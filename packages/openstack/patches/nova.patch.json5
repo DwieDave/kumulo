@@ -1,0 +1,6 @@
+// why: pin all requests to microversion 2.79 (§4.3 decision, see
+// memories.md) rather than the vendored spec's 2.96 snapshot; the header
+// is added via the generator's global-parameter hook, not per-operation,
+// so no per-path patch is needed yet. Real corrections land here once
+// T5.2 fixture-replay tests find spec/microversion mismatches.
+[]

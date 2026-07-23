@@ -1,0 +1,23 @@
+{
+  "service": "nova",
+  "spec": "specs/nova/v2.96.yaml",
+  "microversion": "2.79",
+  "operationIds": [
+    "servers:post",
+    "servers/id:get",
+    "servers/detail:get",
+    "servers/id:delete",
+    "servers/id/action:post",
+    "flavors:get",
+    "flavors/detail:get",
+    "servers/server_id/metadata:get",
+    "servers/server_id/metadata:put",
+    "servers/server_id/tags:get",
+    "servers/server_id/tags:put",
+    "servers/server_id/tags:delete",
+    "os-server-groups:post",
+    "os-server-groups:get",
+    "os-server-groups/id:get",
+    "os-server-groups/id:delete"
+  ]
+}

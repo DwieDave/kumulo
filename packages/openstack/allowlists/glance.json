@@ -1,0 +1,8 @@
+{
+  "service": "glance",
+  "spec": "specs/glance/v2.16.yaml",
+  "operationIds": [
+    "images:get",
+    "images/image_id:get"
+  ]
+}

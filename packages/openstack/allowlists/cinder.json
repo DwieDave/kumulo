@@ -1,0 +1,7 @@
+{
+  "service": "cinder",
+  "spec": "specs/cinder/v3.70.yaml",
+  "operationIds": [
+    "types:get"
+  ]
+}

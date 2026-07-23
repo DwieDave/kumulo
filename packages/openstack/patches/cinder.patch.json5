@@ -1,0 +1,5 @@
+// why: no known upstream spec corrections needed yet for the allowlisted
+// Cinder operations (v1 only needs volume-type listing). Empty overlay
+// keeps the patch-apply step exercised; populate as T5.2 fixture-replay
+// tests surface real spec bugs.
+[]

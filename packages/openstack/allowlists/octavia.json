@@ -1,0 +1,27 @@
+{
+  "service": "octavia",
+  "spec": "specs/octavia/v2.yaml",
+  "operationIds": [
+    "lbaas/loadbalancers:get",
+    "lbaas/loadbalancers:post",
+    "lbaas/loadbalancers/loadbalancer_id:get",
+    "lbaas/loadbalancers/loadbalancer_id:delete",
+    "lbaas/loadbalancers/loadbalancer_id:put",
+    "lbaas/loadbalancers/loadbalancer_id/status:get",
+    "lbaas/listeners:get",
+    "lbaas/listeners:post",
+    "lbaas/listeners/listener_id:get",
+    "lbaas/listeners/listener_id:delete",
+    "lbaas/listeners/listener_id:put",
+    "lbaas/pools:get",
+    "lbaas/pools:post",
+    "lbaas/pools/pool_id:get",
+    "lbaas/pools/pool_id:delete",
+    "lbaas/pools/pool_id:put",
+    "lbaas/pools/pool_id/members:get",
+    "lbaas/pools/pool_id/members:post",
+    "lbaas/pools/pool_id/members/member_id:get",
+    "lbaas/pools/pool_id/members/member_id:delete",
+    "lbaas/pools/pool_id/members/member_id:put"
+  ]
+}

@@ -1,0 +1,5 @@
+// why: no known upstream spec corrections needed yet for the allowlisted
+// Keystone operations (auth/tokens:post, auth/catalog:get). Empty overlay
+// keeps the patch-apply step exercised end-to-end (T5.2 regen-noop CI);
+// populate as fixture-replay tests in T5.2 surface real spec bugs.
+[]

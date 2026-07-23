@@ -156,3 +156,57 @@ green: 10 test files / 11 tests passing.
 - `bun run ci` full green: typecheck × 11 packages, vitest 17 files/46 tests
   (7 new in `packages/core/test/config/`), lint:deps 0 violations, oxlint
   clean.
+
+## T5.1 — Vendor OpenStack specs + allowlists
+
+- **Source revision:** `gtema/openstack-openapi` is a live (not archived) repo
+  at `github.com/gtema/openstack-openapi`, default branch `main`, OpenAPI 3.1
+  specs under `/specs/<service>/`. Pinned commit
+  `7bc4ee41e044e4f2f7dc09c8b1193cfc4bc8f8ad` (2025-02-20). Fetched via
+  `raw.githubusercontent.com/gtema/openstack-openapi/<sha>/specs/...` — no git
+  submodule, plain `curl` in `packages/openstack/scripts/update-specs.sh`
+  (wired as root `specs:update:openstack`). Re-running the script re-fetches
+  from the *same pinned SHA* (documented as deliberately not auto-tracking
+  `main` — bump the SHA constant by hand to pick up upstream changes).
+- **Vendored files** (`packages/openstack/specs/<service>/<version>.yaml`,
+  picked the most detailed microversion-specific file over the generic
+  `v2.yaml`/`v3.yaml` when both exist):
+  - `keystone/v3.14.yaml` (492K, 121 paths)
+  - `nova/v2.96.yaml` (1.5M, 131 paths)
+  - `neutron/v2.yaml` (900K, 147 paths — Neutron ships one unversioned spec)
+  - `glance/v2.16.yaml` (360K, 47 paths)
+  - `cinder/v3.70.yaml` (688K, 199 paths)
+  - `octavia/v2.yaml` (392K, 39 paths)
+  All confirmed `openapi: 3.1.0`, parsed clean with PyYAML.
+- **Nova microversion pin: `2.79`** — a conservative, widely-deployed
+  microversion per design §4.3 ("2.79-era"); recorded in
+  `allowlists/nova.json`'s `"microversion"` field as the documented decision.
+  The vendored spec snapshot itself is `2.96` (latest at fetch time) — the
+  pipeline's T5.2 patch/generate stage is responsible for pruning
+  microversion-gated variants down to 2.79 and injecting
+  `X-OpenStack-Nova-API-Version: 2.79` as a global request header; T5.1 only
+  records the decision, doesn't implement the pruning.
+- **Allowlists** (`packages/openstack/allowlists/<service>.json`, operationId
+  arrays keyed off the actual vendored spec's `operationId` values — these
+  specs use path-derived IDs like `servers/id:get`, not verb-prefixed
+  `createServer`-style names):
+  - keystone: 2 ops (issue token, get catalog)
+  - nova: 16 ops (server CRUD+action, flavors list/detail, metadata, tags,
+    server-groups CRUD for soft-anti-affinity per D8)
+  - neutron: 34 ops (networks/subnets/routers/ports CRUD, router
+    add/remove-interface, security-groups+rules CRUD, floating IPs)
+  - glance: 2 ops (list/get images)
+  - cinder: 1 op (list volume types — v1 only needs this per design)
+  - octavia: 20 ops (loadbalancer/listener/pool/member CRUD + LB status)
+  - **Total: 75 allowlisted operations** across 6 services.
+- **Initial patches** (`packages/openstack/patches/<service>.patch.json5`):
+  all 6 are empty RFC 6902 arrays (`[]`) with a `// why` comment — no upstream
+  spec bugs identified yet against the allowlisted ops. Real corrections
+  (type tightening, enum fixes, microversion pruning) are deferred to T5.2
+  where fixture-replay tests will surface them against actual codegen
+  output — writing speculative patches now would be guessing. `.json5`
+  extension chosen (not `.json`) to allow the `// why` comment per design's
+  "JSON5 in source, compiled to strict JSON" patch policy.
+- `bun run lint:deps` confirmed green after adding these files (85 modules,
+  188 deps, 0 violations) — no TS added in this task, spec/allowlist/patch
+  files are pure data.
