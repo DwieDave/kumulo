@@ -1,0 +1,45 @@
+import { Context, Effect } from "effect"
+import type {
+  AuthenticationFailed,
+  CapabilityMissing,
+  ProvisioningTimeout,
+  QuotaExceeded,
+  ResourceConflict,
+  ResourceNotFound
+} from "../errors/tagged.ts"
+import type {
+  ClusterTag,
+  FlavorId,
+  FlavorRef,
+  ImageId,
+  ImageRef,
+  Inventory,
+  LbInfo,
+  LbSpec,
+  NetworkInfo,
+  NetworkSpec,
+  SecGroupInfo,
+  SecGroupSpec,
+  ServerInfo,
+  ServerSpec
+} from "../domain/types.ts"
+
+export type CloudError =
+  | AuthenticationFailed
+  | QuotaExceeded
+  | ResourceNotFound
+  | ResourceConflict
+  | CapabilityMissing
+  | ProvisioningTimeout
+
+// Design §3.1 — the only interface the reconciler talks to for infrastructure.
+export class CloudProvider extends Context.Service<CloudProvider, {
+  readonly ensureNetwork: (spec: NetworkSpec) => Effect.Effect<NetworkInfo, CloudError>
+  readonly ensureSecurityGroups: (spec: SecGroupSpec) => Effect.Effect<SecGroupInfo, CloudError>
+  readonly ensureLoadBalancer: (spec: LbSpec) => Effect.Effect<LbInfo, CloudError>
+  readonly ensureServer: (spec: ServerSpec) => Effect.Effect<ServerInfo, CloudError>
+  readonly deleteByTag: (tag: ClusterTag) => Effect.Effect<void, CloudError>
+  readonly listClusterResources: (tag: ClusterTag) => Effect.Effect<Inventory, CloudError>
+  readonly resolveImage: (ref: ImageRef) => Effect.Effect<ImageId, CloudError>
+  readonly resolveFlavor: (ref: FlavorRef) => Effect.Effect<FlavorId, CloudError>
+}>()("@kumulo/core/CloudProvider") {}

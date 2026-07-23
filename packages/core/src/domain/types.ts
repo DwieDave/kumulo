@@ -1,0 +1,134 @@
+// Domain types shared by port interfaces (design doc §3). Structural and
+// minimal on purpose — the full config schema lives in a sibling package
+// under concurrent development; only the shapes ports need are defined here.
+
+export type ClusterTag = string
+export type NodeRole = "master" | "worker"
+export type DistroKind = "k3s" | "ovh-mks"
+export type Capability = "octavia" | "floatingIps" | "cilium"
+export type Version = string
+
+export interface NetworkSpec {
+  readonly cidr: string
+}
+export interface NetworkInfo {
+  readonly id: string
+  readonly cidr: string
+}
+
+export interface SecGroupSpec {
+  readonly rules: ReadonlyArray<unknown>
+}
+export interface SecGroupInfo {
+  readonly id: string
+}
+
+export interface LbSpec {
+  readonly members: ReadonlyArray<string>
+}
+export interface LbInfo {
+  readonly id: string
+  readonly vip: string
+}
+
+export interface ServerSpec {
+  readonly name: string
+  readonly role: NodeRole
+  readonly flavor: string
+  readonly image: string
+  readonly tag: ClusterTag
+}
+export interface ServerInfo {
+  readonly id: string
+  readonly name: string
+  readonly ip: string
+}
+
+export type ImageRef = string
+export type ImageId = string
+export type FlavorRef = string
+export type FlavorId = string
+
+export interface Inventory {
+  readonly servers: ReadonlyArray<ServerInfo>
+  readonly networks: ReadonlyArray<NetworkInfo>
+  readonly securityGroups: ReadonlyArray<SecGroupInfo>
+  readonly loadBalancers: ReadonlyArray<LbInfo>
+}
+
+export interface ManagedClusterRef {
+  readonly id: string
+}
+export interface ManagedClusterInfo {
+  readonly id: string
+  readonly apiEndpoint: string
+  readonly status: string
+}
+
+export interface Kubeconfig {
+  readonly content: string
+}
+export interface SshTarget {
+  readonly host: string
+  readonly user: string
+}
+export interface NodeContext {
+  readonly role: NodeRole
+  readonly token?: string
+  readonly apiEndpoint: string
+}
+export interface BootstrapPlan {
+  readonly order: ReadonlyArray<string>
+}
+export interface NodeRef {
+  readonly name: string
+  readonly role: NodeRole
+}
+export interface ResolvedVersion {
+  readonly value: string
+}
+
+export interface K8sManifest {
+  readonly apiVersion: string
+  readonly kind: string
+  readonly [key: string]: unknown
+}
+export interface AddonContext {
+  readonly clusterName: string
+  readonly capabilities: ReadonlyArray<Capability>
+}
+
+export interface DesiredRecord {
+  readonly name: string
+  readonly target: "api_server" | "ingress" | string
+}
+
+export interface VolumeSpec {
+  readonly name: string
+  readonly sizeGb: number
+  readonly type: string
+  readonly retain: boolean
+}
+export interface VolumeInfo {
+  readonly id: string
+  readonly name: string
+}
+export interface VolumeRef {
+  readonly id: string
+}
+
+// Minimal structural slice of ClusterConfig needed for cross-distro
+// validation rules (§5, §9). NOT the full config schema — that is T1.2's
+// concern; only fields these rules read are declared here.
+export interface AutoscalingRule {
+  readonly enabled: boolean
+}
+export interface WorkerPoolShape {
+  readonly name: string
+  readonly autoscaling?: AutoscalingRule
+}
+export interface ClusterConfigShape {
+  readonly distro: DistroKind
+  readonly workerPools: ReadonlyArray<WorkerPoolShape>
+  readonly cni: "flannel" | "cilium"
+}
