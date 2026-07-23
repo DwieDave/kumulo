@@ -862,3 +862,58 @@ allows, not a separate package; confirmed via `bun run lint:deps`).
   `packages/core`. Full-repo `bun run typecheck`/vitest have one pre-existing
   unrelated failure in `packages/dns-ovh` (a concurrent task's in-progress
   work, not touched here).
+
+## T7.2 — k3s bootstrap logic
+
+- Effect v4 beta has **no `Effect.catchAll`** (confirmed absent from the
+  `Effect.d.ts` surface in this beta) — use `Effect.match({ onFailure,
+  onSuccess })` to turn a failed sub-effect into a plain value (e.g.
+  `Option.none()`), same pattern `ssh/readiness.ts`'s `_asReady` already
+  used. `Option` (module) and `Effect.forEach(..., { concurrency, discard })`
+  **are** available off the bare `effect` barrel.
+- `noUncheckedIndexedAccess` (root tsconfig) bites array destructuring too,
+  not just bracket access: `const [first, ...rest] = someReadonlyArray` types
+  `first` as `T | undefined` unless the parameter itself is a non-empty tuple
+  type. Modeled masters lists needing a guaranteed head as
+  `NonEmptyMasters = readonly [SshHost, ...Array<SshHost>]` (exported from
+  `bootstrap/token.ts`) instead of a runtime empty-check — matches
+  `masters.count >= 1` already enforced by the config schema (T1.2).
+- `kumulo/no-multiple-function-params` applies to any **exported** function
+  regardless of arity source — `installMasters`/`installWorkers` originally
+  took `(list, callback)` / `(list, callback, concurrency)` and both tripped
+  it; refactored to single named-args objects (`InstallMastersArgs`,
+  `InstallWorkersArgs`).
+- `it.prop(name, [oneArb], (props) => ...)` still delivers `props` as a
+  **one-element array** even with a single arbitrary — destructure
+  `([args]) => ...`, confirmed against `@effect/vitest` behavior already
+  noted for the 2-arb case in T1.2's memory.
+- `fast-check@4.9.0` (as vendored here) has no `hexaString` — used a plain
+  `FastCheck.string({ minLength, maxLength })` for a random-token arbitrary
+  instead.
+- Token/first-master logic (`bootstrap/token.ts`) ports hetzner-k3s's
+  `K3s.k3s_token` + `ControlPlane::Setup#identify_first_master`: quorum-tally
+  `/var/lib/rancher/k3s/server/node-token` reads across masters (unreadable
+  masters silently excluded, not failed), most-frequent token wins, ties
+  broken by whichever master owns that token's oldest `stat -c %Y` mtime; no
+  token anywhere on any master → fresh `crypto.randomBytes(32).hex` and
+  `masters[0]` as first-master (matches the Crystal fallback).
+- Install scripts (`bootstrap/install-script.ts`) are plain template-literal
+  string builders, not a templating library port — hetzner-k3s's Crinja
+  templates do far more (private-network detection, Hetzner metadata,
+  Traefik/ServiceLB toggles) that don't apply to our OpenStack/OVH target;
+  kept only what FR-5.3 actually asks for (cluster-init vs `--server` join,
+  TLS SANs incl. `127.0.0.1`, `--disable-cloud-controller`,
+  advertise/node-ip/node-external-ip, cilium's
+  `--flannel-backend=none --disable-network-policy`, extra args
+  passthrough, agent join URL + labels/taints).
+- Orchestration (`bootstrap/orchestrate.ts`) mirrors hetzner-k3s's
+  `ControlPlane::Setup`/`Worker::Setup` structure: `installMasters` runs
+  master 1 alone first (its `--cluster-init` must be up before others'
+  `--server` join works), then fans the rest out with
+  `concurrency: "unbounded"`; `installWorkers` is a single bounded
+  `Effect.forEach` (default concurrency 10, matching hetzner-k3s's
+  semaphore(10)).
+- Package-scoped `bun run typecheck`/vitest (7 files/21 tests)/`lint:deps`/
+  oxlint all green for `packages/distro-k3s`. Root `bun run ci` fails only in
+  `packages/addons` (another concurrent task's in-flight, untracked/modified
+  files — confirmed via `git status` before staging, not touched here).
