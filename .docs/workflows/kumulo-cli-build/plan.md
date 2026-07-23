@@ -55,4 +55,61 @@ When user supplies OVH service account + OpenStack app credentials: `doctor`, th
 → AC-8, D10
 
 ## Task breakdown
-_To be added per milestone after milestone sequencing is approved (Phase 3 step 2), each task linked to FR/AC ids._
+
+Each task = one Sonnet 5 subagent run through the Phase 4 loop (detailed sub-plan → failing tests → code → green → memories → commit). `[→ …]` links requirements. Tasks within a milestone are sequential unless marked ∥ (parallelizable, disjoint files).
+
+### M0 — Workspace foundations
+- **T0.1** Bun workspaces skeleton: root package.json/workspaces, tsconfig base + per-package, 9 `@kumulo/*` packages + `tools/ovh2openapi` (empty index + placeholder test each), pinned `effect@4.0.0-beta.x`, `@effect/platform-bun`, `@effect/openapi-generator`, vitest + `@effect/vitest` + fast-check config running under Bun. [→ D2, D3, D6]
+- **T0.2** Dependency-direction lint (dependency-cruiser or ESLint import rules): only-inward-to-core matrix from Appendix A; `bun run ci` = typecheck + test + dep-lint. [→ NFR-1]
+
+### M1 — Core domain
+- **T1.1** Error taxonomy: all `Data.TaggedError` classes (§8.1 transport/cloud/domain layers) + `Retryable` predicate keyed by tag + renderer-registry type that fails compilation on missing tag. [→ FR-10.3, FR-4.6, AC-6]
+- **T1.2** Config schema: full §5 shape (provider/distro enums, pools, dns, volumes, addons, k3s passthrough) with pathed `ConfigInvalid` issues; property tests: YAML→Schema→YAML round-trip, cidr/count/flavor validators, autoscaling accepted-by-schema. [→ FR-1.1–1.3]
+- **T1.3** Port interfaces: `CloudProvider`, `ProviderProfile`, `Distro` (SelfManaged|Managed union), `Addon`, `DnsProvider`, `VolumeProvider` + domain types (specs, infos, ClusterTag, Inventory, NodeRole…); cross-distro validation rules (autoscaling rejected for k3s at runtime, cilium rejected under ovh-mks). [→ FR-3.1, FR-1.3–1.4]
+
+### M2 — Reconciler engine
+- **T2.1** Inventory/Plan domain: typed diff (create/delete/noop/replace-confirm) from desired config vs tagged inventory; property tests incl. drifted/partial inventories. [→ FR-2.1–2.2]
+- **T2.2** Phase pipeline: dependency-ordered phases, single managed/self-managed branch, bounded-concurrency apply, polling Schedule helper (`ProvisioningTimeout`), interruption-safety tests; fake `CloudProvider` Layer (in-memory tagged store) as shared test fixture. [→ FR-2.3–2.5, NFR-6]
+- **T2.3** Plan presentation (terraform-plan-style renderer) + confirm/`--yes`/`--dry-run` flow as pure core logic. [→ FR-2.2, AC-1]
+
+### M3 — Codegen A: ovh2openapi + OVH clients
+- **T3.1** Vendor OVH fixtures: `specs/ovh/cloud.json` + `domain.json` snapshots (+ trimmed fixture excerpts for tests); `specs:update:ovh` fetch script. [→ FR-4.4]
+- **T3.2** `tools/ovh2openapi` converter TDD: models→schemas, routes→operations, params, enums, `fullType` formats; stable key ordering; `ConversionUnsupported` on unknown constructs; determinism property test (double-run byte-equal). [→ FR-4.3, NFR-5]
+- **T3.3** Shared pipeline scripts: allowlist filter + RFC 6902 patch + `@effect/openapi-generator` invocation + regen-is-noop CI check (service-agnostic, reused by M5). [→ FR-4.1 mechanics, FR-4.4, AC-5]
+- **T3.4** Generate MKS + DNS-zone clients (allowlists: kube CRUD, nodepool CRUD, kubeconfig, `/domain/zone/*` records/refresh) + `OvhAuthLive` (client-credentials token, refresh Schedule, Bearer injection) + fixture-replay tests. [→ FR-4.3, FR-4.5–4.6]
+
+### M4 — distro-ovh-mks slice
+- **T4.1** `@kumulo/distro-ovh-mks`: ensureCluster/ensureNodePools (pool↔nodepool mapping incl. autoscale/min/max/antiAffinity/monthlyBilled), fetchKubeconfig, upgrade, delete; status polling; fixture-replay lifecycle tests. [→ FR-6.1–6.2]
+- **T4.2** CLI skeleton (`effect/unstable/cli`): `create`/`delete`/`scale`/`kubeconfig` wired for MKS via Layer composition in main; error renderers for tags reachable so far; e2e test config→plan→apply against fixtures (AC-3). [→ FR-10.1, FR-3.2, AC-3]
+- **T4.3** `doctor` (OVH half): auth validity, project access, region/version capability, plan-vs-quota preview; actionable failure tests. [→ FR-10.2, AC-4]
+
+### M5 — Codegen B: OpenStack clients
+- **T5.1** Vendor frozen specs (Keystone/Nova/Neutron/Glance/Cinder/Octavia) + per-service allowlists (§4.3) + initial patches; document microversion pin decision. [→ FR-4.1–4.2, D9]
+- **T5.2** Generate six clients through the T3.3 pipeline; regen-noop CI; fixture-replay tests per service (happy + error-mapping cases). [→ FR-4.1, AC-5]
+- **T5.3** `KeystoneAuthLive` (app-creds/clouds.yaml/OS_* env; scoped token cache with skew; re-auth on 401; ServiceCatalog lookup) + transport layer (retry-by-tag Schedule, jitter, Semaphore rate limit, lenient decode). [→ FR-4.5–4.6]
+
+### M6 — CloudProvider + profiles
+- **T6.1** `CloudProvider` impl: ensureNetwork/SecurityGroups/ServerGroups(soft-anti-affinity)/LoadBalancer(Octavia)/Server, tag-based inventory + deleteByTag, image/flavor resolution with alias→fuzzy fallback; SG rules per FR-5.7; TDD against recorded fixtures. [→ FR-3.1 impl, FR-5.7, D8]
+- **T6.2** ∥ `provider-ovh` profile (Ext-Net, image aliases, Octavia per-region flags, volume types, auth defaults) + `generic` profile + profile validation. [→ FR-1.4, §3.2]
+- **T6.3** `doctor` OpenStack half: Keystone auth, microversion acceptance, Octavia capability, quota headroom, image/flavor resolution. [→ FR-10.2, AC-4]
+
+### M7 — distro-k3s slice
+- **T7.1** SSH layer (Bun ssh or thin ssh2 wrapper behind a port): exec/readFile with retry Schedules; readiness gates (cloud-init boot-finished 300s, ssh-ready, control-plane cluster-info poll). [→ FR-5.4]
+- **T7.2** Bootstrap logic: minimal cloud-init render; k3s install script generation (server/agent, cluster-init vs join via master-1, TLS SANs, disable-flags, private-IP advertise); token quorum-read + stable first-master; bounded-concurrency install queue. [→ FR-5.1–5.3, D7]
+- **T7.3** Kubeconfig fetch/rewrite (LB/DNS/master server URL, context naming, 0600), `releases` command (cached k3s version list + validateVersion), drainAndRemove for scale-down; full fake-Layer lifecycle e2e (AC-2 core). [→ FR-5.5–5.6, FR-2.7, AC-2]
+
+### M8 — k8s client + addons
+- **T8.1** Minimal k8s client: kubeconfig parse (token/client-cert), SSA apply (field manager `kumulo`), get/list + readiness waits, cordon/evict/delete node; recorded-response tests. [→ FR-9.2, D4]
+- **T8.2** Addon registry + built-ins: OCCM + cinder-csi (generated minimal-scope cloud.conf Secret), SUC, cilium option; capability gating; MKS subset-skip; flannel-default wiring. [→ FR-9.1, FR-6.3, D5]
+- **T8.3** `upgrade` command: SUC plan rendering (masters concurrency 1 + cordon; workers concurrency + wait-on-server) for k3s; MKS API-driven upgrade path. [→ FR-5.6, FR-6.2]
+
+### M9 — DNS + volumes
+- **T9.1** `dns-ovh`: ensureRecords/removeClusterRecords with TXT ownership contract, api_server/ingress target resolution, zone refresh; `none` no-op; contract test suite reusable by future providers. [→ FR-7]
+- **T9.2** ∥ `volumes-cinder`: ensureVolume by tag+name, outputs file (`<cluster>.outputs.yaml`), static PV/PVC manifest generation (Retain + pinned volumeHandle), delete-time retention; `volumes list`/`adopt` commands. [→ FR-8, AC-7]
+
+### M10 — Polish & release
+- **T10.1** `status` command (inventory + node health via k8s client); exit-code map; renderer completeness sweep + per-tag message tests. [→ FR-10, AC-6]
+- **T10.2** Example configs (k3s + ovh-mks), README/docs, `bun build --compile` binary build script + CI artifact; AC-1 final assertion suite. [→ NFR-7, AC-1]
+
+### M11 — Live smoke (blocked on credentials)
+- **T11.1** Smoke harness: env-gated scripts running doctor + create→kubeconfig→delete per distro against the real OVH project; record results, fix fallout. [→ AC-8, D10]
