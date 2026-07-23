@@ -11,7 +11,11 @@ module.exports = {
       comment: "@kumulo/core may import only 'effect', no other @kumulo/* or deps",
       severity: "error",
       from: { path: "^packages/core/src/" },
-      to: { pathNot: "^(packages/core/src/|node_modules/(effect|@effect/))" },
+      // kumulo: bun nests deps per-package (no root hoist) and dependency-cruiser
+      // can't resolve bare "effect"/"@effect/*" specifiers here, so it reports the
+      // unresolved module name itself as the "path" — match that too, not just a
+      // resolved node_modules path.
+      to: { pathNot: "^(packages/core/src/|node_modules/(effect|@effect/)|effect$|@effect/)" },
     },
     {
       name: "no-sibling-package-imports",
