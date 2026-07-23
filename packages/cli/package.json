@@ -7,9 +7,15 @@
     ".": "./src/index.ts"
   },
   "main": "src/index.ts",
+  "bin": {
+    "kumulo": "./src/main.ts"
+  },
   "dependencies": {
     "effect": "catalog:",
-    "@kumulo/core": "workspace:*"
+    "@effect/platform-bun": "catalog:",
+    "@kumulo/core": "workspace:*",
+    "@kumulo/distro-ovh-mks": "workspace:*",
+    "@kumulo/provider-ovh": "workspace:*"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",

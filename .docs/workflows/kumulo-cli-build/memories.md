@@ -577,3 +577,54 @@ green: 10 test files / 11 tests passing.
   modules/484 deps), oxlint clean for every file this task touched (repo-wide
   `bun run lint` still has pre-existing errors in `packages/distro-ovh-mks` —
   another concurrent agent's in-progress work, untouched).
+
+## T4.2 — CLI skeleton (ovh-mks path)
+
+- `effect/unstable/cli` (`Command`/`Flag`/`Argument`) has no `Command.run`
+  built-in for reaching a Bun/Node process — pair it with
+  `@effect/platform-bun`'s `BunRuntime.runMain` + `BunServices.layer`
+  (`ChildProcessSpawner|Crypto|FileSystem|Path|Terminal|Stdio`, matches
+  `Command.run`'s `Environment` requirement) and
+  `@effect/platform-bun/BunHttpClient` (`export * from
+  "effect/unstable/http/FetchHttpClient"`) for the base `HttpClient`.
+- Effect v4 beta dropped `Effect.catchAll` — use `Effect.matchEffect({
+  onFailure, onSuccess })` instead.
+- `RendererRegistry`'s mapped type lets `renderError({ registry, error })`
+  accept a whole `KumuloError` union (not just one narrowed tag) with zero
+  cast: passing the union infers `Tag = KumuloErrorTag`, and
+  `Extract<KumuloError, {_tag: KumuloErrorTag}>` collapses back to
+  `KumuloError`. Useful pattern for any generic-tag-dispatch helper under the
+  no-type-assertion lint rule — avoids the "narrow `unknown` then cast"
+  trap entirely as long as the caller's error type is a real union, not
+  `unknown`.
+- `core/src/index.ts` doesn't (yet) re-export `present/{decide,render}.ts`
+  or `reconcile/poll.ts` — same "barrel is the integration step's job" gap
+  distro-ovh-mks hit for T6.1's pollUntil. Cli duplicates `decidePlanAction`/
+  `renderPlan` locally (`src/present.ts`) rather than deep-importing.
+- `MksClusterConfig`/`MksWorkerPoolConfig` (distro-ovh-mks) have no
+  `serviceName` (OVH cloud-project id) source in `ClusterConfig` — it's an
+  account concept, not a cluster field. CLI reads it from env
+  (`OVH_SERVICE_NAME`, alongside `OVH_CLIENT_ID`/`OVH_CLIENT_SECRET`) at the
+  composition root (`src/mks/env.ts`), not from the YAML.
+- `MksClusterConfig.version` is `Cloud_kube_VersionEnum`, generated-client-only
+  and not re-exported at distro-ovh-mks's package root — left unset from the
+  CLI (OVH defaults to current stable); revisit once exported.
+- Fixture-replay gotcha: the generated MKS client's delete ops
+  (`deleteCloudProjectServiceNameKubeKubeId(NodePoolId)`) `matchStatus` only
+  `"200"`, not `204` — a fixture returning 204 "no content" gets read as an
+  unexpected-status `HttpClientError`, which `toMksError` then falls back to
+  `ResourceConflict` (looks like a schema-decode failure until you check the
+  status code map).
+- No real Create/NoOp/Delete diff for the presented MKS plan yet (`buildMksPlan`
+  in `src/mks/plan.ts` always shows "Create") — needs a read-only cluster/pool
+  lookup by name that distro-ovh-mks doesn't export; `ensureCluster`/
+  `ensureNodePools` themselves are the real (idempotent) convergence, so this
+  only affects what `--dry-run` prints, not what apply does.
+- Files: `packages/cli/src/{main,commands,config,errors,present,
+  distro-not-wired}.ts`, `packages/cli/src/mks/{env,plan,reconcile}.ts`,
+  `packages/cli/test/{errors,mks/plan}.test.ts`,
+  `packages/cli/test/e2e/{mks-lifecycle,fake-mks-server}.ts`. Added
+  `@effect/platform-bun`, `@kumulo/distro-ovh-mks`, `@kumulo/provider-ovh` as
+  cli deps + a `bin` entry. `bun run ci` green (typecheck, 55 files/168 tests,
+  dep-lint 0 violations, oxlint clean, codegen:check clean). `k3s` distro path
+  is not wired (fails fast with a `DistroNotWired` tagged error) — M7's job.
