@@ -8,6 +8,7 @@ import { makeReleaseCache } from "../releases/cache.ts"
 import { drainAndRemove } from "./drain.ts"
 import { bootstrapOrder } from "./plan.ts"
 import { renderUserData } from "./user-data.ts"
+import { renderUpgradePlan } from "../upgrade/plan.ts"
 
 export { drainAndRemove } from "./drain.ts"
 export { bootstrapOrder } from "./plan.ts"
@@ -47,7 +48,7 @@ export const makeSelfManagedDistro = (args: MakeSelfManagedDistroArgs): SelfMana
           masterIp: apiEndpoint
         })
       }).pipe(provideSsh),
-    upgradePlan: (_target) => Effect.succeed([]), // ponytail: SUC Plan rendering is T8.3's scope
+    upgradePlan: (target) => Effect.succeed(renderUpgradePlan({ version: target })), // FR-5.6 (T8.3)
     validateVersion: releases.validateVersion,
     drainAndRemove: (node) => drainAndRemove({ client: args.k8s, node })
   }

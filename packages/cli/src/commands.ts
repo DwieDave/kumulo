@@ -1,6 +1,7 @@
 import { Console, Effect } from "effect"
 import { Command, Flag } from "effect/unstable/cli"
 import { loadConfig } from "./config.ts"
+import { upgrade } from "./commands/upgrade.ts"
 import { DistroNotWired } from "./distro-not-wired.ts"
 import { buildMksPlan } from "./mks/plan.ts"
 import { applyMks, deleteMks, kubeconfigMks } from "./mks/reconcile.ts"
@@ -86,4 +87,4 @@ export const del = Command.make(
   })
 ).pipe(Command.withDescription("Delete a cluster (FR-2.6)"))
 
-export const kumuloCli = kumulo.pipe(Command.withSubcommands([create, scale, kubeconfig, del]))
+export const kumuloCli = kumulo.pipe(Command.withSubcommands([create, scale, kubeconfig, del, upgrade]))
