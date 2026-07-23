@@ -1046,3 +1046,94 @@ allows, not a separate package; confirmed via `bun run lint:deps`).
   actually exercises new logic. Add a `cli/test/commands/upgrade.test.ts`
   (fake `MksEnv`, capturing `Console.log` output) if the CLI wiring itself
   grows real branching logic.
+
+## T10.1 — status + volumes commands, exit codes, renderer sweep
+
+- `status` (`cli/src/commands/status.ts`) only wires `ovh-mks` live (same
+  scope limit as every other command, `distro-not-wired.ts`) — a real k3s
+  status additionally needs a `K8sClient` composition root (kubeconfig →
+  authenticated HTTP client), which no command builds yet (T8.3 hit the
+  identical gap for `upgrade`/`kubeconfig`); k3s configs fail with
+  `DistroNotWired`, not a stub. Renders `findClusterByName`'s
+  `ManagedClusterInfo` (id/status/apiEndpoint) + configured worker pool
+  sizes — no separate node-health probe exists at the mks layer (OVH IS the
+  node health authority for a managed control plane).
+- `volumes list`/`volumes adopt` (`cli/src/commands/volumes.ts`) are thin
+  wiring over T9.2's already-tested pure `@kumulo/volumes-cinder` functions
+  (`listVolumes`/`adoptVolume`/`readOutputs`/`writeOutputs`) — outputs file
+  lives next to the config (`dirname(configPath)`). `adopt` takes only
+  `--config`/`--name`/`--volume-id`; the volume's size/type/retain/pvc spec
+  comes from the config's own `volumes.retained[]` entry matching `--name`
+  (no duplicate CLI flags for data the config already declares). Did not add
+  a dedicated command-wiring test for these two (same "thin wiring over
+  tested pure functions" call T8.3 made for `upgrade` — `volumes-cinder`'s
+  own test suite already covers `adoptVolume`/`listVolumes`).
+- **AC-7 (`reconcileVolumesOnDelete`, same file)** is the one piece of real
+  new branching logic here, so it gets its own test
+  (`cli/test/commands/volumes.test.ts` + a local `fake-cinder.ts` — dep-lint
+  scopes `test/` per-package, so `volumes-cinder/test/fake-cinder.ts` isn't
+  importable from here; duplicated verbatim, same precedent as
+  `core/k8s`'s `fake-http-client.ts`). Wired into `del` in `commands.ts`
+  after `deleteMks`: for each `volumes.retained[]` entry, look up the
+  matching live volume via `VolumeProvider.listClusterVolumes`, keep+print
+  `retain: true` ones, delete the rest. `config.volumes.module !== "cinder"`
+  or an empty `retained[]` short-circuits to `[]` with zero Cinder calls —
+  this only *reconciles what the config already declares*, it never
+  discovers/deletes volumes it wasn't told about.
+- **`CinderAuth` composition root** (`cli/src/volumes/env.ts`,
+  `CinderAuthLive`): built from `OpenStackEnv` (T6.3, already shared by the
+  doctor checks) — `keystone.token`/`keystone.endpoint({service:
+  "volumev3", region})`, no separate credential set (Cinder is a plain
+  OpenStack service). `keystone.endpoint` can fail with `ResourceNotFound`
+  (missing catalog entry) as well as `AuthenticationFailed`, but
+  `CinderAuth.endpoint`'s contract is `AuthenticationFailed`-only — mapped
+  with `Effect.mapError` rather than widening the port.
+- **Layer wiring gotcha (main.ts)**: `VolumeProviderLive` is composed at
+  *command runtime* (inside `reconcileVolumesOnDelete`, not at Layer-build
+  time) via `Effect.provide(VolumeProvider, VolumeProviderLive({tag}))` —
+  this captures the *ambient* `HttpClient.HttpClient` from context at that
+  point, so `HttpClient` must stay in `MainLive`'s **exposed** environment,
+  not just be consumed internally to build `MksEnvLive`/`CinderAuthLive`.
+  Fixed by adding `BunHttpClient.layer` as its own member of
+  `Layer.mergeAll(...)` (exposed) *and* keeping the outer
+  `.pipe(Layer.provide(BunHttpClient.layer))` (satisfies the other two
+  layers' own build-time `HttpClient` requirement) — dropping either half
+  either loses `HttpClient` from the final environment or fails to build
+  `MksEnvLive`/`CinderAuthLive` at all.
+- `CinderAuthLive` depends on `OpenStackEnv`, which needs to stay exposed
+  too (the doctor checks read it directly) — used `Layer.provideMerge`
+  (`CinderAuthLive.pipe(Layer.provideMerge(OpenStackEnvLive))`), not
+  `Layer.provide`, so `OpenStackEnv` survives into the merged output
+  alongside the derived `CinderAuth`. `Layer.provide` alone would have
+  hidden `OpenStackEnv` after this point.
+- **Renderer sweep (AC-6)**: `RendererRegistry`'s mapped type already
+  compile-enforced every `KumuloErrorTag` (T4.2-era `cli/src/errors.ts`) —
+  only the *tests* were incomplete (2 of 12 tags). Added one assertion per
+  remaining tag (`HttpTransportError`, `ResponseDecodeError`,
+  `QuotaExceeded`, `ResourceConflict`, `CapabilityMissing`,
+  `ProvisioningTimeout`, `ConfigInvalid`, `PlanRejected`, `BootstrapFailed`,
+  `AddonInstallFailed`) to `cli/test/errors.test.ts`. Also added
+  `OutputsInvalid` (a CLI-only tag from `@kumulo/volumes-cinder`, same
+  pattern as `DistroNotWired`) to `CliDomainError`/`renderCliError`, since
+  `readOutputs`/`parseOutputsYaml` failures now reach the CLI boundary via
+  the new `volumes` commands.
+- **`exit-codes.ts`**: `exitCodeFor(error): number`, one code per
+  `KumuloErrorTag` (2–13) + `DistroNotWired` (20) + `PlatformError` (21) +
+  `OutputsInvalid` (22); a bare CLI parse error (`CliError.isCliError`) gets
+  `64` (sysexits.h `EX_USAGE`), matching the pre-existing convention that
+  `CliError` renders its own message rather than going through
+  `renderCliError`. Wired into `main.ts`'s failure branch in place of the
+  old hardcoded `process.exitCode = 1`.
+- **Scope cut, documented deliberately**: did *not* speculatively merge a
+  `DnsProvider` Layer into `main.ts` — no command calls it yet (DNS record
+  management isn't wired into any create/delete path in this codebase),
+  so it would be unused scaffolding. `CinderAuthLive`/`VolumeProvider` *did*
+  get wired because `reconcileVolumesOnDelete` is a real, tested consumer
+  (AC-7). Revisit DNS wiring when a task actually calls `DnsProvider`.
+- Package-scoped `bun run typecheck`/vitest (16 files/45 tests, +12 from
+  T8.3's 33)/`lint:deps` (317 modules, 0 violations)/oxlint all green for
+  `packages/cli`. Root `bun run typecheck` (12 packages) and full `vitest
+  run` (95 files/301 tests) both green — ran the full-repo gates this time
+  since `main.ts`/`commands.ts` are shared integration points other
+  concurrent tasks might also touch; `git status` showed only this
+  session's own files before staging.
