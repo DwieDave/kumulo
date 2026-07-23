@@ -8,10 +8,13 @@
   },
   "main": "src/index.ts",
   "dependencies": {
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "@kumulo/core": "workspace:*",
+    "ssh2": "catalog:"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "@types/ssh2": "catalog:"
   }
 }

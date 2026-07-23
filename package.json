@@ -20,7 +20,9 @@
       "dependency-cruiser": "18.1.0",
       "@swc/core": "1.15.46",
       "oxlint": "1.75.0",
-      "yaml": "2.9.0"
+      "yaml": "2.9.0",
+      "ssh2": "1.16.0",
+      "@types/ssh2": "1.15.5"
     }
   },
   "scripts": {
