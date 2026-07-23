@@ -36,6 +36,9 @@ export { validateAutoscaling, validateCni } from "./ports/validation.ts"
 export { VolumeProvider } from "./ports/volume-provider.ts"
 export type { VolumeError } from "./ports/volume-provider.ts"
 
+export { computePlan, configHash, resourceName, toTaggedResource } from "./plan/index.ts"
+export type { DesiredResource, Inventory as PlanInventory, Plan, PlanAction, TaggedResource } from "./plan/index.ts"
+
 export type {
   AddonContext,
   AutoscalingRule,
