@@ -1,0 +1,16 @@
+{
+  "name": "@kumulo/oxlint",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./oxlint": "./src/oxlint/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  }
+}

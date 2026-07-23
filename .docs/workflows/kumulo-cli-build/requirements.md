@@ -17,6 +17,7 @@ Spec base: `.docs/design/kumulo-design.md`. Deviations from the design doc decid
 | D9 | OpenStack specs | Vendored from archived `gtema/openstack-openapi` `/specs` snapshot; treated beta-quality → lenient response validation default, patches carry corrections |
 | D10 | Live testing | All milestones offline-verifiable (fakes/fixtures); live smoke tests only at the end when credentials arrive |
 | D11 | Dependency versions | Single **Bun catalog** in root package.json (`workspaces.catalog`): every external dependency version declared exactly once, pinned exact; all packages reference `catalog:` — no version literals outside root |
+| D12 | Lint | **oxlint** runs as a CI quality gate alongside typecheck, tests, and dep-lint (`bun run ci`); custom TypeScript/JavaScript lint rules live in a dedicated workspace package **`@kumulo/oxlint`** (oxlint JS-plugin API) wired into the root oxlint config |
 
 ## Functional requirements
 

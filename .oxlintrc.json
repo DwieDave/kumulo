@@ -1,0 +1,30 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "jsPlugins": ["./packages/oxlint/src/oxlint/index.ts"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn"
+  },
+  "rules": {
+    "kumulo/no-banned-type-assertions": "error",
+    "kumulo/no-comments": "error",
+    "kumulo/no-multiple-function-params": "error",
+    "kumulo/no-switch": "error",
+    "kumulo/no-sync-schema-apis": "error",
+    "kumulo/no-type-assertion": "error",
+    "kumulo/no-yieldless-effect-gen": "error",
+    "kumulo/private-function-prefix": "error",
+    "eslint/no-underscore-dangle": "off"
+  },
+  "overrides": [
+    {
+      "files": ["packages/oxlint/**"],
+      "rules": { "kumulo/no-type-assertion": "off" }
+    },
+    {
+      "files": ["**/test/**"],
+      "rules": { "kumulo/no-comments": "off" }
+    }
+  ],
+  "ignorePatterns": ["node_modules", "dist", ".references", "coverage"]
+}

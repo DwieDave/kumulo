@@ -10,7 +10,7 @@ Status: **Phase 4 — executing. Current task: T0.1**
 4. TDD order: write root `ci` script + one failing workspace test first (no packages yet) → verify fail → scaffold until `bun run ci` green.
 5. Definition of done: `bun install` clean, `bun run ci` (typecheck all + vitest all) green, fast-check installed and demonstrably usable in one property test.
 
-**Execution model:** implementation work (Phase 4 task execution) is delegated to **Sonnet 5 subagents** (`model: sonnet`), one per task, each following the Phase 4 TDD loop (failing test → code → green → commit). From T0.2 onward, tasks run under **ultracode multi-agent workflows** (Workflow tool): implementation agent(s) plus adversarial verify/review agents per task; parallel-marked tasks fan out concurrently. The main session orchestrates: prepares task briefs with full context (requirement links, file paths, conventions), reviews agent output, and gates commits.
+**Execution model:** implementation work (Phase 4 task execution) is delegated to **Sonnet 5 subagents** (`model: sonnet`), one per task, each following the Phase 4 TDD loop (failing test → code → green → commit). From T0.2 onward, tasks run under **ultracode multi-agent workflows** (Workflow tool). From M1 onward, workflows batch multiple tasks per milestone: Sonnet 5 implements (parallel where file-ownership is disjoint, plus an integration step for shared barrels), then **1–2 Fable 5 low-effort agents verify** the milestone (spec-deviation lens + test-quality lens); a Sonnet fix round runs only on confirmed blockers. The main session orchestrates: prepares task briefs with full context (requirement links, file paths, conventions), reviews agent output, and gates commits.
 
 Sequencing rationale: shared foundations first; then the OVH-MKS vertical slice (smallest surface that proves config → reconcile → running cluster end to end, per design §3.3.1's own sequencing note); then the k3s/OpenStack slice on the proven core; extensions and addons after both distros exist; polish and credential-gated smoke last. Every milestone ends green offline (NFR-3) and is committed per Phase 4 discipline.
 
@@ -69,6 +69,7 @@ Each task = one Sonnet 5 subagent run through the Phase 4 loop (detailed sub-pla
 ### M0 — Workspace foundations
 - **T0.1** Bun workspaces skeleton: root package.json/workspaces, tsconfig base + per-package, 9 `@kumulo/*` packages + `tools/ovh2openapi` (empty index + placeholder test each), pinned `effect@4.0.0-beta.x`, `@effect/platform-bun`, `@effect/openapi-generator`, vitest + `@effect/vitest` + fast-check config running under Bun. [→ D2, D3, D6]
 - **T0.2** Dependency-direction lint (dependency-cruiser or ESLint import rules): only-inward-to-core matrix from Appendix A; `bun run ci` = typecheck + test + dep-lint. [→ NFR-1]
+- **T0.3** oxlint quality gate: oxlint in catalog + root config, folded into `bun run ci`; new workspace package `@kumulo/oxlint` hosting custom TS/JS lint rules via the oxlint JS-plugin API (starter rule + plugin wiring + test), exempt from the "only core→effect" matrix as a dev-tooling package (like tools/). [→ D12]
 
 ### M1 — Core domain
 - **T1.1** Error taxonomy: all `Data.TaggedError` classes (§8.1 transport/cloud/domain layers) + `Retryable` predicate keyed by tag + renderer-registry type that fails compilation on missing tag. [→ FR-10.3, FR-4.6, AC-6]
