@@ -18,6 +18,7 @@
       "name": "@kumulo/addons",
       "version": "0.0.0",
       "dependencies": {
+        "@kumulo/core": "workspace:*",
         "effect": "catalog:",
       },
       "devDependencies": {

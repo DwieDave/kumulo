@@ -1,0 +1,86 @@
+[
+  {
+    "apiVersion": "v1",
+    "kind": "Secret",
+    "metadata": {
+      "name": "cloud-config",
+      "namespace": "kube-system"
+    },
+    "type": "Opaque",
+    "stringData": {
+      "cloud.conf": "[Global]\nauth-url=https://auth.cloud.ovh.net/v3\nregion=GRA\napplication-credential-id=app-id\napplication-credential-secret=app-secret\nuse-application-credentials=true\n"
+    }
+  },
+  {
+    "apiVersion": "v1",
+    "kind": "ServiceAccount",
+    "metadata": {
+      "name": "cinder-csi-controller-sa",
+      "namespace": "kube-system"
+    }
+  },
+  {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+      "name": "csi-cinder-controllerplugin",
+      "namespace": "kube-system"
+    },
+    "spec": {
+      "replicas": 1,
+      "selector": {
+        "matchLabels": {
+          "app": "csi-cinder-controllerplugin"
+        }
+      },
+      "template": {
+        "metadata": {
+          "labels": {
+            "app": "csi-cinder-controllerplugin"
+          }
+        },
+        "spec": {
+          "serviceAccountName": "cinder-csi-controller-sa",
+          "containers": [
+            {
+              "name": "cinder-csi-plugin",
+              "image": "registry.k8s.io/provider-os/cinder-csi-plugin:v1.30.0",
+              "args": [
+                "/bin/cinder-csi-plugin",
+                "--cloud-config=/etc/config/cloud.conf"
+              ],
+              "volumeMounts": [
+                {
+                  "name": "cloud-config",
+                  "mountPath": "/etc/config",
+                  "readOnly": true
+                }
+              ]
+            }
+          ],
+          "volumes": [
+            {
+              "name": "cloud-config",
+              "secret": {
+                "secretName": "cloud-config"
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "apiVersion": "storage.k8s.io/v1",
+    "kind": "StorageClass",
+    "metadata": {
+      "name": "cinder-csi"
+    },
+    "provisioner": "cinder.csi.openstack.org",
+    "parameters": {
+      "type": "classic"
+    },
+    "reclaimPolicy": "Delete",
+    "volumeBindingMode": "WaitForFirstConsumer"
+  }
+]

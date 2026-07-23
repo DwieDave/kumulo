@@ -1,0 +1,45 @@
+[
+  {
+    "apiVersion": "v1",
+    "kind": "ServiceAccount",
+    "metadata": {
+      "name": "cilium",
+      "namespace": "kube-system"
+    }
+  },
+  {
+    "apiVersion": "apps/v1",
+    "kind": "DaemonSet",
+    "metadata": {
+      "name": "cilium",
+      "namespace": "kube-system"
+    },
+    "spec": {
+      "selector": {
+        "matchLabels": {
+          "k8s-app": "cilium"
+        }
+      },
+      "template": {
+        "metadata": {
+          "labels": {
+            "k8s-app": "cilium"
+          }
+        },
+        "spec": {
+          "serviceAccountName": "cilium",
+          "hostNetwork": true,
+          "containers": [
+            {
+              "name": "cilium-agent",
+              "image": "quay.io/cilium/cilium:v1.16.5",
+              "args": [
+                "--kube-proxy-replacement=true"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+]
