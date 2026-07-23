@@ -917,3 +917,68 @@ allows, not a separate package; confirmed via `bun run lint:deps`).
   oxlint all green for `packages/distro-k3s`. Root `bun run ci` fails only in
   `packages/addons` (another concurrent task's in-flight, untracked/modified
   files — confirmed via `git status` before staging, not touched here).
+
+## T7.3 — kubeconfig, releases, drain, k3s distro assembly + AC-2 e2e
+
+- `src/kubeconfig/{rewrite,fetch,write}.ts`: `resolveServerUrl` (FR-5.5
+  precedence LB VIP > DNS name > master IP) + `rewriteKubeconfig` (plain
+  string substitution, not a YAML round-trip — k3s's generated kubeconfig is
+  a fixed single-context template with `server: https://127.0.0.1:6443` and
+  cluster/context/user all literally named `default`; only those tokens
+  change) + `fetchKubeconfig` (SSH-reads `/etc/rancher/k3s/k3s.yaml` off
+  master 1, rewrites, maps `SshCommandError` → `BootstrapFailed`) +
+  `writeKubeconfigFile` (0600 via `node:fs.writeFileSync({mode: 0o600})` —
+  the only fs write in this package, matches the port's "content is a plain
+  string" contract; nothing else here needs `@effect/platform`).
+- `src/releases/{fixture,cache}.ts`: `K3S_RELEASE_FIXTURE` is a vendored
+  static tag list (offline requirement — no live GitHub fetch in code or
+  tests); `makeReleaseCache({source?, ttlMs?, now?})` wraps it in a `Ref`-
+  backed TTL cache (`source`/`now` injectable so the TTL-refresh test can
+  fake time without `TestClock`) and exposes `validateVersion` (`ConfigInvalid`
+  on an unlisted version). `scripts/refresh-releases.ts` is the human-
+  triggered live refresh (never imported by src/ or tests).
+- `src/distro/drain.ts`: `drainAndRemove({client, node})` composes T8.1's
+  `cordonNode`/`drainNode`/`deleteNode` against a caller-supplied
+  `K8sClient["Service"]`; only does the k8s-side drain (FR-2.7) — actual
+  server deletion stays the reconciler's `CloudProvider.deleteByTag` call,
+  made after this succeeds (the `Distro` port has no `CloudProvider`
+  reference, by design §3.3).
+- `src/distro/{plan,user-data,index}.ts`: `makeSelfManagedDistro(args)`
+  closes over already-resolved dependencies (`ssh`, `k8s` service instances,
+  not `Context.Tag`s) and returns the full `SelfManagedDistroShape` object
+  literal — required because the port's method signatures carry no `R`
+  (`Effect.Effect<A, E>`), so a Layer-requested service can't leak into the
+  return type; SSH is `Effect.provideService`'d inside the one method
+  (`fetchKubeconfig`) that needs it.
+- **`kumulo/no-multiple-function-params` fires even on a function nested
+  inside another function, if that inner function is itself exported at
+  top level** — false, actually the opposite bit us here: the rule exempts
+  a multi-param function *nested inside another function* regardless of
+  export (`_isNestedInsideFunction` short-circuits before the export
+  check), so `SelfManagedDistroShape`'s 2-arg `planBootstrap`/`fetchKubeconfig`
+  fields can be assigned inline as arrows inside `makeSelfManagedDistro`'s
+  body without violating the rule, while a *standalone top-level* 2+-arg
+  export (`drainAndRemove(client, node)`, `writeKubeconfigFile(path,
+  content)`, the old curried `renderUserData(clusterName, sshPublicKey)`)
+  still gets flagged and needed single-object-args. `src/distro/plan.ts`
+  now only exports the single-arg `bootstrapOrder(inventory)`; the port's
+  2-arg `planBootstrap` shape is built inline in `distro/index.ts`.
+- AC-2 e2e (`test/e2e/lifecycle.test.ts`): HA 3-master + 2-pool (`pool-a`x2,
+  `pool-b`x1) `ServerSpec[]` run twice through the *real* `runPhases`/
+  `applyServers` (core) against a small local in-memory `CloudProvider` fake
+  (not a cross-package import of `core/test/fakes` — no other package does
+  that; dep-lint scopes `test/` per-package) — asserts idempotent
+  convergence to exactly 6 servers by name. Then the real `resolveToken`/
+  `installMasters`/`installWorkers`/`renderServerInstallScript`/
+  `renderAgentInstallScript` run over a fake `Ssh`, asserting 3 rendered
+  master scripts (master 1 gets `--cluster-init`, the rest `--server
+  https://<master1>:6443`) and 2 rendered worker scripts (each carrying the
+  resolved token). Finally `makeSelfManagedDistro(...).fetchKubeconfig` is
+  exercised end-to-end (fake Ssh returns a k3s.yaml fixture, rewritten
+  server matches the fake `CloudProvider`'s LB vip) and `.drainAndRemove`
+  against a no-op fake `K8sClient`.
+- Package-scoped `bun run typecheck`/vitest (14 files/36 tests)/`lint:deps`/
+  oxlint all green for `packages/distro-k3s`. Root `bun run ci` not run (this
+  session only touched `packages/distro-k3s`'s own files; other packages'
+  in-flight concurrent work untouched, confirmed via `git status` before
+  staging).
