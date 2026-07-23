@@ -1,0 +1,47 @@
+import { Effect, Layer } from "effect"
+import { HttpClient, HttpClientResponse } from "effect/unstable/http"
+import type { HttpClientRequest } from "effect/unstable/http"
+import { KeystoneAuth } from "../../src/auth/keystone-auth.ts"
+
+export type RouteHandler = (
+  request: HttpClientRequest.HttpClientRequest
+) => { readonly status: number; readonly body?: unknown }
+
+export interface FakeOpenStack {
+  readonly layer: Layer.Layer<KeystoneAuth | HttpClient.HttpClient>
+  readonly calls: () => ReadonlyArray<{ readonly method: string; readonly url: string }>
+}
+
+// Fixture-replay fake: routes `${METHOD} ${pathname}` (query string stripped)
+// through a caller-supplied handler map — offline, no real network (FR-4.6 style).
+export const makeFakeOpenStack = (
+  routes: Record<string, RouteHandler>
+): FakeOpenStack => {
+  const calls: Array<{ method: string; url: string }> = []
+  const client = HttpClient.make((request) => {
+    const url = new URL(request.url)
+    calls.push({ method: request.method, url: request.url })
+    const key = `${request.method} ${url.pathname}`
+    const handler = routes[key]
+    if (handler === undefined) {
+      return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("not found", { status: 404 })))
+    }
+    const result = handler(request)
+    // kumulo: the WHATWG `Response` constructor rejects any body (even "")
+    // on null-body statuses.
+    const nullBodyStatus = result.status === 204 || result.status === 304
+    const responseBody = nullBodyStatus || result.body === undefined ? null : JSON.stringify(result.body)
+    return Effect.succeed(
+      HttpClientResponse.fromWeb(request, new Response(responseBody, { status: result.status }))
+    )
+  })
+  const auth = Layer.succeed(KeystoneAuth, {
+    token: Effect.succeed("tok"),
+    invalidate: Effect.void,
+    endpoint: ({ service }) => Effect.succeed(`https://${service}.example.com/`)
+  })
+  return {
+    layer: Layer.merge(auth, Layer.succeed(HttpClient.HttpClient, client)),
+    calls: () => calls
+  }
+}

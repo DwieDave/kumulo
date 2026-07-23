@@ -505,3 +505,75 @@ green: 10 test files / 11 tests passing.
   via their own standalone `scripts/generate.ts`, not wired into
   `tools/codegen`'s regen-noop gate — could be added later if drift-on-CI
   matters for OVH too, deferred as YAGNI for now).
+
+## T6.1 — OpenStack CloudProvider implementation
+
+- Went with **raw REST calls** over the KeystoneAuth-authenticated
+  `HttpClient` (`src/provider/rest.ts`'s `restRequest`) rather than wiring the
+  full generated `HttpApi`/`HttpApiClient` typed clients (T5.2/T5.3) — lenient
+  `unknown`-body decode (FR-4.6) already means the provider only ever reads a
+  handful of fields per response (`id`/`name`/`status`/`vip_address`/
+  `addresses`), so the generated Schema types would add real ceremony (per-op
+  `HttpApiClient.make` config, security-scheme wiring for 5 services) for no
+  behavioral gain here — this is a ponytail call, not a design decision;
+  revisit if a later task needs strict response validation.
+- **Domain types (`packages/core/src/domain/types.ts`) are single-instance,
+  not per-call**: `NetworkSpec`/`SecGroupSpec`/`LbSpec` carry no cluster tag
+  or name (confirmed by the existing `FakeCloudProviderLive`'s comment) — the
+  cluster tag/region/capabilities are `CloudProviderOptions`, a
+  layer-construction-time closure (`CloudProviderLive(options)`), not
+  threaded per-call. All OpenStack resource names are deterministic:
+  `kumulo-<tag>` (network/security-group/LB), `kumulo-<tag>-masters` /
+  `kumulo-<tag>-workers` (server groups) — this is what makes every `ensure*`
+  idempotent-by-name without a richer port.
+- **FR-5.7 rules travel through `SecGroupSpec.rules: ReadonlyArray<unknown>`**
+  by design (that field exists for exactly this) — decoded via a
+  `SecurityGroupRuleInput` `effect/Schema` union
+  (`src/provider/security-group-rules.ts`) at the `ensureSecurityGroups`
+  trust boundary. The FR-5.7 rule *list itself* (ssh/api/intra-net/etcd/
+  wireguard/icmp) is built by a separate pure, directly-unit-tested function
+  `buildFr57Rules(...)` — callers (a later distro-k3s/CLI wiring task) call it
+  to populate `SecGroupSpec.rules` before invoking the port; `ensureSecurityGroups`
+  itself stays a generic decode-and-apply translator, so it doesn't need
+  changes if FR-5.7's exact rule set evolves.
+- **D8 anti-affinity is masters-vs-workers only, not per worker-pool**
+  (`ensureServerGroups(role)` — `ServerSpec.role: "master" | "worker"` has no
+  pool id) — marked with a `ponytail:` comment as the ceiling; needs
+  `ServerSpec` to grow a `pool` field to go further, which is a core/domain
+  change outside this task's ownership.
+- **`ensureServerGroups` is not part of the `CloudProvider` port** (the
+  interface has no such method, and `packages/core` is out of ownership) —
+  exported as a standalone function from `@kumulo/openstack`'s provider
+  module and called internally by `ensureServer` before creating an instance.
+  The reconcile pipeline's `"ServerGroups"` phase name
+  (`packages/core/src/reconcile/phases.ts`) has no Effect wired to it yet by
+  any task so far — leaving that wiring to whichever task builds the full
+  phase-Effect list is consistent with this task's scope ("CloudProvider impl"
+  only).
+- **`HttpClientRequest`'s `URL`-vs-`string` overload matters for tests**:
+  passing a `URL` object into `HttpClientRequest.get/post/...` makes `setUrl`
+  strip the query string out of `.url` into a separate `.urlParams` field
+  (confirmed in `effect/unstable/http/HttpClientRequest.ts`'s `setUrl`) — a
+  fixture fake that reads `request.url` as a plain string (the natural thing
+  to do) then sees no query at all. Fix: build the `URL` for parsing/joining
+  purposes only, then call `.toString()` before handing it to
+  `HttpClientRequest.get(...)` — keeps the query string in the plain
+  `request.url` string field. `src/provider/rest.ts`'s `restRequest` does
+  this; `test/provider/fake-openstack.ts` is the fixture-replay harness that
+  depends on it (routes on `${METHOD} ${pathname}`, one handler map, real
+  `Response` objects — reused the `http-client.test.ts` `HttpClient.make`
+  pattern from T5.3).
+- **WHATWG `Response` rejects any body, even `""`, on null-body statuses**
+  (204/304) — `fake-openstack.ts` passes `null` for those, not an empty
+  string.
+- Files: `packages/openstack/src/provider/{rest,security-group-rules,
+  cloud-provider}.ts`, `packages/openstack/test/provider/{security-group-rules,
+  cloud-provider,fake-openstack}.ts`. Not wired into `src/index.ts` (barrel
+  integration is a later task's job, per the standing "don't touch
+  `packages/core/src/index.ts` / package barrels outside your task" rule —
+  same precedent as T6.1's sibling reconciler-fakes task).
+- `bun run ci` (package-scoped): `tsc --noEmit` clean, `vitest run
+  packages/openstack` 12 files / 44 tests green, `lint:deps` 0 violations (174
+  modules/484 deps), oxlint clean for every file this task touched (repo-wide
+  `bun run lint` still has pre-existing errors in `packages/distro-ovh-mks` —
+  another concurrent agent's in-progress work, untouched).
