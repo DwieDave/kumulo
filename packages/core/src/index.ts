@@ -47,6 +47,19 @@ export type { PlanDecision } from "./present/index.ts"
 
 export { genericProfile, genericProfileLive } from "./profiles/index.ts"
 
+export { dnsNoop, dnsNoopLive } from "./dns-noop/index.ts"
+
+export { cordonNode, deleteNode, drainNode, K8sClient, makeK8sClient, parseKubeconfig, waitForDeploymentAvailable, waitForNodeReady } from "./k8s/index.ts"
+export type {
+  ClientCertAuth,
+  K8sClientOptions,
+  KubeconfigAuth,
+  KubeconfigContext,
+  ResourceRef,
+  TokenAuth,
+  WaitOptions
+} from "./k8s/index.ts"
+
 export type {
   AddonContext,
   AutoscalingRule,
