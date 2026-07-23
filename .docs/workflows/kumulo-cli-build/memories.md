@@ -802,3 +802,63 @@ half's `OvhProjectClient`).
 - `bun run ci` full green after all five fixes: typecheck (12 packages),
   vitest 68 files/200 tests, dep-lint 0 violations (227 modules), oxlint
   clean, `codegen:check` 8 pipelines clean.
+
+## T8.1 — minimal in-house k8s client
+
+Committed as `7ab7045`. Placement: `packages/core/src/k8s/**` (legal —
+`effect/unstable/http` is a subpath of the `effect` catalog dep core already
+allows, not a separate package; confirmed via `bun run lint:deps`).
+
+- `kubeconfig.ts`: `parseKubeconfig` — single-context (`clusters[0]`/`users[0]`)
+  YAML parse into `{ server, caPem?, auth }`, `auth` a `token | clientCert`
+  discriminated union (base64-decoded cert/key). Client-cert *TLS wiring*
+  (an `https.Agent`) is explicitly out of core's reach (dep-lint's
+  `core-only-imports-effect` forbids `@effect/platform-node`) — parsing
+  exposes the decoded PEM material, building the Agent is the composition
+  root's job (same split as `openstack`'s `KeystoneAuthLive`/`OpenStackHttpLive`).
+- `client.ts`: `K8sClient` (`Context.Service`) — `get`/`list`/`apply`/`delete`/
+  `evict`, all taking a caller-supplied full REST path (`ResourceRef.path`,
+  e.g. `/apis/apps/v1/namespaces/default/deployments/foo`) — no GVK→path
+  mapper; every caller (distro-k3s drain, addons apply, cli status) already
+  knows its own resource's path. `apply` is server-side apply per FR-9.2:
+  `PATCH ...?fieldManager=kumulo&force=true`, `Content-Type:
+  application/apply-patch+yaml` (body is `JSON.stringify` — YAML is a JSON
+  superset, no need for the `yaml` stringifier on this path). `evict` POSTs
+  the Eviction subresource (not a bare pod delete) — 409 (PDB-blocked) maps
+  to `ResourceConflict`. `makeK8sClient({ client, server })` takes an
+  *already-authenticated* `HttpClient.HttpClient` (bearer header set, or an
+  Agent-backed client for certs) — same "wrap the standard tag" contract as
+  `OpenStackHttpLive`.
+- **`kumulo/no-type-assertion` forbids all `as` casts, including narrowing a
+  decoded JSON body to a domain type** — `client.ts`'s `_toManifest` narrows
+  via a runtime `apiVersion`/`kind` string check + object spread (returns
+  `undefined` on a malformed body) instead of `as K8sManifest`.
+- **`kumulo/no-multiple-function-params` applies to every *exported*
+  function, not private (`_`-prefixed) ones** — `node-ops.ts`'s
+  `cordonNode`/`drainNode`/`deleteNode` and `readiness.ts`'s
+  `waitForDeploymentAvailable`/`waitForNodeReady` all take one options
+  object each (`{ client, name }`, `{ get, ref, interval, timeout }`, etc.);
+  private helpers like `_field(value, key)` are exempt.
+- **`HttpClientRequest.delete` is exported under that name, not `.del`**
+  (the source file itself only has a private `const del = make("DELETE")`,
+  re-exported as `{ del as delete }`).
+- **Passing a `URL` object (vs. a string) to `HttpClientRequest.get/patch/...`
+  strips the query string into `request.urlParams`, not `request.url`** —
+  `setUrl` special-cases `URL` instances this way. Fixture tests asserting
+  on a PATCH's `?fieldManager=...&force=true` query must read
+  `UrlParams.toString(request.urlParams)`, not `request.url`.
+- Readiness waits (`waitForDeploymentAvailable`/`waitForNodeReady`) reuse
+  T2's `pollUntil` as-is (generic over `Status`) — no new polling code;
+  "Ready"/"Available" condition extraction is a small pure
+  `_conditionStatus(manifest, type)` reader over `status.conditions[]`.
+- Files: `packages/core/src/k8s/{kubeconfig,client,readiness,node-ops,index}.ts`,
+  mirrored tests under `packages/core/test/k8s/**` (+ `fake-http-client.ts`,
+  a local copy of `openstack/test/transport/http-client.test.ts`'s
+  `_fakeBase` helper — core can't import a sibling package's test code).
+  Timing-dependent readiness tests use `it.live` (real clock), same
+  precedent as `reconcile/poll.test.ts` — `it.effect`'s virtual `TestClock`
+  doesn't auto-advance plain `Effect.sleep`/`Schedule.spaced` durations.
+- Scoped `bun run typecheck`/vitest/`lint:deps`/oxlint all green for
+  `packages/core`. Full-repo `bun run typecheck`/vitest have one pre-existing
+  unrelated failure in `packages/dns-ovh` (a concurrent task's in-progress
+  work, not touched here).
