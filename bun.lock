@@ -106,6 +106,7 @@
       "name": "@kumulo/provider-ovh",
       "version": "0.0.0",
       "dependencies": {
+        "@kumulo/core": "workspace:*",
         "effect": "catalog:",
       },
       "devDependencies": {
@@ -117,6 +118,18 @@
       "name": "@kumulo/volumes-cinder",
       "version": "0.0.0",
       "dependencies": {
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@effect/vitest": "catalog:",
+        "vitest": "catalog:",
+      },
+    },
+    "tools/codegen": {
+      "name": "codegen",
+      "version": "0.0.0",
+      "dependencies": {
+        "@effect/openapi-generator": "catalog:",
         "effect": "catalog:",
       },
       "devDependencies": {
@@ -418,6 +431,8 @@
     "cliui": ["cliui@8.0.1", "", { "dependencies": { "string-width": "^4.2.0", "strip-ansi": "^6.0.1", "wrap-ansi": "^7.0.0" } }, "sha512-BSeNnyus75C4//NQ9gQt1/csTXyo/8Sb+afLAkzAptFuMsod9HFokGNudZpi/oQV73hnVK+sR+5PVRMd+Dr7YQ=="],
 
     "cluster-key-slot": ["cluster-key-slot@1.1.1", "", {}, "sha512-rwHwUfXL40Chm1r08yrhU3qpUvdVlgkKNeyeGPOxnW8/SyVDvgRaed/Uz54AqWNaTCAThlj6QAs3TZcKI0xDEw=="],
+
+    "codegen": ["codegen@workspace:tools/codegen"],
 
     "color-convert": ["color-convert@2.0.1", "", { "dependencies": { "color-name": "~1.1.4" } }, "sha512-RRECPsj7iu/xb5oKYcsFHSppFNnsj/52OVTRKb4zP5onXwVF3zVmmToNcOfGC+CRDpfK/U584fMg38ZHCaElKQ=="],
 

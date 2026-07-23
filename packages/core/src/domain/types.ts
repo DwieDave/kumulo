@@ -132,4 +132,12 @@ export interface ClusterConfigShape {
   readonly distro: DistroKind
   readonly worker_pools: ReadonlyArray<WorkerPoolShape>
   readonly addons: { readonly cni: "flannel" | "cilium" }
+  // kumulo: added for T6.2 provider-profile validation (FR-1.4) — region
+  // for per-region capability checks, HA flag for the Octavia-fallback
+  // rule, retained volume types for the volume-type allowlist rule. Real
+  // ClusterConfig (config/schema.ts) is a structural superset, so any
+  // decoded config satisfies this shape with no adapter.
+  readonly auth?: { readonly region: string }
+  readonly api_server?: { readonly high_availability: boolean }
+  readonly volumes?: { readonly retained: ReadonlyArray<{ readonly type: string }> }
 }
