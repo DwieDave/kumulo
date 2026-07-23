@@ -1,16 +1,8 @@
 # Plan — Kumulo CLI Build
 
-Status: **Phase 4 — executing. Current task: T0.1**
+Status: **Phase 4 — executing. Done: M0 (T0.1–T0.3), M1 (T1.1–T1.3 + integration + verified fix round). Running: M2–M6 combined DAG workflow.**
 
-## Current task detail — T0.1 Workspace skeleton
-
-1. Resolve latest `effect@4.0.0-beta.x`, `@effect/platform-bun`, `@effect/openapi-generator`, `@effect/vitest` beta versions from npm; pin exact.
-2. Root: `package.json` (workspaces: `packages/*`, `tools/*`; scripts `ci`, `test`, `typecheck`), strict `tsconfig.base.json`, vitest config (projects across workspaces), replace bun-init leftovers (`index.ts`).
-3. Packages `packages/{core,openstack,provider-ovh,distro-k3s,distro-ovh-mks,dns-ovh,volumes-cinder,addons,cli}` as `@kumulo/*` + `tools/ovh2openapi`: each package.json (type module, exports src/index.ts), src/index.ts, one real smoke test (core: a trivial Effect.succeed run via @effect/vitest; others: import-resolves test).
-4. TDD order: write root `ci` script + one failing workspace test first (no packages yet) → verify fail → scaffold until `bun run ci` green.
-5. Definition of done: `bun install` clean, `bun run ci` (typecheck all + vitest all) green, fast-check installed and demonstrably usable in one property test.
-
-**Execution model:** implementation work (Phase 4 task execution) is delegated to **Sonnet 5 subagents** (`model: sonnet`), one per task, each following the Phase 4 TDD loop (failing test → code → green → commit). From T0.2 onward, tasks run under **ultracode multi-agent workflows** (Workflow tool). From M1 onward, workflows batch multiple tasks per milestone: Sonnet 5 implements (parallel where file-ownership is disjoint, plus an integration step for shared barrels), then **1–2 Fable 5 low-effort agents verify** the milestone (spec-deviation lens + test-quality lens); a Sonnet fix round runs only on confirmed blockers. The main session orchestrates: prepares task briefs with full context (requirement links, file paths, conventions), reviews agent output, and gates commits.
+**Execution model:** implementation work (Phase 4 task execution) is delegated to **Sonnet 5 subagents** (`model: sonnet`), one per task, each following the Phase 4 TDD loop (failing test → code → green → commit). From T0.2 onward, tasks run under **ultracode multi-agent workflows** (Workflow tool). From M1 onward, workflows batch multiple tasks per milestone: Sonnet 5 implements (parallel where file-ownership is disjoint, plus an integration step for shared barrels), then **one Fable 5 low-effort agent verifies** the milestone(s) (spec-deviation + test-quality in a single pass); a Sonnet fix round runs only on confirmed blockers. Workflows may batch multiple whole milestones when their file surfaces are disjoint (e.g. M2∥M3). The main session orchestrates: prepares task briefs with full context (requirement links, file paths, conventions), reviews agent output, and gates commits.
 
 Sequencing rationale: shared foundations first; then the OVH-MKS vertical slice (smallest surface that proves config → reconcile → running cluster end to end, per design §3.3.1's own sequencing note); then the k3s/OpenStack slice on the proven core; extensions and addons after both distros exist; polish and credential-gated smoke last. Every milestone ends green offline (NFR-3) and is committed per Phase 4 discipline.
 
