@@ -16,6 +16,7 @@ Spec base: `.docs/design/kumulo-design.md`. Deviations from the design doc decid
 | D8 | Anti-affinity | v1 includes Nova server groups (`soft-anti-affinity`) per masters-set and per pool; MKS uses native `antiAffinity` |
 | D9 | OpenStack specs | Vendored from archived `gtema/openstack-openapi` `/specs` snapshot; treated beta-quality → lenient response validation default, patches carry corrections |
 | D10 | Live testing | All milestones offline-verifiable (fakes/fixtures); live smoke tests only at the end when credentials arrive |
+| D11 | Dependency versions | Single **Bun catalog** in root package.json (`workspaces.catalog`): every external dependency version declared exactly once, pinned exact; all packages reference `catalog:` — no version literals outside root |
 
 ## Functional requirements
 
