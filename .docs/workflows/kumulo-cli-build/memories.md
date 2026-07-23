@@ -982,3 +982,67 @@ allows, not a separate package; confirmed via `bun run lint:deps`).
   session only touched `packages/distro-k3s`'s own files; other packages'
   in-flight concurrent work untouched, confirmed via `git status` before
   staging).
+
+## T8.3 — upgrade flows
+
+- `distro-k3s/src/upgrade/plan.ts`: `renderMastersPlan`/`renderWorkersPlan`/
+  `renderUpgradePlan` port hetzner-k3s's `templates/upgrade_plan_for_*.yaml`
+  (SUC `Plan` CRs) — masters concurrency 1 + cordon + control-plane-only
+  nodeSelector; workers configurable concurrency + `prepare` waiting on the
+  `k3s-server` Plan + cordon. Fixed a source bug while porting: the Crystal
+  masters template has **two `matchExpressions:` keys in the same YAML
+  mapping** (`node-role.kubernetes.io/master` then `.../control-plane`) —
+  in YAML a duplicate key silently keeps only the last one, so the "master"
+  condition never actually applied upstream either; folded to one clean
+  `control-plane` (`In`/`NotIn`) selector instead of reproducing the dead
+  key.
+- Wired the `SelfManagedDistroShape.upgradePlan` stub in
+  `distro-k3s/src/distro/index.ts` (left by T7.3 with an explicit `ponytail:
+  ... T8.3's scope` marker) to call `renderUpgradePlan({ version: target })`
+  — one-line change, not a new file, but the designated integration point.
+- `distro-ovh-mks`'s API-driven `upgrade()` (strategy `LATEST_PATCH`/
+  `NEXT_MINOR`) already existed pre-T8.3 (committed under T7.x/T8.x distro
+  work) — nothing to add there, only CLI wiring was missing.
+- **No k3s CLI command path exists yet** (`create`/`scale`/`kubeconfig`/
+  `delete` all hard-fail on `distro: k3s` via `DistroNotWired` — only
+  `ovh-mks` is composed at the root, see `main.ts`'s `MksEnvLive` +
+  `OpenStackEnvLive`). Building a full client-cert `K8sClient` HTTP layer
+  from a kubeconfig just for this one command would be scope creep no other
+  task owns yet (and risks colliding with whatever future task does wire
+  k3s's `create`/`kubeconfig` — same composition-root code would be
+  needed there). Confirmed this reading is intentional, not an oversight:
+  design doc §7 literally lists the command's contract as `kumulo upgrade
+  --config cluster.yaml  # SUC plan for new k3s version` (render, not
+  apply) — matching plan.md's own wording split ("SUC plan **rendering**"
+  for k3s vs "MKS API-**driven**" for mks). So `packages/cli/src/commands/
+  upgrade.ts`'s k3s branch renders + prints the Plan manifests (JSON, same
+  "YAML is a JSON superset" convention as `core/src/k8s/client.ts`) with a
+  `kubectl apply -f -` hint; the ovh-mks branch actually calls the API
+  (resolve cluster by name, then `upgrade()`, gated on `--yes` like
+  `delete`). Revisit once a k3s `K8sClient`/SSH composition root lands —
+  swap the print for a real `K8sClient.apply` per manifest.
+- `strategy` flag maps `latest-patch`/`next-minor` → OVH's
+  `LATEST_PATCH`/`NEXT_MINOR` via `Flag.choiceWithValue` (kebab-case CLI
+  input, upper-snake API enum) rather than exposing the raw enum spelling
+  at the CLI surface.
+- No `worker_upgrade_concurrency` config field exists in `ClusterConfig`
+  schema (unlike hetzner-k3s's `k3s_upgrade_concurrency` setting) — exposed
+  as a CLI-only `--worker-concurrency` flag (default 1) instead of adding a
+  schema field, since `packages/core/src/config/schema.ts` is outside this
+  task's ownership and no other FR calls for it to be config-persisted.
+- Package-scoped `bun run typecheck`/vitest (15 files/39 tests for
+  distro-k3s incl. 3 new; 15 files/33 tests for cli, unchanged count since
+  no new test file was added for the CLI command — see below)/`lint:deps`/
+  oxlint all green for both `packages/distro-k3s` and `packages/cli`.
+  Root `bun run lint` (whole repo) also clean except one pre-existing
+  unrelated warning in `packages/core/test/k8s/readiness.test.ts` (not
+  touched here). `git status` confirmed clean ownership before staging (no
+  other agents' in-flight files touched).
+- Did not add a dedicated CLI-command test file for `upgrade` — ponytail:
+  the two branches are thin wiring over already-tested pure functions
+  (`renderUpgradePlan` golden-tested in distro-k3s; `findClusterByName`/
+  `upgrade` golden/contract-tested in distro-ovh-mks); the golden-file
+  `distro-k3s/test/upgrade/plan.test.ts` is the one runnable check that
+  actually exercises new logic. Add a `cli/test/commands/upgrade.test.ts`
+  (fake `MksEnv`, capturing `Console.log` output) if the CLI wiring itself
+  grows real branching logic.
