@@ -68,3 +68,44 @@ literals elsewhere):**
 
 `bun install` clean, `bun run ci` (typecheck × 10 packages + `vitest run`)
 green: 10 test files / 11 tests passing.
+
+## T0.2 — Dependency-direction lint (dependency-cruiser)
+
+- `dependency-cruiser@18.1.0` added to the root catalog (exact-pinned), config
+  in `.dependency-cruiser.cjs`, wired as `bun run lint:deps` and appended to
+  `ci` (`typecheck && test && lint:deps`).
+- **Gotcha:** dependency-cruiser 18.1's bundled TS-compat check only accepts
+  `typescript >=2.0.0 <7.0.0` for its own transpiler detection; our repo pins
+  `typescript@7.0.2`, so without a fallback it silently parsed **0 modules**
+  when scanning directories (single-file targets still worked, which is what
+  makes this easy to miss). Fix: add `@swc/core` (pinned exact in the catalog,
+  `1.15.46`) as a devDependency — dependency-cruiser detects it as a
+  compatible transpiler and falls back to it for `.ts` parsing. No tsConfig
+  option needed/used (the root `tsconfig.json` has `files: []`, which — if
+  passed as `options.tsConfig` — also silently restricts the module graph to
+  zero files; left `options.tsConfig` out entirely).
+- Rule set encoded (4 `forbidden` rules matching design Appendix A):
+  1. `core-only-imports-effect` — `packages/core/src/**` may only import
+     `effect` (or its own `src/`); scoped to `src/` only so `core`'s own test
+     files can still use `@effect/vitest`/`fast-check` as devDeps.
+  2. `no-sibling-package-imports` — any non-core, non-cli `@kumulo/*` package
+     may import `core` but never another sibling package. Implemented with a
+     regex-capture + `pathNot: "^packages/$1/"` back-reference so a package
+     importing its own files isn't flagged as a "sibling" violation.
+  3. `ovh2openapi-no-kumulo-imports` — `tools/ovh2openapi` may import no
+     `packages/*`.
+  4. `no-deep-package-imports` — forbids importing another package's
+     `src/*` file directly except the package-root `index.ts` (the declared
+     export). Also needed a same-package capture/back-reference
+     (`^(packages|tools)/([^/]+)/` → `pathNot: "^packages/$2/"`) — otherwise
+     it flagged ordinary intra-package files importing each other (caught via
+     the pre-existing unrelated `packages/oxlint` tooling package, which has
+     `src/oxlint/index.ts` importing sibling `src/oxlint/rules/*.ts` files).
+  5. `cli` package is exempt from rules 1/2 by construction (regex excludes
+     `packages/cli/` from the "from" side of the sibling-import rule).
+- TDD proof: temporarily added `import "@kumulo/cli"` to
+  `packages/core/src/index.ts` → `lint:deps` failed with
+  `error core-only-imports-effect: packages/core/src/index.ts → @kumulo/cli`
+  (1 violation). Reverted → 0 violations, 33 modules/40 deps cruised, green.
+- `bun run ci` full green after the fix (typecheck × packages, vitest 10
+  files/11 tests, lint:deps 0 violations).
