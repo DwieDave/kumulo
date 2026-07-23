@@ -1,6 +1,6 @@
 # Plan — Kumulo CLI Build
 
-Status: **Phase 4 — executing. Done: M0 (T0.1–T0.3), M1 (T1.1–T1.3 + integration + verified fix round). Running: M2–M6 combined DAG workflow.**
+Status: **Phase 4 — executing. Done: M0, M1, M2–M6 (16 tasks + integration + verified fix round; MKS lifecycle AC-3 landed). Running: M7–M10 combined DAG workflow. Remaining after: M11 live smoke (blocked on credentials).**
 
 **Execution model:** implementation work (Phase 4 task execution) is delegated to **Sonnet 5 subagents** (`model: sonnet`), one per task, each following the Phase 4 TDD loop (failing test → code → green → commit). From T0.2 onward, tasks run under **ultracode multi-agent workflows** (Workflow tool). From M1 onward, workflows batch multiple tasks per milestone: Sonnet 5 implements (parallel where file-ownership is disjoint, plus an integration step for shared barrels), then **one Fable 5 low-effort agent verifies** the milestone(s) (spec-deviation + test-quality in a single pass); a Sonnet fix round runs only on confirmed blockers. Workflows may batch multiple whole milestones when their file surfaces are disjoint (e.g. M2∥M3). The main session orchestrates: prepares task briefs with full context (requirement links, file paths, conventions), reviews agent output, and gates commits.
 
