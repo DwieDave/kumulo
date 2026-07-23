@@ -28,7 +28,8 @@
     "test": "vitest run",
     "lint:deps": "depcruise --config .dependency-cruiser.cjs packages tools",
     "ci": "bun run typecheck && bun run test && bun run lint:deps && bun run lint",
-    "lint": "oxlint"
+    "lint": "oxlint",
+    "specs:update:ovh": "bash tools/ovh2openapi/scripts/update-specs.sh"
   },
   "devDependencies": {
     "@effect/tsgo": "catalog:",

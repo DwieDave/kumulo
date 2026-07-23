@@ -1,0 +1,166 @@
+{
+  "apiVersion": "1.0",
+  "apis": [
+    {
+      "path": "/domain/zone/{zoneName}/record",
+      "description": "",
+      "operations": [
+        {
+          "operationId": "getRecords",
+          "httpMethod": "GET",
+          "description": "List record",
+          "parameters": [
+            {
+              "name": "fieldType",
+              "dataType": "domain.zone.RecordTypeEnum",
+              "paramType": "query",
+              "fullType": "domain.zone.RecordTypeEnum",
+              "required": false,
+              "description": "Filter the value of fieldType property (like)"
+            },
+            {
+              "name": "subDomain",
+              "dataType": "string",
+              "paramType": "query",
+              "fullType": "string",
+              "required": false,
+              "description": "Filter the value of subDomain property (ilike)"
+            },
+            {
+              "name": "zoneName",
+              "dataType": "string",
+              "paramType": "path",
+              "fullType": "string",
+              "required": true,
+              "description": "Zone name"
+            }
+          ],
+          "responseType": "long[]",
+          "responseTypes": { "200": "long[]" },
+          "noAuthentication": false
+        },
+        {
+          "operationId": "createRecord",
+          "httpMethod": "POST",
+          "description": "Create a new record (Don't forget to refresh the zone)",
+          "parameters": [
+            {
+              "dataType": "domain.zone.RecordCreate",
+              "paramType": "body",
+              "fullType": "domain.zone.RecordCreate",
+              "required": true,
+              "description": "Request Body"
+            },
+            {
+              "name": "zoneName",
+              "dataType": "string",
+              "paramType": "path",
+              "fullType": "string",
+              "required": true,
+              "description": "Zone name"
+            }
+          ],
+          "responseType": "domain.zone.Record",
+          "responseTypes": { "200": "domain.zone.Record" },
+          "noAuthentication": false
+        }
+      ]
+    }
+  ],
+  "models": {
+    "domain.zone.RecordTypeEnum": {
+      "id": "RecordTypeEnum",
+      "namespace": "domain.zone",
+      "description": "Resource record name",
+      "enum": [
+        "A", "AAAA", "CAA", "CNAME", "DKIM", "DMARC", "DNAME", "HTTPS", "LOC",
+        "MX", "NAPTR", "NS", "PTR", "RP", "SPF", "SRV", "SSHFP", "SVCB", "TLSA", "TXT"
+      ],
+      "enumType": "string"
+    },
+    "domain.zone.RecordCreate": {
+      "id": "RecordCreate",
+      "namespace": "domain.zone",
+      "description": "DNS zone record creation request",
+      "properties": {
+        "fieldType": {
+          "type": "domain.zone.RecordTypeEnum",
+          "fullType": "domain.zone.RecordTypeEnum",
+          "canBeNull": false,
+          "readOnly": false,
+          "required": true
+        },
+        "subDomain": {
+          "type": "string",
+          "fullType": "string",
+          "canBeNull": true,
+          "readOnly": false,
+          "description": "Record subDomain",
+          "required": false
+        },
+        "target": {
+          "type": "string",
+          "fullType": "string",
+          "canBeNull": false,
+          "readOnly": false,
+          "description": "Record target",
+          "required": true
+        },
+        "ttl": {
+          "type": "long",
+          "fullType": "long",
+          "canBeNull": false,
+          "readOnly": false,
+          "description": "Record ttl",
+          "required": false
+        }
+      }
+    },
+    "domain.zone.Record": {
+      "id": "Record",
+      "namespace": "domain.zone",
+      "description": "DNS zone record",
+      "properties": {
+        "id": {
+          "type": "long",
+          "fullType": "long",
+          "canBeNull": false,
+          "readOnly": true,
+          "description": "Id of the record",
+          "required": false
+        },
+        "fieldType": {
+          "type": "domain.zone.RecordTypeEnum",
+          "fullType": "domain.zone.RecordTypeEnum",
+          "canBeNull": false,
+          "readOnly": true,
+          "required": false
+        },
+        "subDomain": {
+          "type": "string",
+          "fullType": "string",
+          "canBeNull": true,
+          "readOnly": true,
+          "description": "Record subDomain",
+          "required": false
+        },
+        "target": {
+          "type": "string",
+          "fullType": "string",
+          "canBeNull": false,
+          "readOnly": true,
+          "description": "Record target",
+          "required": false
+        },
+        "ttl": {
+          "type": "long",
+          "fullType": "long",
+          "canBeNull": false,
+          "readOnly": true,
+          "description": "Record ttl",
+          "required": false
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,130 @@
+{
+  "apiVersion": "1.0",
+  "apis": [
+    {
+      "path": "/cloud/project/{serviceName}/kube",
+      "description": "Manage your clusters",
+      "operations": [
+        {
+          "httpMethod": "GET",
+          "description": "List your managed Kubernetes clusters",
+          "parameters": [
+            {
+              "name": "serviceName",
+              "dataType": "string",
+              "paramType": "path",
+              "fullType": "string",
+              "required": true,
+              "description": "Service name"
+            }
+          ],
+          "responseType": "string[]",
+          "responseTypes": { "200": "string[]" },
+          "noAuthentication": false
+        },
+        {
+          "httpMethod": "POST",
+          "description": "Create a new managed Kubernetes cluster",
+          "parameters": [
+            {
+              "dataType": "cloud.ProjectKubeCreation",
+              "paramType": "body",
+              "fullType": "cloud.ProjectKubeCreation",
+              "required": true,
+              "description": "Request Body"
+            },
+            {
+              "name": "serviceName",
+              "dataType": "string",
+              "paramType": "path",
+              "fullType": "string",
+              "required": true,
+              "description": "Service name"
+            }
+          ],
+          "responseType": "cloud.kube.Cluster",
+          "responseTypes": { "200": "cloud.kube.Cluster" },
+          "noAuthentication": false
+        }
+      ]
+    }
+  ],
+  "models": {
+    "cloud.ProjectKubeCreation": {
+      "id": "ProjectKubeCreation",
+      "namespace": "cloud",
+      "description": "Kubernetes cluster creation request",
+      "properties": {
+        "name": {
+          "type": "string",
+          "fullType": "string",
+          "canBeNull": false,
+          "readOnly": false,
+          "description": "Kubernetes cluster name",
+          "required": false
+        },
+        "region": {
+          "type": "string",
+          "fullType": "string",
+          "canBeNull": false,
+          "readOnly": false,
+          "description": "Kubernetes OpenStack region",
+          "required": true
+        },
+        "version": {
+          "type": "cloud.kube.VersionEnum",
+          "fullType": "cloud.kube.VersionEnum",
+          "canBeNull": false,
+          "readOnly": false,
+          "description": "Kubernetes version to install",
+          "required": false
+        }
+      }
+    },
+    "cloud.kube.VersionEnum": {
+      "id": "VersionEnum",
+      "namespace": "cloud.kube",
+      "description": "Enum values for kubernetes version",
+      "enum": ["1.28", "1.29", "1.30"],
+      "enumType": "string"
+    },
+    "cloud.kube.Cluster": {
+      "id": "Cluster",
+      "namespace": "cloud.kube",
+      "description": "Managed Kubernetes cluster description",
+      "properties": {
+        "id": {
+          "type": "string",
+          "fullType": "string",
+          "canBeNull": false,
+          "readOnly": true,
+          "description": "Cluster ID",
+          "required": false
+        },
+        "name": {
+          "type": "string",
+          "fullType": "string",
+          "canBeNull": false,
+          "readOnly": true,
+          "description": "Cluster name",
+          "required": false
+        },
+        "status": {
+          "type": "cloud.kube.StatusEnum",
+          "fullType": "cloud.kube.StatusEnum",
+          "canBeNull": false,
+          "readOnly": true,
+          "description": "Cluster status",
+          "required": false
+        }
+      }
+    },
+    "cloud.kube.StatusEnum": {
+      "id": "StatusEnum",
+      "namespace": "cloud.kube",
+      "description": "Enum values for status",
+      "enum": ["READY", "INSTALLING", "REDEPLOYING", "DELETING", "SUSPENDED", "RESETTING", "UPDATING"],
+      "enumType": "string"
+    }
+  }
+}
