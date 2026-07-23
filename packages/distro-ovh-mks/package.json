@@ -12,6 +12,8 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "codegen": "workspace:*",
+    "ovh2openapi": "workspace:*"
   }
 }

@@ -403,3 +403,105 @@ green: 10 test files / 11 tests passing.
   in `packages/dns-ovh/scripts/generate.ts` and
   `packages/distro-ovh-mks/scripts/generate.ts` — other concurrent agents'
   in-progress work, not touched by this task.
+
+## T3.4 — OVH MKS + DNS clients and OAuth2 auth layer
+
+- **Trimming happens *before* `convert`, not after** (unlike the OpenStack
+  pipeline's post-conversion operationId filter): the vendored `cloud.json` is
+  2.6MB covering OVH's entire Cloud API, and running it whole through
+  `tools/ovh2openapi`'s `convert` hits `ConversionUnsupported` on constructs
+  used by unrelated (non-MKS) routes. Each package's `scripts/generate.ts`
+  trims the raw OVH schema itself first — allowlist.json's `{path, method}`
+  pairs select `apis`, then a transitive model-reference closure (regex-walk
+  every property's `fullType` string) prunes `models` down to only what's
+  reachable — *then* calls `convert`, then reuses `tools/codegen`'s
+  `applyPatches`/`generateSource` stages unchanged. Two near-identical
+  `scripts/generate.ts` (distro-ovh-mks, dns-ovh) — not shared into a tool,
+  only two call sites and each needed a different patch-file name/allowlist
+  shape; not worth a shared abstraction (YAGNI).
+- **`allowlist.json` shape differs from the OpenStack one on purpose**: OVH's
+  `cloud.json` operations carry no `operationId` field at all (only
+  `domain.json` does, e.g. `getRecords`/`createRecord`) — so allowlisting by
+  `operationId` isn't possible pre-conversion. Used `{ path, method }` pairs
+  instead (matched against the OVH schema's own `api.path`/`op.httpMethod`),
+  plus a `spec` field pointing at the vendored schema path. `@effect/openapi-generator`
+  auto-derives stable operationIds from path+method when the source spec
+  lacks one (`getCloudProjectServiceNameKube`, etc.) — confirmed in the
+  generated output, so nothing downstream needed real OVH operationIds.
+- **Converter gaps found and fixed** (extended `tools/ovh2openapi/src/convert.ts`'s
+  primitive-type match, out of this task's nominal ownership but blocking —
+  same precedent as T0.2/T1.2's shared-file exceptions): OVH's `uuid`,
+  `duration`, `datetime`, `password`, `ipv4Block` scalar `fullType`s now map to
+  `{ type: "string", format: "..." }`; OVH's `map[K]V` generic (e.g.
+  `map[string]string` for pool labels/annotations) now maps to
+  `{ type: "object", additionalProperties: <V schema> }` (new
+  `OpenApiSchema` union member added to `openapi.ts`). All four covered by
+  new cases in `tools/ovh2openapi/test/convert.test.ts` (TDD: written failing
+  first, confirmed red, then implemented).
+- **Op counts**: MKS 13 ops / 7 paths / 44 models (kube list/get/create/
+  update/delete, kubeconfig fetch+reset, cluster force-update, nodepool
+  list/get/create/update/delete); DNS 6 ops / 3 paths / 4 models (zone record
+  get/list/create/update/delete, zone refresh).
+- **OvhAuth placement — deviated from the task brief's preferred placement**
+  (`OvhAuth` port in `packages/core/src/ports`, impl in `provider-ovh`):
+  `packages/core/src/index.ts` is explicitly off-limits to this task (owned
+  by the integration/barrel-wiring step per orchestration rules), and
+  dependency-cruiser's `no-deep-package-imports` rule only allows
+  cross-package imports through a package's root `index.ts` — so a core-side
+  port would've been unreachable from `provider-ovh` without editing that
+  barrel. Kept `OvhAuth` (the port, `Context.Service`) and `OvhAuthLive` (the
+  impl) together in `packages/provider-ovh/src/auth/{port,live}.ts` instead;
+  confirmed `bun run lint:deps` green. Documented the reasoning inline in
+  `port.ts` too.
+- **`ovhHttpClientLayer`** (`provider-ovh/src/auth/client.ts`) wraps a base
+  `HttpClient.HttpClient` with Bearer injection (reads `OvhAuth.token` per
+  request via `HttpClient.mapRequestEffect`) + `HttpClientRequest.prependUrl`
+  (OVH API v1 base `https://eu.api.ovh.com/1.0`). A token-fetch
+  `AuthenticationFailed` occurring mid-request has to be converted to an
+  `HttpClientError` (wrapped as a `TransportError`, cause carries the
+  original tagged error) — the plain `HttpClient.HttpClient` interface fixes
+  its error channel to `HttpClientError` structurally, so a Layer providing
+  that exact tag can't leak a different error type through `mapRequestEffect`.
+- **Composition root, not consumed here**: `distro-ovh-mks`/`dns-ovh` do
+  *not* import `@kumulo/provider-ovh` — dependency-cruiser's
+  `no-sibling-package-imports` rule forbids non-core packages depending on
+  each other. Each package's `src/client/{mks,dns}.ts` is a thin re-export of
+  the generated `make`/interface types, taking a plain `HttpClient.HttpClient`
+  value. Wiring `OvhAuthLive` + `ovhHttpClientLayer` (provider-ovh) together
+  with `makeMksClient`/`makeDnsClient` (this task's packages) is the CLI's
+  job (T4.2 composition root).
+- **`OvhAuthLive` token cache**: `Ref`-backed, expiry-skew (60s) check-and-
+  refetch on every `.token` access — no proactive background-refresh fiber
+  (design's "refresh Schedule" language read as retry-on-failure, not
+  proactive prefetch; simplest thing that satisfies FR-4.6, revisit if a
+  real prefetch requirement shows up). The token-endpoint call itself is
+  wrapped in `Effect.retry` with `Schedule.exponential("200 millis").pipe(
+  Schedule.jittered, Schedule.upTo({ times: 3 }))` (FR-4.6's exp-backoff +
+  jitter). **Gotcha**: `Schedule.min([exponential, Schedule.recurs(n)])`
+  looked like the right combinator for "bounded exponential backoff" but
+  hung forever under real retry — `Schedule.upTo({ times: n })` is the
+  correct/simpler API for that.
+- **`it.effect` vs `it.live` in tests**: the retry-schedule test (real
+  `Effect.sleep` between attempts) hangs forever under `it.effect` — its
+  virtual `TestClock` never advances on its own. Had to use `it.live` (real
+  time) for that one test; the cache-hit tests (deterministic, all fixtures
+  return `200` synchronously, no sleeps) work fine under `it.effect`.
+- **Fixture-replay tests need an absolute base URL**: `HttpClient.make(f)`'s
+  internal wiring parses `request.url` into a real `URL` *before* invoking
+  `f` — a bare relative path like `/cloud/project/x/kube` throws
+  `Invalid URL` at that parse step, never reaching the test's fixture
+  handler. Fix: wrap the fixture transport with
+  `HttpClient.mapRequest(HttpClientRequest.prependUrl("https://fixture.invalid"))`
+  before `HttpClient.make`, mirroring what `ovhHttpClientLayer` does for real
+  traffic.
+- `bun run ci` full green: typecheck (12 packages), `vitest run` 156/156
+  across 51 files (mine: 4 new files / 15 tests — 3 auth, 5 MKS client, 4 DNS
+  client, 3 new ovh2openapi convert cases — plus untouched pre-existing
+  suites), `lint:deps` 0 violations, oxlint clean (fixed the 6
+  `no-type-assertion` errors T5.2's memory entry flagged in my in-progress
+  `scripts/generate.ts` files — `JSON.parse` into an explicitly-typed
+  `const` needs no `as`, same trick as T3.2/T3.3), `codegen:check` unaffected
+  (services.json is T5.2's OpenStack manifest; these two packages regenerate
+  via their own standalone `scripts/generate.ts`, not wired into
+  `tools/codegen`'s regen-noop gate — could be added later if drift-on-CI
+  matters for OVH too, deferred as YAGNI for now).

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect } from "effect"
-import { convert } from "../src/convert.ts"
+import { convert, convertModels } from "../src/convert.ts"
 import type { OvhSchema } from "../src/domain.ts"
 import { ConversionUnsupported } from "../src/errors.ts"
 
@@ -69,6 +69,48 @@ describe("convert", () => {
     const error = Effect.runSync(Effect.flip(convert(schema)))
     assert.isTrue(error instanceof ConversionUnsupported)
     assert.strictEqual(error.detail, "x.NotAModel")
+  })
+
+  it("converts an OVH map[K]V type to an open object schema (T3.4: OVH MKS labels/annotations)", () => {
+    const schema = Effect.runSync(convertModels({
+      "cloud.kube.NodePoolTemplateMetadata": {
+        id: "NodePoolTemplateMetadata",
+        namespace: "cloud.kube",
+        properties: { labels: { fullType: "map[string]string", required: false } }
+      }
+    }))
+    assert.deepStrictEqual(schema["cloud.kube.NodePoolTemplateMetadata"], {
+      type: "object",
+      properties: { labels: { type: "object", additionalProperties: { type: "string" } } },
+      required: []
+    })
+  })
+
+  it("converts uuid/duration-typed model properties to formatted string schemas (T3.4: OVH MKS ids/timers)", () => {
+    const doc = Effect.runSync(
+      convert({
+        apiVersion: "1.0",
+        apis: [],
+        models: {
+          "cloud.kube.Cluster": {
+            id: "Cluster",
+            namespace: "cloud.kube",
+            properties: {
+              id: { fullType: "uuid", required: true },
+              controlPlaneUpToDateGracePeriod: { fullType: "duration", required: false }
+            }
+          }
+        }
+      })
+    )
+    assert.deepStrictEqual(doc.components.schemas["cloud.kube.Cluster"], {
+      type: "object",
+      properties: {
+        controlPlaneUpToDateGracePeriod: { type: "string", format: "duration" },
+        id: { type: "string", format: "uuid" }
+      },
+      required: ["id"]
+    })
   })
 
   it("fails with ConversionUnsupported for a non-string enum type", () => {

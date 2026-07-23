@@ -6,6 +6,11 @@ import type { OpenApiDocument, OpenApiOperation, OpenApiParameter, OpenApiReques
 
 const _primitiveSchema = Match.type<string>().pipe(
   Match.when("string", (): OpenApiSchema => ({ type: "string" })),
+  Match.when("uuid", (): OpenApiSchema => ({ type: "string", format: "uuid" })),
+  Match.when("duration", (): OpenApiSchema => ({ type: "string", format: "duration" })),
+  Match.when("datetime", (): OpenApiSchema => ({ type: "string", format: "date-time" })),
+  Match.when("password", (): OpenApiSchema => ({ type: "string", format: "password" })),
+  Match.when("ipv4Block", (): OpenApiSchema => ({ type: "string", format: "ipv4Block" })),
   Match.when("boolean", (): OpenApiSchema => ({ type: "boolean" })),
   Match.when("long", (): OpenApiSchema => ({ type: "integer", format: "int64" })),
   Match.when("integer", (): OpenApiSchema => ({ type: "integer" })),
@@ -23,6 +28,14 @@ export function typeToSchema(args: {
   if (fullType.endsWith("[]")) {
     return typeToSchema({ fullType: fullType.slice(0, -2), models }).pipe(
       Effect.map((items): OpenApiSchema => ({ type: "array", items }))
+    )
+  }
+  // kumulo: OVH's `map[K]V` fullType syntax denotes a string-keyed dictionary
+  // (K is always "string" in practice) — model as an open object.
+  const mapMatch = /^map\[[^\]]+\](.+)$/.exec(fullType)
+  if (mapMatch) {
+    return typeToSchema({ fullType: mapMatch[1]!, models }).pipe(
+      Effect.map((additionalProperties): OpenApiSchema => ({ type: "object", additionalProperties }))
     )
   }
   const primitive = _primitiveSchema(fullType)

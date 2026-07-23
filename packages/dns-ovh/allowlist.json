@@ -1,0 +1,12 @@
+{
+  "service": "dns",
+  "spec": "../../tools/ovh2openapi/specs/ovh/domain.json",
+  "operations": [
+    { "path": "/domain/zone/{zoneName}/record", "method": "GET" },
+    { "path": "/domain/zone/{zoneName}/record", "method": "POST" },
+    { "path": "/domain/zone/{zoneName}/record/{id}", "method": "GET" },
+    { "path": "/domain/zone/{zoneName}/record/{id}", "method": "PUT" },
+    { "path": "/domain/zone/{zoneName}/record/{id}", "method": "DELETE" },
+    { "path": "/domain/zone/{zoneName}/refresh", "method": "POST" }
+  ]
+}

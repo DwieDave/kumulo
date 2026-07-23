@@ -5,6 +5,7 @@ export type OpenApiSchema =
   | { readonly type: "string" | "boolean" | "integer" | "number"; readonly format?: string; readonly enum?: readonly string[] }
   | { readonly type: "array"; readonly items: OpenApiSchema }
   | { readonly type: "object"; readonly properties: Record<string, OpenApiSchema>; readonly required?: readonly string[] }
+  | { readonly type: "object"; readonly additionalProperties: OpenApiSchema }
 
 export interface OpenApiParameter {
   readonly name: string
