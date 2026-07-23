@@ -672,3 +672,70 @@ green: 10 test files / 11 tests passing.
   fixture helper, no HTTP layer needed — fixtures implement `OvhProjectClient`
   directly). `bun run ci` full green: typecheck (13 packages), vitest 60
   files/180 tests, dep-lint 0 violations (210 modules), oxlint clean.
+
+## T6.3 — doctor (OpenStack half) + k3s-config wiring
+
+Committed as `a43913c`. Files: `packages/cli/src/doctor-openstack/{keystone-auth,nova,quota,octavia,resource-resolution,env,index}.ts`,
+mirrored tests under `packages/cli/test/doctor-openstack/**` (+ `fake-openstack.ts`
+fixture: a fixed-response fake `HttpClient` + a narrow `OpenStackEndpointResolver`
+fake, same "narrow interface over the real Context.Service" trick as the OVH
+half's `OvhProjectClient`).
+
+- Five checks, all `DoctorCheck`s taking already-resolved effects/values as
+  params (never a `Context` requirement) so they're unit-testable with plain
+  fakes, same convention as `doctor/ovh/*`:
+  - `keystoneAuthCheck({ token })` — reuses `KeystoneAuth.token`'s own
+    `AuthenticationFailed` error for the message.
+  - `microversionCheck({ probe, microversion })` + `probeMicroversion` — raw
+    `GET /v2.1/` with `X-OpenStack-Nova-API-Version` header (design pins
+    `NOVA_MICROVERSION = "2.96"`, matching the generated spec version, not
+    the allowlist's `2.79` codegen pin — those are different concerns: codegen
+    pins what shapes get generated, this pins what's sent on the wire).
+    406 → rejected, else non-2xx/network failure → unreachable (both fail,
+    distinct messages).
+  - `quotaHeadroomCheck({ limits, plannedInstanceCount })` + `fetchNovaLimits`
+    — raw `GET /v2.1/limits` (no allowlist entry exists for it, same "can't
+    extend the codegen allowlist from this task" gap as the OVH capability
+    check's ponytail note); non-2xx/unparseable → `{maxTotalInstances: -1,
+    ...}` sentinel, read as "no limit" (pass) rather than a false failure —
+    caught by a `mapError` to a literal tag *before* checking status, since
+    checking `response.status` first and only calling `.json` on 2xx is
+    required: a null-body 500's `.json()` can resolve successfully to `null`
+    instead of throwing, which silently turned "unreachable" into "0/0 quota"
+    (a real bug caught by the "unreachable → pass" test case, not the
+    happy-path ones — worth keeping that test around).
+  - `octaviaCapabilityCheck({ region, supported })` — pure, no network call:
+    `supported` is sourced by the (future) composition root from T6.2's
+    `ProviderProfile.capabilities.octavia(region)`, already pure itself.
+  - `resourceResolutionCheck({ kind: "image"|"flavor", ref, resolve })` — one
+    generic check backing both kinds (DRY), fed `@kumulo/openstack`'s
+    existing `resolveImage`/`resolveFlavor` (T6.1) by the composition root.
+- `Context.Service.Shape<typeof SomeTag>` is the v4 way to name a
+  `Context.Service` class's *resolved instance* type outside the class
+  itself (e.g. `OpenStackEnvShape.keystone`'s type) — the bare class name
+  (`KeystoneAuth`) types the **tag**, not the shape; using it directly as a
+  field type fails with "missing Service/[ServiceTypeId]/key".
+- **No `Effect.either`** in this v4 beta (confirmed absent, like
+  `Effect.catchAll`) — used `Effect.matchEffect({ onFailure, onSuccess })` to
+  fork into two effects instead of pattern-matching an `Either` value.
+- `packages/openstack/src/index.ts` was still the T0.1 placeholder — the
+  `no-deep-package-imports` dep-lint rule (package-root imports only) forced
+  adding real barrel exports there (`KeystoneAuth`, `KeystoneAuthLive`,
+  `loadCredentials`, `CloudProviderLive`, `resolveImage`, `resolveFlavor`,
+  types) before this task's checks could reach T6.1/T6.2's code at all;
+  added `@kumulo/openstack` to `packages/cli/package.json` deps to match.
+- `main.ts`: added `OpenStackEnv`/`OpenStackEnvLive` (never-failing — reads
+  `OS_*`/`clouds.yaml`, but a missing/bad credential becomes
+  `{ unavailableReason }` in the shape, not a Layer failure) merged into
+  `MainLive`. Deliberately *not* wired further than that: no `doctor` CLI
+  command exists yet (the OVH half didn't add one either — same precedent),
+  and `distro-k3s` (M7) is still a placeholder package, so there's no
+  consumer to wire beyond making `OpenStackEnv` available in the composition
+  root's context for whichever task adds the `doctor` command / k3s command
+  path next. A Layer that *can* fail (e.g. one that hard-requires `OS_*`)
+  would have broken every `ovh-mks` command by failing `MainLive`'s shared
+  context build regardless of which subcommand runs — that's why the
+  never-failing shape matters here, not just for doctor's own contract.
+- `bun run ci` full green: typecheck (all packages), vitest 26 files/75
+  tests across `cli`+`openstack`, dep-lint 0 violations (223 modules),
+  oxlint clean.
