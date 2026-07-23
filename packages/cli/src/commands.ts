@@ -1,6 +1,8 @@
 import { Console, Effect } from "effect"
 import { Command, Flag } from "effect/unstable/cli"
 import { loadConfig } from "./config.ts"
+import { reconcileVolumesOnDelete, volumes } from "./commands/volumes.ts"
+import { status } from "./commands/status.ts"
 import { upgrade } from "./commands/upgrade.ts"
 import { DistroNotWired } from "./distro-not-wired.ts"
 import { buildMksPlan } from "./mks/plan.ts"
@@ -84,7 +86,14 @@ export const del = Command.make(
     }
     yield* deleteMks(config)
     yield* Console.log(`Cluster "${config.name}" deleted.`)
+
+    // AC-7 — retained volumes (`volumes.retained[].retain: true`) survive
+    // `delete`; anything else recorded there is torn down alongside the cluster.
+    const kept = yield* reconcileVolumesOnDelete(config)
+    if (kept.length > 0) yield* Console.log(`Retained volumes (kept): ${kept.join(", ")}`)
   })
 ).pipe(Command.withDescription("Delete a cluster (FR-2.6)"))
 
-export const kumuloCli = kumulo.pipe(Command.withSubcommands([create, scale, kubeconfig, del, upgrade]))
+export const kumuloCli = kumulo.pipe(
+  Command.withSubcommands([create, scale, status, kubeconfig, del, upgrade, volumes])
+)

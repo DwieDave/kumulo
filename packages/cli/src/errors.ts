@@ -1,6 +1,7 @@
 import type { PlatformError } from "effect/PlatformError"
 import type { KumuloError, RendererRegistry } from "@kumulo/core"
 import { renderError } from "@kumulo/core"
+import type { OutputsInvalid } from "@kumulo/volumes-cinder"
 import type { DistroNotWired } from "./distro-not-wired.ts"
 
 /**
@@ -27,15 +28,16 @@ export const cliErrorRegistry: RendererRegistry = {
   AddonInstallFailed: (error) => `Failed to install addon ${error.addon}: ${error.cause}`
 }
 
-export type CliDomainError = KumuloError | DistroNotWired | PlatformError
+export type CliDomainError = KumuloError | DistroNotWired | OutputsInvalid | PlatformError
 
 /**
- * `_tag ===` checks narrow the union without a cast: once `PlatformError` and
- * `DistroNotWired` are ruled out, TypeScript narrows `error` to `KumuloError`
- * for the final `renderError` call.
+ * `_tag ===` checks narrow the union without a cast: once `PlatformError`,
+ * `DistroNotWired` and `OutputsInvalid` are ruled out, TypeScript narrows
+ * `error` to `KumuloError` for the final `renderError` call.
  */
 export const renderCliError = (error: CliDomainError): string => {
   if (error._tag === "PlatformError") return `File error: ${error.message}`
   if (error._tag === "DistroNotWired") return `distro "${error.distro}" is not wired into the CLI yet`
+  if (error._tag === "OutputsInvalid") return `Outputs file is invalid: ${error.message}`
   return renderError({ registry: cliErrorRegistry, error })
 }

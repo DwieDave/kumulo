@@ -38,6 +38,7 @@
         "@kumulo/distro-ovh-mks": "workspace:*",
         "@kumulo/openstack": "workspace:*",
         "@kumulo/provider-ovh": "workspace:*",
+        "@kumulo/volumes-cinder": "workspace:*",
         "effect": "catalog:",
       },
       "devDependencies": {
