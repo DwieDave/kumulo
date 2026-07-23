@@ -7,11 +7,17 @@
     ".": "./src/index.ts"
   },
   "main": "src/index.ts",
+  "scripts": {
+    "generate": "bun run scripts/generate-clients.ts"
+  },
   "dependencies": {
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "@kumulo/core": "workspace:*",
+    "yaml": "catalog:"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "codegen": "workspace:*"
   }
 }
