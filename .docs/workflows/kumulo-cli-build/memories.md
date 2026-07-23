@@ -628,3 +628,47 @@ green: 10 test files / 11 tests passing.
   cli deps + a `bin` entry. `bun run ci` green (typecheck, 55 files/168 tests,
   dep-lint 0 violations, oxlint clean, codegen:check clean). `k3s` distro path
   is not wired (fails fast with a `DistroNotWired` tagged error) — M7's job.
+
+## T4.3 — `doctor` (OVH half)
+
+- **No live OVH capabilities/quota endpoint is vendored**: `distro-ovh-mks`'s
+  allowlist only covers cluster/nodepool CRUD (T4.1/T4.2 scope), so
+  region-capability and quota data can't be fetched live yet. Handled
+  pragmatically: `regionVersionCapabilityCheck` validates only the k8s
+  version against a hand-kept static set (mirrors the generated
+  `Cloud_kube_VersionEnum` values, not re-exported through the package
+  barrel so duplicated by hand — ponytail-noted with the upgrade path); the
+  region half is an acknowledged gap until a `capabilities/kube` endpoint is
+  added to the codegen pipeline. `planVsQuotaCheck` takes `maxClusters` as a
+  caller-supplied parameter rather than a guessed OVH default — no
+  fabricated "real" quota number.
+- **Generic `Mks` method signatures don't fixture-test cleanly**: `Mks`'s
+  methods are `<Config extends OperationConfig>(...) => Effect<
+  WithOptionalResponse<A, Config>, ...>` — a conditional return type that a
+  concrete literal object can't satisfy generically (TS2322 on a plain
+  `Effect.succeed(x)` return). Fixed by giving the doctor package its own
+  narrow, non-generic `OvhProjectClient` interface (`ovh/probe.ts`) with
+  just `getCloudProjectServiceNameKube: (serviceName) => Effect<string[],
+  ...>` — real wiring adapts with a one-line lambda
+  (`(name) => mks.getCloudProjectServiceNameKube(name, undefined)`), test
+  fixtures implement it directly with zero generics friction.
+- **Effect v4 beta has no `Effect.catchAll`** (confirmed absent from the
+  `effect` barrel here, unlike v3) — used `Effect.match({ onFailure,
+  onSuccess })` instead everywhere a two-outcome fold was needed.
+- Shared `probeStatus` (single `GET /kube` call classified into `"ok" |
+  "unauthenticated" | "forbidden" | "unreachable"` by HTTP status) backs
+  both `authValidityCheck` (fails only on 401) and `projectAccessCheck`
+  (fails on 403, and also fails-through on 401 with a message pointing at
+  the auth check) — two doctor entries, two actionable messages, one
+  request shape.
+- Registry (`doctor/registry.ts`'s `runChecks`) is a one-line
+  `Effect.forEach` over `DoctorCheck[]` — deliberately never touched again;
+  new checks (T6.3's OpenStack half) just append entries to the array built
+  wherever `main.ts`'s composition root wires `doctor` (out of this task's
+  scope).
+- Files: `packages/cli/src/doctor/{types,registry,index}.ts`,
+  `packages/cli/src/doctor/ovh/{probe,auth,project-access,capability,quota,index}.ts`,
+  mirrored tests under `packages/cli/test/doctor/**` (+ `ovh/fake-mks.ts`
+  fixture helper, no HTTP layer needed — fixtures implement `OvhProjectClient`
+  directly). `bun run ci` full green: typecheck (13 packages), vitest 60
+  files/180 tests, dep-lint 0 violations (210 modules), oxlint clean.
