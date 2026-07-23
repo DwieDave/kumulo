@@ -110,6 +110,46 @@ green: 10 test files / 11 tests passing.
 - `bun run ci` full green after the fix (typecheck × packages, vitest 10
   files/11 tests, lint:deps 0 violations).
 
+## T3.2 — ovh2openapi deterministic converter
+
+- Converter input is typed via plain TS interfaces (`src/domain.ts`) matching
+  only the OVH schema fields actually consumed — no `effect/Schema` decode of
+  the input. Vendored/fixture JSON is trusted (checked into the repo, not
+  user input), so the trust-boundary argument for runtime validation doesn't
+  apply here; `JSON.parse` returns `any` in TS, so assigning its result to an
+  `OvhSchema`-typed local needs **no** `as` cast either (avoids
+  `kumulo/no-type-assertion`).
+- Effect v4 beta gotchas hit during this task:
+  - `Effect.reduce`'s second parameter (`zero`) is a **`LazyArg`** (a thunk
+    `() => Z`), not a bare value — `Effect.reduce(xs, {} as X, fn)` fails
+    typecheck two ways at once (widens to `unknown` *and* rejects the object
+    literal as not matching `LazyArg`). Fix: `Effect.reduce(xs, (): X => ({}), fn)`.
+  - There is **no `Either` module and no `FastCheck` export** off the bare
+    `effect` barrel in this v4 beta. `Effect.either` doesn't exist either.
+    Use `Effect.flip(effect)` + `Effect.runSync` to pull a known error value
+    out of a pure Effect in tests instead. `FastCheck` is only reachable via
+    `effect/testing/FastCheck` (confirms the T0.1 memory's import-path note).
+- `kumulo/no-multiple-function-params` (oxlint custom rule) only flags
+  **exported** functions — private `_`-prefixed helpers with 2+ params
+  (`_toOpenApiParam(param, models)` etc.) passed lint untouched, but the
+  public API (`typeToSchema`, `modelToSchema`, `operationToOpenApi`) had to
+  take a single destructured object arg.
+- Determinism is structural, not enforced by a stable-stringify helper:
+  `Object.keys(...).toSorted()` on `models`/`properties`/`apis` before
+  building output objects is sufficient for byte-identical JSON.stringify
+  reruns on the same input (no `Date`/`Math.random`/nondeterministic Map
+  iteration anywhere in the pipeline) — proved by an `it.prop` test generating
+  random small OVH-schema-shaped models via `fast-check`.
+- `responseType: "void"` is handled as a bodyless 200 response (no fixture
+  exercises this yet, but OVH's real schemas have void endpoints).
+- Files: `tools/ovh2openapi/src/{domain,errors,openapi,convert,index}.ts`,
+  `tools/ovh2openapi/test/{convert,determinism}.test.ts` (old placeholder
+  `smoke.test.ts` kept as-is — `packageName` export preserved in the barrel).
+- `bun run ci` (scoped): typecheck clean, vitest 3 files/6 tests passing,
+  `lint:deps` 0 violations (118 modules), oxlint clean for this package (root
+  `bun run lint` still has pre-existing errors in `packages/openstack`,
+  `packages/core`, `tools/codegen` — none of them mine, left untouched).
+
 ## T1.2 — Cluster config schema
 
 - **Bun.YAML is not usable in core's src**: `globalThis.Bun` is `undefined`
