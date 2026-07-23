@@ -8,10 +8,13 @@
   },
   "main": "src/index.ts",
   "dependencies": {
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "yaml": "catalog:",
+    "@kumulo/core": "workspace:*"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "fast-check": "catalog:",
     "vitest": "catalog:"
   }
 }

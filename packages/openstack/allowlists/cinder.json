@@ -2,6 +2,10 @@
   "service": "cinder",
   "spec": "specs/cinder/v3.70.yaml",
   "operationIds": [
-    "types:get"
+    "types:get",
+    "project_id/volumes:get",
+    "project_id/volumes:post",
+    "project_id/volumes/id:get",
+    "project_id/volumes/id:delete"
   ]
 }
