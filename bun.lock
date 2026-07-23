@@ -65,6 +65,7 @@
       "name": "@kumulo/distro-ovh-mks",
       "version": "0.0.0",
       "dependencies": {
+        "@kumulo/core": "workspace:*",
         "effect": "catalog:",
       },
       "devDependencies": {
