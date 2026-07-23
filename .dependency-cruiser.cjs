@@ -3,7 +3,7 @@ module.exports = {
   options: {
     tsPreCompilationDeps: true,
     doNotFollow: { path: "node_modules" },
-    exclude: "node_modules",
+    tsConfig: { fileName: "tsconfig.base.json" },
   },
   forbidden: [
     {
@@ -11,7 +11,7 @@ module.exports = {
       comment: "@kumulo/core may import only 'effect', no other @kumulo/* or deps",
       severity: "error",
       from: { path: "^packages/core/src/" },
-      to: { pathNot: "^(packages/core/src/|effect($|/))" },
+      to: { pathNot: "^(packages/core/src/|node_modules/(effect|@effect/))" },
     },
     {
       name: "no-sibling-package-imports",
