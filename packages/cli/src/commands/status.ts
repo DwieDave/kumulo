@@ -1,14 +1,10 @@
 import { Console, Effect } from "effect"
-import { Command, Flag } from "effect/unstable/cli"
+import { Command } from "effect/unstable/cli"
 import { findClusterByName } from "@kumulo/distro-ovh-mks"
 import { loadConfig } from "../config.ts"
 import { DistroNotWired } from "../distro-not-wired.ts"
 import { MksEnv } from "../mks/env.ts"
-
-const configFlag = Flag.string("config").pipe(
-  Flag.withAlias("c"),
-  Flag.withDescription("Path to the cluster YAML config")
-)
+import { kumulo } from "../root.ts"
 
 /**
  * FR-10 — `status`: inventory + cluster health. Only `ovh-mks` is wired
@@ -20,9 +16,10 @@ const configFlag = Flag.string("config").pipe(
  */
 export const status = Command.make(
   "status",
-  { config: configFlag },
-  Effect.fn(function*({ config: configPath }) {
-    const config = yield* loadConfig(configPath)
+  {},
+  Effect.fn(function*() {
+    const root = yield* kumulo
+    const config = yield* loadConfig(root.config)
     if (config.distro !== "ovh-mks") {
       return yield* Effect.fail(new DistroNotWired({ distro: config.distro }))
     }

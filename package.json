@@ -32,14 +32,17 @@
     "codegen:check": "cd tools/codegen && bun run check",
     "ci": "bun run typecheck && bun run test && bun run lint:deps && bun run lint && bun run codegen:check",
     "lint": "oxlint",
+    "build:binary": "bash scripts/build-binary.sh",
     "specs:update:ovh": "bash tools/ovh2openapi/scripts/update-specs.sh",
     "specs:update:openstack": "bash packages/openstack/scripts/update-specs.sh"
   },
   "devDependencies": {
     "@effect/tsgo": "catalog:",
+    "@kumulo/core": "workspace:*",
     "@swc/core": "catalog:",
     "@types/bun": "catalog:",
     "dependency-cruiser": "catalog:",
+    "effect": "catalog:",
     "oxlint": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

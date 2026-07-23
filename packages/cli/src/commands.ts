@@ -1,5 +1,5 @@
 import { Console, Effect } from "effect"
-import { Command, Flag } from "effect/unstable/cli"
+import { Command } from "effect/unstable/cli"
 import { loadConfig } from "./config.ts"
 import { reconcileVolumesOnDelete, volumes } from "./commands/volumes.ts"
 import { status } from "./commands/status.ts"
@@ -8,24 +8,9 @@ import { DistroNotWired } from "./distro-not-wired.ts"
 import { buildMksPlan } from "./mks/plan.ts"
 import { applyMks, deleteMks, kubeconfigMks } from "./mks/reconcile.ts"
 import { decidePlanAction, renderPlan } from "./present.ts"
+import { kumulo } from "./root.ts"
 
-const configFlag = Flag.string("config").pipe(
-  Flag.withAlias("c"),
-  Flag.withDescription("Path to the cluster YAML config")
-)
-const yesFlag = Flag.boolean("yes").pipe(
-  Flag.withAlias("y"),
-  Flag.withDescription("Skip the confirmation prompt")
-)
-const dryRunFlag = Flag.boolean("dry-run").pipe(
-  Flag.withDescription("Print the plan without applying it")
-)
-
-/** FR-10.1 — root command; `--config`/`--yes`/`--dry-run` are shared by every subcommand. */
-export const kumulo = Command.make("kumulo").pipe(
-  Command.withSharedFlags({ config: configFlag, yes: yesFlag, dryRun: dryRunFlag }),
-  Command.withDescription("Provision and manage kumulo-managed Kubernetes clusters")
-)
+export { kumulo }
 
 // FR-2.3 branches once on distro kind; only `ovh-mks` is wired live in this
 // task (T4.2) — the self-managed (k3s) phase pipeline lands in M7.

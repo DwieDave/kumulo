@@ -6,15 +6,8 @@ import { findClusterByName, upgrade as upgradeMks } from "@kumulo/distro-ovh-mks
 import { renderUpgradePlan } from "@kumulo/distro-k3s"
 import { loadConfig } from "../config.ts"
 import { MksEnv } from "../mks/env.ts"
+import { kumulo } from "../root.ts"
 
-const configFlag = Flag.string("config").pipe(
-  Flag.withAlias("c"),
-  Flag.withDescription("Path to the cluster YAML config")
-)
-const yesFlag = Flag.boolean("yes").pipe(
-  Flag.withAlias("y"),
-  Flag.withDescription("Skip the confirmation prompt (ovh-mks only)")
-)
 const strategyFlag = Flag.choiceWithValue("strategy", [
   ["latest-patch", "LATEST_PATCH" as const],
   ["next-minor", "NEXT_MINOR" as const]
@@ -60,10 +53,11 @@ const _renderK3s = (
 
 export const upgrade = Command.make(
   "upgrade",
-  { config: configFlag, yes: yesFlag, strategy: strategyFlag, workerConcurrency: workerConcurrencyFlag },
-  Effect.fn(function*({ config: configPath, yes, strategy, workerConcurrency }) {
-    const config = yield* loadConfig(configPath)
-    if (config.distro === "ovh-mks") return yield* _upgradeMks({ config, strategy, yes })
+  { strategy: strategyFlag, workerConcurrency: workerConcurrencyFlag },
+  Effect.fn(function*({ strategy, workerConcurrency }) {
+    const root = yield* kumulo
+    const config = yield* loadConfig(root.config)
+    if (config.distro === "ovh-mks") return yield* _upgradeMks({ config, strategy, yes: root.yes })
     yield* _renderK3s({ config, workerConcurrency })
   })
 ).pipe(Command.withDescription("Upgrade the cluster: renders SUC Plans for k3s, drives the OVH API for ovh-mks (FR-5.6, FR-6.2)"))
