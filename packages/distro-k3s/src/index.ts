@@ -23,3 +23,12 @@ export type {
   ResolvedToken,
   ServerInstallArgs
 } from "./bootstrap/index.ts"
+
+export { fetchKubeconfig, resolveServerUrl, rewriteKubeconfig, writeKubeconfigFile } from "./kubeconfig/index.ts"
+export type { FetchKubeconfigArgs, ResolveServerUrlArgs, RewriteKubeconfigArgs } from "./kubeconfig/index.ts"
+
+export { K3S_RELEASE_FIXTURE, makeReleaseCache } from "./releases/index.ts"
+export type { MakeReleaseCacheArgs, ReleaseCache } from "./releases/index.ts"
+
+export { bootstrapOrder, drainAndRemove, makeSelfManagedDistro } from "./distro/index.ts"
+export type { MakeSelfManagedDistroArgs } from "./distro/index.ts"
