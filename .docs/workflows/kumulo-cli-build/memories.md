@@ -109,3 +109,50 @@ green: 10 test files / 11 tests passing.
   (1 violation). Reverted → 0 violations, 33 modules/40 deps cruised, green.
 - `bun run ci` full green after the fix (typecheck × packages, vitest 10
   files/11 tests, lint:deps 0 violations).
+
+## T1.2 — Cluster config schema
+
+- **Bun.YAML is not usable in core's src**: `globalThis.Bun` is `undefined`
+  inside vitest's test workers even when the suite is launched via
+  `bun run test` — vitest's own worker pool doesn't inherit the Bun runtime.
+  Confirmed with a throwaway `typeof Bun` assertion test. So a YAML helper
+  that only works when directly `bun -e`'d is untestable here; had to add the
+  `yaml` npm package (`2.9.0`, already present transitively so version chosen
+  to match) instead, wired through the root catalog + `packages/core`
+  dependencies.
+- That forced an out-of-ownership edit to `.dependency-cruiser.cjs`'s
+  `core-only-imports-effect` rule (same precedent as T0.2's fix): widened the
+  `to.pathNot` regex to also allow `yaml` — as a bare specifier, a top-level
+  `node_modules/yaml/` resolution, and bun's nested
+  `node_modules/.bun/yaml@<version>/node_modules/yaml/` cache path. Also had
+  to explicitly allow the `effect/Schema` submodule import path (previously
+  only bare `effect` and `@effect/*` were allowed) since `SchemaError` isn't
+  re-exported off the `effect` barrel.
+  **Gotcha:** dependency-cruiser rejects "unsafe" regexes (ReDoS guard) —
+  a first attempt using `node_modules/(.*/)?(effect|@effect|yaml)/` was
+  bailed out with "has an unsafe regular expression"; had to flatten to
+  explicit alternatives with no nested unbounded quantifiers.
+- Effect v4 Schema error channel: `Schema.decodeUnknownEffect`/`encodeEffect`
+  fail with `SchemaError` (from `effect/Schema`, has `.issue: SchemaIssue.Issue`),
+  not a bare `Issue` — easy to miss since the internal parser module *does*
+  fail with `Issue` directly.
+- Turning a `SchemaIssue.Issue` into `ConfigInvalid`'s pathed issues:
+  `SchemaIssue.makeFormatterStandardSchemaV1()(issue).issues` gives
+  `{ path, message }[]` matching `PathedIssue` almost exactly — only needed
+  to unwrap StandardSchemaV1's optional `{ key }` path-segment objects back
+  to plain `PropertyKey`s.
+- `@effect/vitest`'s `it.prop(name, [arb1, arb2], (properties, ctx) => ...)`
+  passes the generated values as **one array-shaped `properties` argument**
+  (`[v1, v2]`), not spread positional args — destructure in the parameter
+  list (`([v1, v2]) => ...`), confirmed from `@effect/vitest`'s
+  `internal/internal.ts` source.
+- Schema shape: full §5 YAML mirrored 1:1 (provider/distro/auth/network/
+  api_server/ssh/masters/worker_pools incl. optional labels/taints/
+  autoscaling/dns/volumes/addons/k3s passthrough). `masters.count` enforces
+  "1 or odd" via `Schema.makeFilter`; CIDRs are format-only regex checks
+  (`Schema.isPattern`), not real reachability/route validation. Autoscaling
+  is schema-accepted only — no runtime enabled/distro rejection here, that's
+  T1.3's cross-distro validation layer.
+- `bun run ci` full green: typecheck × 11 packages, vitest 17 files/46 tests
+  (7 new in `packages/core/test/config/`), lint:deps 0 violations, oxlint
+  clean.

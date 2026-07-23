@@ -8,7 +8,8 @@
   },
   "main": "src/index.ts",
   "dependencies": {
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "yaml": "catalog:"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",

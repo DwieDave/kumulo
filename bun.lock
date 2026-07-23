@@ -42,6 +42,7 @@
       "version": "0.0.0",
       "dependencies": {
         "effect": "catalog:",
+        "yaml": "catalog:",
       },
       "devDependencies": {
         "@effect/vitest": "catalog:",
@@ -149,6 +150,7 @@
     "oxlint": "1.75.0",
     "typescript": "7.0.2",
     "vitest": "4.1.10",
+    "yaml": "2.9.0",
   },
   "packages": {
     "@effect/openapi-generator": ["@effect/openapi-generator@4.0.0-beta.101", "", { "dependencies": { "swagger2openapi": "^7.0.8" }, "peerDependencies": { "@effect/platform-node": "^4.0.0-beta.101", "effect": "^4.0.0-beta.101" }, "bin": { "openapigen": "dist/bin.js" } }, "sha512-EYpUpFa/7UeIGXF5tf+bwSddoe30KN6yE670sPT9K82WVrUIjxwXeA/zkvvav+xS55ujhkBCQcmDIqXMz5loWA=="],

@@ -8,14 +8,23 @@ module.exports = {
   forbidden: [
     {
       name: "core-only-imports-effect",
-      comment: "@kumulo/core may import only 'effect', no other @kumulo/* or deps",
+      comment:
+        "@kumulo/core may import only 'effect' plus 'yaml' (pure data parsing, no I/O — T1.2 config schema's " +
+        "YAML helper; Bun.YAML isn't reachable under vitest's worker runtime, see memories.md), no other @kumulo/* or deps",
       severity: "error",
       from: { path: "^packages/core/src/" },
       // kumulo: bun nests deps per-package (no root hoist) and dependency-cruiser
       // can't resolve bare "effect"/"@effect/*" specifiers here, so it reports the
       // unresolved module name itself as the "path" — match that too, not just a
       // resolved node_modules path.
-      to: { pathNot: "^(packages/core/src/|node_modules/(effect|@effect/)|effect$|@effect/)" },
+      // kumulo: bun nests transitive deps under node_modules/.bun/<pkg>@<version>/node_modules/<pkg>/
+      // (no flat hoist), so the resolved "yaml" path needs its own alternative alongside the
+      // top-level node_modules/yaml/ case; kept flat (no nested unbounded quantifiers) so
+      // dependency-cruiser's ReDoS guard doesn't reject it.
+      to: {
+        pathNot:
+          "^(packages/core/src/|node_modules/(effect|@effect/|yaml)/|node_modules/\\.bun/yaml@[^/]+/node_modules/yaml/|effect$|effect/|@effect/|yaml$)",
+      },
     },
     {
       name: "no-sibling-package-imports",
