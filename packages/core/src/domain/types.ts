@@ -73,6 +73,7 @@ export interface SshTarget {
   readonly user: string
 }
 export interface NodeContext {
+  readonly name: string
   readonly role: NodeRole
   readonly token?: string
   readonly apiEndpoint: string

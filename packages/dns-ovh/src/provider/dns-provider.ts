@@ -36,10 +36,12 @@ const _ensureRaw = (
     ? _wrap(zone, name, dns.editRecord(zone, String(existingRecord.id), { payload: { target } }))
     : Effect.void
 
-// FR-7.2 — never mutate a record this module doesn't own: an existing
-// non-TXT record at this name is only touched (or claimed via a fresh TXT
-// ownership record) when a sibling TXT record already carries the exact
-// ownership value this batch expects, or there is no pre-existing record.
+// FR-7.2 — never mutate a record this module doesn't own: *any* pre-existing
+// non-TXT record at this name (regardless of its kind — a foreign CNAME
+// blocks a desired A record just as much as a foreign A does), and any
+// existing TXT ownership record for a *different* tag, are only touched (or
+// claimed via a fresh TXT ownership record) when they don't exist at all.
+// A foreign ownership TXT is never edited to this batch's value (no hijack).
 const _ensurePair = (
   { dns, zone, name, target, ownerTarget }:
     { readonly dns: Dns; readonly zone: string; readonly name: string; readonly target: string; readonly ownerTarget: string | undefined }
@@ -47,14 +49,16 @@ const _ensurePair = (
   Effect.gen(function*() {
     const kind = recordKind(target)
     const existing = yield* recordsAt({ dns, zone, subDomain: name })
-    const existingSame = existing.find((r) => r.fieldType === kind)
+    const existingOther = existing.filter((r) => r.fieldType !== "TXT")
     const existingOwnerTxt = existing.find((r) => r.fieldType === "TXT" && ownerTagOf(r.target) !== undefined)
-    if (existingSame && existingOwnerTxt?.target !== ownerTarget) {
+    const foreignOwnerTxt = existingOwnerTxt !== undefined && existingOwnerTxt.target !== ownerTarget
+    if (foreignOwnerTxt || (existingOther.length > 0 && existingOwnerTxt === undefined)) {
       return yield* Effect.fail(new ResourceConflict({ kind: "dns-record", ref: `${zone}/${name}` }))
     }
     if (ownerTarget !== undefined) {
       yield* _ensureRaw({ dns, zone, name, target: ownerTarget, kind: "TXT", existingRecord: existingOwnerTxt })
     }
+    const existingSame = existingOther.find((r) => r.fieldType === kind)
     yield* _ensureRaw({ dns, zone, name, target, kind, existingRecord: existingSame })
   })
 
