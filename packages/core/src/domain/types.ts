@@ -118,8 +118,9 @@ export interface VolumeRef {
 }
 
 // Minimal structural slice of ClusterConfig needed for cross-distro
-// validation rules (§5, §9). NOT the full config schema — that is T1.2's
-// concern; only fields these rules read are declared here.
+// validation rules (§5, §9) — field names match the real config schema
+// (packages/core/src/config/schema.ts) so any `ClusterConfig.Type` value
+// satisfies this shape structurally, with no adapter/cast required.
 export interface AutoscalingRule {
   readonly enabled: boolean
 }
@@ -129,6 +130,6 @@ export interface WorkerPoolShape {
 }
 export interface ClusterConfigShape {
   readonly distro: DistroKind
-  readonly workerPools: ReadonlyArray<WorkerPoolShape>
-  readonly cni: "flannel" | "cilium"
+  readonly worker_pools: ReadonlyArray<WorkerPoolShape>
+  readonly addons: { readonly cni: "flannel" | "cilium" }
 }
