@@ -27,7 +27,8 @@
     "typecheck": "for d in packages/* tools/*; do (cd \"$d\" && echo \"[typecheck] $d\" && ../../node_modules/.bin/tsc --noEmit) || exit 1; done",
     "test": "vitest run",
     "lint:deps": "depcruise --config .dependency-cruiser.cjs packages tools",
-    "ci": "bun run typecheck && bun run test && bun run lint:deps && bun run lint",
+    "codegen:check": "cd tools/codegen && bun run check",
+    "ci": "bun run typecheck && bun run test && bun run lint:deps && bun run lint && bun run codegen:check",
     "lint": "oxlint",
     "specs:update:ovh": "bash tools/ovh2openapi/scripts/update-specs.sh",
     "specs:update:openstack": "bash packages/openstack/scripts/update-specs.sh"

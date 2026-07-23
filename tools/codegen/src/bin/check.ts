@@ -1,0 +1,58 @@
+/**
+ * codegen:check — regen-is-noop CI gate (FR-4.4/AC-5).
+ *
+ * Reads `services.json` (a list of per-service pipeline configs), regenerates
+ * each into memory, and diffs it against the committed output file. Empty
+ * manifest exits 0 — no service pipelines are registered yet (they land in
+ * T3.4/T5.2); this script is the reusable gate they wire into.
+ */
+import { Effect } from "effect"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
+import type { OpenAPISpec } from "effect/unstable/httpapi/OpenApi"
+import { runPipeline } from "../pipeline.ts"
+import { checkNoop } from "../regenCheck.ts"
+import type { NamedPatch } from "../patch.ts"
+
+interface ServiceEntry {
+  readonly name: string
+  readonly specPath: string
+  readonly allowlistPath: string
+  readonly patchPaths: ReadonlyArray<string>
+  readonly format: "httpclient" | "httpclient-type-only" | "httpapi"
+  readonly outputPath: string
+}
+
+const root = join(import.meta.dirname, "..", "..")
+
+const _loadService = (entry: ServiceEntry) =>
+  Effect.gen(function* () {
+    const spec: OpenAPISpec = JSON.parse(readFileSync(join(root, entry.specPath), "utf8"))
+    const allowlist: ReadonlyArray<string> = JSON.parse(readFileSync(join(root, entry.allowlistPath), "utf8"))
+    const patches: ReadonlyArray<NamedPatch> = entry.patchPaths.map((patchPath) => ({
+      source: patchPath,
+      patch: JSON.parse(readFileSync(join(root, patchPath), "utf8"))
+    }))
+    const committed = readFileSync(join(root, entry.outputPath), "utf8")
+    const { source } = yield* runPipeline({
+      spec,
+      allowlist,
+      patches,
+      generate: { name: entry.name, format: entry.format }
+    })
+    yield* checkNoop({ committedPath: entry.outputPath, committed, regenerated: source })
+  })
+
+const services: ReadonlyArray<ServiceEntry> = JSON.parse(readFileSync(join(root, "services.json"), "utf8"))
+
+const program = Effect.forEach(services, _loadService, { discard: true })
+
+Effect.runPromise(program).then(
+  () => {
+    console.log(`codegen:check — ${services.length} service pipeline(s) clean`)
+  },
+  (error) => {
+    console.error("codegen:check — drift or pipeline failure:", error)
+    process.exit(1)
+  }
+)

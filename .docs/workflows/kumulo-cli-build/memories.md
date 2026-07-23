@@ -250,3 +250,67 @@ green: 10 test files / 11 tests passing.
 - `bun run lint:deps` confirmed green after adding these files (85 modules,
   188 deps, 0 violations) — no TS added in this task, spec/allowlist/patch
   files are pure data.
+
+## T3.3 — Shared codegen pipeline stages (tools/codegen)
+
+- `@effect/openapi-generator` (installed via bun's nested `node_modules/.bun`
+  layout, confirmed at `tools/codegen/node_modules/@effect/`) exposes exactly
+  the pieces this task needs, so the wrapper is thin:
+  - `OpenApiPatch.applyPatches(patches, document)` — already fails loudly
+    with a `JsonPatchAggregateError` listing every unapplicable operation
+    (path/reason), so stage 2 is a near-direct passthrough.
+  - `OpenApiGenerator.OpenApiGenerator` service (+ `layerTransformerSchema`
+    for Schema-backed HttpApi/HttpClient output) — `generator.generate(spec,
+    options)` returns the source string, warnings via an `onWarning`
+    callback.
+- **Type friction — `OpenAPISpec` vs `Schema.Json`:** `OpenAPISpec` (from
+  `effect/unstable/httpapi/OpenApi`) is a plain interface with no index
+  signature and inner fields typed as bare `object` (e.g.
+  `OpenAPISpecParameter.schema`), so it is **not** structurally assignable to
+  `Schema.Json` in either direction — not even via a type-guard predicate
+  (`value is OpenAPISpec` on a `Schema.Json` parameter fails compilation:
+  "type predicate's type must be assignable to its parameter's type").
+  `kumulo`'s oxlint `no-type-assertion` rule (no `as`, anywhere) rules out
+  the obvious fix. Resolution: type our own `applyPatches`
+  wrapper's `document`/return as `unknown` (not `Schema.Json`), converting at
+  the one call site into the library via
+  `JSON.parse(JSON.stringify(document))` (produces a real `any`, assignable
+  to `Schema.Json` without a cast) — then narrow `unknown` back to
+  `OpenAPISpec` downstream with a genuine runtime type-guard function
+  (`typeof value === "object" && "openapi" in value && "paths" in value`),
+  which *does* type-check against an `unknown` parameter.
+- `kumulo`'s `no-multiple-function-params` oxlint rule (single object param,
+  named-args) applies repo-wide, including to this tool's exported stage
+  functions — every stage takes one `args: { ... }` object
+  (`filterAllowlist({ spec, allowlist })`,
+  `applyPatches({ patches, document })`, `generateSource({ spec, options })`,
+  `checkNoop({ committedPath, committed, regenerated })`). Calls into the
+  *library's* own multi-arg functions (`OpenApiPatch.applyPatches(a, b)`,
+  `generator.generate(a, b)`) are fine — the rule only governs functions we
+  declare.
+- Allowlist filter (stage 1) also fails loudly (`AllowlistOperationNotFound`)
+  if an allowlist entry matches no operationId in the spec — a typo guard
+  beyond what FR-4.1 strictly asks for, cheap to add, catches silently-empty
+  generated clients early.
+- Regen-noop check (stage 4, `checkNoop`) is a pure string-equality check
+  reporting the first differing line number — deliberately not a real diff
+  algorithm (`DriftDetected` conveys "look here", CI output/`git diff` on the
+  committed file gives the rest). No FileSystem/Path effect layer added:
+  `@effect/platform-bun` isn't installed/used anywhere in the repo yet, and
+  this tool is a Bun-run script — `node:fs`'s `readFileSync` in
+  `src/bin/check.ts` reads spec/allowlist/patch/committed files directly,
+  keeping the stage functions themselves (`allowlist.ts`/`patch.ts`/
+  `generate.ts`/`regenCheck.ts`) pure and unit-testable with in-memory
+  synthetic fixtures (`test/fixtures.ts`), no I/O in the tested surface.
+- `services.json` (root of `tools/codegen`) is an empty `[]` manifest for
+  now — `codegen:check` (root script, wired into `bun run ci`) loops it and
+  exits 0 instantly since no per-service pipeline configs exist yet; T3.4
+  (OVH clients) and T5.2 (OpenStack clients) are expected to append entries
+  (`{ name, specPath, allowlistPath, patchPaths, format, outputPath }`)
+  rather than build their own regen-check plumbing.
+- `bun run ci` full green through `lint:deps`/`lint`/`codegen:check`;
+  `bun run typecheck` fails only in `packages/openstack` (missing `yaml`
+  module resolution, unrelated to this task — another concurrent agent's
+  in-progress package) — confirmed `tools/codegen`'s own `tsc --noEmit` is
+  clean in isolation, and `bun run test` (whole repo) passes 98/98 across 36
+  files, including this task's 5 files / 11 tests.

@@ -1,0 +1,21 @@
+{
+  "name": "codegen",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "main": "src/index.ts",
+  "scripts": {
+    "check": "bun run src/bin/check.ts"
+  },
+  "dependencies": {
+    "effect": "catalog:",
+    "@effect/openapi-generator": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "vitest": "catalog:"
+  }
+}
