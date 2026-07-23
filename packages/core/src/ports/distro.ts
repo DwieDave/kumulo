@@ -10,6 +10,7 @@ import type {
 } from "../errors/tagged.ts"
 import type {
   BootstrapPlan,
+  ClusterConfigShape,
   Inventory,
   K8sManifest,
   Kubeconfig,
@@ -29,7 +30,7 @@ export interface SelfManagedDistroShape {
   readonly kind: "self-managed"
   readonly name: string
   readonly planBootstrap: (
-    cluster: unknown,
+    cluster: ClusterConfigShape,
     inventory: Inventory
   ) => Effect.Effect<BootstrapPlan>
   readonly renderUserData: (role: NodeRole, ctx: NodeContext) => Effect.Effect<string>
@@ -54,8 +55,8 @@ export type MksError =
 export interface ManagedDistroShape {
   readonly kind: "managed"
   readonly name: string
-  readonly ensureCluster: (cfg: unknown) => Effect.Effect<ManagedClusterInfo, MksError>
-  readonly ensureNodePools: (cfg: unknown) => Effect.Effect<void, MksError>
+  readonly ensureCluster: (cfg: ClusterConfigShape) => Effect.Effect<ManagedClusterInfo, MksError>
+  readonly ensureNodePools: (cfg: ClusterConfigShape) => Effect.Effect<void, MksError>
   readonly fetchKubeconfig: (ref: ManagedClusterRef) => Effect.Effect<Kubeconfig, MksError>
   readonly upgrade: (target: Version) => Effect.Effect<void, MksError>
   readonly delete: (ref: ManagedClusterRef) => Effect.Effect<void, MksError>

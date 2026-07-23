@@ -54,9 +54,19 @@ describe("ClusterConfig", () => {
       )
   )
 
+  const nearMissCidr = fc.constantFrom(
+    "999.0.0.0/99",
+    "10.0.0.0/33",
+    "256.1.1.1/16",
+    "10.0.0/16",
+    "10.0.0.0.0/16",
+    "10.0.0.0/",
+    "10.0.0.0"
+  )
+
   it.prop(
     "rejects malformed network.cidr strings with a pathed issue",
-    [fc.string().filter((s) => !/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2}$/.test(s))],
+    [fc.oneof(nearMissCidr, fc.string().filter((s) => !/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2}$/.test(s)))],
     ([badCidr]) =>
       Effect.runSync(
         Effect.gen(function* () {

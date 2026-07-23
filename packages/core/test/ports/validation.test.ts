@@ -52,4 +52,9 @@ describe("validateCni", () => {
     const config: ClusterConfigShape = { distro: "ovh-mks", worker_pools: [], addons: { cni: "flannel" } }
     expect(Option.isNone(validateCni(config))).toBe(true)
   })
+
+  it("accepts flannel under k3s", () => {
+    const config: ClusterConfigShape = { distro: "k3s", worker_pools: [], addons: { cni: "flannel" } }
+    expect(Option.isNone(validateCni(config))).toBe(true)
+  })
 })

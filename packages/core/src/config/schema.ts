@@ -1,8 +1,11 @@
 import { Schema } from "effect"
 
-// kumulo: basic dotted-quad CIDR check (format only, no reachability/route checks — out of scope for schema)
-const isCidr = Schema.isPattern(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/(\d{1,2})$/, {
-  message: "must be a CIDR in a.b.c.d/n form"
+// kumulo: dotted-quad CIDR check bounding octets to 0-255 and prefix to 0-32
+// (format + range only, no reachability/route checks — out of scope for schema)
+const octet = "(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)"
+const prefix = "(3[0-2]|[12]?\\d)"
+const isCidr = Schema.isPattern(new RegExp(`^${octet}\\.${octet}\\.${octet}\\.${octet}/${prefix}$`), {
+  message: "must be a CIDR in a.b.c.d/n form with valid octets (0-255) and prefix (0-32)"
 })
 
 const Cidr = Schema.String.check(isCidr)
@@ -23,9 +26,15 @@ const VolumesModule = Schema.Literals(["cinder", "none"])
 const Cni = Schema.Literals(["flannel", "cilium"])
 const AccessMode = Schema.Literals(["ReadWriteOnce", "ReadWriteMany", "ReadOnlyMany"])
 
-const K3sVersion = Schema.String.check(
-  Schema.isPattern(/^v\d+\.\d+\.\d+\+k3s\d+$/, { message: "must look like v1.31.4+k3s1" })
-)
+const k3sVersionPattern = /^v\d+\.\d+\.\d+\+k3s\d+$/
+const plainK8sVersionPattern = /^v?\d+\.\d+\.\d+$/
+
+// kumulo: version format is distro-dependent (§5/FR-1.2) — k3s embeds a
+// `+k3sN` build suffix, ovh-mks uses plain upstream Kubernetes versions.
+const isVersionValidForDistro = Schema.makeFilter((config: { distro: string; version: string }) => {
+  const pattern = config.distro === "k3s" ? k3sVersionPattern : plainK8sVersionPattern
+  return pattern.test(config.version) ? undefined : "version does not match the format expected for this distro"
+})
 
 const Auth = Schema.Struct({
   method: AuthMethod,
@@ -119,7 +128,7 @@ export const ClusterConfig = Schema.Struct({
   name: Schema.NonEmptyString,
   provider: Provider,
   distro: Distro,
-  version: K3sVersion,
+  version: Schema.NonEmptyString,
   auth: Auth,
   network: Network,
   api_server: ApiServer,
@@ -130,7 +139,7 @@ export const ClusterConfig = Schema.Struct({
   volumes: Volumes,
   addons: Addons,
   k3s: K3sPassthrough
-})
+}).check(isVersionValidForDistro)
 
 export type ClusterConfig = typeof ClusterConfig.Type
 export type ClusterConfigEncoded = typeof ClusterConfig.Encoded
