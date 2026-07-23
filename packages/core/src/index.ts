@@ -39,6 +39,14 @@ export type { VolumeError } from "./ports/volume-provider.ts"
 export { computePlan, configHash, resourceName, toTaggedResource } from "./plan/index.ts"
 export type { DesiredResource, Inventory as PlanInventory, Plan, PlanAction, TaggedResource } from "./plan/index.ts"
 
+export { applyServers, MANAGED_PHASES, phasesForKind, pollUntil, runPhases, SELF_MANAGED_PHASES } from "./reconcile/index.ts"
+export type { PhaseName, Phase, PollOptions } from "./reconcile/index.ts"
+
+export { decidePlanAction, renderPlan } from "./present/index.ts"
+export type { PlanDecision } from "./present/index.ts"
+
+export { genericProfile, genericProfileLive } from "./profiles/index.ts"
+
 export type {
   AddonContext,
   AutoscalingRule,
