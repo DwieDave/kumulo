@@ -15,6 +15,7 @@
     "@effect/platform-bun": "catalog:",
     "@kumulo/core": "workspace:*",
     "@kumulo/distro-ovh-mks": "workspace:*",
+    "@kumulo/openstack": "workspace:*",
     "@kumulo/provider-ovh": "workspace:*"
   },
   "devDependencies": {

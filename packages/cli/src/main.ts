@@ -4,13 +4,17 @@ import * as BunServices from "@effect/platform-bun/BunServices"
 import { Console, Effect, Layer } from "effect"
 import { CliError, Command } from "effect/unstable/cli"
 import { kumuloCli } from "./commands.ts"
+import { OpenStackEnvLive } from "./doctor-openstack/env.ts"
 import { renderCliError } from "./errors.ts"
 import { MksEnvLive } from "./mks/env.ts"
 
 // FR-3.2 — explicit Layer wiring at the composition root, no runtime module
-// discovery. Only the `ovh-mks` distro path is live; `k3s` (M7) will add a
-// sibling Layer selected the same way once its phase pipeline lands.
-const MainLive = MksEnvLive.pipe(Layer.provide(BunHttpClient.layer))
+// discovery. `ovh-mks` is the only live distro command path; `k3s` (M7) will
+// add a sibling command path once its phase pipeline lands, reusing
+// `OpenStackEnv` (T6.3) — already wired in here (never-failing, see its
+// doc comment) so `doctor`'s OpenStack checks and the future k3s path share
+// one Keystone auth/region source instead of each re-deriving it.
+const MainLive = Layer.merge(MksEnvLive, OpenStackEnvLive).pipe(Layer.provide(BunHttpClient.layer))
 
 const program = Command.run(kumuloCli, { version: "0.0.0" }).pipe(
   Effect.provide(MainLive),
