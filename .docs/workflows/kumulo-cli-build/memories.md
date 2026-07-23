@@ -314,3 +314,92 @@ green: 10 test files / 11 tests passing.
   in-progress package) — confirmed `tools/codegen`'s own `tsc --noEmit` is
   clean in isolation, and `bun run test` (whole repo) passes 98/98 across 36
   files, including this task's 5 files / 11 tests.
+
+## T5.2 — Generated OpenStack clients
+
+- **`bin/check.ts` had two latent bugs** (unexercised because `services.json`
+  was `[]` until now): it `JSON.parse`'d the vendored **YAML** specs directly
+  (always would've thrown `ENOENT`/parse errors), and it treated an
+  allowlist file's whole `{ service, spec, operationIds }` object as the bare
+  operationId array. Fixed both (`YAML.parse` for specs, `.operationIds` for
+  allowlists, comment-stripped `JSON.parse` for the JSON5 patches) — this is
+  shared T3.3 plumbing, not T5.2-owned, but nothing downstream could have
+  worked without the fix. Added `yaml` (catalog) as a `tools/codegen`
+  dependency for this.
+- **`services.json` paths are relative to `tools/codegen/`, not the repo
+  root** (`root = join(import.meta.dirname, "..", "..")` from
+  `src/bin/check.ts`, i.e. two levels up from `src/bin` = `tools/codegen`)
+  — every entry uses `../../packages/openstack/...`.
+- **Real correctness bug found in T3.3's `filterAllowlist`**: it only pruned
+  `spec.paths`, never `spec.components.schemas`. The generator's HttpApi path
+  (`generator.generateHttpApi`) walks *all* of `spec.components.schemas`
+  unconditionally, so even a 1-operation allowlist (Cinder's `types:get`)
+  produced a client with every one of Cinder's ~25 unrelated schemas
+  (`VolumesCreate_*`, `ServersAction_*`-style variants) — bloating output and,
+  worse, some of those schemas don't even compile (see next point). Fixed by
+  adding a `$ref`-reachability closure in `filterAllowlist` (BFS over
+  `"#/components/schemas/X"` refs starting from the surviving paths, keeping
+  only schemas transitively reachable) — TDD'd against a new synthetic
+  fixture (`syntheticSpecWithSchemas`) with a reachable + unreachable schema.
+  Cut generated output size roughly in half (Cinder 69→27 lines, Nova
+  527→369).
+- **Real TS-codegen bug found**: any OpenAPI schema mixing typed optional
+  properties with a **non-`false` `additionalProperties`** (`{ type:
+  "string" }`, or even bare `true`) makes `@effect/openapi-generator` emit
+  TypeScript that doesn't compile — `readonly "foo"?: string, readonly [x:
+  string]: string` is TS2411 (`"foo"?: string` includes `undefined`, which
+  isn't assignable to a plain `string` index). Hit this in Glance's image
+  "extra properties" and Nova's `scheduler_hints`/`OS-SCH-HNT:scheduler_hints`
+  (additionalProperties: `true`). Fixed generically in `generateSource`
+  (`generate.ts`): recursively force every non-`false` `additionalProperties`
+  to `false` before handing the spec to the generator — justified by FR-4.6
+  (lenient decode handles unknown/extra fields at the transport layer, so the
+  schema itself doesn't need to type them). TDD'd with a new
+  `syntheticSpecWithFreeformAdditionalProperties` fixture. This is a
+  systemic fix, not a per-service patch — kept all 6 `*.patch.json5` files
+  empty (T5.1's empty overlays turned out to need no real corrections).
+- **oxlint on generated code**: `no-misleading-character-class` fired on
+  Nova's Unicode-range regex patterns (upstream `container_format` validation
+  copies a huge Unicode character-class straight from the spec, containing
+  NFC combining sequences) and the `kumulo/*` custom rules (`no-comments`,
+  `no-multiple-function-params`, etc.) don't make sense for machine-generated
+  code either way. Added `packages/*/src/generated/**` to `.oxlintrc.json`'s
+  root `ignorePatterns` (shared config file, touched out-of-ownership like
+  T0.2/T1.2's precedent — necessary, no other way to exempt generated
+  output).
+- **Format choice: `"httpapi"`** (not `httpclient`) per design §4.2's "HttpApi
+  definitions + HttpApiClient + Schema types + per-endpoint tagged errors" —
+  confirmed this emits an `HttpApi.make(...)`-based class per service
+  (`Keystone`, `Nova`, ... one `HttpApiGroup` per OpenAPI tag) with exported
+  `Schema.Struct` types per request/response, which is what T5.3 (already
+  landed concurrently) and later provider-wiring tasks consume.
+  `HttpApiClient`/middleware wiring itself is **not** built in T5.2 — that's
+  transport-layer (T5.3, which landed in parallel this session).
+- **Nova microversion pruning turned out to be a non-issue at the spec
+  level**: the vendored `gtema/openstack-openapi` Nova spec has zero
+  microversion-conditional path/parameter variants (no
+  `X-OpenStack-Nova-API-Version` header parameter anywhere in the doc) — it's
+  a single merged document. The 2.79 pin (recorded in `allowlists/nova.json`
+  since T5.1) is purely a transport-layer concern (send the header
+  explicitly on every request), which is T5.3's territory, not a patch-stage
+  concern.
+- **Fixture-replay tests** (`packages/openstack/test/generated/*.test.ts`,
+  one per service + a shared `decode.ts` helper): deliberately schema-decode
+  tests (`Schema.decodeUnknownEffect` against a hand-written fixture), not
+  full `HttpApiClient` + mocked-transport tests — T5.3 hadn't landed the
+  transport layer when this task started, and per-endpoint middleware wiring
+  for 6 different security schemes would be substantial scope creep beyond
+  "prove the generated schemas decode/reject correctly." Each service has a
+  happy-path decode + an "error-mapping" case (either a real non-empty error
+  schema like Keystone's 401 `AuthReceiptSchema`, or a deliberately malformed
+  fixture proving the schema's `additionalProperties`/enum/type constraints
+  actually reject bad data instead of silently passing).
+- **Op counts per service** (unchanged from T5.1's allowlists, all still
+  reachable end-to-end through filter→patch→generate): keystone 2, nova 16,
+  neutron 34, glance 2, cinder 1, octavia 20 — 75 total.
+- `bun run ci` (repo-wide): `typecheck` (12 packages) clean, `test` 135/135
+  across 46 files, `lint:deps` 0 violations (153 modules), `codegen:check` —
+  "6 service pipeline(s) clean". `lint` (oxlint) has 6 remaining errors, all
+  in `packages/dns-ovh/scripts/generate.ts` and
+  `packages/distro-ovh-mks/scripts/generate.ts` — other concurrent agents'
+  in-progress work, not touched by this task.
