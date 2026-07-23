@@ -69,6 +69,8 @@
       },
       "devDependencies": {
         "@effect/vitest": "catalog:",
+        "codegen": "workspace:*",
+        "ovh2openapi": "workspace:*",
         "vitest": "catalog:",
       },
     },
@@ -80,6 +82,8 @@
       },
       "devDependencies": {
         "@effect/vitest": "catalog:",
+        "codegen": "workspace:*",
+        "ovh2openapi": "workspace:*",
         "vitest": "catalog:",
       },
     },
@@ -87,10 +91,13 @@
       "name": "@kumulo/openstack",
       "version": "0.0.0",
       "dependencies": {
+        "@kumulo/core": "workspace:*",
         "effect": "catalog:",
+        "yaml": "catalog:",
       },
       "devDependencies": {
         "@effect/vitest": "catalog:",
+        "codegen": "workspace:*",
         "vitest": "catalog:",
       },
     },
@@ -131,6 +138,7 @@
       "dependencies": {
         "@effect/openapi-generator": "catalog:",
         "effect": "catalog:",
+        "yaml": "catalog:",
       },
       "devDependencies": {
         "@effect/vitest": "catalog:",
@@ -146,6 +154,7 @@
       },
       "devDependencies": {
         "@effect/vitest": "catalog:",
+        "fast-check": "catalog:",
         "vitest": "catalog:",
       },
     },

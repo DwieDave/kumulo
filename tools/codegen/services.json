@@ -1,1 +1,50 @@
-[]
+[
+  {
+    "name": "Keystone",
+    "specPath": "../../packages/openstack/specs/keystone/v3.14.yaml",
+    "allowlistPath": "../../packages/openstack/allowlists/keystone.json",
+    "patchPaths": ["../../packages/openstack/patches/keystone.patch.json5"],
+    "format": "httpapi",
+    "outputPath": "../../packages/openstack/src/generated/keystone.ts"
+  },
+  {
+    "name": "Nova",
+    "specPath": "../../packages/openstack/specs/nova/v2.96.yaml",
+    "allowlistPath": "../../packages/openstack/allowlists/nova.json",
+    "patchPaths": ["../../packages/openstack/patches/nova.patch.json5"],
+    "format": "httpapi",
+    "outputPath": "../../packages/openstack/src/generated/nova.ts"
+  },
+  {
+    "name": "Neutron",
+    "specPath": "../../packages/openstack/specs/neutron/v2.yaml",
+    "allowlistPath": "../../packages/openstack/allowlists/neutron.json",
+    "patchPaths": ["../../packages/openstack/patches/neutron.patch.json5"],
+    "format": "httpapi",
+    "outputPath": "../../packages/openstack/src/generated/neutron.ts"
+  },
+  {
+    "name": "Glance",
+    "specPath": "../../packages/openstack/specs/glance/v2.16.yaml",
+    "allowlistPath": "../../packages/openstack/allowlists/glance.json",
+    "patchPaths": ["../../packages/openstack/patches/glance.patch.json5"],
+    "format": "httpapi",
+    "outputPath": "../../packages/openstack/src/generated/glance.ts"
+  },
+  {
+    "name": "Cinder",
+    "specPath": "../../packages/openstack/specs/cinder/v3.70.yaml",
+    "allowlistPath": "../../packages/openstack/allowlists/cinder.json",
+    "patchPaths": ["../../packages/openstack/patches/cinder.patch.json5"],
+    "format": "httpapi",
+    "outputPath": "../../packages/openstack/src/generated/cinder.ts"
+  },
+  {
+    "name": "Octavia",
+    "specPath": "../../packages/openstack/specs/octavia/v2.yaml",
+    "allowlistPath": "../../packages/openstack/allowlists/octavia.json",
+    "patchPaths": ["../../packages/openstack/patches/octavia.patch.json5"],
+    "format": "httpapi",
+    "outputPath": "../../packages/openstack/src/generated/octavia.ts"
+  }
+]

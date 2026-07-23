@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "effect": "catalog:",
-    "@effect/openapi-generator": "catalog:"
+    "@effect/openapi-generator": "catalog:",
+    "yaml": "catalog:"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",

@@ -1,9 +1,16 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
 import { filterAllowlist } from "../src/allowlist.ts"
-import { syntheticSpec } from "./fixtures.ts"
+import { syntheticSpec, syntheticSpecWithSchemas } from "./fixtures.ts"
 
 describe("filterAllowlist", () => {
+  it.effect("prunes component schemas unreachable from surviving operations", () =>
+    Effect.gen(function* () {
+      const filtered = yield* filterAllowlist({ spec: syntheticSpecWithSchemas, allowlist: ["getWidget"] })
+      expect(Object.keys(filtered.components?.schemas ?? {}).toSorted()).toEqual(["Widget", "WidgetOwner"])
+    }))
+
+
   it.effect("keeps only allowlisted operations", () =>
     Effect.gen(function* () {
       const filtered = yield* filterAllowlist({ spec: syntheticSpec, allowlist: ["listWidgets"] })

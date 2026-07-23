@@ -26,5 +26,11 @@
       "rules": { "kumulo/no-comments": "off" }
     }
   ],
-  "ignorePatterns": ["node_modules", "dist", ".references", "coverage"]
+  "ignorePatterns": [
+    "node_modules",
+    "dist",
+    ".references",
+    "coverage",
+    "packages/*/src/generated/**"
+  ]
 }

@@ -9,6 +9,7 @@
 import { Effect } from "effect"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
+import * as YAML from "yaml"
 import type { OpenAPISpec } from "effect/unstable/httpapi/OpenApi"
 import { runPipeline } from "../pipeline.ts"
 import { checkNoop } from "../regenCheck.ts"
@@ -25,13 +26,19 @@ interface ServiceEntry {
 
 const root = join(import.meta.dirname, "..", "..")
 
+// kumulo: vendored specs are YAML, allowlists carry {service,spec,operationIds}
+// (not a bare array), and patches are JSON5 (`// why` comments) — strip line
+// comments before JSON.parse rather than pull in a full JSON5 dependency.
+const _stripJsonComments = (text: string): string => text.replace(/\/\/.*$/gm, "")
+
 const _loadService = (entry: ServiceEntry) =>
   Effect.gen(function* () {
-    const spec: OpenAPISpec = JSON.parse(readFileSync(join(root, entry.specPath), "utf8"))
-    const allowlist: ReadonlyArray<string> = JSON.parse(readFileSync(join(root, entry.allowlistPath), "utf8"))
+    const spec: OpenAPISpec = YAML.parse(readFileSync(join(root, entry.specPath), "utf8"))
+    const allowlistDoc = JSON.parse(readFileSync(join(root, entry.allowlistPath), "utf8"))
+    const allowlist: ReadonlyArray<string> = allowlistDoc.operationIds
     const patches: ReadonlyArray<NamedPatch> = entry.patchPaths.map((patchPath) => ({
       source: patchPath,
-      patch: JSON.parse(readFileSync(join(root, patchPath), "utf8"))
+      patch: JSON.parse(_stripJsonComments(readFileSync(join(root, patchPath), "utf8")))
     }))
     const committed = readFileSync(join(root, entry.outputPath), "utf8")
     const { source } = yield* runPipeline({
