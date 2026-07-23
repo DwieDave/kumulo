@@ -70,27 +70,33 @@ interface AllowlistFile {
 const _isOpenApiSpec = (value: unknown): value is OpenAPISpec =>
   typeof value === "object" && value !== null && !Array.isArray(value) && "openapi" in value && "paths" in value
 
-const program = Effect.gen(function* () {
-  const allowlist: AllowlistFile = JSON.parse(readFileSync(join(pkgRoot, "allowlist.json"), "utf8"))
-  const schema: OvhSchema = JSON.parse(readFileSync(join(pkgRoot, allowlist.spec), "utf8"))
-  const trimmed = _trimSchema(schema, allowlist.operations)
-  const document = yield* convert(trimmed)
+/** Pure regeneration (allowlist trim -> convert -> patch -> generate) — reused by `scripts/generate.ts`'s CLI writer and by `codegen:check`'s regen-noop CI gate. */
+export const generate = () =>
+  Effect.gen(function* () {
+    const allowlist: AllowlistFile = JSON.parse(readFileSync(join(pkgRoot, "allowlist.json"), "utf8"))
+    const schema: OvhSchema = JSON.parse(readFileSync(join(pkgRoot, allowlist.spec), "utf8"))
+    const trimmed = _trimSchema(schema, allowlist.operations)
+    const document = yield* convert(trimmed)
 
-  const patchText = readFileSync(join(pkgRoot, "patches/dns.patch.json5"), "utf8").replace(/\/\/.*$/gm, "")
-  const patches: ReadonlyArray<NamedPatch> = [{ source: "patches/dns.patch.json5", patch: JSON.parse(patchText) }]
-  const patched = yield* applyPatches({ patches, document })
-  if (!_isOpenApiSpec(patched)) return yield* Effect.die(new Error("patched DNS document lost its OpenAPISpec shape"))
+    const patchText = readFileSync(join(pkgRoot, "patches/dns.patch.json5"), "utf8").replace(/\/\/.*$/gm, "")
+    const patches: ReadonlyArray<NamedPatch> = [{ source: "patches/dns.patch.json5", patch: JSON.parse(patchText) }]
+    const patched = yield* applyPatches({ patches, document })
+    if (!_isOpenApiSpec(patched)) return yield* Effect.die(new Error("patched DNS document lost its OpenAPISpec shape"))
 
-  const { source, warnings } = yield* generateSource({
-    spec: patched,
-    options: { name: "Dns", format: "httpclient" }
+    return yield* generateSource({ spec: patched, options: { name: "Dns", format: "httpclient" } })
   })
-  for (const warning of warnings) console.warn("warning:", warning)
-  writeFileSync(join(pkgRoot, "src/generated/client.ts"), source)
-  console.log(`generated src/generated/client.ts (${Object.keys(trimmed.models).length} models, ${trimmed.apis.length} paths)`)
-})
 
-Effect.runPromise(program).catch((error) => {
-  console.error(error)
-  process.exit(1)
-})
+if (import.meta.main) {
+  Effect.runPromise(
+    generate().pipe(
+      Effect.map(({ source, warnings }) => {
+        for (const warning of warnings) console.warn("warning:", warning)
+        writeFileSync(join(pkgRoot, "src/generated/client.ts"), source)
+        console.log(`generated src/generated/client.ts`)
+      })
+    )
+  ).catch((error) => {
+    console.error(error)
+    process.exit(1)
+  })
+}

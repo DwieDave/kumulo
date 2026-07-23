@@ -52,11 +52,46 @@ const _loadService = (entry: ServiceEntry) =>
 
 const services: ReadonlyArray<ServiceEntry> = JSON.parse(readFileSync(join(root, "services.json"), "utf8"))
 
-const program = Effect.forEach(services, _loadService, { discard: true })
+// FR-4.4/AC-5 — the OVH-generated clients (mks, dns) run their own
+// `ovh2openapi`-shaped pipeline (trim -> convert -> patch -> generate),
+// registered separately from `services.json`'s httpapi-format OpenStack
+// entries; still gated by the same "regen is a no-op" check.
+interface OvhPipeline {
+  readonly name: string
+  readonly outputPath: string
+  readonly generate: () => Effect.Effect<{ readonly source: string }, unknown>
+}
+
+const _loadOvhPipeline = (pipeline: OvhPipeline) =>
+  Effect.gen(function* () {
+    const committed = readFileSync(join(root, pipeline.outputPath), "utf8")
+    const { source } = yield* pipeline.generate()
+    yield* checkNoop({ committedPath: pipeline.outputPath, committed, regenerated: source })
+  })
+
+const _ovhPipelines: Effect.Effect<ReadonlyArray<OvhPipeline>> = Effect.promise(async () => [
+  {
+    name: "distro-ovh-mks",
+    outputPath: "../../packages/distro-ovh-mks/src/generated/client.ts",
+    generate: (await import("../../../../packages/distro-ovh-mks/scripts/generate.ts")).generate
+  },
+  {
+    name: "dns-ovh",
+    outputPath: "../../packages/dns-ovh/src/generated/client.ts",
+    generate: (await import("../../../../packages/dns-ovh/scripts/generate.ts")).generate
+  }
+])
+
+const program = Effect.gen(function* () {
+  yield* Effect.forEach(services, _loadService, { discard: true })
+  const ovhPipelines = yield* _ovhPipelines
+  yield* Effect.forEach(ovhPipelines, _loadOvhPipeline, { discard: true })
+  return services.length + ovhPipelines.length
+})
 
 Effect.runPromise(program).then(
-  () => {
-    console.log(`codegen:check — ${services.length} service pipeline(s) clean`)
+  (count) => {
+    console.log(`codegen:check — ${count} service pipeline(s) clean`)
   },
   (error) => {
     console.error("codegen:check — drift or pipeline failure:", error)

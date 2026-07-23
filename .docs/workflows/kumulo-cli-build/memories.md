@@ -739,3 +739,66 @@ half's `OvhProjectClient`).
 - `bun run ci` full green: typecheck (all packages), vitest 26 files/75
   tests across `cli`+`openstack`, dep-lint 0 violations (223 modules),
   oxlint clean.
+
+## Fix round — M2–M6 verification findings
+
+- **`ensureCluster` create-on-lookup-miss bug (blocker, FR-2.6)**: `deleteMks`/
+  `kubeconfigMks` in `packages/cli/src/mks/reconcile.ts` were both routing
+  through `ensureCluster`, which creates+polls-to-READY (up to 10 min) when
+  the by-name lookup misses — so `kumulo delete`/`kumulo kubeconfig` against
+  a nonexistent cluster silently provisioned a real billable cluster. Fixed
+  by extracting `findClusterByName` (lookup-only, no `_create` fallback)
+  from `distro-ovh-mks/src/distro/ensure-cluster.ts`, exported via both the
+  `distro/index.ts` and package-root barrels. `deleteMks` now no-ops when
+  missing; `kubeconfigMks` now fails with `ResourceNotFound`. Test asserts
+  this with a `HttpClient.tap`-based create-spy (watches for the `POST
+  .../kube` call) — asserting `clusters.size === 0` alone is not enough,
+  since a create-then-delete round trip leaves the same end state.
+- **OVH codegen pipelines unregistered in `codegen:check` (blocker,
+  FR-4.4/AC-5)**: `tools/codegen/src/bin/check.ts` only iterated
+  `services.json` (6 OpenStack, httpapi-format). `distro-ovh-mks` and
+  `dns-ovh` each run their own `ovh2openapi`-shaped pipeline
+  (`scripts/generate.ts`: trim OVH schema -> `convert` -> patch -> generate)
+  with no allowlist/services.json entry, so hand-edits to either committed
+  `generated/client.ts` passed CI clean. Fixed by splitting each
+  `scripts/generate.ts` into an exported pure `generate()` (the
+  trim/convert/patch/generate pipeline, returns `{source, warnings}`) and an
+  `if (import.meta.main)` CLI block that calls it and writes the file;
+  `check.ts` now dynamically imports both packages' `generate()` and runs
+  the same `checkNoop` gate against their committed output. `codegen:check`
+  now reports "8 service pipeline(s) clean" (6 + 2), not 6.
+- **`determinism.test.ts`'s "byte-identical" property was vacuous (minor)**:
+  it converted one fixed in-memory object twice — trivially deterministic
+  for any pure function, never exercising key-insertion-order risk. Fixed
+  by rebuilding a structurally-equal schema with every dict's key order
+  reversed (`_reorderKeys`) and comparing conversions of the original vs.
+  reordered schema; this is a *stronger*, still-passing property (`convert`
+  really is order-independent), not a red herring.
+- **NFR-6 interruption test couldn't fail under a broken interrupt (minor)**:
+  `packages/core/test/reconcile/apply.test.ts` did `forkChild` + `sleep("0
+  millis")` + `interrupt`, then asserted only `<=` bounds that also hold if
+  the fiber ran to completion or never started. Fixed with a test-local
+  decorator layer (`_blockOnSecondServerLive`, defined in the test file, not
+  the shared fake) that blocks on `Effect.never` — no `Clock` dependency,
+  so it isn't affected by `it.effect`'s virtual `TestClock` (plain
+  `Effect.sleep` durations don't advance without an explicit
+  `TestClock.adjust`, which is *why* the original `sleep("0 millis")`
+  version only "worked" by accident) — the first time a 2nd distinct server
+  would be created; `Effect.yieldNow` (used as a value, not a call) lets the
+  forked fiber reach that block before the test interrupts it. Assertions
+  now require `0 < partial.length < specs.length` — genuinely mid-apply.
+- **MKS version silently dropped (minor, FR-6.1)**: `_toMksConfig` never set
+  `MksClusterConfig.version` because the generated
+  `Cloud_kube_VersionEnum` type lived under `distro-ovh-mks`'s
+  `generated/` internals, unreachable from `cli` under
+  `no-deep-package-imports`. Fixed by adding
+  `distro-ovh-mks/src/distro/parse-kube-version.ts` (`parseKubeVersion`,
+  exported via both barrels): strips `ClusterConfig.version`'s plain-semver
+  patch component down to OVH's major.minor enum and decodes it against the
+  generated `Schema` — an unsupported minor now fails loudly with a real
+  `ResourceConflict` (`MksError`) instead of the config's version being
+  quietly ignored. Wired into `applyMks` only (the create/update path);
+  `deleteMks`/`kubeconfigMks` don't need a version for a by-name lookup.
+- `bun run ci` full green after all five fixes: typecheck (12 packages),
+  vitest 68 files/200 tests, dep-lint 0 violations (227 modules), oxlint
+  clean, `codegen:check` 8 pipelines clean.

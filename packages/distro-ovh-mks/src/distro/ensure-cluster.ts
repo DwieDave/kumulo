@@ -18,6 +18,12 @@ const _toInfo = (cluster: RawCluster): ManagedClusterInfo => ({
   status: cluster.status ?? "UNKNOWN"
 })
 
+/** Resolves the cluster by name only — never creates one (FR-2.6: missing cluster is a no-op, not a provisioning trigger). */
+export const findClusterByName = (
+  { mks, config }: { readonly mks: Mks; readonly config: MksClusterConfig }
+): Effect.Effect<ManagedClusterInfo | undefined, MksError> =>
+  Effect.map(_findByName({ mks, config }), (cluster) => cluster && _toInfo(cluster))
+
 const _findByName = (
   { mks, config }: { readonly mks: Mks; readonly config: MksClusterConfig }
 ): Effect.Effect<RawCluster | undefined, MksError> =>

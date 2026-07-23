@@ -2,7 +2,8 @@
 // Managed Kubernetes. Not wired into `src/index.ts`'s exact
 // `ManagedDistroShape` (that adapter is the composition root's job, T4.2) —
 // these are the concrete building blocks it composes.
-export { ensureCluster } from "./ensure-cluster.ts"
+export { ensureCluster, findClusterByName } from "./ensure-cluster.ts"
+export { parseKubeVersion } from "./parse-kube-version.ts"
 export { ensureNodePools } from "./ensure-nodepools.ts"
 export { fetchKubeconfig } from "./kubeconfig.ts"
 export { upgrade } from "./upgrade.ts"

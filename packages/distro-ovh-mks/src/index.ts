@@ -10,6 +10,8 @@ export {
   ensureCluster,
   ensureNodePools,
   fetchKubeconfig,
+  findClusterByName,
+  parseKubeVersion,
   upgrade
 } from "./distro/index.ts"
 export type {
