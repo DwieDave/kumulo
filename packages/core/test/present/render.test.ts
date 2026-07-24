@@ -28,7 +28,7 @@ describe("renderPlan", () => {
   })
 
   it("empty plan renders an all-zero summary and no lines", () => {
-    expect(renderPlan({ actions: [] })).toBe("Plan: 0 to create, 0 to delete, 0 to replace, 0 unchanged.")
+    expect(renderPlan({ actions: [] })).toBe("Plan: 0 to create, 0 to delete, 0 to update, 0 to replace, 0 unchanged.")
   })
 
   const _actionArb: fc.Arbitrary<PlanAction> = fc.oneof(
