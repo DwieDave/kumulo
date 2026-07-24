@@ -13,8 +13,11 @@
   "dependencies": {
     "effect": "catalog:",
     "@effect/platform-bun": "catalog:",
+    "@kumulo/addons": "workspace:*",
     "@kumulo/core": "workspace:*",
+    "@kumulo/distro-k3s": "workspace:*",
     "@kumulo/distro-ovh-mks": "workspace:*",
+    "@kumulo/dns-ovh": "workspace:*",
     "@kumulo/openstack": "workspace:*",
     "@kumulo/provider-ovh": "workspace:*",
     "@kumulo/volumes-cinder": "workspace:*"

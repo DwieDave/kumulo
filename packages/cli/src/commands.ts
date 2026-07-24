@@ -1,10 +1,13 @@
+import { dirname } from "node:path"
 import { Console, Effect } from "effect"
 import { Command } from "effect/unstable/cli"
+import type { ClusterConfig } from "@kumulo/core"
 import { loadConfig } from "./config.ts"
 import { reconcileVolumesOnDelete, volumes } from "./commands/volumes.ts"
 import { status } from "./commands/status.ts"
 import { upgrade } from "./commands/upgrade.ts"
-import { DistroNotWired } from "./distro-not-wired.ts"
+import { buildK3sPlan } from "./k3s/plan.ts"
+import { applyK3s, deleteK3s, kubeconfigK3s } from "./k3s/reconcile.ts"
 import { buildMksPlan } from "./mks/plan.ts"
 import { applyMks, deleteMks, kubeconfigMks } from "./mks/reconcile.ts"
 import { decidePlanAction, renderPlan } from "./present.ts"
@@ -12,18 +15,15 @@ import { kumulo } from "./root.ts"
 
 export { kumulo }
 
-// FR-2.3 branches once on distro kind; only `ovh-mks` is wired live in this
-// task (T4.2) — the self-managed (k3s) phase pipeline lands in M7.
-const _requireMks = (config: { readonly distro: string }) =>
-  config.distro === "ovh-mks" ? Effect.void : Effect.fail(new DistroNotWired({ distro: config.distro }))
+// FR-2.3 — the one distro-kind branch point; every command below dispatches
+// on it the same way `upgrade.ts` already does.
+const _isK3s = (config: ClusterConfig): boolean => config.distro === "k3s"
 
 /** Config → plan → present → apply (FR-2.2), shared by `create` and `scale`. */
 const _applyFlow = Effect.fn(function*() {
   const root = yield* kumulo
   const config = yield* loadConfig(root.config)
-  yield* _requireMks(config)
-
-  const plan = buildMksPlan(config)
+  const plan = _isK3s(config) ? buildK3sPlan(config) : buildMksPlan(config)
   const decision = decidePlanAction({ plan, yes: root.yes, dryRun: root.dryRun })
   yield* Console.log(renderPlan(plan))
 
@@ -33,6 +33,11 @@ const _applyFlow = Effect.fn(function*() {
     return
   }
 
+  if (_isK3s(config)) {
+    const result = yield* applyK3s({ config, configDir: dirname(root.config) })
+    yield* Console.log(`\nCluster "${config.name}" is up (${result.apiEndpoint}); kubeconfig at ${result.kubeconfigPath}.`)
+    return
+  }
   const info = yield* applyMks(config)
   yield* Console.log(`\nCluster "${config.name}" is ${info.status} (${info.apiEndpoint}).`)
 })
@@ -51,8 +56,7 @@ export const kubeconfig = Command.make(
   Effect.fn(function*() {
     const root = yield* kumulo
     const config = yield* loadConfig(root.config)
-    yield* _requireMks(config)
-    const result = yield* kubeconfigMks(config)
+    const result = _isK3s(config) ? yield* kubeconfigK3s(config) : yield* kubeconfigMks(config)
     yield* Console.log(result.content)
   })
 ).pipe(Command.withDescription("Print the cluster's kubeconfig"))
@@ -63,13 +67,13 @@ export const del = Command.make(
   Effect.fn(function*() {
     const root = yield* kumulo
     const config = yield* loadConfig(root.config)
-    yield* _requireMks(config)
 
     if (!root.yes) {
       yield* Console.log(`Re-run with --yes to delete cluster "${config.name}".`)
       return
     }
-    yield* deleteMks(config)
+    if (_isK3s(config)) yield* deleteK3s(config)
+    else yield* deleteMks(config)
     yield* Console.log(`Cluster "${config.name}" deleted.`)
 
     // AC-7 — retained volumes (`volumes.retained[].retain: true`) survive

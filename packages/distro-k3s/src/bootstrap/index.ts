@@ -4,3 +4,5 @@ export type { AddonDisableFlags, AgentInstallArgs, ServerInstallArgs } from "./i
 export { renderAgentInstallScript, renderServerInstallScript } from "./install-script.ts"
 export type { InstallMastersArgs, InstallWorkersArgs } from "./orchestrate.ts"
 export { installMasters, installWorkers } from "./orchestrate.ts"
+export type { BootstrapResult, RunBootstrapArgs } from "./install.ts"
+export { runBootstrap } from "./install.ts"

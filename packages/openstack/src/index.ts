@@ -10,3 +10,9 @@ export { credentialsFromCloudsYaml, credentialsFromEnv, loadCredentials } from "
 export type { OpenStackCredentials } from "./auth/credentials.ts"
 export { CloudProviderLive, resolveFlavor, resolveImage } from "./provider/cloud-provider.ts"
 export type { CloudProviderOptions } from "./provider/cloud-provider.ts"
+// kumulo: WHY re-exported here — the k3s CLI composition root (packages/cli)
+// needs FR-5.7's rule builder to assemble `SecGroupSpec`; dep-lint's
+// no-deep-package-imports rule only allows reaching another package's
+// declared barrel, not `provider/security-group-rules.ts` directly.
+export { buildFr57Rules } from "./provider/security-group-rules.ts"
+export type { SecurityGroupRuleInput } from "./provider/security-group-rules.ts"

@@ -1137,3 +1137,66 @@ allows, not a separate package; confirmed via `bun run lint:deps`).
   since `main.ts`/`commands.ts` are shared integration points other
   concurrent tasks might also touch; `git status` showed only this
   session's own files before staging.
+
+## M7-M10 verifier follow-up — k3s composition root + CLI wiring
+
+- `applyServers`/`phasesForKind`/`runPhases` (core) are still just phase
+  *ordering* data + a bounded-concurrency `ensureServer` helper — there is no
+  generic "run every phase" orchestrator in core. The composition root (this
+  task) sequences the concrete Network→Security→LB→Nodes→Bootstrap→Addons→
+  DNS→Volumes→Kubeconfig calls itself in `packages/cli/src/k3s/reconcile.ts`.
+  "ServerGroups" has no separate call at this layer — `openstack`'s
+  `ensureServer` already calls `ensureServerGroups` internally per
+  `spec.role` (see `packages/openstack/src/provider/cloud-provider.ts`), so
+  the Nodes phase covers it.
+- **Production gap closed**: `distro-k3s/src/bootstrap/install.ts`
+  (`runBootstrap`) is the first *production* caller that actually executes
+  the rendered install scripts over `Ssh.exec`, gated by
+  `cloudInitReady`/`sshReady` before and `controlPlaneReady` after master 1.
+  Previously only `orchestrate.ts`'s `installMasters`/`installWorkers` (pure
+  ordering, caller-supplied `installOne`) and the T7.3 e2e test (which only
+  pushed rendered scripts into an array) existed — neither actually ran
+  anything over SSH in a shipped path.
+- `packages/cli/src/k3s/`: `plan.ts` (per-index `ServerSpec`s via core's
+  `resourceName`, same all-`Create` ponytail simplification as
+  `mks/plan.ts` — upgrade both together once a real tagged-resource diff
+  exists), `env.ts` (Layer builders: OpenStack `CloudProvider` reusing
+  `OpenStackEnv`/T6.3, Cinder `VolumeProvider` reusing the `volumes.ts`
+  pattern, OVH `DnsProvider` reusing `MksEnv`'s OAuth2 env-var pattern),
+  `k8s-http-client.ts` (Bun's `fetch` `tls` option via
+  `FetchHttpClient.RequestInit`/`BunHttpClient.RequestInit` — no bespoke
+  HttpClient constructor needed for the Addons phase's client-cert
+  kubeconfig), `reconcile.ts` (the phase pipeline itself).
+- **Testability split**: every exported flow has a `*Effect` twin
+  (`applyK3sEffect`/`deleteK3sEffect`/`kubeconfigK3sEffect`) expressed purely
+  against the ports (`CloudProvider | Ssh | DnsProvider | VolumeProvider |
+  OpenStackEnv`), with the public `applyK3s`/`deleteK3s`/`kubeconfigK3s`
+  just piping the live Layers on top. Baking `Effect.provide(liveLayer)`
+  directly into the exported function (my first draft) makes it
+  untestable from outside — the returned Effect's `R` no longer mentions
+  the port, so a test can't swap in a fake. Split before writing tests, not
+  after.
+- `packages/cli/test/k3s/reconcile.test.ts` proves the fakes record
+  *executed* commands (`Ssh.exec` calls), not just rendered ones — 3
+  masters + 2 workers all show up in the executed-command log, the first
+  master's script contains `--cluster-init`, the rest `--server https://...`.
+- FR-2.7 scale-down gap: `CloudProvider` has no per-server delete verb (only
+  whole-cluster `deleteByTag`) — `_drainOrphanedWorkers` in `reconcile.ts`
+  drains+deletes the k8s `Node` object for any running worker not in the
+  desired spec set (the real, wired part of FR-2.7); actual VM teardown for
+  a single orphaned worker needs that port to grow a delete-by-name verb
+  first (out of this task's ownership — core port change).
+- Addons phase builds its own `K8sClient` from master 1's raw (unrewritten)
+  kubeconfig — this happens *before* the Kubeconfig phase because
+  `SELF_MANAGED_PHASES`'s fixed order puts Addons ahead of Kubeconfig.
+- Small out-of-package additions (same "necessary barrel wiring" precedent
+  as T0.2/T1.2's dep-lint/config fixes): `packages/openstack/src/index.ts`
+  now re-exports `buildFr57Rules`/`SecurityGroupRuleInput` (FR-5.7 SG rules,
+  previously internal-only); `packages/cli/package.json` was missing
+  `@kumulo/distro-k3s`/`@kumulo/dns-ovh`/`@kumulo/addons` as declared deps
+  (present transitively enough for `tsc` to resolve, but `bun`'s runtime
+  module resolution — and vitest — need them declared to link into
+  `node_modules`; caught by `bunx vitest run`, not `tsc --noEmit`).
+- `bun run ci` full green: typecheck × 12 packages, vitest 102 files/317
+  tests, `lint:deps` 0 violations (328 modules/1065 deps), oxlint clean,
+  `codegen:check` clean.

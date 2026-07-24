@@ -12,15 +12,18 @@ export {
   installWorkers,
   renderAgentInstallScript,
   renderServerInstallScript,
-  resolveToken
+  resolveToken,
+  runBootstrap
 } from "./bootstrap/index.ts"
 export type {
   AddonDisableFlags,
   AgentInstallArgs,
+  BootstrapResult,
   InstallMastersArgs,
   InstallWorkersArgs,
   NonEmptyMasters,
   ResolvedToken,
+  RunBootstrapArgs,
   ServerInstallArgs
 } from "./bootstrap/index.ts"
 
