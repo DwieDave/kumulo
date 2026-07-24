@@ -37,7 +37,7 @@ dns:
   records: []
 volumes:
   module: cinder
-  retained:
+  managed:
     - name: staging-eu-data
       size_gb: 10
       type: classic

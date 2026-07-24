@@ -19,7 +19,7 @@ const _encoded: ClusterConfigEncoded = {
     { name: "general", flavor: "b3-16", count: 2, labels: { workload: "general" } }
   ],
   dns: { module: "none", zone: "example.com", ttl: 300, records: [] },
-  volumes: { module: "none", retained: [] },
+  volumes: { module: "none", managed: [] },
   object_storage: { module: "none", buckets: [] },
   secrets: { sink: "none", dir: "." },
   addons: {

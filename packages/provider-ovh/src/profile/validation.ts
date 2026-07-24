@@ -15,7 +15,7 @@ const _octaviaIssue = (config: ClusterConfigShape): string | undefined =>
     : undefined
 
 const _volumeTypeIssue = (config: ClusterConfigShape): string | undefined => {
-  const unsupported = config.volumes?.retained.find((vol) => !ovhVolumeTypes.includes(vol.type))
+  const unsupported = config.volumes?.managed.find((vol) => !ovhVolumeTypes.includes(vol.type))
   return unsupported === undefined
     ? undefined
     : `volume type '${unsupported.type}' is not one of the OVH volume types: ${ovhVolumeTypes.join(", ")}`

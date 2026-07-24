@@ -23,7 +23,7 @@ it.prop("rejects exactly when Octavia is missing under HA, or the volume type is
       addons: { cni: "flannel" },
       auth: { region: r },
       api_server: { high_availability: ha },
-      volumes: { retained: [{ type: vt }] }
+      volumes: { managed: [{ type: vt }] }
     }
     const expectedInvalid = (ha && !hasOctavia(r)) ||
       !["classic", "high-speed", "high-speed-gen2"].includes(vt)

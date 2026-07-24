@@ -104,7 +104,7 @@ const Pvc = Schema.Struct({
   access_modes: Schema.Array(AccessMode)
 })
 
-const RetainedVolume = Schema.Struct({
+const ManagedVolume = Schema.Struct({
   name: Schema.NonEmptyString,
   size_gb: PositiveInt,
   type: Schema.NonEmptyString,
@@ -114,7 +114,7 @@ const RetainedVolume = Schema.Struct({
 
 const Volumes = Schema.Struct({
   module: VolumesModule,
-  retained: Schema.Array(RetainedVolume)
+  managed: Schema.Array(ManagedVolume)
 })
 
 // kumulo: S3 bucket naming rules — 3-63 chars, lowercase alphanumeric/dots/hyphens,

@@ -9,7 +9,7 @@ const baseConfig: ClusterConfigShape = {
   addons: { cni: "flannel" },
   auth: { region: "GRA5" },
   api_server: { high_availability: true },
-  volumes: { retained: [{ type: "classic" }] }
+  volumes: { managed: [{ type: "classic" }] }
 }
 
 it("ovh profile defaults", () => {
@@ -39,7 +39,7 @@ it.effect("rejects HA control plane in a region without Octavia", () =>
 it.effect("rejects an unsupported volume type", () =>
   Effect.gen(function*() {
     const profile = makeOvhProfile("GRA5")
-    const config = { ...baseConfig, volumes: { retained: [{ type: "ssd-nvme" }] } }
+    const config = { ...baseConfig, volumes: { managed: [{ type: "ssd-nvme" }] } }
     const result = yield* Effect.flip(profile.validate(config))
     assert.isTrue(result.issues.some((issue) => issue.message.includes("ssd-nvme")))
   }))

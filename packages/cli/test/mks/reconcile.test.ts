@@ -50,7 +50,7 @@ dns:
   records: []
 volumes:
   module: none
-  retained: []
+  managed: []
 object_storage:
   module: none
   buckets: []

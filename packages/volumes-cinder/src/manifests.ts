@@ -32,7 +32,7 @@ export interface PvcBinding {
 }
 
 // kumulo: PVC binding needs namespace/accessModes from the cluster config's
-// `volumes.retained[].pvc` block, which isn't part of the frozen
+// `volumes.managed[].pvc` block, which isn't part of the frozen
 // `VolumeProvider.staticPvManifest(vol, spec)` port signature — exposed as
 // a separate pure function for the CLI/core orchestrator to call
 // alongside `staticPvManifest`, not as part of the port itself.

@@ -33,7 +33,7 @@ dns:
   records: []
 volumes:
   module: cinder
-  retained:
+  managed:
     - name: keep-me
       size_gb: 50
       type: high-speed

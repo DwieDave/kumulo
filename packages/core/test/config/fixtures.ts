@@ -33,7 +33,7 @@ export const validConfig: ClusterConfigEncoded = {
   },
   volumes: {
     module: "cinder",
-    retained: [
+    managed: [
       {
         name: "postgres-data",
         size_gb: 100,

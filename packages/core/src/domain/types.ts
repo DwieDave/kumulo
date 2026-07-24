@@ -176,5 +176,5 @@ export interface ClusterConfigShape {
   // decoded config satisfies this shape with no adapter.
   readonly auth?: { readonly region: string }
   readonly api_server?: { readonly high_availability: boolean }
-  readonly volumes?: { readonly retained: ReadonlyArray<{ readonly type: string }> }
+  readonly volumes?: { readonly managed: ReadonlyArray<{ readonly type: string }> }
 }

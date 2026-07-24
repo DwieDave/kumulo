@@ -68,7 +68,7 @@ const _encoded: ClusterConfigEncoded = {
   },
   volumes: {
     module: "cinder",
-    retained: [{ name: "pg-data", size_gb: 10, type: "high-speed", retain: true }]
+    managed: [{ name: "pg-data", size_gb: 10, type: "high-speed", retain: true }]
   },
   object_storage: { module: "none", buckets: [] },
   secrets: { sink: "none", dir: "." },

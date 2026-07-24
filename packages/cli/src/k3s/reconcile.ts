@@ -189,7 +189,7 @@ const _reconcileVolumes = (config: ClusterConfig): Effect.Effect<void, VolumeErr
     : Effect.gen(function*() {
       const provider = yield* VolumeProvider
       yield* Effect.forEach(
-        config.volumes.retained,
+        config.volumes.managed,
         (v) => provider.ensureVolume({ name: v.name, sizeGb: v.size_gb, type: v.type, retain: v.retain }),
         { discard: true }
       )
@@ -301,7 +301,7 @@ export const deleteK3sEffect = (
     if (config.volumes.module === "cinder") {
       const existing = yield* volumeProvider.listClusterVolumes(config.name)
       for (const vol of existing) {
-        const retained = config.volumes.retained.find((r) => r.name === vol.name)?.retain ?? false
+        const retained = config.volumes.managed.find((r) => r.name === vol.name)?.retain ?? false
         if (!retained) yield* volumeProvider.deleteVolume({ id: vol.id })
       }
     }

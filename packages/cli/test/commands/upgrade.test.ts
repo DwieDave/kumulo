@@ -17,7 +17,7 @@ const _encoded: ClusterConfigEncoded = {
   masters: { flavor: "b3-8", count: 3, image: "ubuntu-24.04" },
   worker_pools: [{ name: "general", flavor: "b3-16", count: 2 }],
   dns: { module: "none", zone: "example.com", ttl: 300, records: [] },
-  volumes: { module: "none", retained: [] },
+  volumes: { module: "none", managed: [] },
   object_storage: { module: "none", buckets: [] },
   secrets: { sink: "none", dir: "." },
   addons: {

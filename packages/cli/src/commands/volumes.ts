@@ -12,7 +12,7 @@ const configFlag = Flag.string("config").pipe(
   Flag.withDescription("Path to the cluster YAML config")
 )
 const nameFlag = Flag.string("name").pipe(
-  Flag.withDescription("Name of the retained volume, matching an entry in the config's volumes.retained list")
+  Flag.withDescription("Name of the retained volume, matching an entry in the config's volumes.managed list")
 )
 const volumeIdFlag = Flag.string("volume-id").pipe(
   Flag.withDescription("Existing Cinder volume ID to bind into this cluster's outputs + generated PVs")
@@ -37,7 +37,7 @@ export const volumesList = Command.make(
 ).pipe(Command.withDescription("List recorded volumes for a cluster"))
 
 const _retainedSpec = (config: ClusterConfig, name: string): VolumeSpec | undefined => {
-  const entry = config.volumes.retained.find((candidate) => candidate.name === name)
+  const entry = config.volumes.managed.find((candidate) => candidate.name === name)
   return entry === undefined ? undefined : { name: entry.name, sizeGb: entry.size_gb, type: entry.type, retain: entry.retain }
 }
 
@@ -46,7 +46,7 @@ const _retainedSpec = (config: ClusterConfig, name: string): VolumeSpec | undefi
  * into this cluster's outputs file + regenerates its static PV(+PVC)
  * manifest, pinned to that volume's `csi.volumeHandle`. No Cinder call
  * needed (the volume already exists) — the spec (size/type/retain/pvc)
- * comes from the config's own `volumes.retained[]` entry matching `--name`,
+ * comes from the config's own `volumes.managed[]` entry matching `--name`,
  * not duplicate CLI flags.
  */
 export const volumesAdopt = Command.make(
@@ -57,10 +57,10 @@ export const volumesAdopt = Command.make(
     const spec = _retainedSpec(config, name)
     if (spec === undefined) {
       return yield* Effect.fail(
-        new ConfigInvalid({ issues: [{ path: ["volumes", "retained"], message: `no retained volume named "${name}"` }] })
+        new ConfigInvalid({ issues: [{ path: ["volumes", "managed"], message: `no retained volume named "${name}"` }] })
       )
     }
-    const entry = config.volumes.retained.find((candidate) => candidate.name === name)
+    const entry = config.volumes.managed.find((candidate) => candidate.name === name)
     const dir = dirname(configPath)
     const file = yield* readOutputs({ dir, tag: config.name })
     const pvc = entry?.pvc === undefined ? undefined : { namespace: entry.pvc.namespace, accessModes: entry.pvc.access_modes }
@@ -80,18 +80,18 @@ export const volumes = Command.make("volumes").pipe(
  * `delete` skips `retain: true` volumes; called by `del` in
  * `commands.ts` after the cluster itself is torn down. Non-retained
  * volumes with a matching config entry are deleted; anything not present
- * in `volumes.retained` (or module !== "cinder") is left untouched — this
+ * in `volumes.managed` (or module !== "cinder") is left untouched — this
  * command never discovers/deletes volumes it wasn't told about.
  */
 export const reconcileVolumesOnDelete = (
   config: ClusterConfig
 ): Effect.Effect<ReadonlyArray<string>, VolumeError, CinderAuth | HttpClient.HttpClient> =>
   Effect.gen(function*() {
-    if (config.volumes.module !== "cinder" || config.volumes.retained.length === 0) return []
+    if (config.volumes.module !== "cinder" || config.volumes.managed.length === 0) return []
     const provider = yield* Effect.provide(VolumeProvider, VolumeProviderLive({ tag: config.name }))
     const existing = yield* provider.listClusterVolumes(config.name)
     const kept: Array<string> = []
-    for (const entry of config.volumes.retained) {
+    for (const entry of config.volumes.managed) {
       const vol = existing.find((v) => v.name === entry.name)
       if (vol === undefined) continue
       if (entry.retain) {

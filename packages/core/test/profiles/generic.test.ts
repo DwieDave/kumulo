@@ -9,7 +9,7 @@ const baseConfig: ClusterConfigShape = {
   addons: { cni: "flannel" },
   auth: { region: "anywhere" },
   api_server: { high_availability: true },
-  volumes: { retained: [{ type: "any-custom-type" }] }
+  volumes: { managed: [{ type: "any-custom-type" }] }
 }
 
 it("generic profile makes no capability assumptions", () => {

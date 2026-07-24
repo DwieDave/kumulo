@@ -36,7 +36,7 @@ dns:
   records: []
 volumes:
   module: none
-  retained: []
+  managed: []
 object_storage:
 ${bucketsYaml}
 secrets:

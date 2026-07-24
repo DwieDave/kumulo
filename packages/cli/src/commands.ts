@@ -93,7 +93,7 @@ export const del = Command.make(
     else yield* deleteMks(config)
     yield* Console.log(`Cluster "${config.name}" deleted.`)
 
-    // Retained volumes (`volumes.retained[].retain: true`) survive `delete`;
+    // Retained volumes (`volumes.managed[].retain: true`) survive `delete`;
     // anything else recorded there is torn down alongside the cluster.
     const kept = yield* reconcileVolumesOnDelete(config)
     if (kept.length > 0) yield* Console.log(`Retained volumes (kept): ${kept.join(", ")}`)
