@@ -23,11 +23,21 @@ export const decidePlanAction = (
   return { _tag: "NeedsConfirm" }
 }
 
+// ANSI colors only when writing to a real terminal — piped/captured output
+// (tests, files) stays plain.
+const _color = (code: number) => (text: string): string =>
+  process.stdout.isTTY ? `\x1b[${code}m${text}\x1b[0m` : text
+
+export const green = _color(32)
+export const red = _color(31)
+export const yellow = _color(33)
+export const dim = _color(2)
+
 const _renderLine = (action: PlanAction): string => {
-  if (action._tag === "Create") return `  + ${action.name}`
-  if (action._tag === "Delete") return `  - ${action.name}`
-  if (action._tag === "NoOp") return `  = ${action.name}`
-  return `  ~ ${action.name} (${action.reason})`
+  if (action._tag === "Create") return green(`  + ${action.name}`)
+  if (action._tag === "Delete") return red(`  - ${action.name}`)
+  if (action._tag === "NoOp") return dim(`  = ${action.name}`)
+  return yellow(`  ~ ${action.name} (${action.reason})`)
 }
 
 const _count = (actions: ReadonlyArray<PlanAction>, tag: PlanAction["_tag"]): number =>
@@ -36,11 +46,11 @@ const _count = (actions: ReadonlyArray<PlanAction>, tag: PlanAction["_tag"]): nu
 const _groupOrder: ReadonlyArray<PlanAction["_tag"]> = ["Create", "ReplaceNeedsConfirm", "Delete", "NoOp"]
 
 export const renderPlan = (plan: Plan): string => {
-  const summary = `Plan: ${_count(plan.actions, "Create")} to create, ${
-    _count(plan.actions, "Delete")
-  } to delete, ${_count(plan.actions, "ReplaceNeedsConfirm")} to replace, ${
-    _count(plan.actions, "NoOp")
-  } unchanged.`
+  const summary = `Plan: ${green(`${_count(plan.actions, "Create")} to create`)}, ${
+    red(`${_count(plan.actions, "Delete")} to delete`)
+  }, ${yellow(`${_count(plan.actions, "ReplaceNeedsConfirm")} to replace`)}, ${
+    dim(`${_count(plan.actions, "NoOp")} unchanged`)
+  }.`
   if (plan.actions.length === 0) return summary
   const grouped = _groupOrder.flatMap((tag) => plan.actions.filter((action) => action._tag === tag))
   return [summary, "", ...grouped.map(_renderLine)].join("\n")

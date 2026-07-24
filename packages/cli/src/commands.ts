@@ -13,7 +13,7 @@ import { buildMksPlan } from "./mks/plan.ts"
 import { applyMks, deleteMks, kubeconfigMks, lookupMksInventory } from "./mks/reconcile.ts"
 import { StorageEnv, storageLayers } from "./storage/env.ts"
 import { bucketPlanActions, convergeBuckets, reconcileBucketsOnDelete } from "./storage/reconcile.ts"
-import { decidePlanAction, renderPlan } from "./present.ts"
+import { decidePlanAction, dim, green, red, renderPlan, yellow } from "./present.ts"
 import { kumulo } from "./root.ts"
 
 export { kumulo }
@@ -37,9 +37,9 @@ const _mksPlanLive = (config: ClusterConfig) =>
   })
 
 const _appliedVerb: Record<string, string> = {
-  Create: "Created",
-  Delete: "Deleted",
-  ReplaceNeedsConfirm: "Replaced"
+  Create: green("Created"),
+  Delete: red("Deleted"),
+  ReplaceNeedsConfirm: yellow("Replaced")
 }
 
 /** One line per non-NoOp plan row whose name matches `prefixes`, logged after the corresponding converge step succeeded. */
@@ -66,17 +66,17 @@ const _applyFlow = Effect.fn(function*() {
     : yield* bucketPlanActions({ config, configDir }).pipe(Effect.provide(storageLayer))
   const plan: Plan = { actions: [...basePlan.actions, ...bucketActions] }
   const decision = decidePlanAction({ plan, yes: root.yes, dryRun: root.dryRun })
-  yield* Console.log(renderPlan(plan))
+  yield* Console.log(`${renderPlan(plan)}\n`)
 
   if (decision._tag === "DryRun" || decision._tag === "NothingToDo") return
   if (decision._tag === "NeedsConfirm") {
-    yield* Console.log("\nRe-run with --yes to apply.")
+    yield* Console.log("Re-run with --yes to apply.")
     return
   }
 
   if (_isK3s(config)) {
     const result = yield* applyK3s({ config, configDir })
-    yield* Console.log(`\nCluster "${config.name}" is up (${result.apiEndpoint}); kubeconfig at ${result.kubeconfigPath}.`)
+    yield* Console.log(`Cluster "${config.name}" is up (${result.apiEndpoint}); kubeconfig at ${result.kubeconfigPath}.`)
     return
   }
   // Cluster+pools, volumes, and buckets have no dependencies on each other
@@ -84,7 +84,7 @@ const _applyFlow = Effect.fn(function*() {
   // depend on buckets, sequenced inside `convergeBuckets`) — converge all
   // three concurrently.
   const mksStep = applyMks(config).pipe(
-    Effect.tap((info) => Console.log(`\nCluster "${config.name}" is ${info.status} (${info.apiEndpoint}).`)),
+    Effect.tap((info) => Console.log(`Cluster "${config.name}" is ${info.status} (${info.apiEndpoint}).`)),
     Effect.tap(() => _logApplied({ plan, prefixes: ["mks-cluster/", "mks-pool/"] }))
   )
   // Same Cinder-backed volumes as the k3s path's `_reconcileVolumes`
@@ -137,13 +137,13 @@ export const del = Command.make(
     const clusterAndVolumesStep = Effect.gen(function*() {
       if (_isK3s(config)) yield* deleteK3s(config)
       else yield* deleteMks(config)
-      yield* Console.log(`Deleted mks-cluster/${config.name}`)
+      yield* Console.log(`${red("Deleted")} mks-cluster/${config.name}`)
 
       // Retained volumes (`volumes.managed[].retain: true`) survive `delete`;
       // anything else recorded there is torn down alongside the cluster.
       const volumesResult = yield* reconcileVolumesOnDelete(config)
-      yield* Effect.forEach(volumesResult.deleted, (name) => Console.log(`Deleted volume/${name}`), { discard: true })
-      if (volumesResult.kept.length > 0) yield* Console.log(`Retained volumes (kept): ${volumesResult.kept.join(", ")}`)
+      yield* Effect.forEach(volumesResult.deleted, (name) => Console.log(`${red("Deleted")} volume/${name}`), { discard: true })
+      if (volumesResult.kept.length > 0) yield* Console.log(`${dim("Retained volumes (kept):")} ${volumesResult.kept.join(", ")}`)
     })
 
     // Same retain semantics for buckets (R6/R11) — a non-empty, non-retained
@@ -155,8 +155,8 @@ export const del = Command.make(
       const buckets = yield* reconcileBucketsOnDelete({ config, configDir: dirname(root.config) }).pipe(
         Effect.provide(providerLayer)
       )
-      yield* Effect.forEach(buckets.deleted, (name) => Console.log(`Deleted bucket/${name}`), { discard: true })
-      if (buckets.kept.length > 0) yield* Console.log(`Retained buckets (kept): ${buckets.kept.join(", ")}`)
+      yield* Effect.forEach(buckets.deleted, (name) => Console.log(`${red("Deleted")} bucket/${name}`), { discard: true })
+      if (buckets.kept.length > 0) yield* Console.log(`${dim("Retained buckets (kept):")} ${buckets.kept.join(", ")}`)
     })
 
     yield* Effect.all([clusterAndVolumesStep, bucketsStep], { concurrency: 2 })
