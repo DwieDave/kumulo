@@ -38,6 +38,19 @@ dns:
 volumes:
   module: cinder
   retained: []
+object_storage:
+  module: ovh
+  buckets:
+    - name: staging-eu-backups
+      region: DE1
+      versioning: false
+      encryption: false
+      retain: true
+secrets:
+  sink: sops
+  dir: .
+  sops:
+    age_recipient: age1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqql4pcnf
 addons:
   cloud_controller_manager: true
   cinder_csi:

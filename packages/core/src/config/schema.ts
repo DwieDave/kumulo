@@ -23,6 +23,8 @@ const PublicAccess = Schema.Literals(["bastionless", "nat"])
 const AuthMethod = Schema.Literals(["application_credential", "clouds_yaml", "env"])
 const DnsModule = Schema.Literals(["ovh", "designate", "none"])
 const VolumesModule = Schema.Literals(["cinder", "none"])
+const ObjectStorageModule = Schema.Literals(["ovh", "none"])
+const SecretsSink = Schema.Literals(["sops", "none"])
 const Cni = Schema.Literals(["flannel", "cilium"])
 const AccessMode = Schema.Literals(["ReadWriteOnce", "ReadWriteMany", "ReadOnlyMany"])
 
@@ -35,6 +37,14 @@ const isVersionValidForDistro = Schema.makeFilter((config: { distro: string; ver
   const pattern = config.distro === "k3s" ? k3sVersionPattern : plainK8sVersionPattern
   return pattern.test(config.version) ? undefined : "version does not match the format expected for this distro"
 })
+
+// kumulo: object storage buckets carry secrets, so an ovh module requires a real sink
+const isSecretsRequiredForObjectStorage = Schema.makeFilter(
+  (config: { object_storage: { module: string }; secrets: { sink: string } }) =>
+    config.object_storage.module === "ovh" && config.secrets.sink === "none"
+      ? "secrets.sink must not be none when object_storage.module is ovh"
+      : undefined
+)
 
 const Auth = Schema.Struct({
   method: AuthMethod,
@@ -107,6 +117,54 @@ const Volumes = Schema.Struct({
   retained: Schema.Array(RetainedVolume)
 })
 
+// kumulo: S3 bucket naming rules — 3-63 chars, lowercase alphanumeric/dots/hyphens,
+// must start and end with an alphanumeric character
+const isS3BucketName = Schema.isPattern(/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/, {
+  message: "must be 3-63 chars, lowercase alphanumeric/dots/hyphens, and start/end alphanumeric"
+})
+
+const BucketName = Schema.String.check(isS3BucketName)
+
+const Bucket = Schema.Struct({
+  name: BucketName,
+  region: Schema.optionalKey(Schema.NonEmptyString),
+  versioning: Schema.Boolean,
+  encryption: Schema.Boolean,
+  retain: Schema.Boolean
+})
+
+const isBucketsEmptyWhenModuleNone = Schema.makeFilter(
+  (objectStorage: { module: string; buckets: ReadonlyArray<unknown> }) =>
+    objectStorage.module === "none" && objectStorage.buckets.length > 0
+      ? "buckets must be empty when object_storage.module is none"
+      : undefined
+)
+
+const ObjectStorage = Schema.Struct({
+  module: ObjectStorageModule,
+  buckets: Schema.Array(Bucket)
+}).check(isBucketsEmptyWhenModuleNone)
+
+const isAgeRecipient = Schema.isPattern(/^age1/, {
+  message: "must be an age recipient key starting with age1"
+})
+
+const Sops = Schema.Struct({
+  age_recipient: Schema.String.check(isAgeRecipient)
+})
+
+const isSopsConfiguredWhenSinkIsSops = Schema.makeFilter((secrets: { sink: string; sops?: unknown }) =>
+  secrets.sink === "sops" && secrets.sops === undefined
+    ? "sops config is required when secrets.sink is sops"
+    : undefined
+)
+
+const Secrets = Schema.Struct({
+  sink: SecretsSink,
+  dir: Schema.NonEmptyString,
+  sops: Schema.optionalKey(Sops)
+}).check(isSopsConfiguredWhenSinkIsSops)
+
 const CinderCsi = Schema.Struct({
   enabled: Schema.Boolean,
   default_volume_type: Schema.NonEmptyString
@@ -137,9 +195,11 @@ export const ClusterConfig = Schema.Struct({
   worker_pools: Schema.Array(WorkerPool),
   dns: Dns,
   volumes: Volumes,
+  object_storage: ObjectStorage,
+  secrets: Secrets,
   addons: Addons,
   k3s: K3sPassthrough
-}).check(isVersionValidForDistro)
+}).check(isVersionValidForDistro, isSecretsRequiredForObjectStorage)
 
 export type ClusterConfig = typeof ClusterConfig.Type
 export type ClusterConfigEncoded = typeof ClusterConfig.Encoded

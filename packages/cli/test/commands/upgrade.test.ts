@@ -18,6 +18,8 @@ const _encoded: ClusterConfigEncoded = {
   worker_pools: [{ name: "general", flavor: "b3-16", count: 2 }],
   dns: { module: "none", zone: "example.com", ttl: 300, records: [] },
   volumes: { module: "none", retained: [] },
+  object_storage: { module: "none", buckets: [] },
+  secrets: { sink: "none", dir: "." },
   addons: {
     cloud_controller_manager: false,
     cinder_csi: { enabled: false, default_volume_type: "high-speed" },

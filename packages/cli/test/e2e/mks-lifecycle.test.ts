@@ -46,6 +46,12 @@ dns:
 volumes:
   module: none
   retained: []
+object_storage:
+  module: none
+  buckets: []
+secrets:
+  sink: none
+  dir: .
 addons:
   cloud_controller_manager: true
   cinder_csi:

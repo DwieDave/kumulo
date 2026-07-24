@@ -19,7 +19,9 @@ Status: DRAFT — awaiting human approval. Each task lists its requirements.
 
 ## Milestone 3 — Reconcile + plan
 
-- T3.1 Pure bucket diff (property tests: idempotence, totality). [R5, N1]
+- T3.1 Pure bucket diff (property tests: idempotence, totality). Bucket `region`
+  defaults to `auth.region` here, at desired-state construction — deliberately not in
+  the schema (T1.1 verifier finding). [R5, N1]
 - T3.2 Wire into plan rendering + create/scale/delete/status CLI paths (ovh-mks only).
   [R5, R11]
 
@@ -37,3 +39,18 @@ Status: DRAFT — awaiting human approval. Each task lists its requirements.
 
 Phase-4 execution: per task — detail plan here, failing test first, implement, verify,
 commit.
+
+## T1.1 detailed plan (in progress)
+
+1. Failing tests first (`packages/core/test/config/object-storage.test.ts`):
+   decode success for full `object_storage` + `secrets` sections; failures for:
+   missing sections, invalid S3 bucket names (uppercase, too short/long, bad
+   start/end), `module: none` with non-empty buckets, `module: ovh` with
+   `secrets.sink: none`, bad `age_recipient` prefix.
+2. Schema (`packages/core/src/config/schema.ts`): `ObjectStorage`, `Secrets`
+   structs; `isS3BucketName` pattern check; cross-field filters in the style of
+   `isVersionValidForDistro`. Both sections required on `ClusterConfig`.
+3. Update `examples/ovh-mks.yaml` + `examples/k3s.yaml` (`module: none`,
+   `secrets.sink: none` defaults for k3s; ovh-mks example gets one bucket +
+   sops secrets), refresh plan snapshots.
+4. Gates: typecheck, vitest, lint, lint:deps all green.
