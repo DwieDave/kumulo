@@ -28,6 +28,7 @@ export type PlanAction =
   | { readonly _tag: "Create"; readonly name: string }
   | { readonly _tag: "Delete"; readonly name: string }
   | { readonly _tag: "NoOp"; readonly name: string }
+  | { readonly _tag: "Update"; readonly name: string; readonly reason: string }
   | { readonly _tag: "ReplaceNeedsConfirm"; readonly name: string; readonly reason: string }
 
 export interface Plan {

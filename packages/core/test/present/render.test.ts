@@ -18,10 +18,10 @@ describe("renderPlan", () => {
       ]
     }
     expect(renderPlan(plan)).toMatchInlineSnapshot(`
-      "Plan: 1 to create, 1 to delete, 1 to replace, 1 unchanged.
+      "Plan: 1 to create, 1 to delete, 0 to update, 1 to replace, 1 unchanged.
 
         + kumulo-prod-worker-default-1
-        ~ kumulo-prod-master-default-0 (config-hash drifted from desired spec)
+        -/+ kumulo-prod-master-default-0 (config-hash drifted from desired spec)
         - kumulo-prod-old-default-0
         = kumulo-prod-worker-default-0"
     `)

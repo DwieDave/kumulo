@@ -37,20 +37,21 @@ const _renderLine = (action: PlanAction): string => {
   if (action._tag === "Create") return green(`  + ${action.name}`)
   if (action._tag === "Delete") return red(`  - ${action.name}`)
   if (action._tag === "NoOp") return dim(`  = ${action.name}`)
-  return yellow(`  ~ ${action.name} (${action.reason})`)
+  if (action._tag === "Update") return yellow(`  ~ ${action.name} (${action.reason})`)
+  return yellow(`  -/+ ${action.name} (${action.reason})`)
 }
 
 const _count = (actions: ReadonlyArray<PlanAction>, tag: PlanAction["_tag"]): number =>
   actions.filter((action) => action._tag === tag).length
 
-const _groupOrder: ReadonlyArray<PlanAction["_tag"]> = ["Create", "ReplaceNeedsConfirm", "Delete", "NoOp"]
+const _groupOrder: ReadonlyArray<PlanAction["_tag"]> = ["Create", "Update", "ReplaceNeedsConfirm", "Delete", "NoOp"]
 
 export const renderPlan = (plan: Plan): string => {
   const summary = `Plan: ${green(`${_count(plan.actions, "Create")} to create`)}, ${
     red(`${_count(plan.actions, "Delete")} to delete`)
-  }, ${yellow(`${_count(plan.actions, "ReplaceNeedsConfirm")} to replace`)}, ${
-    dim(`${_count(plan.actions, "NoOp")} unchanged`)
-  }.`
+  }, ${yellow(`${_count(plan.actions, "Update")} to update`)}, ${
+    yellow(`${_count(plan.actions, "ReplaceNeedsConfirm")} to replace`)
+  }, ${dim(`${_count(plan.actions, "NoOp")} unchanged`)}.`
   if (plan.actions.length === 0) return summary
   const grouped = _groupOrder.flatMap((tag) => plan.actions.filter((action) => action._tag === tag))
   return [summary, "", ...grouped.map(_renderLine)].join("\n")

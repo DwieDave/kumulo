@@ -50,7 +50,7 @@ export const bucketPlanActions = (
       const liveNames = new Set(live.flat().map((bucket) => bucket.name))
       return [
         ...diff.toCreate.map((b) => ({ _tag: "Create" as const, name: `bucket/${b.name}` })),
-        ...diff.toUpdate.map((u) => ({ _tag: "Create" as const, name: `bucket/${u.spec.name}` })),
+        ...diff.toUpdate.map((u) => ({ _tag: "Update" as const, name: `bucket/${u.spec.name}`, reason: "versioning" })),
         ...diff.toReplace.map((r) => ({
           _tag: "ReplaceNeedsConfirm" as const,
           name: `bucket/${r.spec.name}`,

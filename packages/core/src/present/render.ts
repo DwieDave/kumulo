@@ -5,7 +5,8 @@ const _renderLine = (action: PlanAction): string => {
   if (action._tag === "Create") return `  + ${action.name}`
   if (action._tag === "Delete") return `  - ${action.name}`
   if (action._tag === "NoOp") return `  = ${action.name}`
-  return `  ~ ${action.name} (${action.reason})`
+  if (action._tag === "Update") return `  ~ ${action.name} (${action.reason})`
+  return `  -/+ ${action.name} (${action.reason})`
 }
 
 const _count = (actions: ReadonlyArray<PlanAction>, tag: PlanAction["_tag"]): number =>
@@ -13,14 +14,14 @@ const _count = (actions: ReadonlyArray<PlanAction>, tag: PlanAction["_tag"]): nu
 
 // Grouping order mirrors `terraform plan`: additions, then changes, then
 // removals, unchanged resources last.
-const _groupOrder: ReadonlyArray<PlanAction["_tag"]> = ["Create", "ReplaceNeedsConfirm", "Delete", "NoOp"]
+const _groupOrder: ReadonlyArray<PlanAction["_tag"]> = ["Create", "Update", "ReplaceNeedsConfirm", "Delete", "NoOp"]
 
 export const renderPlan = (plan: Plan): string => {
   const summary = `Plan: ${_count(plan.actions, "Create")} to create, ${
     _count(plan.actions, "Delete")
-  } to delete, ${_count(plan.actions, "ReplaceNeedsConfirm")} to replace, ${
-    _count(plan.actions, "NoOp")
-  } unchanged.`
+  } to delete, ${_count(plan.actions, "Update")} to update, ${
+    _count(plan.actions, "ReplaceNeedsConfirm")
+  } to replace, ${_count(plan.actions, "NoOp")} unchanged.`
   if (plan.actions.length === 0) return summary
   const grouped = _groupOrder.flatMap((tag) => plan.actions.filter((action) => action._tag === tag))
   return [summary, "", ...grouped.map(_renderLine)].join("\n")

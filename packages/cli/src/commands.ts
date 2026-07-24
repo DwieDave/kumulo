@@ -38,6 +38,7 @@ const _mksPlanLive = (config: ClusterConfig) =>
 
 const _appliedVerb: Record<string, string> = {
   Create: green("Created"),
+  Update: yellow("Updated"),
   Delete: red("Deleted"),
   ReplaceNeedsConfirm: yellow("Replaced")
 }
