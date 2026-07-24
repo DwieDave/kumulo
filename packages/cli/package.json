@@ -20,6 +20,8 @@
     "@kumulo/dns-ovh": "workspace:*",
     "@kumulo/openstack": "workspace:*",
     "@kumulo/provider-ovh": "workspace:*",
+    "@kumulo/secrets-sops": "workspace:*",
+    "@kumulo/storage-ovh": "workspace:*",
     "@kumulo/volumes-cinder": "workspace:*"
   },
   "devDependencies": {

@@ -1,7 +1,8 @@
 import { dirname } from "node:path"
 import { Console, Effect } from "effect"
 import { Command } from "effect/unstable/cli"
-import type { ClusterConfig } from "@kumulo/core"
+import type { ClusterConfig, Plan } from "@kumulo/core"
+import { ovhObjectStorageProviderLive } from "@kumulo/storage-ovh"
 import { loadConfig } from "./config.ts"
 import { reconcileVolumesOnDelete, volumes } from "./commands/volumes.ts"
 import { status } from "./commands/status.ts"
@@ -10,6 +11,8 @@ import { buildK3sPlan } from "./k3s/plan.ts"
 import { applyK3s, deleteK3s, kubeconfigK3s } from "./k3s/reconcile.ts"
 import { buildMksPlan } from "./mks/plan.ts"
 import { applyMks, deleteMks, kubeconfigMks } from "./mks/reconcile.ts"
+import { StorageEnv, storageLayers } from "./storage/env.ts"
+import { bucketPlanActions, convergeBuckets, reconcileBucketsOnDelete } from "./storage/reconcile.ts"
 import { decidePlanAction, renderPlan } from "./present.ts"
 import { kumulo } from "./root.ts"
 
@@ -19,11 +22,18 @@ export { kumulo }
 // the same way `upgrade.ts` already does.
 const _isK3s = (config: ClusterConfig): boolean => config.distro === "k3s"
 
+// Object storage is only wired for the ovh-mks path (scope.md) — k3s
+// compiles against the same config shape but never converges buckets.
+const _isOvhStorage = (config: ClusterConfig): boolean => !_isK3s(config) && config.object_storage.module === "ovh"
+
 /** Config → plan → present → apply, shared by `create` and `scale`. */
 const _applyFlow = Effect.fn(function*() {
   const root = yield* kumulo
   const config = yield* loadConfig(root.config)
-  const plan = _isK3s(config) ? buildK3sPlan(config) : buildMksPlan(config)
+  const configDir = dirname(root.config)
+  const basePlan = _isK3s(config) ? buildK3sPlan(config) : buildMksPlan(config)
+  const bucketActions = _isOvhStorage(config) ? yield* bucketPlanActions({ config, configDir }) : []
+  const plan: Plan = { actions: [...basePlan.actions, ...bucketActions] }
   const decision = decidePlanAction({ plan, yes: root.yes, dryRun: root.dryRun })
   yield* Console.log(renderPlan(plan))
 
@@ -34,12 +44,19 @@ const _applyFlow = Effect.fn(function*() {
   }
 
   if (_isK3s(config)) {
-    const result = yield* applyK3s({ config, configDir: dirname(root.config) })
+    const result = yield* applyK3s({ config, configDir })
     yield* Console.log(`\nCluster "${config.name}" is up (${result.apiEndpoint}); kubeconfig at ${result.kubeconfigPath}.`)
     return
   }
   const info = yield* applyMks(config)
   yield* Console.log(`\nCluster "${config.name}" is ${info.status} (${info.apiEndpoint}).`)
+
+  // Buckets converge only after the cluster is READY, credentials are
+  // written last (R6/R7 ordering) — both handled inside `convergeBuckets`.
+  if (_isOvhStorage(config)) {
+    const layer = yield* storageLayers(config)
+    yield* convergeBuckets({ config, configDir }).pipe(Effect.provide(layer))
+  }
 })
 
 export const create = Command.make("create", {}, _applyFlow).pipe(
@@ -80,6 +97,17 @@ export const del = Command.make(
     // anything else recorded there is torn down alongside the cluster.
     const kept = yield* reconcileVolumesOnDelete(config)
     if (kept.length > 0) yield* Console.log(`Retained volumes (kept): ${kept.join(", ")}`)
+
+    // Same retain semantics for buckets (R6/R11) — a non-empty, non-retained
+    // bucket surfaces `BucketNotEmpty` as-is, nothing else here rolls back.
+    if (_isOvhStorage(config)) {
+      const env = yield* StorageEnv
+      const providerLayer = ovhObjectStorageProviderLive(env)
+      const keptBuckets = yield* reconcileBucketsOnDelete({ config, configDir: dirname(root.config) }).pipe(
+        Effect.provide(providerLayer)
+      )
+      if (keptBuckets.length > 0) yield* Console.log(`Retained buckets (kept): ${keptBuckets.join(", ")}`)
+    }
   })
 ).pipe(Command.withDescription("Delete a cluster"))
 

@@ -8,6 +8,7 @@ import { OpenStackEnvLive } from "./doctor-openstack/env.ts"
 import { exitCodeFor } from "./exit-codes.ts"
 import { renderCliError } from "./errors.ts"
 import { MksEnvLive } from "./mks/env.ts"
+import { StorageEnvLive } from "./storage/env.ts"
 import { CinderAuthLive } from "./volumes/env.ts"
 
 // Explicit Layer wiring at the composition root, no runtime module
@@ -17,13 +18,17 @@ import { CinderAuthLive } from "./volumes/env.ts"
 // derived from that same `OpenStackEnv` (`Layer.provideMerge` keeps
 // `OpenStackEnv` itself exposed too, since the doctor checks still need it
 // directly) — volumes (Cinder) are a plain OpenStack service shared by both
-// distros, no separate credential set. `HttpClient.HttpClient` stays in the
-// exposed environment too (not just consumed while building the other
-// layers) — `VolumeProvider` is composed per-cluster at command runtime
-// (`reconcileVolumesOnDelete`), not at Layer-build time, so it still needs
-// an ambient `HttpClient` to reach.
+// distros, no separate credential set. `StorageEnvLive` similarly depends on
+// `MksEnv` (reuses its `serviceName`, see `storage/env.ts`) and is kept
+// alongside it the same way. `HttpClient.HttpClient` stays in the exposed
+// environment too (not just consumed while building the other layers) —
+// `VolumeProvider`/`ObjectStorageProvider`/`CredentialsSink` are composed
+// per-cluster at command runtime (`reconcileVolumesOnDelete`,
+// `storageLayers`), not at Layer-build time, so they still need an ambient
+// `HttpClient` to reach.
 const MainLive = Layer.mergeAll(
   MksEnvLive,
+  StorageEnvLive.pipe(Layer.provideMerge(MksEnvLive)),
   CinderAuthLive.pipe(Layer.provideMerge(OpenStackEnvLive)),
   BunHttpClient.layer
 ).pipe(Layer.provide(BunHttpClient.layer))

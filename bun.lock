@@ -43,6 +43,8 @@
         "@kumulo/dns-ovh": "workspace:*",
         "@kumulo/openstack": "workspace:*",
         "@kumulo/provider-ovh": "workspace:*",
+        "@kumulo/secrets-sops": "workspace:*",
+        "@kumulo/storage-ovh": "workspace:*",
         "@kumulo/volumes-cinder": "workspace:*",
         "effect": "catalog:",
       },
@@ -161,10 +163,12 @@
       "dependencies": {
         "@kumulo/core": "workspace:*",
         "effect": "catalog:",
+        "yaml": "catalog:",
       },
       "devDependencies": {
         "@effect/vitest": "catalog:",
         "codegen": "workspace:*",
+        "fast-check": "catalog:",
         "ovh2openapi": "workspace:*",
         "vitest": "catalog:",
       },

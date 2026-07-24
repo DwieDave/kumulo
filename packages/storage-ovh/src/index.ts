@@ -8,3 +8,17 @@ export { toStorageError } from "./provider/errors.ts"
 
 export { diffBuckets } from "./diff.ts"
 export type { BucketDiff, ExistingBucket } from "./diff.ts"
+
+export {
+  decodeOutputs,
+  emptyOutputs,
+  OutputsBucket,
+  OutputsFile,
+  OutputsInvalid,
+  outputsPath,
+  parseOutputsYaml,
+  readOutputs,
+  stringifyOutputsYaml,
+  toOutputsBucket,
+  writeOutputs
+} from "./outputs.ts"

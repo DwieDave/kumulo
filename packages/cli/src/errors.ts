@@ -1,7 +1,8 @@
 import type { PlatformError } from "effect/PlatformError"
 import type { KumuloError, RendererRegistry } from "@kumulo/core"
 import { renderError } from "@kumulo/core"
-import type { OutputsInvalid } from "@kumulo/volumes-cinder"
+import type { OutputsInvalid as StorageOutputsInvalid } from "@kumulo/storage-ovh"
+import type { OutputsInvalid as VolumesOutputsInvalid } from "@kumulo/volumes-cinder"
 import type { DistroNotWired } from "./distro-not-wired.ts"
 
 /**
@@ -30,11 +31,12 @@ export const cliErrorRegistry: RendererRegistry = {
   SinkUnavailable: (error) => `Credentials sink unavailable: ${error.hint}`
 }
 
-export type CliDomainError = KumuloError | DistroNotWired | OutputsInvalid | PlatformError
+export type CliDomainError = KumuloError | DistroNotWired | VolumesOutputsInvalid | StorageOutputsInvalid | PlatformError
 
 /**
  * `_tag ===` checks narrow the union without a cast: once `PlatformError`,
- * `DistroNotWired` and `OutputsInvalid` are ruled out, TypeScript narrows
+ * `DistroNotWired` and `OutputsInvalid` (shared tag, volumes and storage both
+ * carry the same `{ message }` shape) are ruled out, TypeScript narrows
  * `error` to `KumuloError` for the final `renderError` call.
  */
 export const renderCliError = (error: CliDomainError): string => {
