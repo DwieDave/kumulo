@@ -28,7 +28,14 @@ Status: DRAFT — awaiting human approval.
   apply is rolled back (per-resource convergence, consistent with nodepool behavior).
 - **R7 — Credentials.** One OpenStack/S3 user per cluster (`kumulo-<cluster>`), created
   idempotently; S3 credentials issued via `/user/{id}/s3Credentials`. Re-runs reuse the
-  existing user + credential (no rotation in v1).
+  existing user + credential (no rotation in v1). **Verified OVH constraint (2026-07-24,
+  needs re-approval):** the S3 secret is only ever returned once, on the creation POST —
+  a GET on an existing credential lists it without the secret. The provider therefore
+  cannot itself "reuse" a credential across process runs; `ensureCredentials` fails
+  closed with `ResourceConflict` if one already exists rather than fabricate/omit a
+  secret. Reuse across runs is only achievable one layer up (T3.2 reconcile): read the
+  credentials sink (R8/R9) first and skip calling `ensureCredentials` when an entry for
+  the cluster already exists.
 - **R8 — CredentialsSink port.** Core port `CredentialsSink` (`write(entries) →
   Effect<void, CredentialsSinkError>`); reconcile depends only on the port.
 - **R9 — Sops sink.** First sink impl shells out to `sops --encrypt` writing

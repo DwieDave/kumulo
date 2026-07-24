@@ -23,7 +23,9 @@ Status: DRAFT — awaiting human approval. Each task lists its requirements.
   defaults to `auth.region` here, at desired-state construction — deliberately not in
   the schema (T1.1 verifier finding). [R5, N1]
 - T3.2 Wire into plan rendering + create/scale/delete/status CLI paths (ovh-mks only).
-  [R5, R11]
+  Must read the credentials sink for the cluster before calling `ensureCredentials`
+  (per R7 note) and skip the call when an entry already exists — the provider itself
+  fails closed on a pre-existing credential rather than fabricate a secret. [R5, R11, R7]
 
 ## Milestone 4 — Credentials sink
 
