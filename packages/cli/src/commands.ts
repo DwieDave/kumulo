@@ -36,6 +36,24 @@ const _mksPlanLive = (config: ClusterConfig) =>
     return buildMksPlan({ config, inventory: { ...mks, volumeNames } })
   })
 
+const _appliedVerb: Record<string, string> = {
+  Create: "Created",
+  Delete: "Deleted",
+  ReplaceNeedsConfirm: "Replaced"
+}
+
+/** One line per non-NoOp plan row whose name matches `prefixes`, logged after the corresponding converge step succeeded. */
+const _logApplied = (
+  { plan, prefixes }: { readonly plan: Plan; readonly prefixes: ReadonlyArray<string> }
+): Effect.Effect<void> =>
+  Effect.forEach(
+    plan.actions.filter((action) =>
+      action._tag !== "NoOp" && prefixes.some((prefix) => action.name.startsWith(prefix))
+    ),
+    (action) => Console.log(`${_appliedVerb[action._tag] ?? action._tag} ${action.name}`),
+    { discard: true }
+  )
+
 /** Config → plan → present → apply, shared by `create` and `scale`. */
 const _applyFlow = Effect.fn(function*() {
   const root = yield* kumulo
@@ -63,16 +81,19 @@ const _applyFlow = Effect.fn(function*() {
   }
   const info = yield* applyMks(config)
   yield* Console.log(`\nCluster "${config.name}" is ${info.status} (${info.apiEndpoint}).`)
+  yield* _logApplied({ plan, prefixes: ["mks-cluster/", "mks-pool/"] })
 
   // Same Cinder-backed volumes as the k3s path's `_reconcileVolumes`
   // (`k3s/reconcile.ts`), just no cluster-side manifest apply yet — see
   // `convergeManagedVolumes`'s doc comment.
   yield* convergeManagedVolumes({ config, configDir })
+  yield* _logApplied({ plan, prefixes: ["volume/"] })
 
   // Buckets converge only after the cluster is READY, credentials are
   // written last (R6/R7 ordering) — both handled inside `convergeBuckets`.
   if (storageLayer !== undefined) {
     yield* convergeBuckets({ config, configDir }).pipe(Effect.provide(storageLayer))
+    yield* _logApplied({ plan, prefixes: ["bucket/"] })
   }
 })
 
@@ -112,18 +133,20 @@ export const del = Command.make(
 
     // Retained volumes (`volumes.managed[].retain: true`) survive `delete`;
     // anything else recorded there is torn down alongside the cluster.
-    const kept = yield* reconcileVolumesOnDelete(config)
-    if (kept.length > 0) yield* Console.log(`Retained volumes (kept): ${kept.join(", ")}`)
+    const volumesResult = yield* reconcileVolumesOnDelete(config)
+    yield* Effect.forEach(volumesResult.deleted, (name) => Console.log(`Deleted volume/${name}`), { discard: true })
+    if (volumesResult.kept.length > 0) yield* Console.log(`Retained volumes (kept): ${volumesResult.kept.join(", ")}`)
 
     // Same retain semantics for buckets (R6/R11) — a non-empty, non-retained
     // bucket surfaces `BucketNotEmpty` as-is, nothing else here rolls back.
     if (_isOvhStorage(config)) {
       const env = yield* StorageEnv
       const providerLayer = ovhObjectStorageProviderLive(env)
-      const keptBuckets = yield* reconcileBucketsOnDelete({ config, configDir: dirname(root.config) }).pipe(
+      const buckets = yield* reconcileBucketsOnDelete({ config, configDir: dirname(root.config) }).pipe(
         Effect.provide(providerLayer)
       )
-      if (keptBuckets.length > 0) yield* Console.log(`Retained buckets (kept): ${keptBuckets.join(", ")}`)
+      yield* Effect.forEach(buckets.deleted, (name) => Console.log(`Deleted bucket/${name}`), { discard: true })
+      if (buckets.kept.length > 0) yield* Console.log(`Retained buckets (kept): ${buckets.kept.join(", ")}`)
     }
   })
 ).pipe(Command.withDescription("Delete a cluster"))

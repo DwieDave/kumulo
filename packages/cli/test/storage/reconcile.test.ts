@@ -264,9 +264,10 @@ it.effect("reconcileBucketsOnDelete deletes non-retained buckets and keeps retai
     })
     const layer = Layer.mergeAll(_fakeProviderLayer(calls), _fakeFs(seed))
 
-    const kept = yield* reconcileBucketsOnDelete({ config, configDir: "." }).pipe(Effect.provide(layer))
+    const result = yield* reconcileBucketsOnDelete({ config, configDir: "." }).pipe(Effect.provide(layer))
 
-    assert.deepStrictEqual(kept, ["keep-me"])
+    assert.deepStrictEqual(result.kept, ["keep-me"])
+    assert.deepStrictEqual(result.deleted, ["drop-me"])
     assert.deepStrictEqual(calls.deleteBucket, [{ name: "drop-me", region: "DE1" }])
   }))
 
@@ -276,9 +277,9 @@ it.effect("reconcileBucketsOnDelete no-ops when object_storage.module isn't ovh"
     const calls: FakeProviderCalls = { ensureBucket: [], deleteBucket: [], ensureCredentialsCalls: [] }
     const layer = Layer.mergeAll(_fakeProviderLayer(calls), _fakeFs())
 
-    const kept = yield* reconcileBucketsOnDelete({ config, configDir: "." }).pipe(Effect.provide(layer))
+    const result = yield* reconcileBucketsOnDelete({ config, configDir: "." }).pipe(Effect.provide(layer))
 
-    assert.deepStrictEqual(kept, [])
+    assert.deepStrictEqual(result, { kept: [], deleted: [] })
     assert.deepStrictEqual(calls.deleteBucket, [])
   }))
 

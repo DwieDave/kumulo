@@ -94,6 +94,17 @@ const _toManagedSpec = (entry: ClusterConfig["volumes"]["managed"][number]): Vol
   retain: entry.retain
 })
 
+/** Names of the cluster's live Cinder volumes for the plan — empty (no OpenStack call) when nothing is managed. */
+export const lookupManagedVolumeNames = (
+  config: ClusterConfig
+): Effect.Effect<ReadonlySet<string>, VolumeError, CinderAuth | HttpClient.HttpClient> =>
+  Effect.gen(function*() {
+    if (config.volumes.module !== "cinder" || config.volumes.managed.length === 0) return new Set<string>()
+    const provider = yield* Effect.provide(VolumeProvider, VolumeProviderLive({ tag: config.name }))
+    const existing = yield* provider.listClusterVolumes(config.name)
+    return new Set(existing.map((volume) => volume.name))
+  })
+
 /**
  * `create`/`scale` (mks path): converges `volumes.managed` via the Cinder
  * `VolumeProvider`, same as `k3sVolumeProviderLayer`'s `_reconcileVolumes`,
@@ -107,17 +118,6 @@ const _toManagedSpec = (entry: ClusterConfig["volumes"]["managed"][number]): Vol
  * (unlike k3s's `installAddons`, run against a fetched kubeconfig) — once one
  * exists, apply `staticVolumeManifests` here too instead of only recording ids.
  */
-/** Names of the cluster's live Cinder volumes for the plan — empty (no OpenStack call) when nothing is managed. */
-export const lookupManagedVolumeNames = (
-  config: ClusterConfig
-): Effect.Effect<ReadonlySet<string>, VolumeError, CinderAuth | HttpClient.HttpClient> =>
-  Effect.gen(function*() {
-    if (config.volumes.module !== "cinder" || config.volumes.managed.length === 0) return new Set<string>()
-    const provider = yield* Effect.provide(VolumeProvider, VolumeProviderLive({ tag: config.name }))
-    const existing = yield* provider.listClusterVolumes(config.name)
-    return new Set(existing.map((volume) => volume.name))
-  })
-
 export const convergeManagedVolumes = (
   { config, configDir }: { readonly config: ClusterConfig; readonly configDir: string }
 ): Effect.Effect<void, VolumeError | OutputsInvalid | PlatformError, CinderAuth | HttpClient.HttpClient | FileSystem> =>
@@ -142,12 +142,17 @@ export const convergeManagedVolumes = (
  */
 export const reconcileVolumesOnDelete = (
   config: ClusterConfig
-): Effect.Effect<ReadonlyArray<string>, VolumeError, CinderAuth | HttpClient.HttpClient> =>
+): Effect.Effect<
+  { readonly kept: ReadonlyArray<string>; readonly deleted: ReadonlyArray<string> },
+  VolumeError,
+  CinderAuth | HttpClient.HttpClient
+> =>
   Effect.gen(function*() {
-    if (config.volumes.module !== "cinder" || config.volumes.managed.length === 0) return []
+    if (config.volumes.module !== "cinder" || config.volumes.managed.length === 0) return { kept: [], deleted: [] }
     const provider = yield* Effect.provide(VolumeProvider, VolumeProviderLive({ tag: config.name }))
     const existing = yield* provider.listClusterVolumes(config.name)
     const kept: Array<string> = []
+    const deleted: Array<string> = []
     for (const entry of config.volumes.managed) {
       const vol = existing.find((v) => v.name === entry.name)
       if (vol === undefined) continue
@@ -156,6 +161,7 @@ export const reconcileVolumesOnDelete = (
         continue
       }
       yield* provider.deleteVolume({ id: vol.id })
+      deleted.push(vol.name)
     }
-    return kept
+    return { kept, deleted }
   })

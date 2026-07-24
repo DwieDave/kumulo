@@ -86,9 +86,10 @@ it.effect("keeps retain:true volumes and deletes the rest", () =>
       }
     })
 
-    const kept = yield* reconcileVolumesOnDelete(config).pipe(Effect.provide(fakeCinder))
+    const result = yield* reconcileVolumesOnDelete(config).pipe(Effect.provide(fakeCinder))
 
-    assert.deepStrictEqual(kept, ["keep-me"])
+    assert.deepStrictEqual(result.kept, ["keep-me"])
+    assert.deepStrictEqual(result.deleted, ["drop-me"])
     assert.deepStrictEqual(deletedIds, ["vol-drop"])
   }))
 
@@ -96,8 +97,8 @@ it.effect("no-ops when volumes.module isn't cinder", () =>
   Effect.gen(function*() {
     const config = yield* parseConfigYaml(_yaml.replace("module: cinder", "module: none"))
     const fakeCinder = makeFakeCinder({})
-    const kept = yield* reconcileVolumesOnDelete(config).pipe(Effect.provide(fakeCinder))
-    assert.deepStrictEqual(kept, [])
+    const result = yield* reconcileVolumesOnDelete(config).pipe(Effect.provide(fakeCinder))
+    assert.deepStrictEqual(result, { kept: [], deleted: [] })
   }))
 
 // in-memory FileSystem covering just `exists`/`readFileString`/`writeFileString`,

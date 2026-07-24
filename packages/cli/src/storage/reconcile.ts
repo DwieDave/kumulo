@@ -163,19 +163,23 @@ export const convergeBuckets = (
  */
 export const reconcileBucketsOnDelete = (
   { config, configDir }: { readonly config: ClusterConfig; readonly configDir: string }
-): Effect.Effect<ReadonlyArray<string>, ObjectStorageError | OutputsInvalid | PlatformError, ObjectStorageProvider | FileSystem> =>
+): Effect.Effect<
+  { readonly kept: ReadonlyArray<string>; readonly deleted: ReadonlyArray<string> },
+  ObjectStorageError | OutputsInvalid | PlatformError,
+  ObjectStorageProvider | FileSystem
+> =>
   Effect.gen(function*() {
-    if (config.object_storage.module !== "ovh") return []
+    if (config.object_storage.module !== "ovh") return { kept: [], deleted: [] }
     const provider = yield* ObjectStorageProvider
     const file = yield* readOutputs({ dir: configDir, tag: config.name })
-    if (file.buckets.length === 0) return []
+    if (file.buckets.length === 0) return { kept: [], deleted: [] }
 
     const diff = diffBuckets({ desired: [], existing: file.buckets })
     yield* Effect.forEach(diff.toDelete, provider.deleteBucket, { discard: true })
 
     const retained = file.buckets.filter((bucket) => bucket.retain)
     yield* writeOutputs({ dir: configDir, file: { cluster: config.name, buckets: retained } })
-    return retained.map((bucket) => bucket.name)
+    return { kept: retained.map((bucket) => bucket.name), deleted: diff.toDelete.map((ref) => ref.name) }
   })
 
 /** `status` (R11): buckets recorded for this cluster + whether its credentials file exists — no OVH call. */
