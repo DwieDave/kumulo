@@ -37,7 +37,15 @@ dns:
   records: []
 volumes:
   module: cinder
-  retained: []
+  retained:
+    - name: staging-eu-data
+      size_gb: 10
+      type: classic
+      retain: true
+      pvc:
+        namespace: default
+        access_modes:
+          - ReadWriteOnce
 object_storage:
   module: ovh
   buckets:
