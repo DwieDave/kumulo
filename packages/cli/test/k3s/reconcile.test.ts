@@ -10,20 +10,24 @@ import {
 import type { ClusterConfigEncoded, DesiredRecord, K8sManifest, ServerInfo } from "@kumulo/core"
 import { Ssh, SshCommandError } from "@kumulo/distro-k3s"
 import { OpenStackEnv } from "../../src/doctor-openstack/env.ts"
-import { applyK3sEffect, deleteK3sEffect, orphanedWorkers } from "../../src/k3s/reconcile.ts"
+import { applyK3sEffect, deleteK3sEffect, k3sStatusEffect, orphanedWorkers } from "../../src/k3s/reconcile.ts"
 
 // Item 3 — the injectable K8sClient seam: a fake `K8sClient` Layer proves
 // the drain phase takes its client from context instead of a real
 // kubeconfig/HTTP round-trip. Just enough behavior for `drainAndRemove`
 // (cordon=apply, drain=list+evict, delete=delete) to succeed.
+const _isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null
+const _emptyManifests: ReadonlyArray<K8sManifest> = []
+
 const _fakeK8sClientLayer = (cordonedNodes: Array<string>): Layer.Layer<K8sClient> =>
   Layer.succeed(K8sClient, {
     get: () => Effect.die("not used by drain"),
-    list: () => Effect.succeed([] as ReadonlyArray<K8sManifest>),
+    list: () => Effect.succeed(_emptyManifests),
     apply: (_ref, manifest) =>
       Effect.sync(() => {
-        const name = (manifest["metadata"] as { readonly name?: string } | undefined)?.name
-        if (name !== undefined) cordonedNodes.push(name)
+        const metadata = manifest["metadata"]
+        const name = _isRecord(metadata) ? metadata["name"] : undefined
+        if (typeof name === "string") cordonedNodes.push(name)
         return manifest
       }),
     delete: () => Effect.void,
@@ -293,5 +297,55 @@ describe("k3s CLI composition root (FR-2.3/FR-5)", () => {
       expect(volumeCalls.deleted).toEqual([])
       // Owned DNS records for this cluster's zone are removed.
       expect(dnsCalls.removed).toEqual(["test-k3s"])
+    }))
+})
+
+describe("k3s status (FR-10)", () => {
+  const _nodeManifest = (name: string, ready: boolean): K8sManifest => ({
+    apiVersion: "v1",
+    kind: "Node",
+    metadata: { name },
+    status: { conditions: [{ type: "Ready", status: ready ? "True" : "False" }] }
+  })
+
+  const _statusK8sClientLayer = (nodes: ReadonlyArray<K8sManifest>) => () => Layer.succeed(K8sClient, {
+    get: () => Effect.die("not used by status"),
+    list: () => Effect.succeed(nodes),
+    apply: () => Effect.die("not used by status"),
+    delete: () => Effect.die("not used by status"),
+    evict: () => Effect.die("not used by status")
+  })
+
+  it.effect("reports \"does not exist\" when the tagged inventory has no master", () =>
+    Effect.gen(function*() {
+      const log: SshLog = { executed: [], cloudInitGates: [], clusterInfoGates: [] }
+      const status = yield* k3sStatusEffect({ config: _config }).pipe(
+        Effect.provide(_FakeSshLive(log)),
+        Effect.provide(_fakeCloudProviderLive())
+      )
+      expect(status).toEqual({ exists: false, nodes: [] })
+    }))
+
+  it.effect("reports the LB endpoint + per-node Ready condition once the cluster exists", () =>
+    Effect.gen(function*() {
+      const log: SshLog = { executed: [], cloudInitGates: [], clusterInfoGates: [] }
+      const nodes = [_nodeManifest("kumulo-test-k3s-master-masters-1", true), _nodeManifest("kumulo-test-k3s-worker-general-1", false)]
+
+      const status: { exists: boolean; apiEndpoint?: string; nodes: ReadonlyArray<{ name: string; ready: boolean }> } =
+        yield* applyK3sEffect({ config: _config, configDir: "/tmp" }).pipe(
+          Effect.andThen(() => k3sStatusEffect({ config: _config, k8sClientLayer: _statusK8sClientLayer(nodes) })),
+          Effect.provide(_FakeSshLive(log)),
+          Effect.provide(_trackingVolumeProvider({ ensured: [], deleted: [] })),
+          Effect.provide(_trackingDnsProvider({ ensured: [], removed: [] })),
+          Effect.provide(OpenStackEnvFake),
+          Effect.provide(_fakeCloudProviderLive())
+        )
+
+      expect(status.exists).toBe(true)
+      expect(status.apiEndpoint).toBe("10.0.0.100")
+      expect(status.nodes).toEqual([
+        { name: "kumulo-test-k3s-master-masters-1", ready: true },
+        { name: "kumulo-test-k3s-worker-general-1", ready: false }
+      ])
     }))
 })

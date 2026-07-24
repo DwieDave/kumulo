@@ -20,6 +20,8 @@ import type {
   ConfigInvalid,
   DesiredRecord,
   DnsError,
+  HttpTransportError,
+  K8sManifest,
   Kubeconfig,
   ServerInfo,
   VolumeError
@@ -34,6 +36,7 @@ export type K3sError =
   | VolumeError
   | ResourceNotFound
   | AuthenticationFailed
+  | HttpTransportError
 import {
   drainAndRemove,
   fetchKubeconfig,
@@ -143,8 +146,7 @@ const _cloudConfFromEnv = (region: string) => ({
  * default) while tests can `Effect.provide` a fake `K8sClient` Layer instead.
  */
 export const k8sClientLive = (
-  config: ClusterConfig,
-  master1: SshHost
+  { config, master1 }: { readonly config: ClusterConfig; readonly master1: SshHost }
 ): Layer.Layer<K8sClient, BootstrapFailed | ConfigInvalid, Ssh> =>
   Layer.effect(
     K8sClient,
@@ -262,8 +264,7 @@ export const applyK3sEffect = (
     readonly config: ClusterConfig
     readonly configDir: string
     readonly k8sClientLayer?: (
-      config: ClusterConfig,
-      master1: SshHost
+      args: { readonly config: ClusterConfig; readonly master1: SshHost }
     ) => Layer.Layer<K8sClient, BootstrapFailed | ConfigInvalid, Ssh>
   }
 ): Effect.Effect<K3sApplyResult, K3sError, CloudProvider | Ssh | DnsProvider | VolumeProvider | OpenStackEnv> =>
@@ -273,7 +274,7 @@ export const applyK3sEffect = (
     yield* Effect.gen(function*() {
       yield* _installAddons(config)
       yield* _drainOrphanedWorkers(config)
-    }).pipe(Effect.provide(k8sClientLayer(config, master1)))
+    }).pipe(Effect.provide(k8sClientLayer({ config, master1 })))
     yield* _reconcileDns(config, infra.lbVip)
     yield* _reconcileVolumes(config)
     const kubeconfigPath = yield* _writeKubeconfig(config, master1, infra.lbVip, configDir)
@@ -337,6 +338,71 @@ export const kubeconfigK3s = (
   config: ClusterConfig
 ): Effect.Effect<Kubeconfig, K3sError, OpenStackEnv | CinderAuth | HttpClient.HttpClient> =>
   kubeconfigK3sEffect(config).pipe(
+    Effect.provide(SshLive),
+    Effect.provide(k3sCloudProviderLayer(config))
+  )
+
+export interface K3sNodeStatus {
+  readonly name: string
+  readonly ready: boolean
+}
+
+export interface K3sStatus {
+  readonly exists: boolean
+  readonly apiEndpoint?: string
+  readonly nodes: ReadonlyArray<K3sNodeStatus>
+}
+
+const NODES_REF = { path: "/api/v1/nodes", kind: "Node" }
+
+const _isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null
+const _field = (value: unknown, key: string): unknown => _isRecord(value) ? value[key] : undefined
+
+const _nodeReady = (manifest: K8sManifest): boolean => {
+  const conditions = _field(manifest["status"], "conditions")
+  if (!Array.isArray(conditions)) return false
+  const ready = conditions.find((c) => _field(c, "type") === "Ready")
+  return _field(ready, "status") === "True"
+}
+
+const _nodeName = (manifest: K8sManifest): string => {
+  const name = _field(manifest["metadata"], "name")
+  return typeof name === "string" ? name : ""
+}
+
+/**
+ * FR-10 — k3s status: inventory via `CloudProvider` by tag (D5.7 gone, this
+ * is the real, wired part of FR-2.7's twin gap), node health via `K8sClient`
+ * (item 3's seam — same `k8sClientLive` production wiring as `applyK3sEffect`,
+ * built from master 1's kubeconfig once the cluster's inventory says it exists).
+ */
+export const k3sStatusEffect = (
+  { config, k8sClientLayer = k8sClientLive }: {
+    readonly config: ClusterConfig
+    readonly k8sClientLayer?: (
+      args: { readonly config: ClusterConfig; readonly master1: SshHost }
+    ) => Layer.Layer<K8sClient, BootstrapFailed | ConfigInvalid, Ssh>
+  }
+): Effect.Effect<K3sStatus, K3sError, CloudProvider | Ssh> =>
+  Effect.gen(function*() {
+    const cloudProvider = yield* CloudProvider
+    const inventory = yield* cloudProvider.listClusterResources(config.name)
+    const masterInfo = inventory.servers.find((s) => s.name.includes("-master-"))
+    if (masterInfo === undefined) return { exists: false, nodes: [] }
+    const lb = yield* cloudProvider.ensureLoadBalancer({ members: [] })
+    const nodes = yield* Effect.gen(function*() {
+      const client = yield* K8sClient
+      const manifests = yield* client.list(NODES_REF)
+      return manifests.map((m) => ({ name: _nodeName(m), ready: _nodeReady(m) }))
+    }).pipe(Effect.provide(k8sClientLayer({ config, master1: _toHost(masterInfo) })))
+    return { exists: true, apiEndpoint: lb.vip, nodes }
+  })
+
+/** FR-10 — `k3sStatusEffect` wired to its live Layers. */
+export const k3sStatus = (
+  config: ClusterConfig
+): Effect.Effect<K3sStatus, K3sError, OpenStackEnv | CinderAuth | HttpClient.HttpClient> =>
+  k3sStatusEffect({ config }).pipe(
     Effect.provide(SshLive),
     Effect.provide(k3sCloudProviderLayer(config))
   )
