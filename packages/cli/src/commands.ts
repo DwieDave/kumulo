@@ -125,11 +125,17 @@ export const kubeconfig = Command.make(
 // volumes as NoOp "(retained)"; buckets from the recorded outputs. Volume
 // rows only appear for volumes that actually exist on Cinder right now.
 const _deletePlan = Effect.fn(function*(config: ClusterConfig, configDir: string) {
-  const clusterAction = _isK3s(config)
+  const inventory = _isK3s(config) ? undefined : yield* lookupMksInventory(config)
+  const clusterAction = inventory === undefined
     ? [{ _tag: "Delete" as const, name: `cluster/${config.name}` }]
-    : (yield* lookupMksInventory(config)).clusterExists
+    : inventory.clusterExists
     ? [{ _tag: "Delete" as const, name: `mks-cluster/${config.name}` }]
     : [{ _tag: "NoOp" as const, name: `mks-cluster/${config.name} (already absent)` }]
+  // Node pools go down with the cluster — one row per live pool.
+  const poolActions = [...(inventory?.poolNames ?? [])].toSorted().map((pool) => ({
+    _tag: "Delete" as const,
+    name: `mks-pool/${config.name}/${pool}`
+  }))
   const liveVolumes = yield* lookupManagedVolumeNames(config)
   const volumeActions = config.volumes.managed
     .filter((entry) => liveVolumes.has(entry.name))
@@ -139,7 +145,7 @@ const _deletePlan = Effect.fn(function*(config: ClusterConfig, configDir: string
         : { _tag: "Delete" as const, name: `volume/${entry.name}` }
     )
   const bucketActions = yield* bucketDeletePlanActions({ config, configDir })
-  const plan: Plan = { actions: [...clusterAction, ...volumeActions, ...bucketActions] }
+  const plan: Plan = { actions: [...clusterAction, ...poolActions, ...volumeActions, ...bucketActions] }
   return plan
 })
 
