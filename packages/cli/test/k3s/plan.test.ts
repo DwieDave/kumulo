@@ -25,6 +25,7 @@ const _encoded: ClusterConfigEncoded = {
   addons: {
     cloud_controller_manager: false,
     cinder_csi: { enabled: false, default_volume_type: "high-speed" },
+    hcloud_csi: { enabled: false },
     system_upgrade_controller: false,
     cni: "flannel"
   },

@@ -17,12 +17,12 @@ const isOddCount = Schema.makeFilter((count: number) =>
 const PositiveInt = Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0))
 const NonNegativeInt = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))
 
-const Provider = Schema.Literals(["ovh", "generic"])
+const Provider = Schema.Literals(["ovh", "generic", "hetzner"])
 const Distro = Schema.Literals(["k3s", "ovh-mks"])
 const PublicAccess = Schema.Literals(["bastionless", "nat"])
-const AuthMethod = Schema.Literals(["application_credential", "clouds_yaml", "env"])
-const DnsModule = Schema.Literals(["ovh", "designate", "none"])
-const VolumesModule = Schema.Literals(["cinder", "none"])
+const AuthMethod = Schema.Literals(["application_credential", "clouds_yaml", "env", "api_token"])
+const DnsModule = Schema.Literals(["ovh", "designate", "none", "hetzner"])
+const VolumesModule = Schema.Literals(["cinder", "hcloud", "none"])
 const ObjectStorageModule = Schema.Literals(["ovh", "none"])
 const SecretsSink = Schema.Literals(["sops", "none"])
 const Cni = Schema.Literals(["flannel", "cilium"])
@@ -44,6 +44,42 @@ const isSecretsRequiredForObjectStorage = Schema.makeFilter(
     config.object_storage.module === "ovh" && config.secrets.sink === "none"
       ? "secrets.sink must not be none when object_storage.module is ovh"
       : undefined
+)
+
+// kumulo: hetzner uses a static hcloud API token; every other provider uses
+// an OpenStack-style auth method — the two vocabularies never mix
+const isAuthMethodConsistentWithProvider = Schema.makeFilter(
+  (config: { provider: string; auth: { method: string } }) =>
+    (config.provider === "hetzner") !== (config.auth.method === "api_token")
+      ? "auth.method must be api_token if and only if provider is hetzner"
+      : undefined
+)
+
+// kumulo: hcloud volumes only exist on hetzner; cinder volumes only exist on
+// the OpenStack-family providers — cross-wiring either is a config error
+const isVolumesModuleConsistentWithProvider = Schema.makeFilter(
+  (config: { provider: string; volumes: { module: string } }) => {
+    if (config.volumes.module === "hcloud" && config.provider !== "hetzner")
+      return "volumes.module hcloud requires provider hetzner"
+    if (config.volumes.module === "cinder" && config.provider === "hetzner")
+      return "volumes.module cinder is not available on provider hetzner"
+    return undefined
+  }
+)
+
+// kumulo: hcloud_csi/cinder_csi are provider-specific addons — enabling the
+// wrong one for the active provider is a config error, not a silent no-op
+const isAddonsConsistentWithProvider = Schema.makeFilter(
+  (config: {
+    provider: string
+    addons: { hcloud_csi: { enabled: boolean }; cinder_csi: { enabled: boolean } }
+  }) => {
+    if (config.addons.hcloud_csi.enabled && config.provider !== "hetzner")
+      return "addons.hcloud_csi can only be enabled when provider is hetzner"
+    if (config.addons.cinder_csi.enabled && config.provider === "hetzner")
+      return "addons.cinder_csi cannot be enabled when provider is hetzner"
+    return undefined
+  }
 )
 
 const Auth = Schema.Struct({
@@ -173,9 +209,14 @@ const CinderCsi = Schema.Struct({
   default_volume_type: Schema.NonEmptyString
 })
 
+const HcloudCsi = Schema.Struct({
+  enabled: Schema.Boolean
+})
+
 const Addons = Schema.Struct({
   cloud_controller_manager: Schema.Boolean,
   cinder_csi: CinderCsi,
+  hcloud_csi: HcloudCsi,
   system_upgrade_controller: Schema.Boolean,
   cni: Cni
 })
@@ -202,7 +243,13 @@ export const ClusterConfig = Schema.Struct({
   secrets: Secrets,
   addons: Addons,
   k3s: K3sPassthrough
-}).check(isVersionValidForDistro, isSecretsRequiredForObjectStorage)
+}).check(
+  isVersionValidForDistro,
+  isSecretsRequiredForObjectStorage,
+  isAuthMethodConsistentWithProvider,
+  isVolumesModuleConsistentWithProvider,
+  isAddonsConsistentWithProvider
+)
 
 export type ClusterConfig = typeof ClusterConfig.Type
 export type ClusterConfigEncoded = typeof ClusterConfig.Encoded

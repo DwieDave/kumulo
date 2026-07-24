@@ -57,6 +57,7 @@ export const validConfig: ClusterConfigEncoded = {
   addons: {
     cloud_controller_manager: true,
     cinder_csi: { enabled: true, default_volume_type: "high-speed" },
+    hcloud_csi: { enabled: false },
     system_upgrade_controller: true,
     cni: "cilium"
   },
