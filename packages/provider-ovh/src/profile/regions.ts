@@ -1,4 +1,4 @@
-// Design §3.2 — Octavia (OVH's managed load balancer) is not available in
+// kumulo: Octavia (OVH's managed load balancer) is not available in
 // every OVH Public Cloud region. This table is best-effort from OVH's
 // published region capability matrix at time of writing; extend as OVH
 // rolls Octavia out further (ponytail: flat data table, revisit if OVH

@@ -17,7 +17,7 @@ const _authFailed = (ctx: ErrorContext): MksError =>
 
 // kumulo: OVH's error body doesn't reliably carry the numeric quota
 // limit/requested pair for a generic 402/429 — `0`/`0` is a placeholder;
-// tighten if `doctor`'s quota-preview (T4.3) needs real numbers here too.
+// tighten if a caller needs real numbers here too.
 const _quotaExceeded = (ctx: ErrorContext): MksError => new QuotaExceeded({ resource: ctx.kind, limit: 0, requested: 0 })
 
 const _byStatus: Record<number, (ctx: ErrorContext) => MksError> = {

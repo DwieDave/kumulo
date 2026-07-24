@@ -4,7 +4,7 @@ import type { Mks } from "../client/mks.ts"
 import { mapMksError } from "./errors.ts"
 import type { MksClusterRef } from "./types.ts"
 
-/** FR-6.2 — kubeconfig via the OVH API, no SSH. */
+/** Kubeconfig via the OVH API, no SSH. */
 export const fetchKubeconfig = (
   { mks, ref }: { readonly mks: Mks; readonly ref: MksClusterRef }
 ): Effect.Effect<Kubeconfig, MksError> =>

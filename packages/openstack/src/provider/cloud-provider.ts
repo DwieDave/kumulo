@@ -131,7 +131,7 @@ export const ensureSecurityGroups = (
     return { id: groupId }
   })
 
-// ---- Server groups (D8: soft-anti-affinity per role) -------------------
+// ---- Server groups (soft-anti-affinity per role) -------------------
 
 export type ServerGroupRole = "master" | "worker"
 
@@ -234,7 +234,7 @@ const _waitGone = (options: CloudProviderOptions, id: string): R<void> =>
     Effect.catchTag("ResourceNotFound", () => Effect.void)
   )
 
-// FR-2.7 — deletes a single server and waits until it's gone (404), for
+// kumulo: deletes a single server and waits until it's gone (404), for
 // scale-down's per-worker teardown (whole-cluster `deleteByTag` doesn't wait).
 export const deleteServer = ({ options, ref }: { readonly options: CloudProviderOptions; readonly ref: ServerInfo }): R<void> =>
   restRequest({ service: "compute", region: options.region, path: `v2.1/servers/${ref.id}`, method: "DELETE", kind: "server", okStatuses: [404] }).pipe(

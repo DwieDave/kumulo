@@ -29,7 +29,7 @@ export interface CinderRequest {
   readonly okStatuses?: ReadonlyArray<number>
 }
 
-// kumulo: lenient decode (FR-4.6 style) — body handed back as `unknown`,
+// kumulo: lenient decode — body handed back as `unknown`,
 // callers pick the fields they need instead of asserting a strict response schema.
 export const cinderRequest = (
   request: CinderRequest

@@ -1,4 +1,4 @@
-// Design §3.5 / FR-7.2 — TXT ownership contract: a sibling TXT record at the
+// kumulo: TXT ownership contract — a sibling TXT record at the
 // same subdomain, valued `kumulo.cluster=<name>`, marks a record as
 // kumulo-owned (external-dns convention). Every mutation checks this before
 // touching a record it didn't create.

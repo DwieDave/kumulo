@@ -18,7 +18,7 @@ const _toInfo = (cluster: RawCluster): ManagedClusterInfo => ({
   status: cluster.status ?? "UNKNOWN"
 })
 
-/** Resolves the cluster by name only — never creates one (FR-2.6: missing cluster is a no-op, not a provisioning trigger). */
+/** Resolves the cluster by name only — never creates one: a missing cluster is a no-op, not a provisioning trigger. */
 export const findClusterByName = (
   { mks, config }: { readonly mks: Mks; readonly config: MksClusterConfig }
 ): Effect.Effect<ManagedClusterInfo | undefined, MksError> =>
@@ -71,7 +71,7 @@ const _awaitReady = (
     ref: kubeId
   })
 
-/** FR-6.1 — create-or-update the MKS control plane, then poll to `READY`. */
+/** Create-or-update the MKS control plane, then poll to `READY`. */
 export const ensureCluster = (
   { mks, config }: { readonly mks: Mks; readonly config: MksClusterConfig }
 ): Effect.Effect<ManagedClusterInfo, MksError> =>

@@ -1,6 +1,6 @@
 import * as Schema from "effect/Schema"
 
-// FR-5.7 — one rule descriptor per Neutron security-group-rule call. `remoteGroupSelf`
+// kumulo: one rule descriptor per Neutron security-group-rule call. `remoteGroupSelf`
 // means "from members of this same security group" (master-to-master / intra-pool).
 export const SecurityGroupRuleInput = Schema.Struct({
   protocol: Schema.Literals(["tcp", "udp", "icmp", "any"]),

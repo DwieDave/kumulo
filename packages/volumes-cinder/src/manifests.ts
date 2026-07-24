@@ -1,10 +1,10 @@
 import type { K8sManifest, VolumeInfo, VolumeSpec } from "@kumulo/core"
 
-// kumulo: matches OVH-provisioned + self-installed cinder-csi (design §3.6 —
-// same driver name, same volumeHandle semantics under both distros).
+// kumulo: matches OVH-provisioned + self-installed cinder-csi — same
+// driver name, same volumeHandle semantics under both distros.
 const _cinderCsiDriver = "cinder.csi.openstack.org"
 
-// Design §3.6 — VolumeProvider port method: pins `csi.volumeHandle` to the
+// kumulo: VolumeProvider port method: pins `csi.volumeHandle` to the
 // stable Cinder volume ID, `persistentVolumeReclaimPolicy: Retain` so
 // deleting the PV/PVC never deletes the backing volume.
 export const staticPvManifest = (
@@ -34,7 +34,7 @@ export interface PvcBinding {
 // kumulo: PVC binding needs namespace/accessModes from the cluster config's
 // `volumes.retained[].pvc` block, which isn't part of the frozen
 // `VolumeProvider.staticPvManifest(vol, spec)` port signature — exposed as
-// a separate pure function for the CLI/core orchestrator (T10.1) to call
+// a separate pure function for the CLI/core orchestrator to call
 // alongside `staticPvManifest`, not as part of the port itself.
 export const staticPvcManifest = (
   { vol, spec, pvc }: { readonly vol: VolumeInfo; readonly spec: VolumeSpec; readonly pvc: PvcBinding }

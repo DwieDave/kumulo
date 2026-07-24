@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import * as Schema from "effect/Schema"
 
-// kumulo: only the fields this provider consumes (FR-4.6) — Cinder's real
+// kumulo: only the fields this provider consumes — Cinder's real
 // volume payload carries many more (status, attachments, ...) left
 // undeclared and ignored on decode.
 const VolumeMetadata = Schema.Struct({

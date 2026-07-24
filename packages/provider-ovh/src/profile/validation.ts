@@ -5,9 +5,9 @@ import { hasOctavia } from "./regions.ts"
 
 const ovhVolumeTypes: ReadonlyArray<string> = ["classic", "high-speed", "high-speed-gen2"]
 
-// FR-1.4 example case: HA control plane needs a load balancer, and OVH's
-// LB (Octavia) isn't available in every region — no fallback exists, so
-// reject rather than silently provisioning a non-HA endpoint.
+// kumulo: HA control plane needs a load balancer, and OVH's LB (Octavia)
+// isn't available in every region — no fallback exists, so reject rather
+// than silently provisioning a non-HA endpoint.
 const _octaviaIssue = (config: ClusterConfigShape): string | undefined =>
   config.api_server?.high_availability === true && !hasOctavia(config.auth?.region ?? "")
     ? `region '${config.auth?.region}' has no Octavia (load balancer) support; ` +

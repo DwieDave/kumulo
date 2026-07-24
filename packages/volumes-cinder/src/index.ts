@@ -1,4 +1,4 @@
-/** @kumulo/volumes-cinder — VolumeProvider implementation (design §3.6, FR-8). */
+/** @kumulo/volumes-cinder — VolumeProvider implementation. */
 export const packageName = "@kumulo/volumes-cinder"
 
 export { CinderAuth } from "./auth.ts"

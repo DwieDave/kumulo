@@ -4,7 +4,7 @@ import { imageAliasesForRegion } from "./image-aliases.ts"
 import { hasOctavia } from "./regions.ts"
 import { validateOvhConfig } from "./validation.ts"
 
-// Design §3.2 — OVH `ProviderProfile`: Ext-Net model (no floating IPs),
+// kumulo: OVH `ProviderProfile`: Ext-Net model (no floating IPs),
 // per-region Octavia + image aliases, OVH's three Cinder volume types.
 // Region is fixed at construction time (known once `auth.region` is
 // decoded from config), which is how the flat `imageAliases`/`octavia`

@@ -84,7 +84,7 @@ const _applyDiff = (
     yield* Effect.forEach(diff.toUpdate, ({ id, pool }) => _update({ mks, ref, id, pool }), { discard: true })
   })
 
-/** FR-6.1 — converges MKS nodepools onto `worker_pools` (create/update/replace/delete, by name). */
+/** Converges MKS nodepools onto `worker_pools` (create/update/replace/delete, by name). */
 export const ensureNodePools = (
   { mks, ref, pools }: { readonly mks: Mks; readonly ref: MksClusterRef; readonly pools: ReadonlyArray<MksWorkerPoolConfig> }
 ): Effect.Effect<void, MksError> =>

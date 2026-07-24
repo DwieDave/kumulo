@@ -13,7 +13,7 @@ export interface FakeOpenStack {
 }
 
 // Fixture-replay fake: routes `${METHOD} ${pathname}` (query string stripped)
-// through a caller-supplied handler map — offline, no real network (FR-4.6 style).
+// through a caller-supplied handler map — offline, no real network.
 export const makeFakeOpenStack = (
   routes: Record<string, RouteHandler>
 ): FakeOpenStack => {

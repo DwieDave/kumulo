@@ -13,7 +13,7 @@ const CatalogEntrySchema = Schema.Struct({
   endpoints: Schema.optionalKey(Schema.Array(CatalogEndpointSchema))
 })
 
-// kumulo: only the fields the auth layer consumes (FR-4.6) — everything else
+// kumulo: only the fields the auth layer consumes — everything else
 // Keystone's token response carries is left undeclared and ignored.
 const TokenResponse = Schema.Struct({
   token: Schema.Struct({

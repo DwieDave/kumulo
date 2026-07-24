@@ -6,7 +6,7 @@
  * dependency-cruiser's `no-sibling-package-imports` rule forbids non-core
  * packages depending on each other by design (hexagonal boundary). Composing
  * `OvhAuthLive` + `ovhHttpClientLayer` (both in provider-ovh) with this
- * client is the composition root's job (CLI wiring, T4.2), not this
+ * client is the composition root's job (CLI wiring), not this
  * package's.
  */
 export { make as makeMksClient } from "../generated/client.ts"

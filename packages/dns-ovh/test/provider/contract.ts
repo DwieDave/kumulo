@@ -24,7 +24,7 @@ const _ownedRecord = (): DesiredRecord => ({ name: "api.example.com", target: "1
 const _ownershipRecord = (name: string, tag: string): DesiredRecord => ({ name, target: `kumulo.cluster=${tag}` })
 
 /**
- * Port-contract suite for `DnsProvider` (FR-7): reusable across every
+ * Port-contract suite for `DnsProvider`: reusable across every
  * implementation (ovh, designate, ...) by supplying a harness. Exercises
  * create/update-to-desired-state, the TXT ownership guard, and
  * tag-scoped deletion — the parts of the contract every backend must honor.

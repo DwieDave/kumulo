@@ -3,7 +3,7 @@ import { Effect } from "effect"
 import * as Schema from "effect/Schema"
 
 // kumulo: OpenStack list/get responses carry many fields beyond what any one
-// caller consumes — every schema here is intentionally partial (FR-4.6):
+// caller consumes — every schema here is intentionally partial:
 // unrecognized extra fields are ignored, not rejected, because a plain
 // `Schema.Struct` only validates the keys it declares.
 

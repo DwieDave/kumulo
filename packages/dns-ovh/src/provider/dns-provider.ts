@@ -36,7 +36,7 @@ const _ensureRaw = (
     ? _wrap(zone, name, dns.editRecord(zone, String(existingRecord.id), { payload: { target } }))
     : Effect.void
 
-// FR-7.2 — never mutate a record this module doesn't own: *any* pre-existing
+// kumulo: never mutate a record this module doesn't own: *any* pre-existing
 // non-TXT record at this name (regardless of its kind — a foreign CNAME
 // blocks a desired A record just as much as a foreign A does), and any
 // existing TXT ownership record for a *different* tag, are only touched (or
@@ -62,7 +62,7 @@ const _ensurePair = (
     yield* _ensureRaw({ dns, zone, name, target, kind, existingRecord: existingSame })
   })
 
-/** FR-7.2/7.3 — create-or-update every desired record to its target, then refresh the zone once. */
+/** Create-or-update every desired record to its target, then refresh the zone once. */
 export const ensureRecords = (dns: Dns) =>
   (zone: string, records: ReadonlyArray<DesiredRecord>): Effect.Effect<void, DnsError> =>
     Effect.gen(function*() {
@@ -90,7 +90,7 @@ export const ensureRecords = (dns: Dns) =>
 const _ownedSubDomains = (records: ReadonlyArray<{ readonly fieldType: string; readonly subDomain: string; readonly target: string }>, tag: ClusterTag) =>
   new Set(records.filter((r) => r.fieldType === "TXT" && ownerTagOf(r.target) === tag).map((r) => r.subDomain))
 
-/** FR-7.3 — deletes only records at subdomains this cluster's TXT ownership record covers. */
+/** Deletes only records at subdomains this cluster's TXT ownership record covers. */
 export const removeClusterRecords = (dns: Dns) =>
   (zone: string, tag: ClusterTag): Effect.Effect<void, DnsError> =>
     Effect.gen(function*() {

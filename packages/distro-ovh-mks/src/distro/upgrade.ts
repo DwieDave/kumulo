@@ -5,7 +5,7 @@ import { mapMksError } from "./errors.ts"
 import type { MksClusterRef, MksUpgradeStrategy } from "./types.ts"
 
 /**
- * FR-6.2 — OVH-driven upgrade: `POST .../update` forces the cluster (and
+ * OVH-driven upgrade: `POST .../update` forces the cluster (and
  * its nodes) onto the latest patch, or the next minor, of its current
  * version track. There's no arbitrary target-version field on this
  * endpoint (OVH doesn't support skipping versions), so `strategy` is the

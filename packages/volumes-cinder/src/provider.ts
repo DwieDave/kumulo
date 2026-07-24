@@ -16,7 +16,7 @@ type R<A> = Effect.Effect<A, VolumeError, Deps>
 
 // kumulo: Cinder volume metadata carries no first-class "cluster" concept —
 // this key is our own tagging convention, mirroring the CloudProvider's
-// name-prefix scheme (design §3.6: ensure-by-tag+name).
+// ensure-by-tag+name scheme.
 const _tagMetadataKey = "kumulo_cluster"
 
 const _volumeInfo = (record: VolumeRecord): VolumeInfo => ({

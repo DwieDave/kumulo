@@ -33,7 +33,7 @@ const _isMutableDiff = (pool: MksWorkerPoolConfig, existing: ExistingNodePool): 
   pool.maxNodes !== existing.maxNodes ||
   pool.autoscale !== existing.autoscale
 
-// FR-6.1 — `worker_pools` converge onto MKS nodepools by name: missing →
+// kumulo: `worker_pools` converge onto MKS nodepools by name: missing →
 // create, present-with-immutable-drift → replace, present-with-mutable-drift
 // → update, present-but-undesired → delete. Pure and total: same inputs
 // always produce the same plan (idempotent re-run, easy to property-test).

@@ -1,10 +1,9 @@
 /**
- * Local input/ref shapes for the `ovh-mks` managed distro (design §3.3.1,
- * FR-6.1–6.2).
+ * Local input/ref shapes for the `ovh-mks` managed distro.
  *
  * kumulo: `@kumulo/core`'s `ClusterConfigShape`/`WorkerPoolShape` (domain
  * types) are deliberately minimal — just enough for cross-distro validation
- * rules (T6.2). They don't carry the OVH MKS-specific pool fields
+ * rules. They don't carry the OVH MKS-specific pool fields
  * (flavor/min/max/desired/antiAffinity/monthlyBilled) this distro actually
  * needs to talk to the API. Rather than widen core's shared shape from this
  * package (out of scope/ownership) or reach into it with unsafe casts, this
@@ -12,7 +11,7 @@
  * the real config schema's naming. Any decoded `ClusterConfig` is a
  * structural superset and satisfies it with no adapter; wiring it in as the
  * literal `ManagedDistroShape` from `@kumulo/core` is the composition root's
- * job (T4.2).
+ * job.
  */
 import type { Cloud_kube_VersionEnum } from "../generated/client.ts"
 

@@ -99,8 +99,8 @@ export const credentialsFromCloudsYaml = (
     return yield* _fromRaw(cloud.auth ?? {}, region)
   })
 
-// kumulo: precedence per FR-4.5 — OS_* env wins if OS_AUTH_URL is set,
-// else fall back to clouds.yaml (openstacksdk-compatible file+cloud lookup)
+// kumulo: OS_* env wins if OS_AUTH_URL is set, else fall back to
+// clouds.yaml (openstacksdk-compatible file+cloud lookup)
 export const loadCredentials = (
   env: Readonly<Record<string, string | undefined>>
 ): Effect.Effect<OpenStackCredentials, AuthenticationFailed> => {

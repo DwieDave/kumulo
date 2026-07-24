@@ -4,7 +4,7 @@ import type { PlatformError } from "effect/PlatformError"
 import { parse, stringify } from "yaml"
 import type { ClusterTag } from "@kumulo/core"
 
-// FR-8.2 — stable volume IDs written to `<cluster>.outputs.yaml`.
+// kumulo: stable volume IDs written to `<cluster>.outputs.yaml`.
 export const OutputsVolume = Schema.Struct({
   name: Schema.NonEmptyString,
   id: Schema.NonEmptyString,
@@ -36,7 +36,7 @@ export const parseOutputsYaml = (text: string): Effect.Effect<OutputsFile, Outpu
   )
 
 // kumulo: stable key ordering (cluster, volumes) — regenerating from
-// unchanged state is a byte-identical diff (NFR-5-style guarantee for outputs).
+// unchanged state is a byte-identical diff.
 export const stringifyOutputsYaml = (file: OutputsFile): string => stringify({ cluster: file.cluster, volumes: file.volumes })
 
 export const emptyOutputs = (tag: ClusterTag): OutputsFile => ({ cluster: tag, volumes: [] })

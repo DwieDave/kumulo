@@ -6,7 +6,7 @@ import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
 import { AuthenticationFailed } from "@kumulo/core"
 import { OvhAuth } from "./port.ts"
 
-/** Design §4.5 — OVH's OAuth2 client-credentials token endpoint (v1 + v2 routes alike, no legacy AK/AS/CK). */
+/** OVH's OAuth2 client-credentials token endpoint (v1 + v2 routes alike, no legacy AK/AS/CK). */
 export const OVH_TOKEN_ENDPOINT = "https://www.ovh.com/auth/oauth2/token"
 
 export interface OvhCredentials {
@@ -25,8 +25,7 @@ const TokenResponse = Schema.Struct({
 // expires rather than racing a request against expiry.
 const _skewMillis = 60_000
 
-// FR-4.6 — retryability decided per-tag, not by call-site status code
-// inspection: any failure fetching the token itself is transient (network
+// kumulo: any failure fetching the token itself is transient (network
 // blip, OVH-side 5xx) and worth a bounded exp-backoff+jitter retry before
 // surfacing AuthenticationFailed.
 const _retrySchedule = Schedule.exponential("200 millis").pipe(Schedule.jittered, Schedule.upTo({ times: 3 }))
@@ -64,7 +63,7 @@ const _getToken = (creds: OvhCredentials, httpClient: HttpClient.HttpClient, cac
     return fresh.access_token
   })
 
-/** OAuth2 client-credentials auth Layer (design §4.5) — cached token w/ expiry skew, exp-backoff+jitter retry on fetch. */
+/** OAuth2 client-credentials auth Layer — cached token w/ expiry skew, exp-backoff+jitter retry on fetch. */
 export const OvhAuthLive = (
   creds: OvhCredentials
 ): Layer.Layer<OvhAuth, never, HttpClient.HttpClient> =>

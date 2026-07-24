@@ -32,7 +32,7 @@ export interface RestRequest {
   readonly okStatuses?: ReadonlyArray<number>
 }
 
-// kumulo: lenient decode (FR-4.6) — body is handed back as `unknown`, callers
+// kumulo: lenient decode — body is handed back as `unknown`, callers
 // pick the fields they need instead of asserting a strict response schema.
 export const restRequest = (
   options: RestRequest

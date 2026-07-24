@@ -22,8 +22,8 @@ interface CachedToken {
   readonly catalog: ServiceCatalog
 }
 
-// kumulo: only the one field this layer reads out of the token envelope
-// (FR-4.6) — a missing/malformed `expires_at` is not a hard failure, it just
+// kumulo: only the one field this layer reads out of the token envelope —
+// a missing/malformed `expires_at` is not a hard failure, it just
 // falls back to "expires now" (see `_expiresAtMs` below), same as before.
 const _ExpiresAt = Schema.Struct({
   token: Schema.Struct({
@@ -32,7 +32,7 @@ const _ExpiresAt = Schema.Struct({
 })
 
 // kumulo: Keystone's identity/scope request shape per credential method —
-// mechanical translation only, no judgment calls (design §4.4 pattern).
+// mechanical translation only, no judgment calls.
 const _authBody = (credentials: OpenStackCredentials): unknown =>
   credentials.method === "application_credential"
     ? {
@@ -106,7 +106,7 @@ export interface KeystoneAuthLiveOptions {
   readonly skewMs?: number
 }
 
-// kumulo: token cache with expiry skew (FR-4.5) — a fresh token is only
+// kumulo: token cache with expiry skew — a fresh token is only
 // issued once per skew window, every other caller shares the cached result.
 export const KeystoneAuthLive = (
   options: KeystoneAuthLiveOptions

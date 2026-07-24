@@ -8,7 +8,7 @@ import { hasOctavia } from "../../src/profile/regions.ts"
 const region = fc.constantFrom("GRA5", "BHS1", "made-up-region", "SBG5")
 const volumeType = fc.constantFrom("classic", "high-speed", "high-speed-gen2", "bogus-type")
 
-// Property (FR-1.4): validation rejects a config iff either rule actually
+// Property: validation rejects a config iff either rule actually
 // fires — never a false positive/negative against the two known checks.
 it.prop("rejects exactly when Octavia is missing under HA, or the volume type is unsupported", [
   region,
