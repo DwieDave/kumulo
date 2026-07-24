@@ -1,6 +1,45 @@
-import { Context, Effect, Layer } from "effect"
+import { Config, Context, Effect, Layer, Option, Redacted } from "effect"
 import * as HttpClient from "effect/unstable/http/HttpClient"
 import { KeystoneAuth, KeystoneAuthLive, loadCredentials } from "@kumulo/openstack"
+
+const OS_ENV_KEYS = [
+  "OS_AUTH_URL",
+  "OS_REGION_NAME",
+  "OS_APPLICATION_CREDENTIAL_ID",
+  "OS_USERNAME",
+  "OS_PROJECT_NAME",
+  "OS_USER_DOMAIN_NAME",
+  "OS_PROJECT_DOMAIN_NAME",
+  "OS_CLIENT_CONFIG_FILE",
+  "OS_CLOUD"
+] as const
+
+const OS_SECRET_ENV_KEYS = ["OS_APPLICATION_CREDENTIAL_SECRET", "OS_PASSWORD"] as const
+
+// `Schema.String`/`Schema.Redacted(Schema.String)` accept any string, so the
+// only way `Config.option` here fails is missing data — already folded into
+// `None` — `orDie` just documents that the remaining `ConfigError` channel is
+// unreachable, keeping this read (like `DoctorCheck.run`) never-failing.
+const _optionalEnv = (name: string): Effect.Effect<readonly [string, string | undefined]> =>
+  Config.option(Config.string(name)).pipe(
+    Effect.map((value) => [name, Option.getOrUndefined(value)] as const),
+    Effect.orDie
+  )
+
+const _optionalSecretEnv = (name: string): Effect.Effect<readonly [string, string | undefined]> =>
+  Config.option(Config.redacted(name)).pipe(
+    Effect.map((value) => [name, Option.map(value, Redacted.value).pipe(Option.getOrUndefined)] as const),
+    Effect.orDie
+  )
+
+/** All `OS_*` env vars `loadCredentials` reads, sourced from `Config` instead of raw `process.env`. */
+const _readOsEnv: Effect.Effect<Readonly<Record<string, string | undefined>>> = Effect.gen(function*() {
+  const entries = yield* Effect.all([
+    ...OS_ENV_KEYS.map(_optionalEnv),
+    ...OS_SECRET_ENV_KEYS.map(_optionalSecretEnv)
+  ])
+  return Object.fromEntries(entries)
+})
 
 export interface OpenStackEnvShape {
   readonly keystone: Context.Service.Shape<typeof KeystoneAuth> | undefined
@@ -21,7 +60,8 @@ export const OpenStackEnvLive: Layer.Layer<OpenStackEnv, never, HttpClient.HttpC
   OpenStackEnv,
   Effect.gen(function*() {
     const client = yield* HttpClient.HttpClient
-    return yield* loadCredentials(process.env).pipe(
+    const env = yield* _readOsEnv
+    return yield* loadCredentials(env).pipe(
       Effect.matchEffect({
         onFailure: (error) =>
           Effect.succeed<OpenStackEnvShape>({ keystone: undefined, region: undefined, unavailableReason: error.hint }),

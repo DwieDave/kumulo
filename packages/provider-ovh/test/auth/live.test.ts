@@ -1,11 +1,11 @@
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Redacted } from "effect"
 import { assert, it } from "@effect/vitest"
 import * as HttpClient from "effect/unstable/http/HttpClient"
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
 import { OvhAuth } from "../../src/auth/port.ts"
 import { OvhAuthLive } from "../../src/auth/live.ts"
 
-const creds = { clientId: "id", clientSecret: "secret" }
+const creds = { clientId: "id", clientSecret: Redacted.make("secret") }
 
 /** Fixture HttpClient: counts calls, replies with a fresh token each time (zero network). */
 const _fakeTransport = (expiresInSeconds: number) => {

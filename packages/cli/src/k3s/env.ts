@@ -9,13 +9,7 @@ import { CinderAuth, VolumeProviderLive } from "@kumulo/volumes-cinder"
 import type { VolumeProviderOptions } from "@kumulo/volumes-cinder"
 import { OvhAuthLive, ovhHttpClientLayer } from "@kumulo/provider-ovh"
 import { OpenStackEnv } from "../doctor-openstack/env.ts"
-
-const _requiredEnv = (name: string): Effect.Effect<string, AuthenticationFailed> => {
-  const value = process.env[name]
-  return value === undefined || value.length === 0
-    ? Effect.fail(new AuthenticationFailed({ hint: `missing required env var ${name}` }))
-    : Effect.succeed(value)
-}
+import { requiredEnv, requiredRedactedEnv } from "../mks/env.ts"
 
 /** Security-group rules for this cluster's network CIDR/allowed CIDRs/CNI choice. */
 export const secGroupRules = (config: ClusterConfig) =>
@@ -68,8 +62,8 @@ export const k3sVolumeProviderLayer = (
 export const k3sDnsProviderLayer = (): Layer.Layer<import("@kumulo/core").DnsProvider, AuthenticationFailed, HttpClient.HttpClient> =>
   Layer.unwrap(
     Effect.gen(function*() {
-      const clientId = yield* _requiredEnv("OVH_CLIENT_ID")
-      const clientSecret = yield* _requiredEnv("OVH_CLIENT_SECRET")
+      const clientId = yield* requiredEnv("OVH_CLIENT_ID")
+      const clientSecret = yield* requiredRedactedEnv("OVH_CLIENT_SECRET")
       const authLayer = OvhAuthLive({ clientId, clientSecret })
       const httpClientLayer = ovhHttpClientLayer().pipe(Layer.provide(authLayer))
       const httpClient = yield* Effect.provide(HttpClient.HttpClient, httpClientLayer)

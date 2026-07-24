@@ -1,4 +1,4 @@
-import { Effect, Layer, Schema } from "effect"
+import { Config, Effect, Layer, Redacted, Schema } from "effect"
 import * as HttpClient from "effect/unstable/http/HttpClient"
 import {
   BootstrapFailed,
@@ -131,12 +131,25 @@ const _bootstrap = (config: ClusterConfig, infra: Infra): Effect.Effect<SshHost,
     return masters[0]
   })
 
-const _cloudConfFromEnv = (region: string) => ({
-  authUrl: process.env["OS_AUTH_URL"] ?? "",
-  region,
-  applicationCredentialId: process.env["OS_APPLICATION_CREDENTIAL_ID"] ?? "",
-  applicationCredentialSecret: process.env["OS_APPLICATION_CREDENTIAL_SECRET"] ?? ""
-})
+// cloud.conf is rendered to a plain-string INI (`renderCloudConfIni`), so the
+// secret is unwrapped here at that render boundary rather than threaded as
+// `Redacted` through `@kumulo/addons`. `withDefault` only leaves the
+// never-reachable validation-error branch of `ConfigError` (plain/redacted
+// string schemas accept any string) — `orDie` documents that.
+const _cloudConfFromEnv = (region: string): Effect.Effect<{
+  readonly authUrl: string
+  readonly region: string
+  readonly applicationCredentialId: string
+  readonly applicationCredentialSecret: string
+}> =>
+  Effect.gen(function*() {
+    const authUrl = yield* Config.string("OS_AUTH_URL").pipe(Config.withDefault(""))
+    const applicationCredentialId = yield* Config.string("OS_APPLICATION_CREDENTIAL_ID").pipe(Config.withDefault(""))
+    const applicationCredentialSecret = yield* Config.redacted("OS_APPLICATION_CREDENTIAL_SECRET").pipe(
+      Config.withDefault(Redacted.make(""))
+    )
+    return { authUrl, region, applicationCredentialId, applicationCredentialSecret: Redacted.value(applicationCredentialSecret) }
+  }).pipe(Effect.orDie)
 
 /**
  * Injectable K8sClient seam: a `K8sClient` `Layer` built from master
@@ -163,7 +176,7 @@ const _installAddons = (config: ClusterConfig): Effect.Effect<void, AddonError, 
   Effect.gen(function*() {
     const k8sClient = yield* K8sClient
     const env = yield* OpenStackEnv
-    const cloudConf = _cloudConfFromEnv(env.region ?? "")
+    const cloudConf = yield* _cloudConfFromEnv(env.region ?? "")
     const addons = resolveAddons({ distro: "k3s", addons: config.addons, capabilities: _capabilities(config), cloudConf })
     const ctx: AddonContext = { clusterName: config.name, capabilities: _capabilities(config) }
     yield* installAddons({ k8sClient, addons, ctx })

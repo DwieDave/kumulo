@@ -1,4 +1,4 @@
-import { Clock, Effect, Layer, Ref, Schedule } from "effect"
+import { Clock, Effect, Layer, Redacted, Ref, Schedule } from "effect"
 import * as Schema from "effect/Schema"
 import * as HttpClient from "effect/unstable/http/HttpClient"
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
@@ -11,7 +11,7 @@ export const OVH_TOKEN_ENDPOINT = "https://www.ovh.com/auth/oauth2/token"
 
 export interface OvhCredentials {
   readonly clientId: string
-  readonly clientSecret: string
+  readonly clientSecret: Redacted.Redacted<string>
   readonly scope?: string
   readonly tokenEndpoint?: string
 }
@@ -36,7 +36,7 @@ const _requestToken = (creds: OvhCredentials, httpClient: HttpClient.HttpClient)
       HttpClientRequest.bodyUrlParams({
         grant_type: "client_credentials",
         client_id: creds.clientId,
-        client_secret: creds.clientSecret,
+        client_secret: Redacted.value(creds.clientSecret),
         // kumulo: OVH issues a valid-but-unauthorized token when no scope is
         // requested (every API call then 401s) — default to "all".
         scope: creds.scope ?? "all"

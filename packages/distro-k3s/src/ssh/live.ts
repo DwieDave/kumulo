@@ -1,4 +1,4 @@
-import { Effect, Layer } from "effect"
+import { Config, Effect, Layer } from "effect"
 import { readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { Client } from "ssh2"
@@ -9,7 +9,12 @@ import type { SshHost } from "./port.ts"
 // kumulo: WHY root@key-only — user "root", pubkey-auth only, no password
 // fallback.
 const SSH_USER = "root"
-const PRIVATE_KEY_PATH = process.env["KUMULO_SSH_PRIVATE_KEY_PATH"] ?? `${homedir()}/.ssh/id_ed25519`
+// `withDefault` only leaves the (never-reachable, `Schema.String` accepts any
+// string) validation-error branch of `ConfigError` — `orDie` documents that.
+const _privateKeyPath: Effect.Effect<string> = Config.string("KUMULO_SSH_PRIVATE_KEY_PATH").pipe(
+  Config.withDefault(`${homedir()}/.ssh/id_ed25519`),
+  Effect.orDie
+)
 
 // One-shot connect-exec-disconnect per call — no pooling.
 // ponytail: fine for bootstrap's low call volume (readiness gates + a
@@ -20,13 +25,16 @@ const _withSession = <A>(
   command: string,
   onReady: (client: Client, resolve: (value: A) => void, reject: (error: SshCommandError) => void) => void
 ): Effect.Effect<A, SshCommandError> =>
-  Effect.callback<A, SshCommandError>((resume) => {
-    const client = new Client()
-    client
-      .on("ready", () => onReady(client, (value) => resume(Effect.succeed(value)), (error) => resume(Effect.fail(error))))
-      .on("error", (cause) => resume(Effect.fail(new SshCommandError({ host: host.ip, command, cause }))))
-      .connect({ host: host.ip, port: host.port, username: SSH_USER, privateKey: readFileSync(PRIVATE_KEY_PATH) })
-    return Effect.sync(() => client.end())
+  Effect.gen(function*() {
+    const privateKeyPath = yield* _privateKeyPath
+    return yield* Effect.callback<A, SshCommandError>((resume) => {
+      const client = new Client()
+      client
+        .on("ready", () => onReady(client, (value) => resume(Effect.succeed(value)), (error) => resume(Effect.fail(error))))
+        .on("error", (cause) => resume(Effect.fail(new SshCommandError({ host: host.ip, command, cause }))))
+        .connect({ host: host.ip, port: host.port, username: SSH_USER, privateKey: readFileSync(privateKeyPath) })
+      return Effect.sync(() => client.end())
+    })
   })
 
 const _exec = (host: SshHost, command: string): Effect.Effect<string, SshCommandError> =>
