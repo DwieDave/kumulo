@@ -7,6 +7,7 @@
       "devDependencies": {
         "@effect/tsgo": "catalog:",
         "@kumulo/core": "workspace:*",
+        "@kumulo/storage-ovh": "workspace:*",
         "@swc/core": "catalog:",
         "@types/bun": "catalog:",
         "dependency-cruiser": "catalog:",

@@ -45,29 +45,37 @@ exports[`dry-run plan against fake inventory (k3s) > partial inventory -> mix of
 `;
 
 exports[`dry-run plan against fake inventory (ovh-mks) > complete matching inventory -> all no-ops, nothing to do 1`] = `
-"Plan: 0 to create, 0 to delete, 0 to replace, 2 unchanged.
+"Plan: 0 to create, 0 to delete, 0 to replace, 4 unchanged.
 
   = kumulo-staging-eu-worker-general-0
-  = kumulo-staging-eu-worker-general-1"
+  = kumulo-staging-eu-worker-general-1
+  = bucket/staging-eu-backups
+  = bucket/staging-eu-logs"
 `;
 
 exports[`dry-run plan against fake inventory (ovh-mks) > drifted inventory -> replace-needs-confirm, never a silent apply 1`] = `
-"Plan: 0 to create, 0 to delete, 2 to replace, 0 unchanged.
+"Plan: 0 to create, 0 to delete, 4 to replace, 0 unchanged.
 
   ~ kumulo-staging-eu-worker-general-0 (config-hash drifted from desired spec)
-  ~ kumulo-staging-eu-worker-general-1 (config-hash drifted from desired spec)"
+  ~ kumulo-staging-eu-worker-general-1 (config-hash drifted from desired spec)
+  ~ bucket/staging-eu-backups (region or encryption changed (immutable, delete+recreate))
+  ~ bucket/staging-eu-logs (region or encryption changed (immutable, delete+recreate))"
 `;
 
 exports[`dry-run plan against fake inventory (ovh-mks) > empty inventory -> all creates 1`] = `
-"Plan: 2 to create, 0 to delete, 0 to replace, 0 unchanged.
+"Plan: 4 to create, 0 to delete, 0 to replace, 0 unchanged.
 
   + kumulo-staging-eu-worker-general-0
-  + kumulo-staging-eu-worker-general-1"
+  + kumulo-staging-eu-worker-general-1
+  + bucket/staging-eu-backups
+  + bucket/staging-eu-logs"
 `;
 
 exports[`dry-run plan against fake inventory (ovh-mks) > partial inventory -> mix of no-op and create 1`] = `
-"Plan: 1 to create, 0 to delete, 0 to replace, 1 unchanged.
+"Plan: 2 to create, 0 to delete, 0 to replace, 2 unchanged.
 
   + kumulo-staging-eu-worker-general-1
-  = kumulo-staging-eu-worker-general-0"
+  + bucket/staging-eu-logs
+  = kumulo-staging-eu-worker-general-0
+  = bucket/staging-eu-backups"
 `;

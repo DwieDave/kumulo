@@ -83,3 +83,26 @@ Status: DRAFT — awaiting human approval.
   ```
 
   `object_storage.module: ovh` requires `secrets.sink != none` (cross-field filter).
+
+## Contract — `<cluster>.credentials.yaml` (R10, as implemented)
+
+Sops-encrypted YAML written by `@kumulo/secrets-sops` (`sink.ts`), built from flat
+`CredentialEntry` dot-path keys (`entries.ts`'s `buildCredentialsPayload`):
+
+```yaml
+cluster: <cluster tag>
+s3:
+  user: <s3 user name>
+  accessKey: <sops-encrypted>
+  secretKey: <sops-encrypted>
+  buckets:
+    - name: <bucket name>
+      region: <region>
+      endpoint: <s3 endpoint>
+```
+
+Entry keys (final field list, flat dot-path form before nesting): `cluster`,
+`s3.user`, `s3.accessKey`, `s3.secretKey`, `s3.buckets.<i>.name`,
+`s3.buckets.<i>.region`, `s3.buckets.<i>.endpoint`. `accessKey`/`secretKey` are
+the only entries carrying real secret material (`Redacted` end to end, N4);
+`konfig.ts`'s `SecretSource` reads this file shape as-is.

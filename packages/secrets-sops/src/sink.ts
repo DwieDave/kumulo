@@ -5,7 +5,8 @@
  * disk, only the ciphertext `sops` prints to stdout is.
  *
  * Output file schema — the stable contract `konfig.ts`'s `SecretSource` will
- * consume (T4.2 cross-links this in requirements.md):
+ * consume. Canonical source: .docs/workflows/ovh-object-storage/requirements.md
+ * R10 ("Contract" subsection) — keep both in sync on change.
  *
  *   cluster: <cluster tag>
  *   s3:

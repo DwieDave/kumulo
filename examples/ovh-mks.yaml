@@ -54,6 +54,11 @@ object_storage:
       versioning: false
       encryption: false
       retain: true
+    - name: staging-eu-logs
+      region: DE1
+      versioning: true
+      encryption: false
+      retain: false
 secrets:
   sink: sops
   dir: .
