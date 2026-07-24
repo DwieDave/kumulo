@@ -18,7 +18,7 @@ const _wrap = <A>(
   self: Effect.Effect<A, HttpClientError.HttpClientError | SchemaError>
 ): Effect.Effect<A, DnsError> => Effect.mapError(self, (cause) => toDnsError({ cause, zone, name }))
 
-const _toZoneRecord = (raw: { id?: number; fieldType?: string; subDomain?: string; target?: string }): ZoneRecord => ({
+const _toZoneRecord = (raw: { id?: number; fieldType?: string; subDomain?: string | null; target?: string }): ZoneRecord => ({
   id: raw.id ?? 0,
   fieldType: raw.fieldType ?? "",
   subDomain: raw.subDomain ?? "",

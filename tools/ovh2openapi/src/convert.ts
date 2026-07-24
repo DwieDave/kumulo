@@ -51,14 +51,19 @@ function _enumModelSchema(enumType: string, values: readonly string[]): Effect.E
   return Effect.succeed({ type: "string", enum: values })
 }
 
+const _nullable = (schema: OpenApiSchema, canBeNull: boolean | undefined): OpenApiSchema =>
+  canBeNull === true ? { anyOf: [schema, { type: "null" }] } : schema
+
 function _objectModelSchema(
-  properties: Record<string, { readonly fullType: string; readonly required?: boolean }>,
+  properties: Record<string, { readonly fullType: string; readonly required?: boolean; readonly canBeNull?: boolean }>,
   models: Record<string, OvhModel>
 ): Effect.Effect<OpenApiSchema, ConversionUnsupported> {
   const keys = Object.keys(properties).toSorted()
   const required = keys.filter((key) => properties[key]?.required === true)
   return Effect.reduce(keys, (): Record<string, OpenApiSchema> => ({}), (acc, key) =>
-    typeToSchema({ fullType: properties[key]!.fullType, models }).pipe(Effect.map((schema) => ({ ...acc, [key]: schema })))
+    typeToSchema({ fullType: properties[key]!.fullType, models }).pipe(
+      Effect.map((schema) => ({ ...acc, [key]: _nullable(schema, properties[key]!.canBeNull) }))
+    )
   ).pipe(Effect.map((props): OpenApiSchema => ({ type: "object", properties: props, required })))
 }
 

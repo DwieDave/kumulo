@@ -27,6 +27,7 @@ export interface OvhPropertySchema {
   readonly fullType: string
   readonly description?: string
   readonly required?: boolean
+  readonly canBeNull?: boolean
 }
 
 export interface OvhObjectModel {
