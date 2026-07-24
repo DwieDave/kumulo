@@ -37,4 +37,13 @@ describe.skipIf(!existsSync(_binary))("compiled kumulo binary", () => {
     expect(out).toContain("to create")
     expect(out).toContain("mks-cluster/staging-eu")
   })
+
+  it("create --dry-run prints a plan against the k3s example", () => {
+    const out = execFileSync(
+      _binary,
+      ["create", "--config", join(_root, "examples", "k3s.yaml"), "--dry-run"],
+      { env: _fakeEnv, encoding: "utf8" }
+    )
+    expect(out).toContain("to create")
+  })
 })

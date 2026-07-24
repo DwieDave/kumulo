@@ -30,7 +30,7 @@
     "test": "vitest run",
     "lint:deps": "depcruise --config .dependency-cruiser.cjs packages tools",
     "codegen:check": "cd tools/codegen && bun run check",
-    "ci": "bun run typecheck && bun run test && bun run lint:deps && bun run lint && bun run codegen:check",
+    "ci": "bun run typecheck && bun run build:binary && bun run test && bun run lint:deps && bun run lint && bun run codegen:check",
     "lint": "oxlint",
     "build:binary": "bash scripts/build-binary.sh",
     "specs:update:ovh": "bash tools/ovh2openapi/scripts/update-specs.sh",

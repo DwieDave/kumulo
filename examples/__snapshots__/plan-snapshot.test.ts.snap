@@ -1,6 +1,50 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`dry-run plan against fake inventory > complete matching inventory -> all no-ops, nothing to do 1`] = `
+exports[`dry-run plan against fake inventory (k3s) > complete matching inventory -> all no-ops, nothing to do 1`] = `
+"Plan: 0 to create, 0 to delete, 0 to replace, 6 unchanged.
+
+  = kumulo-prod-eu-worker-general-0
+  = kumulo-prod-eu-worker-general-1
+  = kumulo-prod-eu-worker-general-2
+  = kumulo-prod-eu-worker-general-3
+  = kumulo-prod-eu-worker-highmem-0
+  = kumulo-prod-eu-worker-highmem-1"
+`;
+
+exports[`dry-run plan against fake inventory (k3s) > drifted inventory -> replace-needs-confirm, never a silent apply 1`] = `
+"Plan: 0 to create, 0 to delete, 6 to replace, 0 unchanged.
+
+  ~ kumulo-prod-eu-worker-general-0 (config-hash drifted from desired spec)
+  ~ kumulo-prod-eu-worker-general-1 (config-hash drifted from desired spec)
+  ~ kumulo-prod-eu-worker-general-2 (config-hash drifted from desired spec)
+  ~ kumulo-prod-eu-worker-general-3 (config-hash drifted from desired spec)
+  ~ kumulo-prod-eu-worker-highmem-0 (config-hash drifted from desired spec)
+  ~ kumulo-prod-eu-worker-highmem-1 (config-hash drifted from desired spec)"
+`;
+
+exports[`dry-run plan against fake inventory (k3s) > empty inventory -> all creates 1`] = `
+"Plan: 6 to create, 0 to delete, 0 to replace, 0 unchanged.
+
+  + kumulo-prod-eu-worker-general-0
+  + kumulo-prod-eu-worker-general-1
+  + kumulo-prod-eu-worker-general-2
+  + kumulo-prod-eu-worker-general-3
+  + kumulo-prod-eu-worker-highmem-0
+  + kumulo-prod-eu-worker-highmem-1"
+`;
+
+exports[`dry-run plan against fake inventory (k3s) > partial inventory -> mix of no-op and create 1`] = `
+"Plan: 5 to create, 0 to delete, 0 to replace, 1 unchanged.
+
+  + kumulo-prod-eu-worker-general-1
+  + kumulo-prod-eu-worker-general-2
+  + kumulo-prod-eu-worker-general-3
+  + kumulo-prod-eu-worker-highmem-0
+  + kumulo-prod-eu-worker-highmem-1
+  = kumulo-prod-eu-worker-general-0"
+`;
+
+exports[`dry-run plan against fake inventory (ovh-mks) > complete matching inventory -> all no-ops, nothing to do 1`] = `
 "Plan: 0 to create, 0 to delete, 0 to replace, 3 unchanged.
 
   = kumulo-staging-eu-worker-general-0
@@ -8,7 +52,7 @@ exports[`dry-run plan against fake inventory > complete matching inventory -> al
   = kumulo-staging-eu-worker-general-2"
 `;
 
-exports[`dry-run plan against fake inventory > drifted inventory -> replace-needs-confirm, never a silent apply 1`] = `
+exports[`dry-run plan against fake inventory (ovh-mks) > drifted inventory -> replace-needs-confirm, never a silent apply 1`] = `
 "Plan: 0 to create, 0 to delete, 3 to replace, 0 unchanged.
 
   ~ kumulo-staging-eu-worker-general-0 (config-hash drifted from desired spec)
@@ -16,7 +60,7 @@ exports[`dry-run plan against fake inventory > drifted inventory -> replace-need
   ~ kumulo-staging-eu-worker-general-2 (config-hash drifted from desired spec)"
 `;
 
-exports[`dry-run plan against fake inventory > empty inventory -> all creates 1`] = `
+exports[`dry-run plan against fake inventory (ovh-mks) > empty inventory -> all creates 1`] = `
 "Plan: 3 to create, 0 to delete, 0 to replace, 0 unchanged.
 
   + kumulo-staging-eu-worker-general-0
@@ -24,7 +68,7 @@ exports[`dry-run plan against fake inventory > empty inventory -> all creates 1`
   + kumulo-staging-eu-worker-general-2"
 `;
 
-exports[`dry-run plan against fake inventory > partial inventory -> mix of no-op and create 1`] = `
+exports[`dry-run plan against fake inventory (ovh-mks) > partial inventory -> mix of no-op and create 1`] = `
 "Plan: 2 to create, 0 to delete, 0 to replace, 1 unchanged.
 
   + kumulo-staging-eu-worker-general-1

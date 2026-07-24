@@ -186,14 +186,21 @@ const _reconcileVolumes = (config: ClusterConfig): Effect.Effect<void, VolumeErr
       )
     })
 
+/** FR-2.7 — any currently-running worker not in the desired spec set (exported for direct unit testing, no k8s client needed). */
+export const orphanedWorkers = (
+  { config, workerInfos }: { readonly config: ClusterConfig; readonly workerInfos: ReadonlyArray<ServerInfo> }
+): ReadonlyArray<ServerInfo> => {
+  const desiredNames = new Set(buildK3sServerSpecs(config).filter((s) => s.role === "worker").map((s) => s.name))
+  return workerInfos.filter((info) => !desiredNames.has(info.name))
+}
+
 /** FR-2.7 — scale-down: any currently-running worker not in the desired spec set is drained before removal. */
 const _drainOrphanedWorkers = (
   config: ClusterConfig,
   infra: Infra,
   k8sClient: K8sClient["Service"]
 ): Effect.Effect<void, BootstrapFailed> => {
-  const desiredNames = new Set(buildK3sServerSpecs(config).filter((s) => s.role === "worker").map((s) => s.name))
-  const orphaned = infra.workerInfos.filter((info) => !desiredNames.has(info.name))
+  const orphaned = orphanedWorkers({ config, workerInfos: infra.workerInfos })
   // ponytail: `CloudProvider` has no per-server delete verb (only whole-cluster
   // `deleteByTag`) — draining the k8s Node object is the real, wired part of
   // FR-2.7; VM teardown for a single orphaned worker awaits that port growing one.
