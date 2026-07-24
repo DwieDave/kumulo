@@ -37,7 +37,9 @@ const _requestToken = (creds: OvhCredentials, httpClient: HttpClient.HttpClient)
         grant_type: "client_credentials",
         client_id: creds.clientId,
         client_secret: creds.clientSecret,
-        ...(creds.scope ? { scope: creds.scope } : {})
+        // kumulo: OVH issues a valid-but-unauthorized token when no scope is
+        // requested (every API call then 401s) — default to "all".
+        scope: creds.scope ?? "all"
       })
     )
     const response = yield* httpClient.execute(request).pipe(Effect.flatMap(HttpClientResponse.filterStatusOk))
