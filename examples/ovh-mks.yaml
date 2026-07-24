@@ -63,7 +63,7 @@ secrets:
   sink: sops
   dir: .
   sops:
-    age_recipient: age1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqql4pcnf
+    age_recipient: age1xv0gzkxnvr08jtqyfjmcqd0qrfxlg4vu0gwnjradd4dy6ufh5v0sgd6c3t
 addons:
   cloud_controller_manager: true
   cinder_csi:

@@ -38,3 +38,6 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .references/
 /AGENTS.md
 /CLAUDE.md
+
+# local age private keys — never commit
+.config/
