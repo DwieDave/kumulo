@@ -25,20 +25,25 @@ export const emptyMksInventory: MksInventory = {
   volumeNames: new Set()
 }
 
-const _createOrNoOp = (exists: boolean, name: string): PlanAction =>
+const _createOrNoOp = ({ exists, name }: { readonly exists: boolean; readonly name: string }): PlanAction =>
   exists ? { _tag: "NoOp", name } : { _tag: "Create", name }
 
 // Existence-only diff: spec drift (flavor, autoscaling, size) still converges
 // via the idempotent ensure* verbs without showing as Replace here — those
 // fields aren't exposed by the lookups yet.
-export const buildMksPlan = (config: MksPlanInput, inventory: MksInventory): Plan => ({
+export const buildMksPlan = (
+  { config, inventory }: { readonly config: MksPlanInput; readonly inventory: MksInventory }
+): Plan => ({
   actions: [
-    _createOrNoOp(inventory.clusterExists, `mks-cluster/${config.name}`),
+    _createOrNoOp({ exists: inventory.clusterExists, name: `mks-cluster/${config.name}` }),
     ...config.worker_pools.map((pool) =>
-      _createOrNoOp(inventory.clusterExists && inventory.poolNames.has(pool.name), `mks-pool/${config.name}/${pool.name}`)
+      _createOrNoOp({
+        exists: inventory.clusterExists && inventory.poolNames.has(pool.name),
+        name: `mks-pool/${config.name}/${pool.name}`
+      })
     ),
     ...(config.volumes.module === "cinder"
-      ? config.volumes.managed.map((v) => _createOrNoOp(inventory.volumeNames.has(v.name), `volume/${v.name}`))
+      ? config.volumes.managed.map((v) => _createOrNoOp({ exists: inventory.volumeNames.has(v.name), name: `volume/${v.name}` }))
       : [])
   ]
 })

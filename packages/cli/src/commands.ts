@@ -33,7 +33,7 @@ const _mksPlanLive = (config: ClusterConfig) =>
   Effect.gen(function*() {
     const mks = yield* lookupMksInventory(config)
     const volumeNames = yield* lookupManagedVolumeNames(config)
-    return buildMksPlan(config, { ...mks, volumeNames })
+    return buildMksPlan({ config, inventory: { ...mks, volumeNames } })
   })
 
 /** Config → plan → present → apply, shared by `create` and `scale`. */

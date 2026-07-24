@@ -79,7 +79,7 @@ it.effect("yaml → plan → apply → nodepool scale-update → kubeconfig → 
     assert.strictEqual(config.distro, "ovh-mks")
 
     const inventory = yield* lookupMksInventory(config).pipe(Effect.provide(mksEnvLayer))
-    const plan = buildMksPlan(config, { ...inventory, volumeNames: new Set() })
+    const plan = buildMksPlan({ config, inventory: { ...inventory, volumeNames: new Set() } })
     assert.strictEqual(plan.actions.length, 2)
     const decision = decidePlanAction({ plan, yes: true, dryRun: false })
     assert.strictEqual(decision._tag, "Proceed")
@@ -90,7 +90,7 @@ it.effect("yaml → plan → apply → nodepool scale-update → kubeconfig → 
 
     // Re-plan against the now-populated fake API: everything exists -> all NoOp.
     const after = yield* lookupMksInventory(config).pipe(Effect.provide(mksEnvLayer))
-    const replan = buildMksPlan(config, { ...after, volumeNames: new Set() })
+    const replan = buildMksPlan({ config, inventory: { ...after, volumeNames: new Set() } })
     assert.deepStrictEqual(replan.actions.map((a) => a._tag), ["NoOp", "NoOp"])
     assert.strictEqual([...server.pools.get(info.id)!.values()][0]?.desiredNodes, 3)
 

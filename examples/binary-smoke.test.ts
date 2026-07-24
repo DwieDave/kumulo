@@ -28,14 +28,17 @@ describe.skipIf(!existsSync(_binary))("compiled kumulo binary", () => {
     expect(out).toContain("kumulo <subcommand>")
   })
 
-  it("create --dry-run prints a plan against the ovh-mks example", () => {
-    const out = execFileSync(
-      _binary,
-      ["create", "--config", join(_root, "examples", "ovh-mks.yaml"), "--dry-run"],
-      { env: _fakeEnv, encoding: "utf8" }
-    )
-    expect(out).toContain("to create")
-    expect(out).toContain("mks-cluster/staging-eu")
+  // The ovh-mks plan is a live diff (cluster/pool/volume/bucket existence is
+  // looked up against OVH), so dry-run with fake credentials must fail loudly
+  // instead of printing a made-up plan.
+  it("create --dry-run against the ovh-mks example fails loudly on fake credentials", () => {
+    expect(() =>
+      execFileSync(
+        _binary,
+        ["create", "--config", join(_root, "examples", "ovh-mks.yaml"), "--dry-run"],
+        { env: _fakeEnv, encoding: "utf8", stdio: "pipe" }
+      )
+    ).toThrow(/OAuth2 token request failed|Authentication failed/)
   })
 
   it("create --dry-run prints a plan against the k3s example", () => {
