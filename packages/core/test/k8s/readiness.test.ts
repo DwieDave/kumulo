@@ -31,6 +31,19 @@ describe("readiness waits", () => {
       status: { conditions: [{ type: "Ready", status: "False" }] }
     })
 
+  it.live("waitForNodeReady times out when status/conditions is missing/malformed (lenient decode, not a hard failure)", () =>
+    Effect.gen(function*() {
+      const get = (_ref: ResourceRef): Effect.Effect<K8sManifest, never> =>
+        Effect.succeed({ apiVersion: "v1", kind: "Node", status: "not-an-object" })
+      const error = yield* Effect.flip(waitForNodeReady({
+        get,
+        ref: { path: "/api/v1/nodes/n1", kind: "Node" },
+        interval: "1 millis",
+        timeout: "10 millis"
+      }))
+      expect(error._tag).toBe("ProvisioningTimeout")
+    }))
+
   it.live("waitForNodeReady times out with ProvisioningTimeout when Ready never flips", () =>
     Effect.gen(function*() {
       const error = yield* Effect.flip(waitForNodeReady({

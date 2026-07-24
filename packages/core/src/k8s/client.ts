@@ -1,4 +1,4 @@
-import { Context, Effect } from "effect"
+import { Context, Effect, Option, Schema } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { HttpTransportError, ResourceConflict, ResourceNotFound } from "../errors/tagged.ts"
 import type { K8sManifest } from "../domain/types.ts"
@@ -33,17 +33,20 @@ const _transportError = (cause: unknown): HttpTransportError => new HttpTranspor
 const _statusError = (ref: ResourceRef, status: number): ResourceNotFound | HttpTransportError =>
   status === 404 ? new ResourceNotFound({ kind: ref.kind, ref: ref.path }) : _transportError(`status ${status}`)
 
-const _isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null
-const _field = (value: unknown, key: string): unknown => _isRecord(value) ? value[key] : undefined
+// kumulo: lenient decode (FR-4.6) — apiVersion/kind are the only fields any
+// caller relies on structurally; every other field is passed through
+// untouched via the trailing `Record` so node-ops/addons/readiness can read
+// arbitrary manifest fields (metadata, status, spec) without a schema per
+// resource kind.
+const K8sManifestSchema = Schema.StructWithRest(
+  Schema.Struct({ apiVersion: Schema.String, kind: Schema.String }),
+  [Schema.Record(Schema.String, Schema.Unknown)]
+)
 
-// kumulo: narrows a decoded JSON body to K8sManifest without a type
-// assertion — `undefined` on a malformed body (missing apiVersion/kind)
-// signals "not a manifest" to callers, who turn that into a tagged error.
-const _toManifest = (value: unknown): K8sManifest | undefined => {
-  if (!_isRecord(value)) return undefined
-  const { apiVersion, kind } = value
-  return typeof apiVersion === "string" && typeof kind === "string" ? { ...value, apiVersion, kind } : undefined
-}
+const K8sListSchema = Schema.Struct({
+  items: Schema.optional(Schema.Array(Schema.Unknown))
+})
+const _emptyListing: { items?: ReadonlyArray<unknown> } = { items: [] }
 
 export interface K8sClientOptions {
   // kumulo: `client` is expected to already be authenticated (bearer token
@@ -57,14 +60,17 @@ export interface K8sClientOptions {
 
 const _url = (server: string, path: string): URL => new URL(path, server)
 
+// kumulo: `undefined` on a malformed body (missing apiVersion/kind) signals
+// "not a manifest" to callers, who turn that into a tagged error.
 const _decodeManifest = (
   body: unknown
-): Effect.Effect<K8sManifest, HttpTransportError> => {
-  const manifest = _toManifest(body)
-  return manifest === undefined
-    ? Effect.fail(_transportError("response body was not a K8s manifest"))
-    : Effect.succeed(manifest)
-}
+): Effect.Effect<K8sManifest, HttpTransportError> =>
+  Schema.decodeUnknownEffect(K8sManifestSchema)(body).pipe(
+    Effect.mapError(() => _transportError("response body was not a K8s manifest"))
+  )
+
+const _decodeManifestOption = (item: unknown): Effect.Effect<Option.Option<K8sManifest>> =>
+  Schema.decodeUnknownEffect(K8sManifestSchema)(item).pipe(Effect.option)
 
 export const makeK8sClient = (options: K8sClientOptions): K8sClient["Service"] => {
   const { client, server } = options
@@ -86,8 +92,14 @@ export const makeK8sClient = (options: K8sClientOptions): K8sClient["Service"] =
       )
       if (response.status !== 200) return yield* Effect.fail(_transportError(`status ${response.status}`))
       const body = yield* response.json.pipe(Effect.mapError(_transportError))
-      const items = _field(body, "items")
-      return Array.isArray(items) ? items.flatMap((item) => _toManifest(item) ?? []) : []
+      // kumulo: a body with no/malformed `items` yields an empty list rather
+      // than a transport error — same lenient "not a manifest -> skip it"
+      // semantics as `_decodeManifest`, just per-item instead of whole-body.
+      const listing = yield* Schema.decodeUnknownEffect(K8sListSchema)(body).pipe(
+        Effect.orElseSucceed(() => _emptyListing)
+      )
+      const decoded = yield* Effect.forEach(listing.items ?? [], _decodeManifestOption)
+      return decoded.flatMap(Option.toArray)
     })
 
   // kumulo: server-side apply per FR-9.2 — PATCH with

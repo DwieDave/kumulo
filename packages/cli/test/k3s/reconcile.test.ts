@@ -326,6 +326,23 @@ describe("k3s status (FR-10)", () => {
       expect(status).toEqual({ exists: false, nodes: [] })
     }))
 
+  it.effect("treats a node with malformed metadata/status as not-ready/unnamed instead of failing (lenient decode)", () =>
+    Effect.gen(function*() {
+      const log: SshLog = { executed: [], cloudInitGates: [], clusterInfoGates: [] }
+      const malformed: K8sManifest = { apiVersion: "v1", kind: "Node", metadata: "not-an-object", status: "not-an-object" }
+
+      const status = yield* applyK3sEffect({ config: _config, configDir: "/tmp" }).pipe(
+        Effect.andThen(() => k3sStatusEffect({ config: _config, k8sClientLayer: _statusK8sClientLayer([malformed]) })),
+        Effect.provide(_FakeSshLive(log)),
+        Effect.provide(_trackingVolumeProvider({ ensured: [], deleted: [] })),
+        Effect.provide(_trackingDnsProvider({ ensured: [], removed: [] })),
+        Effect.provide(OpenStackEnvFake),
+        Effect.provide(_fakeCloudProviderLive())
+      )
+
+      expect(status.nodes).toEqual([{ name: "", ready: false }])
+    }))
+
   it.effect("reports the LB endpoint + per-node Ready condition once the cluster exists", () =>
     Effect.gen(function*() {
       const log: SshLog = { executed: [], cloudInitGates: [], clusterInfoGates: [] }

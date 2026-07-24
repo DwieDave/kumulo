@@ -1,4 +1,4 @@
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import type { DoctorCheck } from "../doctor/types.ts"
 import type { OpenStackEndpointResolver } from "./nova.ts"
@@ -8,9 +8,18 @@ export interface NovaLimits {
   readonly totalInstancesUsed: number
 }
 
-const _isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null
-const _field = (value: unknown, key: string): unknown => _isRecord(value) ? value[key] : undefined
-const _number = (value: unknown): number => typeof value === "number" ? value : 0
+// kumulo: lenient decode (FR-4.6) — either absolute field missing/wrong-typed
+// defaults to 0/unset rather than failing, matching the previous "coerce to
+// 0" narrowing; a response that isn't shaped like this at all falls through
+// to `_unknownLimits` via `Effect.orElseSucceed` below.
+const _NovaLimitsResponse = Schema.Struct({
+  limits: Schema.optional(Schema.Struct({
+    absolute: Schema.optional(Schema.Struct({
+      maxTotalInstances: Schema.optional(Schema.Number),
+      totalInstancesUsed: Schema.optional(Schema.Number)
+    }))
+  }))
+})
 
 const _unknownLimits: NovaLimits = { maxTotalInstances: -1, totalInstancesUsed: 0 }
 
@@ -33,13 +42,11 @@ export const fetchNovaLimits = (args: {
         ? response.json.pipe(Effect.mapError(() => "bad-json" as const))
         : Effect.fail("bad-status" as const)
     ),
-    Effect.map((body): NovaLimits => {
-      const absolute = _field(_field(body, "limits"), "absolute")
-      return {
-        maxTotalInstances: _number(_field(absolute, "maxTotalInstances")),
-        totalInstancesUsed: _number(_field(absolute, "totalInstancesUsed"))
-      }
-    }),
+    Effect.flatMap(Schema.decodeUnknownEffect(_NovaLimitsResponse)),
+    Effect.map((decoded): NovaLimits => ({
+      maxTotalInstances: decoded.limits?.absolute?.maxTotalInstances ?? 0,
+      totalInstancesUsed: decoded.limits?.absolute?.totalInstancesUsed ?? 0
+    })),
     Effect.orElseSucceed(() => _unknownLimits)
   )
 

@@ -1,18 +1,23 @@
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import type { Duration } from "effect"
 import { pollUntil } from "../reconcile/poll.ts"
 import type { HttpTransportError, ProvisioningTimeout, ResourceNotFound } from "../errors/tagged.ts"
 import type { K8sManifest } from "../domain/types.ts"
 import type { ResourceRef } from "./client.ts"
 
-const _isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null
+// kumulo: lenient decode (FR-4.6) — a manifest missing/malformed `status`
+// (not yet populated by the controller, e.g. a brand-new Node) decodes to
+// `undefined` conditions rather than failing, same as before.
+const _ConditionsShape = Schema.Struct({
+  status: Schema.optional(Schema.Struct({
+    conditions: Schema.optional(Schema.Array(Schema.Struct({ type: Schema.String, status: Schema.String })))
+  }))
+})
 
 const _conditionStatus = (manifest: K8sManifest, type: string): string | undefined => {
-  const status = manifest["status"]
-  const conditions = _isRecord(status) ? status["conditions"] : undefined
-  if (!Array.isArray(conditions)) return undefined
-  const match = conditions.find((c) => _isRecord(c) && c["type"] === type)
-  return _isRecord(match) && typeof match["status"] === "string" ? match["status"] : undefined
+  const decoded = Schema.decodeUnknownExit(_ConditionsShape)(manifest)
+  if (decoded._tag !== "Success") return undefined
+  return decoded.value.status?.conditions?.find((c) => c.type === type)?.status
 }
 
 export interface WaitOptions {

@@ -1,4 +1,4 @@
-import { Effect } from "effect"
+import { Effect, Option, Schema } from "effect"
 import type { HttpTransportError, ResourceConflict, ResourceNotFound } from "../errors/tagged.ts"
 import type { K8sManifest } from "../domain/types.ts"
 import type { K8sClient, ResourceRef } from "./client.ts"
@@ -27,16 +27,22 @@ interface PodRef {
   readonly name: string
 }
 
-const _isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null
-const _field = (value: unknown, key: string): unknown => _isRecord(value) ? value[key] : undefined
+// kumulo: a pod without both metadata fields is silently skipped (same
+// "not a manifest -> drop it" lenient-decode semantics as `K8sClient.list`),
+// not a hard failure — a malformed pod entry shouldn't abort draining the
+// rest of the node.
+const _PodMetadata = Schema.Struct({
+  metadata: Schema.Struct({ name: Schema.String, namespace: Schema.String })
+})
 
-const _podRefs = (pods: ReadonlyArray<K8sManifest>): ReadonlyArray<PodRef> =>
-  pods.flatMap((pod) => {
-    const metadata = pod["metadata"]
-    const name = _field(metadata, "name")
-    const namespace = _field(metadata, "namespace")
-    return typeof name === "string" && typeof namespace === "string" ? [{ namespace, name }] : []
-  })
+const _podRef = (pod: K8sManifest): Effect.Effect<Option.Option<PodRef>> =>
+  Schema.decodeUnknownEffect(_PodMetadata)(pod).pipe(
+    Effect.map(({ metadata }): PodRef => ({ name: metadata.name, namespace: metadata.namespace })),
+    Effect.option
+  )
+
+const _podRefs = (pods: ReadonlyArray<K8sManifest>): Effect.Effect<ReadonlyArray<PodRef>> =>
+  Effect.forEach(pods, _podRef).pipe(Effect.map((refs) => refs.flatMap(Option.toArray)))
 
 export interface DrainNodeOptions {
   readonly client: K8sClient["Service"]
@@ -52,7 +58,7 @@ export const drainNode = (
   options: DrainNodeOptions
 ): Effect.Effect<void, ResourceNotFound | ResourceConflict | HttpTransportError> =>
   options.client.list(options.podsRef).pipe(
-    Effect.map(_podRefs),
+    Effect.flatMap(_podRefs),
     Effect.flatMap((pods) =>
       Effect.forEach(pods, (pod) => options.client.evict(pod.namespace, pod.name), { discard: true })
     )

@@ -1,4 +1,4 @@
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { parse } from "yaml"
 import { ConfigInvalid } from "../errors/tagged.ts"
 
@@ -23,18 +23,37 @@ const _invalid = (message: string): ConfigInvalid => new ConfigInvalid({ issues:
 
 const _base64Decode = (value: string): string => globalThis.atob(value)
 
-const _isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null
-
-const _field = (value: unknown, key: string): unknown => _isRecord(value) ? value[key] : undefined
+// kumulo: lenient decode (FR-4.6) — every field is optional at the schema
+// level (a kubeconfig's cluster/user entry may carry only some of these),
+// with "is the shape we need actually present" decided afterward in
+// `_parseAuth`/`parseKubeconfig` rather than by the schema failing outright.
+// `Schema.Unknown` array elements (not a nested cluster/user schema) because
+// only entry `0` is ever read — see the single-context comment below.
+const _KubeconfigDoc = Schema.Struct({
+  clusters: Schema.optional(Schema.Array(Schema.Struct({
+    cluster: Schema.optional(Schema.Struct({
+      server: Schema.optional(Schema.String),
+      "certificate-authority-data": Schema.optional(Schema.String)
+    }))
+  }))),
+  users: Schema.optional(Schema.Array(Schema.Struct({
+    user: Schema.optional(Schema.Struct({
+      token: Schema.optional(Schema.String),
+      "client-certificate-data": Schema.optional(Schema.String),
+      "client-key-data": Schema.optional(Schema.String)
+    }))
+  })))
+})
+type KubeconfigDoc = typeof _KubeconfigDoc.Type
+type KubeconfigUser = NonNullable<NonNullable<KubeconfigDoc["users"]>[number]["user"]>
 
 // kumulo: only token and client-cert auth are needed (FR-9.2) — kubeconfigs
 // from k3s (client-cert) and MKS (token) never use exec/oidc plugins.
-const _parseAuth = (user: unknown): KubeconfigAuth | undefined => {
-  const token = _field(user, "token")
-  if (typeof token === "string") return { kind: "token", token }
-  const certData = _field(user, "client-certificate-data")
-  const keyData = _field(user, "client-key-data")
-  if (typeof certData === "string" && typeof keyData === "string") {
+const _parseAuth = (user: KubeconfigUser | undefined): KubeconfigAuth | undefined => {
+  if (user?.token !== undefined) return { kind: "token", token: user.token }
+  const certData = user?.["client-certificate-data"]
+  const keyData = user?.["client-key-data"]
+  if (certData !== undefined && keyData !== undefined) {
     return { kind: "clientCert", certPem: _base64Decode(certData), keyPem: _base64Decode(keyData) }
   }
   return undefined
@@ -44,18 +63,19 @@ const _parseAuth = (user: unknown): KubeconfigAuth | undefined => {
 // current-context resolution across multiple clusters/users.
 export const parseKubeconfig = (text: string): Effect.Effect<KubeconfigContext, ConfigInvalid> =>
   Effect.try({ try: () => parse(text), catch: (cause) => _invalid(String(cause)) }).pipe(
+    Effect.flatMap((yaml) => Schema.decodeUnknownEffect(_KubeconfigDoc)(yaml).pipe(Effect.mapError(() => _invalid("kubeconfig is not a valid document")))),
     Effect.flatMap((doc) => {
-      const cluster = _field(_field(_field(doc, "clusters"), "0"), "cluster")
-      const server = _field(cluster, "server")
-      const caData = _field(cluster, "certificate-authority-data")
-      const user = _field(_field(_field(doc, "users"), "0"), "user")
+      const cluster = doc.clusters?.[0]?.cluster
+      const user = doc.users?.[0]?.user
       const auth = _parseAuth(user)
-      if (typeof server !== "string" || auth === undefined) {
+      if (cluster?.server === undefined || auth === undefined) {
         return Effect.fail(_invalid("kubeconfig missing cluster.server or a token/client-cert user"))
       }
       return Effect.succeed({
-        server,
-        caPem: typeof caData === "string" ? _base64Decode(caData) : undefined,
+        server: cluster.server,
+        caPem: cluster["certificate-authority-data"] === undefined
+          ? undefined
+          : _base64Decode(cluster["certificate-authority-data"]),
         auth
       })
     })

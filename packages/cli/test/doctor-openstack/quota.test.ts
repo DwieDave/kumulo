@@ -39,6 +39,18 @@ it.effect("passes when Nova reports no quota limit (-1)", () =>
     assert.match(result.message, /no quota limit reported/)
   }))
 
+it.effect("treats a malformed limits.absolute shape as unknown quota (lenient decode, not a false failure)", () =>
+  Effect.gen(function*() {
+    const limits = fetchNovaLimits({
+      client: fakeHttpClient({ status: 200, body: { limits: { absolute: "not-an-object" } } }),
+      keystone: fakeEndpointResolver(),
+      region: "GRA9"
+    })
+    const result = yield* quotaHeadroomCheck({ limits, plannedInstanceCount: 5 }).run
+    assert.strictEqual(result.status, "pass")
+    assert.match(result.message, /no quota limit reported/)
+  }))
+
 it.effect("treats an unreachable limits endpoint as unknown quota (pass, not a false failure)", () =>
   Effect.gen(function*() {
     const limits = fetchNovaLimits({

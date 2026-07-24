@@ -26,6 +26,32 @@ describe("K8sClient", () => {
       expect(error._tag).toBe("ResourceNotFound")
     }))
 
+  it.effect("get fails with HttpTransportError when the 200 body isn't a manifest (missing apiVersion/kind)", () =>
+    Effect.gen(function*() {
+      const fake = fakeHttpClient(() => new Response(JSON.stringify({ metadata: { name: "n1" } }), { status: 200 }))
+      const client = makeK8sClient({ client: fake.client, server })
+      const error = yield* Effect.flip(client.get(nodeRef))
+      expect(error._tag).toBe("HttpTransportError")
+    }))
+
+  it.effect("list drops malformed items instead of failing (lenient decode)", () =>
+    Effect.gen(function*() {
+      const fake = fakeHttpClient(() =>
+        new Response(
+          JSON.stringify({
+            items: [
+              { apiVersion: "v1", kind: "Node", metadata: { name: "n1" } },
+              { metadata: { name: "not-a-manifest" } }
+            ]
+          }),
+          { status: 200 }
+        )
+      )
+      const client = makeK8sClient({ client: fake.client, server })
+      const items = yield* client.list(nodeRef)
+      expect(items.length).toBe(1)
+    }))
+
   it.effect("list unwraps the items array", () =>
     Effect.gen(function*() {
       const fake = fakeHttpClient(() =>

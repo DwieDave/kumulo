@@ -1,4 +1,4 @@
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Schema } from "effect"
 import * as HttpClient from "effect/unstable/http/HttpClient"
 import {
   BootstrapFailed,
@@ -355,19 +355,28 @@ export interface K3sStatus {
 
 const NODES_REF = { path: "/api/v1/nodes", kind: "Node" }
 
-const _isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null
-const _field = (value: unknown, key: string): unknown => _isRecord(value) ? value[key] : undefined
+// kumulo: lenient decode (FR-4.6) — a Node manifest missing/malformed
+// metadata.name or status.conditions decodes to the same "not ready" /
+// "" defaults the manual guards previously fell back to, rather than
+// failing status reporting outright.
+const _NodeStatusShape = Schema.Struct({
+  metadata: Schema.optional(Schema.Struct({ name: Schema.optional(Schema.String) })),
+  status: Schema.optional(Schema.Struct({
+    conditions: Schema.optional(Schema.Array(Schema.Struct({ type: Schema.String, status: Schema.String })))
+  }))
+})
+
+const _decodeNodeStatus = (manifest: K8sManifest) => Schema.decodeUnknownExit(_NodeStatusShape)(manifest)
 
 const _nodeReady = (manifest: K8sManifest): boolean => {
-  const conditions = _field(manifest["status"], "conditions")
-  if (!Array.isArray(conditions)) return false
-  const ready = conditions.find((c) => _field(c, "type") === "Ready")
-  return _field(ready, "status") === "True"
+  const decoded = _decodeNodeStatus(manifest)
+  if (decoded._tag !== "Success") return false
+  return decoded.value.status?.conditions?.some((c) => c.type === "Ready" && c.status === "True") ?? false
 }
 
 const _nodeName = (manifest: K8sManifest): string => {
-  const name = _field(manifest["metadata"], "name")
-  return typeof name === "string" ? name : ""
+  const decoded = _decodeNodeStatus(manifest)
+  return decoded._tag === "Success" ? decoded.value.metadata?.name ?? "" : ""
 }
 
 /**

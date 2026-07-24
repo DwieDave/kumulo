@@ -40,6 +40,27 @@ describe("node-ops", () => {
       expect(evictions.length).toBe(2)
     }))
 
+  it.effect("drainNode skips a pod missing metadata.name/namespace instead of failing", () =>
+    Effect.gen(function*() {
+      const fake = fakeHttpClient((request) =>
+        request.method === "GET"
+          ? new Response(
+            JSON.stringify({
+              items: [
+                { apiVersion: "v1", kind: "Pod", metadata: { name: "p1", namespace: "default" } },
+                { apiVersion: "v1", kind: "Pod", metadata: { name: "p2" } }
+              ]
+            }),
+            { status: 200 }
+          )
+          : new Response(null, { status: 201 })
+      )
+      const client = makeK8sClient({ client: fake.client, server })
+      yield* drainNode({ client, podsRef: { path: "/api/v1/pods?fieldSelector=spec.nodeName=n1", kind: "Pod" } })
+      const evictions = fake.requests().filter((r) => r.url.includes("eviction"))
+      expect(evictions.length).toBe(1)
+    }))
+
   it.effect("deleteNode DELETEs the node resource", () =>
     Effect.gen(function*() {
       const fake = fakeHttpClient(() => new Response(null, { status: 200 }))
