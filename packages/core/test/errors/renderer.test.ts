@@ -15,7 +15,9 @@ const fullRegistry: RendererRegistry = {
   ConfigInvalid: (e) => `config invalid: ${e.issues.length} issue(s)`,
   PlanRejected: (e) => `plan rejected: ${e.reason}`,
   BootstrapFailed: (e) => `bootstrap failed on ${e.node} at ${e.phase}`,
-  AddonInstallFailed: (e) => `addon ${e.addon} failed: ${e.cause}`
+  AddonInstallFailed: (e) => `addon ${e.addon} failed: ${e.cause}`,
+  BucketNotEmpty: (e) => `bucket ${e.bucket} not empty: ${e.objectCount} object(s)`,
+  SinkUnavailable: (e) => `sink unavailable: ${e.hint}`
 }
 
 describe("renderError", () => {

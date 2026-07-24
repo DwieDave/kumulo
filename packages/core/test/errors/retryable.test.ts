@@ -4,6 +4,7 @@ import {
   AddonInstallFailed,
   AuthenticationFailed,
   BootstrapFailed,
+  BucketNotEmpty,
   CapabilityMissing,
   ConfigInvalid,
   HttpTransportError,
@@ -12,7 +13,8 @@ import {
   QuotaExceeded,
   ResourceConflict,
   ResourceNotFound,
-  ResponseDecodeError
+  ResponseDecodeError,
+  SinkUnavailable
 } from "../../src/errors/tagged.ts"
 import { isRetryable } from "../../src/errors/retryable.ts"
 
@@ -37,5 +39,7 @@ describe("isRetryable", () => {
     expect(isRetryable(new PlanRejected({ reason: "x" }))).toBe(false)
     expect(isRetryable(new BootstrapFailed({ node: "n", phase: "p", log: "l" }))).toBe(false)
     expect(isRetryable(new AddonInstallFailed({ addon: "x", cause: "x" }))).toBe(false)
+    expect(isRetryable(new BucketNotEmpty({ bucket: "b", objectCount: 1 }))).toBe(false)
+    expect(isRetryable(new SinkUnavailable({ hint: "x" }))).toBe(false)
   })
 })

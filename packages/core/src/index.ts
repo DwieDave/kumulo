@@ -4,6 +4,7 @@ export {
   AddonInstallFailed,
   AuthenticationFailed,
   BootstrapFailed,
+  BucketNotEmpty,
   CapabilityMissing,
   ConfigInvalid,
   HttpTransportError,
@@ -12,9 +13,10 @@ export {
   QuotaExceeded,
   ResourceConflict,
   ResourceNotFound,
-  ResponseDecodeError
+  ResponseDecodeError,
+  SinkUnavailable
 } from "./errors/tagged.ts"
-export type { KumuloError, KumuloErrorTag, PathedIssue } from "./errors/tagged.ts"
+export type { CredentialsSinkError, KumuloError, KumuloErrorTag, PathedIssue } from "./errors/tagged.ts"
 export { isRetryable } from "./errors/retryable.ts"
 export { renderError } from "./errors/renderer.ts"
 export type { RendererRegistry } from "./errors/renderer.ts"
@@ -26,10 +28,13 @@ export { Addon } from "./ports/addon.ts"
 export type { AddonError } from "./ports/addon.ts"
 export { CloudProvider } from "./ports/cloud-provider.ts"
 export type { CloudError } from "./ports/cloud-provider.ts"
+export { CredentialsSink } from "./ports/credentials-sink.ts"
 export { Distro } from "./ports/distro.ts"
 export type { DistroShape, ManagedDistroShape, MksError, SelfManagedDistroShape } from "./ports/distro.ts"
 export { DnsProvider } from "./ports/dns-provider.ts"
 export type { DnsError } from "./ports/dns-provider.ts"
+export { ObjectStorageProvider } from "./ports/object-storage-provider.ts"
+export type { ObjectStorageError } from "./ports/object-storage-provider.ts"
 export { ProviderProfile } from "./ports/provider-profile.ts"
 export type { AuthDefaults, ProfileError } from "./ports/provider-profile.ts"
 export { validateAutoscaling, validateCni } from "./ports/validation.ts"
@@ -64,9 +69,13 @@ export type {
   AddonContext,
   AutoscalingRule,
   BootstrapPlan,
+  BucketInfo,
+  BucketRef,
+  BucketSpec,
   Capability,
   ClusterConfigShape,
   ClusterTag,
+  CredentialEntry,
   DesiredRecord,
   DistroKind,
   FlavorId,
@@ -86,6 +95,7 @@ export type {
   NodeRef,
   NodeRole,
   ResolvedVersion,
+  S3Credentials,
   SecGroupInfo,
   SecGroupSpec,
   ServerInfo,

@@ -4,6 +4,7 @@ import {
   AddonInstallFailed,
   AuthenticationFailed,
   BootstrapFailed,
+  BucketNotEmpty,
   CapabilityMissing,
   ConfigInvalid,
   HttpTransportError,
@@ -12,7 +13,8 @@ import {
   QuotaExceeded,
   ResourceConflict,
   ResourceNotFound,
-  ResponseDecodeError
+  ResponseDecodeError,
+  SinkUnavailable
 } from "@kumulo/core"
 import { DistroNotWired } from "../src/distro-not-wired.ts"
 import { renderCliError } from "../src/errors.ts"
@@ -80,6 +82,16 @@ it("renders BootstrapFailed", () => {
 it("renders AddonInstallFailed", () => {
   const message = renderCliError(new AddonInstallFailed({ addon: "cilium", cause: "timeout" }))
   assert.match(message, /Failed to install addon cilium: timeout/)
+})
+
+it("renders BucketNotEmpty", () => {
+  const message = renderCliError(new BucketNotEmpty({ bucket: "staging-eu-backups", objectCount: 3 }))
+  assert.match(message, /staging-eu-backups.*3 object/)
+})
+
+it("renders SinkUnavailable", () => {
+  const message = renderCliError(new SinkUnavailable({ hint: "sops binary not found" }))
+  assert.match(message, /Credentials sink unavailable: sops binary not found/)
 })
 
 it("renders a CLI-only DistroNotWired error", () => {

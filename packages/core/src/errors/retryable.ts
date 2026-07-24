@@ -12,7 +12,9 @@ const retryableByTag: Record<KumuloErrorTag, boolean> = {
   ConfigInvalid: false,
   PlanRejected: false,
   BootstrapFailed: false,
-  AddonInstallFailed: false
+  AddonInstallFailed: false,
+  BucketNotEmpty: false,
+  SinkUnavailable: false
 }
 
 export const isRetryable = (error: KumuloError): boolean => retryableByTag[error._tag]

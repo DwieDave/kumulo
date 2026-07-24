@@ -66,6 +66,17 @@ export class AddonInstallFailed extends Data.TaggedError("AddonInstallFailed")<{
   readonly cause: string
 }> {}
 
+// Deleting a bucket that still has objects refuses rather than force-deleting
+// (scope.md decision 2026-07-24 — no force_destroy in v1).
+export class BucketNotEmpty extends Data.TaggedError("BucketNotEmpty")<{
+  readonly bucket: string
+  readonly objectCount: number
+}> {}
+
+export class SinkUnavailable extends Data.TaggedError("SinkUnavailable")<{
+  readonly hint: string
+}> {}
+
 export type KumuloError =
   | HttpTransportError
   | ResponseDecodeError
@@ -79,5 +90,9 @@ export type KumuloError =
   | PlanRejected
   | BootstrapFailed
   | AddonInstallFailed
+  | BucketNotEmpty
+  | SinkUnavailable
 
 export type KumuloErrorTag = KumuloError["_tag"]
+
+export type CredentialsSinkError = SinkUnavailable

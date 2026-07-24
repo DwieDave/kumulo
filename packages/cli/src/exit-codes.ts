@@ -21,7 +21,9 @@ const _codeByTag: Record<KumuloErrorTag, number> = {
   BootstrapFailed: 10,
   AddonInstallFailed: 11,
   HttpTransportError: 12,
-  ResponseDecodeError: 13
+  ResponseDecodeError: 13,
+  BucketNotEmpty: 14,
+  SinkUnavailable: 15
 }
 
 const _distroNotWiredCode = 20

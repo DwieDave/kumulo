@@ -25,7 +25,9 @@ export const cliErrorRegistry: RendererRegistry = {
       .join("\n"),
   PlanRejected: (error) => `Plan rejected: ${error.reason}`,
   BootstrapFailed: (error) => `Bootstrap failed on ${error.node} during ${error.phase}:\n${error.log}`,
-  AddonInstallFailed: (error) => `Failed to install addon ${error.addon}: ${error.cause}`
+  AddonInstallFailed: (error) => `Failed to install addon ${error.addon}: ${error.cause}`,
+  BucketNotEmpty: (error) => `Bucket ${error.bucket} still has ${error.objectCount} object(s); refusing to delete`,
+  SinkUnavailable: (error) => `Credentials sink unavailable: ${error.hint}`
 }
 
 export type CliDomainError = KumuloError | DistroNotWired | OutputsInvalid | PlatformError

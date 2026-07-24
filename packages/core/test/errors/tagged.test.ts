@@ -4,6 +4,7 @@ import {
   AddonInstallFailed,
   AuthenticationFailed,
   BootstrapFailed,
+  BucketNotEmpty,
   CapabilityMissing,
   ConfigInvalid,
   HttpTransportError,
@@ -12,7 +13,8 @@ import {
   QuotaExceeded,
   ResourceConflict,
   ResourceNotFound,
-  ResponseDecodeError
+  ResponseDecodeError,
+  SinkUnavailable
 } from "../../src/errors/tagged.ts"
 
 describe("tagged errors", () => {
@@ -85,5 +87,17 @@ describe("tagged errors", () => {
   it("AddonInstallFailed carries addon/cause", () => {
     const error = new AddonInstallFailed({ addon: "cilium", cause: "x" })
     expect(error._tag).toBe("AddonInstallFailed")
+  })
+
+  it("BucketNotEmpty carries bucket/objectCount", () => {
+    const error = new BucketNotEmpty({ bucket: "staging-eu-backups", objectCount: 3 })
+    expect(error._tag).toBe("BucketNotEmpty")
+    expect(error.objectCount).toBe(3)
+  })
+
+  it("SinkUnavailable carries a hint", () => {
+    const error = new SinkUnavailable({ hint: "sops binary not found" })
+    expect(error._tag).toBe("SinkUnavailable")
+    expect(error.hint).toBe("sops binary not found")
   })
 })

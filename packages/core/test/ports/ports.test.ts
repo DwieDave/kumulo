@@ -3,12 +3,14 @@
 // is the compile+runtime proof that the interfaces in src/ports are honest
 // contracts, not just types.
 import { describe, expect, it } from "@effect/vitest"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Redacted } from "effect"
 import { CloudProvider } from "../../src/ports/cloud-provider.ts"
+import { CredentialsSink } from "../../src/ports/credentials-sink.ts"
 import { ProviderProfile } from "../../src/ports/provider-profile.ts"
 import { Distro } from "../../src/ports/distro.ts"
 import { Addon } from "../../src/ports/addon.ts"
 import { DnsProvider } from "../../src/ports/dns-provider.ts"
+import { ObjectStorageProvider } from "../../src/ports/object-storage-provider.ts"
 import { VolumeProvider } from "../../src/ports/volume-provider.ts"
 
 describe("ports", () => {
@@ -121,5 +123,50 @@ describe("ports", () => {
         fake
       )
       expect(info.name).toBe("postgres-data")
+    }))
+
+  it.effect("ObjectStorageProvider resolves through a fake Layer", () =>
+    Effect.gen(function*() {
+      const fake = Layer.succeed(
+        ObjectStorageProvider,
+        ObjectStorageProvider.of({
+          listBuckets: () => Effect.succeed([]),
+          ensureBucket: (spec) => Effect.succeed({ name: spec.name, region: spec.region, endpoint: "s3.gra.io.cloud.ovh.net" }),
+          deleteBucket: () => Effect.void,
+          ensureCredentials: (clusterName) =>
+            Effect.succeed({
+              user: `kumulo-${clusterName}`,
+              accessKey: Redacted.make("access"),
+              secretKey: Redacted.make("secret"),
+              buckets: []
+            })
+        })
+      )
+      const bucket = yield* Effect.provide(
+        ObjectStorageProvider.pipe(
+          Effect.flatMap((osp) =>
+            osp.ensureBucket({ name: "staging-eu-backups", region: "DE1", versioning: false, encryption: false, retain: true })
+          )
+        ),
+        fake
+      )
+      expect(bucket.name).toBe("staging-eu-backups")
+    }))
+
+  it.effect("CredentialsSink resolves through a fake Layer", () =>
+    Effect.gen(function*() {
+      const fake = Layer.succeed(
+        CredentialsSink,
+        CredentialsSink.of({
+          write: () => Effect.void
+        })
+      )
+      yield* Effect.provide(
+        CredentialsSink.pipe(
+          Effect.flatMap((sink) => sink.write([{ key: "s3.accessKey", value: Redacted.make("access") }]))
+        ),
+        fake
+      )
+      expect(true).toBe(true)
     }))
 })

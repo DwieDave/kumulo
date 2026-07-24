@@ -2,6 +2,8 @@
 // minimal on purpose — the full config schema lives in a sibling package
 // under concurrent development; only the shapes ports need are defined here.
 
+import type { Redacted } from "effect"
+
 export type ClusterTag = string
 export type NodeRole = "master" | "worker"
 export type DistroKind = "k3s" | "ovh-mks"
@@ -116,6 +118,40 @@ export interface VolumeInfo {
 }
 export interface VolumeRef {
   readonly id: string
+}
+
+export interface BucketSpec {
+  readonly name: string
+  readonly region: string
+  readonly versioning: boolean
+  readonly encryption: boolean
+  readonly retain: boolean
+}
+export interface BucketInfo {
+  readonly name: string
+  readonly region: string
+  readonly endpoint: string
+}
+export interface BucketRef {
+  readonly name: string
+  readonly region: string
+}
+
+// One S3 user per cluster (R7); `accessKey`/`secretKey` are `Redacted` end to
+// end (N4) — never logged, never in plan output.
+export interface S3Credentials {
+  readonly user: string
+  readonly accessKey: Redacted.Redacted<string>
+  readonly secretKey: Redacted.Redacted<string>
+  readonly buckets: ReadonlyArray<BucketInfo>
+}
+
+// Resource-agnostic secret entry for `CredentialsSink` (D5+D6) — object
+// storage is the first producer, other secret-bearing resources (e.g.
+// postgres) reuse the same shape without the sink knowing about buckets.
+export interface CredentialEntry {
+  readonly key: string
+  readonly value: Redacted.Redacted<string>
 }
 
 // Minimal structural slice of ClusterConfig needed for cross-distro
