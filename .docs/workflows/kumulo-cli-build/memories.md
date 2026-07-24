@@ -1,5 +1,75 @@
 # Memories — Kumulo CLI Build
 
+## k3s integration gap closure — deleteServer, status, injectable K8sClient
+
+- **FR-2.7 scale-down bug found via TDD, not just the documented gap**:
+  `_drainOrphanedWorkers` previously computed orphans from
+  `infra.workerInfos` (the just-`ensureServer`'d nodes for the *current*
+  desired spec set) — since `ensureServer` is create-if-missing-by-name, a
+  shrunk pool's now-undesired worker is never touched by it and so never
+  appears in `infra.workerInfos` at all. Orphan detection was silently a
+  no-op. Fixed by having `_drainOrphanedWorkers` fetch the real tagged
+  inventory via `cloudProvider.listClusterResources(config.name)` and filter
+  to `-worker-`-named servers (same naming-convention filter
+  `kubeconfigK3sEffect` already uses to pick out masters) — *that's* what
+  gets compared against `orphanedWorkers`'s desired-name set. A reduced-repro
+  test (`Effect.provide` around a *single* combined two-apply sequence, not
+  one `Effect.provide` per apply) caught this: providing the same fake
+  `CloudProvider` `Layer` value twice via separate `Effect.provide` calls
+  rebuilds it fresh each time (fresh `Ref.make` state) — Layers aren't
+  memoized across separate provide-sites just because the JS variable is the
+  same. Wrap the whole multi-step sequence in one `Effect.gen` and
+  `Effect.provide` once around that if state must persist between steps.
+- **`CloudProvider.deleteServer`**: added to core's port +
+  `openstack`'s `CloudProviderLive` (DELETE + poll-until-404, mirroring
+  `ensureServer`'s `_waitActive` but the inverse — `_waitGone` repeats
+  `_serverStatus` until it fails with `ResourceNotFound`, `catchTag`s that
+  into success, and fails `ProvisioningTimeout` if the repeat budget (150 ×
+  2s) exhausts first). Every existing `CloudProvider` fake across
+  `core/test/fakes`, `core/test/ports`, `distro-k3s/test/e2e`,
+  `cli/test/k3s` needed the new method (compile-enforced by the
+  `Context.Service` interface, same as any port addition) — grep
+  `ensureServer:` across `packages/**/*.ts` test dirs to find every fake
+  when a `CloudProvider` port method is added.
+- **Injectable K8sClient seam (item 3)**: `k8sClientLive({config, master1})`
+  is now an exported `Layer.Layer<K8sClient, BootstrapFailed|ConfigInvalid,
+  Ssh>` (was a private `_liveK8sClient` Effect built and consumed inline).
+  `_installAddons`/`_drainOrphanedWorkers`/the new `k3sStatusEffect` all pull
+  `K8sClient` from context (`yield* K8sClient`) instead of taking it as a
+  hand-threaded parameter. Because the concrete kubeconfig-derived client can
+  only be built *after* `master1`'s IP is known at runtime (mid-pipeline,
+  not at any static Layer-composition point `applyK3s`/`k3sStatus` could
+  wire ahead of time), the seam is an **injectable factory parameter**
+  (`k8sClientLayer?: (args: {config, master1}) => Layer<K8sClient, ...>`,
+  defaulting to `k8sClientLive`) rather than a pure ambient-context swap —
+  production callers (`applyK3s`, `k3sStatus`) never pass it so wiring is
+  byte-identical; tests pass a fake `Layer.succeed(K8sClient, {...})`
+  builder instead. This is the same "constructor injection via default
+  param" idiom as `distro-not-wired.ts`'s dispatch, just at the Layer level.
+- **FR-10 k3s status**: `k3sStatusEffect({config, k8sClientLayer?})` —
+  inventory via `CloudProvider.listClusterResources` (no master found ⇒
+  `{exists: false, nodes: []}`, no k8s call attempted), else
+  `ensureLoadBalancer` for the endpoint display + a `K8sClient.list` of
+  `/api/v1/nodes` for per-node `Ready` condition parsing (`_nodeReady`/
+  `_nodeName`, plain `_field`/`_isRecord` narrowing — no type assertions,
+  `kumulo/no-type-assertion` forbids `as`). `commands/status.ts` now
+  dispatches `k3s` vs `ovh-mks` the same way `commands.ts`'s `_isK3s` branch
+  point does elsewhere, instead of the old blanket `DistroNotWired` gate
+  (that error type/its renderer/exit code stay — `create`/`kubeconfig`/
+  `delete`/`upgrade` don't reference `DistroNotWired` either since they
+  already dispatch on `config.distro` directly; it was only ever `status`'s
+  gate, now removed).
+- **`kumulo/no-multiple-function-params`**: applies to plain function
+  *types* too, not just implementations — `k8sClientLayer?: (config, master1)
+  => Layer<...>` in a type position tripped the oxlint rule just like a real
+  function declaration would; fixed the same way, single `{readonly config,
+  readonly master1}` object parameter.
+- `bun run ci` green: typecheck × 12 packages + tools, `build:binary`,
+  vitest 103 files/329 tests (+2 from this task's net additions), `lint:deps`
+  0 violations (329 modules/1078 deps), oxlint clean (3 pre-existing
+  `consistent-function-scoping` warnings, not errors), `codegen:check` clean.
+
+
 ## T0.1 — Bun workspaces skeleton
 
 **Pinned versions (all via a single Bun catalog in root `package.json` →
