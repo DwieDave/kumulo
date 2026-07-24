@@ -140,6 +140,21 @@
         "vitest": "catalog:",
       },
     },
+    "packages/secrets-sops": {
+      "name": "@kumulo/secrets-sops",
+      "version": "0.0.0",
+      "dependencies": {
+        "@kumulo/core": "workspace:*",
+        "effect": "catalog:",
+        "yaml": "catalog:",
+      },
+      "devDependencies": {
+        "@effect/platform-bun": "catalog:",
+        "@effect/vitest": "catalog:",
+        "fast-check": "catalog:",
+        "vitest": "catalog:",
+      },
+    },
     "packages/storage-ovh": {
       "name": "@kumulo/storage-ovh",
       "version": "0.0.0",
@@ -264,6 +279,8 @@
     "@kumulo/oxlint": ["@kumulo/oxlint@workspace:packages/oxlint"],
 
     "@kumulo/provider-ovh": ["@kumulo/provider-ovh@workspace:packages/provider-ovh"],
+
+    "@kumulo/secrets-sops": ["@kumulo/secrets-sops@workspace:packages/secrets-sops"],
 
     "@kumulo/storage-ovh": ["@kumulo/storage-ovh@workspace:packages/storage-ovh"],
 

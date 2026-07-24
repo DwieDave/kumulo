@@ -1,0 +1,21 @@
+{
+  "name": "@kumulo/secrets-sops",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "main": "src/index.ts",
+  "dependencies": {
+    "effect": "catalog:",
+    "yaml": "catalog:",
+    "@kumulo/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@effect/platform-bun": "catalog:",
+    "@effect/vitest": "catalog:",
+    "fast-check": "catalog:",
+    "vitest": "catalog:"
+  }
+}
