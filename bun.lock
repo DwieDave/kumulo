@@ -140,6 +140,20 @@
         "vitest": "catalog:",
       },
     },
+    "packages/storage-ovh": {
+      "name": "@kumulo/storage-ovh",
+      "version": "0.0.0",
+      "dependencies": {
+        "@kumulo/core": "workspace:*",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@effect/vitest": "catalog:",
+        "codegen": "workspace:*",
+        "ovh2openapi": "workspace:*",
+        "vitest": "catalog:",
+      },
+    },
     "packages/volumes-cinder": {
       "name": "@kumulo/volumes-cinder",
       "version": "0.0.0",
@@ -250,6 +264,8 @@
     "@kumulo/oxlint": ["@kumulo/oxlint@workspace:packages/oxlint"],
 
     "@kumulo/provider-ovh": ["@kumulo/provider-ovh@workspace:packages/provider-ovh"],
+
+    "@kumulo/storage-ovh": ["@kumulo/storage-ovh@workspace:packages/storage-ovh"],
 
     "@kumulo/volumes-cinder": ["@kumulo/volumes-cinder@workspace:packages/volumes-cinder"],
 

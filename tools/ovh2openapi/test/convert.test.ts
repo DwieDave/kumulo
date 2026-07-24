@@ -113,6 +113,21 @@ describe("convert", () => {
     })
   })
 
+  it("converts a date-typed model property to a formatted string schema (OVH storage lifecycle rules)", () => {
+    const schema = Effect.runSync(convertModels({
+      "cloud.StorageLifecycleRuleExpiration": {
+        id: "StorageLifecycleRuleExpiration",
+        namespace: "cloud",
+        properties: { date: { fullType: "date", required: false } }
+      }
+    }))
+    assert.deepStrictEqual(schema["cloud.StorageLifecycleRuleExpiration"], {
+      type: "object",
+      properties: { date: { type: "string", format: "date" } },
+      required: []
+    })
+  })
+
   it("fails with ConversionUnsupported for a non-string enum type", () => {
     const schema: OvhSchema = {
       apis: [],

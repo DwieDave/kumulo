@@ -79,6 +79,11 @@ const _ovhPipelines: Effect.Effect<ReadonlyArray<OvhPipeline>> = Effect.promise(
     name: "dns-ovh",
     outputPath: "../../packages/dns-ovh/src/generated/client.ts",
     generate: (await import("../../../../packages/dns-ovh/scripts/generate.ts")).generate
+  },
+  {
+    name: "storage-ovh",
+    outputPath: "../../packages/storage-ovh/src/generated/client.ts",
+    generate: (await import("../../../../packages/storage-ovh/scripts/generate.ts")).generate
   }
 ])
 

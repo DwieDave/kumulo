@@ -9,6 +9,7 @@ const _primitiveSchema = Match.type<string>().pipe(
   Match.when("uuid", (): OpenApiSchema => ({ type: "string", format: "uuid" })),
   Match.when("duration", (): OpenApiSchema => ({ type: "string", format: "duration" })),
   Match.when("datetime", (): OpenApiSchema => ({ type: "string", format: "date-time" })),
+  Match.when("date", (): OpenApiSchema => ({ type: "string", format: "date" })),
   Match.when("password", (): OpenApiSchema => ({ type: "string", format: "password" })),
   Match.when("ipv4Block", (): OpenApiSchema => ({ type: "string", format: "ipv4Block" })),
   Match.when("boolean", (): OpenApiSchema => ({ type: "boolean" })),
