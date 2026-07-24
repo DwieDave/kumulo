@@ -169,6 +169,7 @@ export const del = Command.make(
       if (_isK3s(config)) yield* deleteK3s(config)
       else yield* deleteMks(config)
       yield* Console.log(`${red("Deleted")} ${_isK3s(config) ? "cluster" : "mks-cluster"}/${config.name}`)
+      yield* _logApplied({ plan, prefixes: ["mks-pool/"] })
 
       // Retained volumes (`volumes.managed[].retain: true`) survive `delete`;
       // anything else recorded there is torn down alongside the cluster.
