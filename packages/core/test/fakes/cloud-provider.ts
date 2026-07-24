@@ -79,6 +79,10 @@ export const FakeCloudProviderLive: Layer.Layer<CloudProvider> = Layer.effect(
             )
           })
         ),
+      deleteServer: (ref) =>
+        Ref.update(servers, (current) => new Map([...current].filter(([name]) => name !== ref.name))).pipe(
+          Effect.asVoid
+        ),
       deleteByTag: (tag) =>
         Ref.update(servers, (current) => new Map([...current].filter(([, record]) => record.tag !== tag))).pipe(
           Effect.asVoid

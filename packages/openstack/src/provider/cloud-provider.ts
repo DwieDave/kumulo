@@ -225,6 +225,20 @@ export const ensureServer = ({ options, spec }: { readonly options: CloudProvide
     return { id, name: spec.name, ip: _serverIp(field({ value: detail, key: "server" })) }
   })
 
+const _waitGone = (options: CloudProviderOptions, id: string): R<void> =>
+  _serverStatus(options, id).pipe(
+    Effect.repeat({ schedule: Schedule.spaced("2 seconds"), times: 150 }),
+    Effect.flatMap(() => Effect.fail(new ProvisioningTimeout({ kind: "server", ref: id, lastStatus: "still present" }))),
+    Effect.catchTag("ResourceNotFound", () => Effect.void)
+  )
+
+// FR-2.7 — deletes a single server and waits until it's gone (404), for
+// scale-down's per-worker teardown (whole-cluster `deleteByTag` doesn't wait).
+export const deleteServer = ({ options, ref }: { readonly options: CloudProviderOptions; readonly ref: ServerInfo }): R<void> =>
+  restRequest({ service: "compute", region: options.region, path: `v2.1/servers/${ref.id}`, method: "DELETE", kind: "server", okStatuses: [404] }).pipe(
+    Effect.flatMap(() => _waitGone(options, ref.id))
+  )
+
 // ---- Inventory + delete --------------------------------------------------
 
 const _listServersByTag = (options: CloudProviderOptions): R<ReadonlyArray<Record<string, unknown>>> =>
@@ -346,6 +360,7 @@ export const CloudProviderLive = (options: CloudProviderOptions): Layer.Layer<Cl
         ensureSecurityGroups: (spec: SecGroupSpec) => run(ensureSecurityGroups({ options, spec })),
         ensureLoadBalancer: (spec: LbSpec) => run(ensureLoadBalancer({ options, spec })),
         ensureServer: (spec: ServerSpec) => run(ensureServer({ options, spec })),
+        deleteServer: (ref: ServerInfo) => run(deleteServer({ options, ref })),
         deleteByTag: (_tag: ClusterTag) => run(deleteByTag({ options })),
         listClusterResources: (_tag: ClusterTag) => run(listClusterResources({ options })),
         resolveImage: (ref: string) => run(resolveImage({ options, ref })),

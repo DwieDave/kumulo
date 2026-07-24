@@ -38,6 +38,9 @@ export class CloudProvider extends Context.Service<CloudProvider, {
   readonly ensureSecurityGroups: (spec: SecGroupSpec) => Effect.Effect<SecGroupInfo, CloudError>
   readonly ensureLoadBalancer: (spec: LbSpec) => Effect.Effect<LbInfo, CloudError>
   readonly ensureServer: (spec: ServerSpec) => Effect.Effect<ServerInfo, CloudError>
+  // FR-2.7 — scale-down: deletes one orphaned worker VM (waits until it's
+  // actually gone, so the caller can rely on the delete having landed).
+  readonly deleteServer: (ref: ServerInfo) => Effect.Effect<void, CloudError>
   readonly deleteByTag: (tag: ClusterTag) => Effect.Effect<void, CloudError>
   readonly listClusterResources: (tag: ClusterTag) => Effect.Effect<Inventory, CloudError>
   readonly resolveImage: (ref: ImageRef) => Effect.Effect<ImageId, CloudError>

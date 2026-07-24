@@ -21,6 +21,7 @@ describe("ports", () => {
           ensureSecurityGroups: () => Effect.succeed({ id: "sg-1" }),
           ensureLoadBalancer: () => Effect.succeed({ id: "lb-1", vip: "1.2.3.4" }),
           ensureServer: () => Effect.succeed({ id: "srv-1", name: "master-1", ip: "10.0.0.2" }),
+          deleteServer: () => Effect.void,
           deleteByTag: () => Effect.void,
           listClusterResources: () =>
             Effect.succeed({ servers: [], networks: [], securityGroups: [], loadBalancers: [] }),

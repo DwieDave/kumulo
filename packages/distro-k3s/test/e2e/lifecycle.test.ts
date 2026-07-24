@@ -47,6 +47,10 @@ const FakeCloudProviderLive: Layer.Layer<CloudProvider> = Layer.effect(
             return Ref.update(servers, (current) => new Map(current).set(spec.name, info)).pipe(Effect.as(info))
           })
         ),
+      deleteServer: (ref) =>
+        Ref.update(servers, (current) => new Map([...current].filter(([name]) => name !== ref.name))).pipe(
+          Effect.asVoid
+        ),
       deleteByTag: (_tag) => Ref.set(servers, new Map()),
       listClusterResources: (_tag) =>
         Ref.get(servers).pipe(
