@@ -20,4 +20,11 @@ describe("example configs", () => {
     expect(config.distro).toBe("ovh-mks")
     expect(config.name).toBe("staging-eu")
   })
+
+  it("k3s-hetzner.yaml decodes to a valid ClusterConfig", () => {
+    const config = Effect.runSync(parseConfigYaml(_load("k3s-hetzner.yaml")))
+    expect(config.distro).toBe("k3s")
+    expect(config.provider).toBe("hetzner")
+    expect(config.name).toBe("prod-fsn")
+  })
 })

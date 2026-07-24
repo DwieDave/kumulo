@@ -4,7 +4,8 @@ import { Effect } from "effect"
 import { installAddons } from "../src/install.ts"
 import { resolveAddons } from "../src/registry.ts"
 
-const cloudConf = {
+const cloudCredential = {
+  provider: "openstack" as const,
   authUrl: "https://auth.cloud.ovh.net/v3",
   region: "GRA",
   applicationCredentialId: "app-id",
@@ -39,11 +40,12 @@ it.effect("installs addon manifests in registry order, addon-by-addon", () =>
       addons: {
         cloud_controller_manager: true,
         cinder_csi: { enabled: true, default_volume_type: "classic" },
+        hcloud_csi: { enabled: false },
         system_upgrade_controller: true,
         cni: "cilium"
       },
       capabilities: ["cilium"],
-      cloudConf
+      cloudCredential
     })
 
     yield* installAddons({ k8sClient: _fakeK8sClient(log), addons, ctx: { clusterName: "test", capabilities: ["cilium"] } })

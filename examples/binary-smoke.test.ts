@@ -19,7 +19,9 @@ const _fakeEnv = {
   OS_USERNAME: "x",
   OS_PASSWORD: "x",
   OS_PROJECT_NAME: "x",
-  OS_REGION_NAME: "x"
+  OS_REGION_NAME: "x",
+  HCLOUD_TOKEN: "x",
+  HETZNER_DNS_TOKEN: "x"
 }
 
 describe.skipIf(!existsSync(_binary))("compiled kumulo binary", () => {
@@ -45,6 +47,17 @@ describe.skipIf(!existsSync(_binary))("compiled kumulo binary", () => {
     const out = execFileSync(
       _binary,
       ["create", "--config", join(_root, "examples", "k3s.yaml"), "--dry-run"],
+      { env: _fakeEnv, encoding: "utf8" }
+    )
+    expect(out).toContain("to create")
+  })
+
+  // k3s plans are config-only (buildK3sPlan, R13) — provider: hetzner prints
+  // the same shape without ever touching HCLOUD_TOKEN/the hcloud API.
+  it("create --dry-run prints a plan against the k3s-hetzner example", () => {
+    const out = execFileSync(
+      _binary,
+      ["create", "--config", join(_root, "examples", "k3s-hetzner.yaml"), "--dry-run"],
       { env: _fakeEnv, encoding: "utf8" }
     )
     expect(out).toContain("to create")

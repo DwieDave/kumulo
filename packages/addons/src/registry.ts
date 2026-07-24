@@ -4,21 +4,34 @@ import { Effect } from "effect"
 import type { CloudConf } from "./cloud-conf.ts"
 import { ciliumManifests } from "./manifests/cilium.ts"
 import { cinderCsiManifests } from "./manifests/cinder-csi.ts"
+import { hcloudCcmManifests } from "./manifests/hcloud-ccm.ts"
+import { hcloudCsiManifests } from "./manifests/hcloud-csi.ts"
 import { openstackCcmManifests } from "./manifests/openstack-ccm.ts"
 import { systemUpgradeControllerManifests } from "./manifests/system-upgrade-controller.ts"
 
 export interface AddonToggles {
   readonly cloud_controller_manager: boolean
   readonly cinder_csi: { readonly enabled: boolean; readonly default_volume_type: string }
+  readonly hcloud_csi: { readonly enabled: boolean }
   readonly system_upgrade_controller: boolean
   readonly cni: "flannel" | "cilium"
 }
+
+// R11 — one CCM/CSI credential shape per active cloud provider. The caller
+// (`_installAddons`, packages/cli/src/k3s/reconcile.ts) narrows its
+// `CloudCredentialEnv` port value down to this before calling
+// `resolveAddons` — `@kumulo/addons` never imports that CLI-side port
+// itself (dependency-cruiser: `cli` already depends on `addons`, an
+// `addons` -> `cli` import would cycle), it just matches its shape.
+export type CloudCredential =
+  | ({ readonly provider: "openstack" } & CloudConf)
+  | { readonly provider: "hetzner"; readonly token: string }
 
 export interface AddonSelectionInput {
   readonly distro: DistroKind
   readonly addons: AddonToggles
   readonly capabilities: ReadonlyArray<Capability>
-  readonly cloudConf: CloudConf
+  readonly cloudCredential: CloudCredential
 }
 
 // These three are always OVH-managed under ovh-mks (OCCM, cinder-csi
@@ -38,29 +51,44 @@ const _asAddon = ({ name, requiredCapabilities, manifests }: AsAddonParams): Add
   manifests: () => Effect.succeed(manifests)
 })
 
-// Install order: CNI first (pods need networking before anything else
-// schedules), then the two cloud-integration addons, then SUC last.
-const _toggledOn = (input: AddonSelectionInput): ReadonlyArray<Addon["Service"]> => [
-  ...(input.addons.cni === "cilium"
-    ? [_asAddon({ name: "cilium", requiredCapabilities: ["cilium"], manifests: ciliumManifests() })]
-    : []),
-  ...(input.addons.cloud_controller_manager
-    ? [_asAddon({ name: "openstack-ccm", requiredCapabilities: [], manifests: openstackCcmManifests(input.cloudConf) })]
-    : []),
-  ...(input.addons.cinder_csi.enabled
-    ? [_asAddon({
+/** CCM addon for whichever cloud is active — one shared toggle (`addons.cloud_controller_manager`), provider-branched manifests. */
+const _ccmAddon = (cloudCredential: CloudCredential): Addon["Service"] =>
+  cloudCredential.provider === "hetzner"
+    ? _asAddon({ name: "hcloud-ccm", requiredCapabilities: [], manifests: hcloudCcmManifests({ token: cloudCredential.token }) })
+    : _asAddon({ name: "openstack-ccm", requiredCapabilities: [], manifests: openstackCcmManifests(cloudCredential) })
+
+/** CSI addon: `cinder_csi`/`hcloud_csi` are mutually exclusive per the config schema's cross-field filters, matching `cloudCredential`'s tag 1:1. */
+const _csiAddon = (input: AddonSelectionInput): Addon["Service"] | undefined => {
+  const { cloudCredential } = input
+  if (cloudCredential.provider === "hetzner") {
+    return input.addons.hcloud_csi.enabled
+      ? _asAddon({ name: "hcloud-csi", requiredCapabilities: [], manifests: hcloudCsiManifests({ token: cloudCredential.token }) })
+      : undefined
+  }
+  return input.addons.cinder_csi.enabled
+    ? _asAddon({
       name: "cinder-csi",
       requiredCapabilities: [],
-      manifests: cinderCsiManifests({
-        conf: input.cloudConf,
-        defaultVolumeType: input.addons.cinder_csi.default_volume_type
-      })
-    })]
-    : []),
-  ...(input.addons.system_upgrade_controller
-    ? [_asAddon({ name: "system-upgrade-controller", requiredCapabilities: [], manifests: systemUpgradeControllerManifests() })]
-    : [])
-]
+      manifests: cinderCsiManifests({ conf: cloudCredential, defaultVolumeType: input.addons.cinder_csi.default_volume_type })
+    })
+    : undefined
+}
+
+// Install order: CNI first (pods need networking before anything else
+// schedules), then the two cloud-integration addons, then SUC last.
+const _toggledOn = (input: AddonSelectionInput): ReadonlyArray<Addon["Service"]> => {
+  const csi = _csiAddon(input)
+  return [
+    ...(input.addons.cni === "cilium"
+      ? [_asAddon({ name: "cilium", requiredCapabilities: ["cilium"], manifests: ciliumManifests() })]
+      : []),
+    ...(input.addons.cloud_controller_manager ? [_ccmAddon(input.cloudCredential)] : []),
+    ...(csi === undefined ? [] : [csi]),
+    ...(input.addons.system_upgrade_controller
+      ? [_asAddon({ name: "system-upgrade-controller", requiredCapabilities: [], manifests: systemUpgradeControllerManifests() })]
+      : [])
+  ]
+}
 
 export interface GateAddonsParams {
   readonly all: ReadonlyArray<Addon["Service"]>

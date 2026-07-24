@@ -1,9 +1,11 @@
-import { Config, Effect, Layer, Redacted, Schema } from "effect"
+import { Effect, Layer, Redacted, Schema } from "effect"
 import * as HttpClient from "effect/unstable/http/HttpClient"
 import {
   BootstrapFailed,
   CloudProvider,
+  ConfigInvalid,
   DnsProvider,
+  dnsNoopLive,
   K8sClient,
   makeK8sClient,
   parseKubeconfig,
@@ -17,7 +19,6 @@ import type {
   Capability,
   CloudError,
   ClusterConfig,
-  ConfigInvalid,
   DesiredRecord,
   DnsError,
   HttpTransportError,
@@ -49,7 +50,17 @@ import type { SshHost } from "@kumulo/distro-k3s"
 import { installAddons, resolveAddons } from "@kumulo/addons"
 import { CinderAuth } from "@kumulo/volumes-cinder"
 import { OpenStackEnv } from "../doctor-openstack/env.ts"
-import { k3sCloudProviderLayer, k3sDnsProviderLayer, k3sVolumeProviderLayer, secGroupRules } from "./env.ts"
+import {
+  CloudCredentialEnv,
+  k3sCloudCredentialLayer,
+  k3sCloudProviderLayer,
+  k3sDnsProviderLayer,
+  k3sHetznerCloudProviderLayer,
+  k3sHetznerDnsProviderLayer,
+  k3sHetznerVolumeProviderLayer,
+  k3sVolumeProviderLayer,
+  secGroupRules
+} from "./env.ts"
 import { k8sHttpClientLayer } from "./k8s-http-client.ts"
 import { buildK3sServerSpecs } from "./plan.ts"
 
@@ -131,26 +142,6 @@ const _bootstrap = (config: ClusterConfig, infra: Infra): Effect.Effect<SshHost,
     return masters[0]
   })
 
-// cloud.conf is rendered to a plain-string INI (`renderCloudConfIni`), so the
-// secret is unwrapped here at that render boundary rather than threaded as
-// `Redacted` through `@kumulo/addons`. `withDefault` only leaves the
-// never-reachable validation-error branch of `ConfigError` (plain/redacted
-// string schemas accept any string) — `orDie` documents that.
-const _cloudConfFromEnv = (region: string): Effect.Effect<{
-  readonly authUrl: string
-  readonly region: string
-  readonly applicationCredentialId: string
-  readonly applicationCredentialSecret: string
-}> =>
-  Effect.gen(function*() {
-    const authUrl = yield* Config.string("OS_AUTH_URL").pipe(Config.withDefault(""))
-    const applicationCredentialId = yield* Config.string("OS_APPLICATION_CREDENTIAL_ID").pipe(Config.withDefault(""))
-    const applicationCredentialSecret = yield* Config.redacted("OS_APPLICATION_CREDENTIAL_SECRET").pipe(
-      Config.withDefault(Redacted.make(""))
-    )
-    return { authUrl, region, applicationCredentialId, applicationCredentialSecret: Redacted.value(applicationCredentialSecret) }
-  }).pipe(Effect.orDie)
-
 /**
  * Injectable K8sClient seam: a `K8sClient` `Layer` built from master
  * 1's own (unrewritten) kubeconfig, fetched over `Ssh` — Addons/scale-down
@@ -171,33 +162,43 @@ export const k8sClientLive = (
     })
   )
 
-/** Addons phase. */
-const _installAddons = (config: ClusterConfig): Effect.Effect<void, AddonError, OpenStackEnv | K8sClient> =>
+/** Addons phase — `CloudCredentialEnv`'s union tag picks the CCM/CSI credential shape `@kumulo/addons` needs (R11). */
+const _installAddons = (config: ClusterConfig): Effect.Effect<void, AddonError, CloudCredentialEnv | K8sClient> =>
   Effect.gen(function*() {
     const k8sClient = yield* K8sClient
-    const env = yield* OpenStackEnv
-    const cloudConf = yield* _cloudConfFromEnv(env.region ?? "")
-    const addons = resolveAddons({ distro: "k3s", addons: config.addons, capabilities: _capabilities(config), cloudConf })
+    const cred = yield* CloudCredentialEnv
+    const cloudCredential = cred.provider === "hetzner"
+      ? { provider: "hetzner" as const, token: Redacted.value(cred.token) }
+      : {
+        provider: "openstack" as const,
+        authUrl: cred.authUrl,
+        region: cred.region,
+        applicationCredentialId: cred.applicationCredentialId,
+        applicationCredentialSecret: cred.applicationCredentialSecret
+      }
+    const addons = resolveAddons({ distro: "k3s", addons: config.addons, capabilities: _capabilities(config), cloudCredential })
     const ctx: AddonContext = { clusterName: config.name, capabilities: _capabilities(config) }
     yield* installAddons({ k8sClient, addons, ctx })
   })
 
-/** DNS phase: only wired for `dns.module: ovh` (the only implemented `DnsProvider`). */
+/**
+ * DNS phase: always runs against the resolved `DnsProvider` —
+ * `_dnsProviderLayerFor` is what makes `dns.module: none` a no-op and an
+ * unhandled module a loud `ConfigInvalid` (R6), not this call site.
+ */
 const _reconcileDns = (config: ClusterConfig, apiTarget: string): Effect.Effect<void, DnsError, DnsProvider> =>
-  config.dns.module !== "ovh"
-    ? Effect.void
-    : Effect.gen(function*() {
-      const dns = yield* DnsProvider
-      const records: ReadonlyArray<DesiredRecord> = config.dns.records.map((r) => ({
-        name: r.name,
-        target: r.target === "api_server" ? apiTarget : r.target
-      }))
-      yield* dns.ensureRecords(config.dns.zone, records)
-    })
+  Effect.gen(function*() {
+    const dns = yield* DnsProvider
+    const records: ReadonlyArray<DesiredRecord> = config.dns.records.map((r) => ({
+      name: r.name,
+      target: r.target === "api_server" ? apiTarget : r.target
+    }))
+    yield* dns.ensureRecords(config.dns.zone, records)
+  })
 
-/** Volumes phase: only wired for `volumes.module: cinder`. */
+/** Volumes phase: skipped for `volumes.module: none` — "cinder" and "hcloud" both converge through the resolved `VolumeProvider` (R2). */
 const _reconcileVolumes = (config: ClusterConfig): Effect.Effect<void, VolumeError, VolumeProvider> =>
-  config.volumes.module !== "cinder"
+  config.volumes.module === "none"
     ? Effect.void
     : Effect.gen(function*() {
       const provider = yield* VolumeProvider
@@ -257,13 +258,46 @@ const _writeKubeconfig = (
     return path
   })
 
-const _noopDns = { ensureRecords: () => Effect.void, removeClusterRecords: () => Effect.void }
+/**
+ * `dns.module` → `DnsProvider` Layer — one dispatch function, reused at
+ * every construction site below (R6). `"none"` is a no-op, `"ovh"`/`"hetzner"`
+ * hit their real providers, and any other value (today only `"designate"`)
+ * fails loudly with `ConfigInvalid` instead of silently degrading to a no-op.
+ */
+const _dnsProviderLayerFor = (
+  config: ClusterConfig
+): Layer.Layer<DnsProvider, AuthenticationFailed | ConfigInvalid, HttpClient.HttpClient> => {
+  const dnsModule = config.dns.module
+  if (dnsModule === "ovh") return k3sDnsProviderLayer()
+  if (dnsModule === "hetzner") return k3sHetznerDnsProviderLayer()
+  if (dnsModule === "none") return dnsNoopLive
+  return Layer.effect(
+    DnsProvider,
+    Effect.fail(
+      new ConfigInvalid({ issues: [{ path: ["dns", "module"], message: `dns.module "${dnsModule}" has no DnsProvider implementation` }] })
+    )
+  )
+}
 
-const _dnsLayer = (config: ClusterConfig): Layer.Layer<DnsProvider, AuthenticationFailed, HttpClient.HttpClient> =>
-  config.dns.module === "ovh" ? k3sDnsProviderLayer() : Layer.succeed(DnsProvider, _noopDns)
+/** `config.provider` → `CloudProvider` Layer (R2/R7) — every apply/delete/kubeconfig/status entry point below dispatches through this. */
+const _cloudProviderLayerFor = (
+  config: ClusterConfig
+): Layer.Layer<CloudProvider, AuthenticationFailed, OpenStackEnv | HttpClient.HttpClient> =>
+  config.provider === "hetzner" ? k3sHetznerCloudProviderLayer(config) : k3sCloudProviderLayer(config)
+
+/**
+ * `volumes.module` → `VolumeProvider` Layer. `"none"` and `"cinder"` both
+ * resolve through the existing Cinder-backed Layer (lazy, never-failing at
+ * build time — safe even when nothing is ever converged); only `"hcloud"`
+ * needs `HCLOUD_TOKEN`.
+ */
+const _volumeProviderLayerFor = (
+  config: ClusterConfig
+): Layer.Layer<VolumeProvider, AuthenticationFailed, CinderAuth | HttpClient.HttpClient> =>
+  config.volumes.module === "hcloud" ? k3sHetznerVolumeProviderLayer(config) : k3sVolumeProviderLayer({ tag: config.name })
 
 // The full self-managed (k3s) phase pipeline, expressed purely against the
-// ports (`CloudProvider`/`Ssh`/`DnsProvider`/`VolumeProvider`/`OpenStackEnv`) —
+// ports (`CloudProvider`/`Ssh`/`DnsProvider`/`VolumeProvider`/`CloudCredentialEnv`) —
 // kept separate from `applyK3s`'s live Layer wiring below so tests can
 // drive it against fake `CloudProvider`/`Ssh` Layers instead.
 //
@@ -279,7 +313,7 @@ export const applyK3sEffect = (
       args: { readonly config: ClusterConfig; readonly master1: SshHost }
     ) => Layer.Layer<K8sClient, BootstrapFailed | ConfigInvalid, Ssh>
   }
-): Effect.Effect<K3sApplyResult, K3sError, CloudProvider | Ssh | DnsProvider | VolumeProvider | OpenStackEnv> =>
+): Effect.Effect<K3sApplyResult, K3sError, CloudProvider | Ssh | DnsProvider | VolumeProvider | CloudCredentialEnv> =>
   Effect.gen(function*() {
     const infra = yield* _provisionInfra(config)
     const master1 = yield* _bootstrap(config, infra)
@@ -293,15 +327,16 @@ export const applyK3sEffect = (
     return { apiEndpoint: infra.lbVip, kubeconfigPath }
   })
 
-/** `applyK3sEffect` wired to its live Layers (OpenStack `CloudProvider`, real SSH, dns-ovh, Cinder). */
+/** `applyK3sEffect` wired to its live Layers, `config.provider`/`config.dns.module`/`config.volumes.module`-dispatched (R2/R6). */
 export const applyK3s = (
   args: { readonly config: ClusterConfig; readonly configDir: string }
 ): Effect.Effect<K3sApplyResult, K3sError, OpenStackEnv | CinderAuth | HttpClient.HttpClient> =>
   applyK3sEffect(args).pipe(
     Effect.provide(SshLive),
-    Effect.provide(k3sVolumeProviderLayer({ tag: args.config.name })),
-    Effect.provide(_dnsLayer(args.config)),
-    Effect.provide(k3sCloudProviderLayer(args.config))
+    Effect.provide(_volumeProviderLayerFor(args.config)),
+    Effect.provide(_dnsProviderLayerFor(args.config)),
+    Effect.provide(_cloudProviderLayerFor(args.config)),
+    Effect.provide(k3sCloudCredentialLayer(args.config))
   )
 
 /** Delete: inventory-by-tag, `retain: true` volumes skipped; ports-only, see `applyK3sEffect`. */
@@ -311,26 +346,24 @@ export const deleteK3sEffect = (
   Effect.gen(function*() {
     const volumeProvider = yield* VolumeProvider
     const cloudProvider = yield* CloudProvider
-    if (config.volumes.module === "cinder") {
+    const dns = yield* DnsProvider
+    if (config.volumes.module !== "none") {
       const existing = yield* volumeProvider.listClusterVolumes(config.name)
       for (const vol of existing) {
         const retained = config.volumes.managed.find((r) => r.name === vol.name)?.retain ?? false
         if (!retained) yield* volumeProvider.deleteVolume({ id: vol.id })
       }
     }
-    if (config.dns.module === "ovh") {
-      const dns = yield* DnsProvider
-      yield* dns.removeClusterRecords(config.dns.zone, config.name)
-    }
+    yield* dns.removeClusterRecords(config.dns.zone, config.name)
     yield* cloudProvider.deleteByTag(config.name)
   })
 
 /** `deleteK3sEffect` wired to its live Layers. */
 export const deleteK3s = (config: ClusterConfig): Effect.Effect<void, K3sError, OpenStackEnv | CinderAuth | HttpClient.HttpClient> =>
   deleteK3sEffect(config).pipe(
-    Effect.provide(k3sVolumeProviderLayer({ tag: config.name })),
-    Effect.provide(_dnsLayer(config)),
-    Effect.provide(k3sCloudProviderLayer(config))
+    Effect.provide(_volumeProviderLayerFor(config)),
+    Effect.provide(_dnsProviderLayerFor(config)),
+    Effect.provide(_cloudProviderLayerFor(config))
   )
 
 /** Kubeconfig: resolves the tagged inventory + LB, re-fetches from master 1; ports-only, see `applyK3sEffect`. */
@@ -351,7 +384,7 @@ export const kubeconfigK3s = (
 ): Effect.Effect<Kubeconfig, K3sError, OpenStackEnv | CinderAuth | HttpClient.HttpClient> =>
   kubeconfigK3sEffect(config).pipe(
     Effect.provide(SshLive),
-    Effect.provide(k3sCloudProviderLayer(config))
+    Effect.provide(_cloudProviderLayerFor(config))
   )
 
 export interface K3sNodeStatus {
@@ -424,5 +457,5 @@ export const k3sStatus = (
 ): Effect.Effect<K3sStatus, K3sError, OpenStackEnv | CinderAuth | HttpClient.HttpClient> =>
   k3sStatusEffect({ config }).pipe(
     Effect.provide(SshLive),
-    Effect.provide(k3sCloudProviderLayer(config))
+    Effect.provide(_cloudProviderLayerFor(config))
   )

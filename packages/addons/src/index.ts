@@ -21,6 +21,6 @@ export type { HcloudCredential } from "./hcloud-secret.ts"
 export { refFor } from "./resource-ref.ts"
 
 export { gateAddons, resolveAddons } from "./registry.ts"
-export type { AddonSelectionInput, AddonToggles } from "./registry.ts"
+export type { AddonSelectionInput, AddonToggles, CloudCredential } from "./registry.ts"
 
 export { installAddons } from "./install.ts"

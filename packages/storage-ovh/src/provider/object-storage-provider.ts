@@ -104,7 +104,7 @@ const _awaitUserReady = (
         : Effect.fail(new ResourceNotFound({ kind: "s3-user", ref: `${username} (status: ${user.status ?? "unknown"})` }))
     ),
     Effect.retry({
-      schedule: Schedule.spaced("3 seconds").pipe(Schedule.upTo({ elapsed: "2 minutes" })),
+      schedule: Schedule.spaced("3 seconds").pipe(Schedule.upTo({ duration: "2 minutes" })),
       while: (error) => error._tag === "ResourceNotFound"
     })
   )

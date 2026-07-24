@@ -44,6 +44,38 @@ exports[`dry-run plan against fake inventory (k3s) > partial inventory -> mix of
   = kumulo-prod-eu-worker-general-0"
 `;
 
+exports[`dry-run plan against fake inventory (k3s-hetzner) > complete matching inventory -> all no-ops, nothing to do (mks: except its always-Create volumes) 1`] = `
+"Plan: 0 to create, 0 to delete, 0 to update, 0 to replace, 3 unchanged.
+
+  = kumulo-prod-fsn-worker-general-0
+  = kumulo-prod-fsn-worker-general-1
+  = kumulo-prod-fsn-worker-general-2"
+`;
+
+exports[`dry-run plan against fake inventory (k3s-hetzner) > drifted inventory -> replace-needs-confirm, never a silent apply 1`] = `
+"Plan: 0 to create, 0 to delete, 0 to update, 3 to replace, 0 unchanged.
+
+  -/+ kumulo-prod-fsn-worker-general-0 (config-hash drifted from desired spec)
+  -/+ kumulo-prod-fsn-worker-general-1 (config-hash drifted from desired spec)
+  -/+ kumulo-prod-fsn-worker-general-2 (config-hash drifted from desired spec)"
+`;
+
+exports[`dry-run plan against fake inventory (k3s-hetzner) > empty inventory -> all creates 1`] = `
+"Plan: 3 to create, 0 to delete, 0 to update, 0 to replace, 0 unchanged.
+
+  + kumulo-prod-fsn-worker-general-0
+  + kumulo-prod-fsn-worker-general-1
+  + kumulo-prod-fsn-worker-general-2"
+`;
+
+exports[`dry-run plan against fake inventory (k3s-hetzner) > partial inventory -> mix of no-op and create 1`] = `
+"Plan: 2 to create, 0 to delete, 0 to update, 0 to replace, 1 unchanged.
+
+  + kumulo-prod-fsn-worker-general-1
+  + kumulo-prod-fsn-worker-general-2
+  = kumulo-prod-fsn-worker-general-0"
+`;
+
 exports[`dry-run plan against fake inventory (ovh-mks) > complete matching inventory -> all no-ops, nothing to do (mks: except its always-Create volumes) 1`] = `
 "Plan: 1 to create, 0 to delete, 0 to update, 0 to replace, 3 unchanged.
 

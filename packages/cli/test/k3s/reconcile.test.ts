@@ -9,7 +9,7 @@ import {
 } from "@kumulo/core"
 import type { ClusterConfigEncoded, DesiredRecord, K8sManifest, ServerInfo } from "@kumulo/core"
 import { Ssh, SshCommandError } from "@kumulo/distro-k3s"
-import { OpenStackEnv } from "../../src/doctor-openstack/env.ts"
+import { CloudCredentialEnv } from "../../src/k3s/env.ts"
 import { applyK3sEffect, deleteK3sEffect, k3sStatusEffect, orphanedWorkers } from "../../src/k3s/reconcile.ts"
 
 // Item 3 — the injectable K8sClient seam: a fake `K8sClient` Layer proves
@@ -83,10 +83,12 @@ const _encoded: ClusterConfigEncoded = {
 }
 const _config = Effect.runSync(decodeConfig(_encoded))
 
-const OpenStackEnvFake = Layer.succeed(OpenStackEnv, {
-  keystone: undefined,
+const CloudCredentialEnvFake = Layer.succeed(CloudCredentialEnv, {
+  provider: "openstack",
+  authUrl: "",
   region: "GRA11",
-  unavailableReason: undefined
+  applicationCredentialId: "",
+  applicationCredentialSecret: ""
 })
 
 // Tracking fakes (not no-ops) so create/delete can assert DNS + retained
@@ -192,7 +194,7 @@ describe("k3s CLI composition root", () => {
         Effect.provide(_FakeSshLive(log)),
         Effect.provide(_trackingVolumeProvider(volumeCalls)),
         Effect.provide(_trackingDnsProvider(dnsCalls)),
-        Effect.provide(OpenStackEnvFake),
+        Effect.provide(CloudCredentialEnvFake),
         Effect.provide(_fakeCloudProviderLive())
       )
 
@@ -235,7 +237,7 @@ describe("k3s CLI composition root", () => {
           Effect.provide(sshLayer),
           Effect.provide(_trackingVolumeProvider({ ensured: [], deleted: [] })),
           Effect.provide(_trackingDnsProvider({ ensured: [], removed: [] })),
-          Effect.provide(OpenStackEnvFake),
+          Effect.provide(CloudCredentialEnvFake),
           Effect.provide(cloudLayer)
         )
 
@@ -268,7 +270,7 @@ describe("k3s CLI composition root", () => {
       Effect.provide(_FakeSshLive(log)),
       Effect.provide(_trackingVolumeProvider({ ensured: [], deleted: [] })),
       Effect.provide(_trackingDnsProvider({ ensured: [], removed: [] })),
-      Effect.provide(OpenStackEnvFake),
+      Effect.provide(CloudCredentialEnvFake),
       Effect.provide(_fakeCloudProviderLive(deletedServers))
     )
   })
@@ -338,7 +340,7 @@ describe("k3s status", () => {
         Effect.provide(_FakeSshLive(log)),
         Effect.provide(_trackingVolumeProvider({ ensured: [], deleted: [] })),
         Effect.provide(_trackingDnsProvider({ ensured: [], removed: [] })),
-        Effect.provide(OpenStackEnvFake),
+        Effect.provide(CloudCredentialEnvFake),
         Effect.provide(_fakeCloudProviderLive())
       )
 
@@ -356,7 +358,7 @@ describe("k3s status", () => {
           Effect.provide(_FakeSshLive(log)),
           Effect.provide(_trackingVolumeProvider({ ensured: [], deleted: [] })),
           Effect.provide(_trackingDnsProvider({ ensured: [], removed: [] })),
-          Effect.provide(OpenStackEnvFake),
+          Effect.provide(CloudCredentialEnvFake),
           Effect.provide(_fakeCloudProviderLive())
         )
 
