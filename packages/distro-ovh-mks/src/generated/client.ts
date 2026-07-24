@@ -215,12 +215,14 @@ export const make = (
     HttpClientRequest.bodyJsonUnsafe(options.payload),
     withResponse(options.config)(HttpClientResponse.matchStatus({
       "200": () => Effect.void,
+      "204": () => Effect.void,
       orElse: unexpectedStatus
     }))
   ),
     "deleteCloudProjectServiceNameKubeKubeId": (serviceName, kubeId, options) => HttpClientRequest.delete(`/cloud/project/${serviceName}/kube/${kubeId}`).pipe(
     withResponse(options?.config)(HttpClientResponse.matchStatus({
       "200": () => Effect.void,
+      "204": () => Effect.void,
       orElse: unexpectedStatus
     }))
   ),
@@ -233,6 +235,7 @@ export const make = (
     "postCloudProjectServiceNameKubeKubeIdKubeconfigReset": (serviceName, kubeId, options) => HttpClientRequest.post(`/cloud/project/${serviceName}/kube/${kubeId}/kubeconfig/reset`).pipe(
     withResponse(options?.config)(HttpClientResponse.matchStatus({
       "200": () => Effect.void,
+      "204": () => Effect.void,
       orElse: unexpectedStatus
     }))
   ),
@@ -259,12 +262,14 @@ export const make = (
     HttpClientRequest.bodyJsonUnsafe(options.payload),
     withResponse(options.config)(HttpClientResponse.matchStatus({
       "200": () => Effect.void,
+      "204": () => Effect.void,
       orElse: unexpectedStatus
     }))
   ),
     "deleteCloudProjectServiceNameKubeKubeIdNodepoolNodePoolId": (serviceName, kubeId, nodePoolId, options) => HttpClientRequest.delete(`/cloud/project/${serviceName}/kube/${kubeId}/nodepool/${nodePoolId}`).pipe(
     withResponse(options?.config)(HttpClientResponse.matchStatus({
       "200": () => Effect.void,
+      "204": () => Effect.void,
       orElse: unexpectedStatus
     }))
   ),
@@ -272,6 +277,7 @@ export const make = (
     HttpClientRequest.bodyJsonUnsafe(options.payload),
     withResponse(options.config)(HttpClientResponse.matchStatus({
       "200": () => Effect.void,
+      "204": () => Effect.void,
       orElse: unexpectedStatus
     }))
   )

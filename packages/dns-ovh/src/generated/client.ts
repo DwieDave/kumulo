@@ -124,18 +124,21 @@ export const make = (
     HttpClientRequest.bodyJsonUnsafe(options.payload),
     withResponse(options.config)(HttpClientResponse.matchStatus({
       "200": () => Effect.void,
+      "204": () => Effect.void,
       orElse: unexpectedStatus
     }))
   ),
     "deleteRecord": (zoneName, id, options) => HttpClientRequest.delete(`/domain/zone/${zoneName}/record/${id}`).pipe(
     withResponse(options?.config)(HttpClientResponse.matchStatus({
       "200": () => Effect.void,
+      "204": () => Effect.void,
       orElse: unexpectedStatus
     }))
   ),
     "refreshZone": (zoneName, options) => HttpClientRequest.post(`/domain/zone/${zoneName}/refresh`).pipe(
     withResponse(options?.config)(HttpClientResponse.matchStatus({
       "200": () => Effect.void,
+      "204": () => Effect.void,
       orElse: unexpectedStatus
     }))
   )

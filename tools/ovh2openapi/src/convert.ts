@@ -113,7 +113,8 @@ function _requestBodyFor(
 }
 
 function _responses(responseType: string, models: Record<string, OvhModel>): Effect.Effect<OpenApiOperation["responses"], ConversionUnsupported> {
-  if (responseType === "void") return Effect.succeed({ "200": { description: "OK" } })
+  // OVH's schema says "void" but the API answers 200 or 204 depending on the route.
+  if (responseType === "void") return Effect.succeed({ "200": { description: "OK" }, "204": { description: "No Content" } })
   return typeToSchema({ fullType: responseType, models }).pipe(
     Effect.map((schema) => ({ "200": { description: "OK", content: { "application/json": { schema } } } }))
   )
