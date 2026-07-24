@@ -11,6 +11,7 @@ export {
   ensureNodePools,
   fetchKubeconfig,
   findClusterByName,
+  listNodePools,
   parseKubeVersion,
   upgrade
 } from "./distro/index.ts"

@@ -1,5 +1,5 @@
 import { assert, it } from "@effect/vitest"
-import { buildMksPlan, type MksPlanInput } from "../../src/mks/plan.ts"
+import { buildMksPlan, emptyMksInventory, type MksInventory, type MksPlanInput } from "../../src/mks/plan.ts"
 
 const _config: MksPlanInput = {
   name: "prod-eu",
@@ -7,8 +7,8 @@ const _config: MksPlanInput = {
   volumes: { module: "none", managed: [] }
 }
 
-it("one Create action per cluster plus one per worker pool", () => {
-  const plan = buildMksPlan(_config)
+it("one Create action per cluster plus one per worker pool on empty inventory", () => {
+  const plan = buildMksPlan(_config, emptyMksInventory)
   assert.deepStrictEqual(plan.actions, [
     { _tag: "Create", name: "mks-cluster/prod-eu" },
     { _tag: "Create", name: "mks-pool/prod-eu/workers" },
@@ -20,7 +20,7 @@ it("adds a Create action per managed volume when volumes.module is cinder", () =
   const plan = buildMksPlan({
     ..._config,
     volumes: { module: "cinder", managed: [{ name: "data" }, { name: "logs" }] }
-  })
+  }, emptyMksInventory)
   assert.deepStrictEqual(plan.actions, [
     { _tag: "Create", name: "mks-cluster/prod-eu" },
     { _tag: "Create", name: "mks-pool/prod-eu/workers" },
@@ -31,10 +31,34 @@ it("adds a Create action per managed volume when volumes.module is cinder", () =
 })
 
 it("shows no volume actions when volumes.module isn't cinder, even with managed entries present", () => {
-  const plan = buildMksPlan({ ..._config, volumes: { module: "none", managed: [{ name: "data" }] } })
+  const plan = buildMksPlan({ ..._config, volumes: { module: "none", managed: [{ name: "data" }] } }, emptyMksInventory)
   assert.deepStrictEqual(plan.actions, [
     { _tag: "Create", name: "mks-cluster/prod-eu" },
     { _tag: "Create", name: "mks-pool/prod-eu/workers" },
     { _tag: "Create", name: "mks-pool/prod-eu/gpu" }
   ])
+})
+
+it("existing resources plan as NoOp; missing ones as Create", () => {
+  const inventory: MksInventory = {
+    clusterExists: true,
+    poolNames: new Set(["workers"]),
+    volumeNames: new Set(["data"])
+  }
+  const plan = buildMksPlan({
+    ..._config,
+    volumes: { module: "cinder", managed: [{ name: "data" }, { name: "logs" }] }
+  }, inventory)
+  assert.deepStrictEqual(plan.actions, [
+    { _tag: "NoOp", name: "mks-cluster/prod-eu" },
+    { _tag: "NoOp", name: "mks-pool/prod-eu/workers" },
+    { _tag: "Create", name: "mks-pool/prod-eu/gpu" },
+    { _tag: "NoOp", name: "volume/data" },
+    { _tag: "Create", name: "volume/logs" }
+  ])
+})
+
+it("pools never plan as NoOp when the cluster itself is missing", () => {
+  const plan = buildMksPlan(_config, { clusterExists: false, poolNames: new Set(["workers", "gpu"]), volumeNames: new Set() })
+  assert.deepStrictEqual(plan.actions.map((a) => a._tag), ["Create", "Create", "Create"])
 })

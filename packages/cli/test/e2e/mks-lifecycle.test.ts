@@ -4,7 +4,7 @@ import { assert, it } from "@effect/vitest"
 import { loadConfig } from "../../src/config.ts"
 import { MksEnv } from "../../src/mks/env.ts"
 import { buildMksPlan } from "../../src/mks/plan.ts"
-import { applyMks, deleteMks, kubeconfigMks } from "../../src/mks/reconcile.ts"
+import { applyMks, deleteMks, kubeconfigMks, lookupMksInventory } from "../../src/mks/reconcile.ts"
 import { decidePlanAction, renderPlan } from "../../src/present.ts"
 import { makeFakeMksServer } from "./fake-mks-server.ts"
 import { makeMksClient } from "@kumulo/distro-ovh-mks"
@@ -78,7 +78,8 @@ it.effect("yaml → plan → apply → nodepool scale-update → kubeconfig → 
     const config = yield* loadConfig(_configPath)
     assert.strictEqual(config.distro, "ovh-mks")
 
-    const plan = buildMksPlan(config)
+    const inventory = yield* lookupMksInventory(config).pipe(Effect.provide(mksEnvLayer))
+    const plan = buildMksPlan(config, { ...inventory, volumeNames: new Set() })
     assert.strictEqual(plan.actions.length, 2)
     const decision = decidePlanAction({ plan, yes: true, dryRun: false })
     assert.strictEqual(decision._tag, "Proceed")
@@ -86,6 +87,11 @@ it.effect("yaml → plan → apply → nodepool scale-update → kubeconfig → 
 
     const info = yield* applyMks(config).pipe(Effect.provide(mksEnvLayer))
     assert.strictEqual(info.status, "READY")
+
+    // Re-plan against the now-populated fake API: everything exists -> all NoOp.
+    const after = yield* lookupMksInventory(config).pipe(Effect.provide(mksEnvLayer))
+    const replan = buildMksPlan(config, { ...after, volumeNames: new Set() })
+    assert.deepStrictEqual(replan.actions.map((a) => a._tag), ["NoOp", "NoOp"])
     assert.strictEqual([...server.pools.get(info.id)!.values()][0]?.desiredNodes, 3)
 
     // scale: re-run apply with a bumped worker count — same reconcile.

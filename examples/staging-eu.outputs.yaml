@@ -2,4 +2,4 @@ cluster: staging-eu
 volumes:
   - name: staging-eu-data
     id: 3a1f0884-de3b-437f-96f8-6172fa4e78a6
-    retain: true
+    retain: false

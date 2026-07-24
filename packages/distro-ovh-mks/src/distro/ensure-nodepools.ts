@@ -84,6 +84,18 @@ const _applyDiff = (
     yield* Effect.forEach(diff.toUpdate, ({ id, pool }) => _update({ mks, ref, id, pool }), { discard: true })
   })
 
+/** Read-only nodepool listing — powers real plan diffs without converging anything. */
+export const listNodePools = (
+  { mks, ref }: { readonly mks: Mks; readonly ref: MksClusterRef }
+): Effect.Effect<ReadonlyArray<ExistingNodePool>, MksError> =>
+  Effect.map(
+    mapMksError({
+      self: mks.getCloudProjectServiceNameKubeKubeIdNodepool(ref.serviceName, ref.kubeId, undefined),
+      ctx: { kind: "nodepool", ref: ref.kubeId }
+    }),
+    (raw) => raw.map(_toExisting)
+  )
+
 /** Converges MKS nodepools onto `worker_pools` (create/update/replace/delete, by name). */
 export const ensureNodePools = (
   { mks, ref, pools }: { readonly mks: Mks; readonly ref: MksClusterRef; readonly pools: ReadonlyArray<MksWorkerPoolConfig> }

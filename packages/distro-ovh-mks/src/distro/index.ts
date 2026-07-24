@@ -4,7 +4,7 @@
 // composes.
 export { ensureCluster, findClusterByName } from "./ensure-cluster.ts"
 export { parseKubeVersion } from "./parse-kube-version.ts"
-export { ensureNodePools } from "./ensure-nodepools.ts"
+export { ensureNodePools, listNodePools } from "./ensure-nodepools.ts"
 export { fetchKubeconfig } from "./kubeconfig.ts"
 export { upgrade } from "./upgrade.ts"
 export { deleteCluster } from "./delete.ts"

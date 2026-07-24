@@ -4,7 +4,7 @@ buckets:
     region: DE
     versioning: false
     encryption: false
-    retain: true
+    retain: false
   - name: staging-eu-logs
     region: DE
     versioning: true

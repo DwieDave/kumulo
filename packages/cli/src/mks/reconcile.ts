@@ -7,12 +7,14 @@ import {
   ensureNodePools,
   fetchKubeconfig,
   findClusterByName,
+  listNodePools,
   parseKubeVersion,
   type MksClusterConfig,
   type MksClusterRef,
   type MksWorkerPoolConfig
 } from "@kumulo/distro-ovh-mks"
 import { MksEnv } from "./env.ts"
+import type { MksInventory } from "./plan.ts"
 
 const _toPool = (pool: ClusterConfig["worker_pools"][number]): MksWorkerPoolConfig => ({
   name: pool.name,
@@ -33,6 +35,22 @@ const _toMksConfig = (
   region: config.auth.region,
   worker_pools: config.worker_pools.map(_toPool)
 })
+
+/**
+ * Live cluster/nodepool existence for the plan. `volumeNames` is filled in by
+ * the caller (a Cinder lookup lives in `commands/volumes.ts`, not here).
+ */
+export const lookupMksInventory = (
+  config: ClusterConfig
+): Effect.Effect<Omit<MksInventory, "volumeNames">, MksError, MksEnv> =>
+  Effect.gen(function*() {
+    const { mks, serviceName } = yield* MksEnv
+    const mksConfig = _toMksConfig({ config, serviceName })
+    const info = yield* findClusterByName({ mks, config: mksConfig })
+    if (info === undefined) return { clusterExists: false, poolNames: new Set<string>() }
+    const pools = yield* listNodePools({ mks, ref: { serviceName, kubeId: info.id } })
+    return { clusterExists: true, poolNames: new Set(pools.map((pool) => pool.name)) }
+  })
 
 /** Converge control plane + nodepools onto the config (create and scale share this). */
 export const applyMks = (

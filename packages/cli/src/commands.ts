@@ -4,13 +4,13 @@ import { Command } from "effect/unstable/cli"
 import type { ClusterConfig, Plan } from "@kumulo/core"
 import { ovhObjectStorageProviderLive } from "@kumulo/storage-ovh"
 import { loadConfig } from "./config.ts"
-import { convergeManagedVolumes, reconcileVolumesOnDelete, volumes } from "./commands/volumes.ts"
+import { convergeManagedVolumes, lookupManagedVolumeNames, reconcileVolumesOnDelete, volumes } from "./commands/volumes.ts"
 import { status } from "./commands/status.ts"
 import { upgrade } from "./commands/upgrade.ts"
 import { buildK3sPlan } from "./k3s/plan.ts"
 import { applyK3s, deleteK3s, kubeconfigK3s } from "./k3s/reconcile.ts"
 import { buildMksPlan } from "./mks/plan.ts"
-import { applyMks, deleteMks, kubeconfigMks } from "./mks/reconcile.ts"
+import { applyMks, deleteMks, kubeconfigMks, lookupMksInventory } from "./mks/reconcile.ts"
 import { StorageEnv, storageLayers } from "./storage/env.ts"
 import { bucketPlanActions, convergeBuckets, reconcileBucketsOnDelete } from "./storage/reconcile.ts"
 import { decidePlanAction, renderPlan } from "./present.ts"
@@ -26,13 +26,26 @@ const _isK3s = (config: ClusterConfig): boolean => config.distro === "k3s"
 // compiles against the same config shape but never converges buckets.
 const _isOvhStorage = (config: ClusterConfig): boolean => !_isK3s(config) && config.object_storage.module === "ovh"
 
+// Live plan for the ovh-mks path: cluster/pool existence via the OVH API,
+// volume existence via Cinder — spec drift still converges through the
+// idempotent ensure* verbs without showing here (see `buildMksPlan`).
+const _mksPlanLive = (config: ClusterConfig) =>
+  Effect.gen(function*() {
+    const mks = yield* lookupMksInventory(config)
+    const volumeNames = yield* lookupManagedVolumeNames(config)
+    return buildMksPlan(config, { ...mks, volumeNames })
+  })
+
 /** Config → plan → present → apply, shared by `create` and `scale`. */
 const _applyFlow = Effect.fn(function*() {
   const root = yield* kumulo
   const config = yield* loadConfig(root.config)
   const configDir = dirname(root.config)
-  const basePlan = _isK3s(config) ? buildK3sPlan(config) : buildMksPlan(config)
-  const bucketActions = _isOvhStorage(config) ? yield* bucketPlanActions({ config, configDir }) : []
+  const storageLayer = _isOvhStorage(config) ? yield* storageLayers(config) : undefined
+  const basePlan = _isK3s(config) ? buildK3sPlan(config) : yield* _mksPlanLive(config)
+  const bucketActions = storageLayer === undefined
+    ? []
+    : yield* bucketPlanActions({ config, configDir }).pipe(Effect.provide(storageLayer))
   const plan: Plan = { actions: [...basePlan.actions, ...bucketActions] }
   const decision = decidePlanAction({ plan, yes: root.yes, dryRun: root.dryRun })
   yield* Console.log(renderPlan(plan))
@@ -58,9 +71,8 @@ const _applyFlow = Effect.fn(function*() {
 
   // Buckets converge only after the cluster is READY, credentials are
   // written last (R6/R7 ordering) — both handled inside `convergeBuckets`.
-  if (_isOvhStorage(config)) {
-    const layer = yield* storageLayers(config)
-    yield* convergeBuckets({ config, configDir }).pipe(Effect.provide(layer))
+  if (storageLayer !== undefined) {
+    yield* convergeBuckets({ config, configDir }).pipe(Effect.provide(storageLayer))
   }
 })
 

@@ -32,36 +32,52 @@ const _bucketDiff = (
   })
 
 /**
- * Plan actions for `object_storage.buckets` (R5) — diffed against the
- * last-recorded outputs file, never a live OVH call: OVH has no concept of
- * `retain` and doesn't expose `encryption` on its list endpoint, so kumulo's
- * own record is the only source that can answer "does this still need to
- * exist" for a bucket dropped from config (see `@kumulo/storage-ovh`'s
- * `outputs.ts`).
+ * Plan actions for `object_storage.buckets` (R5). The retain/encryption diff
+ * comes from the last-recorded outputs file (OVH can't answer those), but
+ * existence is verified live: a bucket the record calls converged that no
+ * longer exists on OVH plans as Create, not NoOp.
  */
 export const bucketPlanActions = (
   { config, configDir }: { readonly config: ClusterConfig; readonly configDir: string }
-): Effect.Effect<ReadonlyArray<PlanAction>, OutputsInvalid | PlatformError, FileSystem> =>
+): Effect.Effect<ReadonlyArray<PlanAction>, ObjectStorageError | OutputsInvalid | PlatformError, ObjectStorageProvider | FileSystem> =>
   config.object_storage.module !== "ovh"
     ? Effect.succeed([])
-    : Effect.map(_bucketDiff({ config, configDir }), (diff) => [
-      ...diff.toCreate.map((b) => ({ _tag: "Create" as const, name: `bucket/${b.name}` })),
-      ...diff.toUpdate.map((u) => ({ _tag: "Create" as const, name: `bucket/${u.spec.name}` })),
-      ...diff.toReplace.map((r) => ({
-        _tag: "ReplaceNeedsConfirm" as const,
-        name: `bucket/${r.spec.name}`,
-        reason: "region or encryption changed (immutable, delete+recreate)"
-      })),
-      ...diff.toDelete.map((ref) => ({ _tag: "Delete" as const, name: `bucket/${ref.name}` })),
-      ...diff.noop.map((ref) => ({ _tag: "NoOp" as const, name: `bucket/${ref.name}` }))
-    ])
+    : Effect.gen(function*() {
+      const diff = yield* _bucketDiff({ config, configDir })
+      const provider = yield* ObjectStorageProvider
+      const regions = [...new Set(diff.noop.map((ref) => ref.region))]
+      const live = yield* Effect.forEach(regions, provider.listBuckets)
+      const liveNames = new Set(live.flat().map((bucket) => bucket.name))
+      return [
+        ...diff.toCreate.map((b) => ({ _tag: "Create" as const, name: `bucket/${b.name}` })),
+        ...diff.toUpdate.map((u) => ({ _tag: "Create" as const, name: `bucket/${u.spec.name}` })),
+        ...diff.toReplace.map((r) => ({
+          _tag: "ReplaceNeedsConfirm" as const,
+          name: `bucket/${r.spec.name}`,
+          reason: "region or encryption changed (immutable, delete+recreate)"
+        })),
+        ...diff.toDelete.map((ref) => ({ _tag: "Delete" as const, name: `bucket/${ref.name}` })),
+        ...diff.noop.map((ref) =>
+          liveNames.has(ref.name)
+            ? { _tag: "NoOp" as const, name: `bucket/${ref.name}` }
+            : { _tag: "Create" as const, name: `bucket/${ref.name}` }
+        )
+      ]
+    })
 
 /** Applies one bucket diff via the provider — replace is delete-then-recreate (region/encryption are immutable on OVH's side). */
 const _applyBucketDiff = (
-  { provider, diff }: { readonly provider: StorageProvider; readonly diff: BucketDiff }
+  { provider, diff, desired }: { readonly provider: StorageProvider; readonly diff: BucketDiff; readonly desired: ReadonlyArray<BucketSpec> }
 ): Effect.Effect<void, ObjectStorageError> =>
   Effect.gen(function*() {
     yield* Effect.forEach(diff.toCreate, provider.ensureBucket, { discard: true })
+    // Heal out-of-band deletions: a bucket the outputs file says is converged
+    // may have been removed behind kumulo's back — `ensureBucket` checks live
+    // state and only creates when actually missing, so re-ensuring noops is
+    // both cheap and safe.
+    const byName = new Map(desired.map((spec) => [spec.name, spec]))
+    const noopSpecs = diff.noop.flatMap((ref) => byName.get(ref.name) ?? [])
+    yield* Effect.forEach(noopSpecs, provider.ensureBucket, { discard: true })
     yield* Effect.forEach(diff.toUpdate, (u) => provider.ensureBucket(u.spec), { discard: true })
     yield* Effect.forEach(
       diff.toReplace,
@@ -130,7 +146,7 @@ export const convergeBuckets = (
     const desired = _desiredBuckets(config)
     const diff = diffBuckets({ desired, existing: file.buckets })
 
-    yield* _applyBucketDiff({ provider, diff })
+    yield* _applyBucketDiff({ provider, diff, desired })
 
     const desiredNames = new Set(desired.map((bucket) => bucket.name))
     const retainedOrphans = file.buckets.filter((bucket) => !desiredNames.has(bucket.name) && bucket.retain)

@@ -41,7 +41,7 @@ volumes:
     - name: staging-eu-data
       size_gb: 10
       type: classic
-      retain: true
+      retain: false
       pvc:
         namespace: default
         access_modes:
@@ -53,7 +53,7 @@ object_storage:
       region: DE
       versioning: false
       encryption: false
-      retain: true
+      retain: false
     - name: staging-eu-logs
       region: DE
       versioning: true

@@ -107,6 +107,17 @@ const _toManagedSpec = (entry: ClusterConfig["volumes"]["managed"][number]): Vol
  * (unlike k3s's `installAddons`, run against a fetched kubeconfig) — once one
  * exists, apply `staticVolumeManifests` here too instead of only recording ids.
  */
+/** Names of the cluster's live Cinder volumes for the plan — empty (no OpenStack call) when nothing is managed. */
+export const lookupManagedVolumeNames = (
+  config: ClusterConfig
+): Effect.Effect<ReadonlySet<string>, VolumeError, CinderAuth | HttpClient.HttpClient> =>
+  Effect.gen(function*() {
+    if (config.volumes.module !== "cinder" || config.volumes.managed.length === 0) return new Set<string>()
+    const provider = yield* Effect.provide(VolumeProvider, VolumeProviderLive({ tag: config.name }))
+    const existing = yield* provider.listClusterVolumes(config.name)
+    return new Set(existing.map((volume) => volume.name))
+  })
+
 export const convergeManagedVolumes = (
   { config, configDir }: { readonly config: ClusterConfig; readonly configDir: string }
 ): Effect.Effect<void, VolumeError | OutputsInvalid | PlatformError, CinderAuth | HttpClient.HttpClient | FileSystem> =>

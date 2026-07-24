@@ -1,4 +1,4 @@
-import type { Plan } from "@kumulo/core"
+import type { Plan, PlanAction } from "@kumulo/core"
 
 // Structural slice of `ClusterConfig` (same pattern as core's
 // `ClusterConfigShape`) — keeps this module's test fixtures minimal instead
@@ -12,19 +12,33 @@ export interface MksPlanInput {
   }
 }
 
-// ponytail: a real Create/NoOp/Delete diff needs a read-only cluster/nodepool
-// (and Cinder volume) lookup by name, which distro-ovh-mks/volumes-cinder
-// don't currently export (only the idempotent ensure* verbs). Every resource
-// is presented as "Create" regardless of whether it already exists;
-// `ensureCluster`/`ensureNodePools`/`ensureVolume` are the actual convergence
-// and are genuinely idempotent, so this only affects what the plan *prints*,
-// not what apply does. Upgrade to a real diff once a lookup is exported.
-export const buildMksPlan = (config: MksPlanInput): Plan => ({
+/** Live existence, as looked up right before planning (see `lookupMksInventory`). */
+export interface MksInventory {
+  readonly clusterExists: boolean
+  readonly poolNames: ReadonlySet<string>
+  readonly volumeNames: ReadonlySet<string>
+}
+
+export const emptyMksInventory: MksInventory = {
+  clusterExists: false,
+  poolNames: new Set(),
+  volumeNames: new Set()
+}
+
+const _createOrNoOp = (exists: boolean, name: string): PlanAction =>
+  exists ? { _tag: "NoOp", name } : { _tag: "Create", name }
+
+// Existence-only diff: spec drift (flavor, autoscaling, size) still converges
+// via the idempotent ensure* verbs without showing as Replace here — those
+// fields aren't exposed by the lookups yet.
+export const buildMksPlan = (config: MksPlanInput, inventory: MksInventory): Plan => ({
   actions: [
-    { _tag: "Create", name: `mks-cluster/${config.name}` },
-    ...config.worker_pools.map((pool) => ({ _tag: "Create" as const, name: `mks-pool/${config.name}/${pool.name}` })),
+    _createOrNoOp(inventory.clusterExists, `mks-cluster/${config.name}`),
+    ...config.worker_pools.map((pool) =>
+      _createOrNoOp(inventory.clusterExists && inventory.poolNames.has(pool.name), `mks-pool/${config.name}/${pool.name}`)
+    ),
     ...(config.volumes.module === "cinder"
-      ? config.volumes.managed.map((v) => ({ _tag: "Create" as const, name: `volume/${v.name}` }))
+      ? config.volumes.managed.map((v) => _createOrNoOp(inventory.volumeNames.has(v.name), `volume/${v.name}`))
       : [])
   ]
 })

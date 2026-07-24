@@ -97,13 +97,21 @@ interface FakeProviderCalls {
   readonly ensureBucket: Array<BucketSpec>
   readonly deleteBucket: Array<BucketRef>
   readonly ensureCredentialsCalls: Array<ClusterTag>
+  // Buckets that "exist on OVH" before the test runs — plan existence checks
+  // and heal behavior read live state through listBuckets.
+  readonly live?: Array<BucketRef>
 }
 
 const _fakeProviderLayer = (calls: FakeProviderCalls) =>
   Layer.succeed(
     ObjectStorageProvider,
     ObjectStorageProvider.of({
-      listBuckets: (region) => Effect.succeed(calls.ensureBucket.filter((b) => b.region === region).map(_bucketInfo)),
+      listBuckets: (region) =>
+        Effect.succeed(
+          [...(calls.live ?? []), ...calls.ensureBucket]
+            .filter((b) => b.region === region)
+            .map(_bucketInfo)
+        ),
       ensureBucket: (spec) => {
         calls.ensureBucket.push(spec)
         return Effect.succeed(_bucketInfo(spec))
@@ -138,14 +146,16 @@ const _fakeSinkLayer = (writes: Array<ReadonlyArray<CredentialEntry>>) =>
 it.effect("bucketPlanActions is empty when object_storage.module is none", () =>
   Effect.gen(function*() {
     const config = yield* parseConfigYaml(_yaml(_noBucketsYaml))
-    const actions = yield* bucketPlanActions({ config, configDir: "." }).pipe(Effect.provide(_fakeFs()))
+    const layer = Layer.merge(_fakeFs(), _fakeProviderLayer({ ensureBucket: [], deleteBucket: [], ensureCredentialsCalls: [] }))
+    const actions = yield* bucketPlanActions({ config, configDir: "." }).pipe(Effect.provide(layer))
     assert.deepStrictEqual(actions, [])
   }))
 
 it.effect("bucketPlanActions shows a Create for a bucket missing from recorded outputs", () =>
   Effect.gen(function*() {
     const config = yield* parseConfigYaml(_yaml(_oneBucketYaml))
-    const actions = yield* bucketPlanActions({ config, configDir: "." }).pipe(Effect.provide(_fakeFs()))
+    const layer = Layer.merge(_fakeFs(), _fakeProviderLayer({ ensureBucket: [], deleteBucket: [], ensureCredentialsCalls: [] }))
+    const actions = yield* bucketPlanActions({ config, configDir: "." }).pipe(Effect.provide(layer))
     assert.deepStrictEqual(actions, [{ _tag: "Create", name: "bucket/staging-eu-backups" }])
   }))
 
@@ -156,7 +166,16 @@ it.effect("bucketPlanActions shows NoOp once outputs match desired", () =>
       cluster: "staging",
       buckets: [{ name: "staging-eu-backups", region: "DE1", versioning: false, encryption: false, retain: true }]
     })
-    const actions = yield* bucketPlanActions({ config, configDir: "." }).pipe(Effect.provide(_fakeFs(seed)))
+    const layer = Layer.merge(
+      _fakeFs(seed),
+      _fakeProviderLayer({
+        ensureBucket: [],
+        deleteBucket: [],
+        ensureCredentialsCalls: [],
+        live: [{ name: "staging-eu-backups", region: "DE1" }]
+      })
+    )
+    const actions = yield* bucketPlanActions({ config, configDir: "." }).pipe(Effect.provide(layer))
     assert.deepStrictEqual(actions, [{ _tag: "NoOp", name: "bucket/staging-eu-backups" }])
   }))
 
@@ -167,7 +186,8 @@ it.effect("bucketPlanActions shows ReplaceNeedsConfirm on immutable drift (encry
       cluster: "staging",
       buckets: [{ name: "staging-eu-backups", region: "DE1", versioning: false, encryption: true, retain: true }]
     })
-    const actions = yield* bucketPlanActions({ config, configDir: "." }).pipe(Effect.provide(_fakeFs(seed)))
+    const layer = Layer.merge(_fakeFs(seed), _fakeProviderLayer({ ensureBucket: [], deleteBucket: [], ensureCredentialsCalls: [] }))
+    const actions = yield* bucketPlanActions({ config, configDir: "." }).pipe(Effect.provide(layer))
     assert.strictEqual(actions.length, 1)
     assert.strictEqual(actions[0]?._tag, "ReplaceNeedsConfirm")
   }))
@@ -179,7 +199,8 @@ it.effect("bucketPlanActions shows a Delete for a non-retained bucket dropped fr
       cluster: "staging",
       buckets: [{ name: "orphan", region: "DE1", versioning: false, encryption: false, retain: false }]
     })
-    const actions = yield* bucketPlanActions({ config, configDir: "." }).pipe(Effect.provide(_fakeFs(seed)))
+    const layer = Layer.merge(_fakeFs(seed), _fakeProviderLayer({ ensureBucket: [], deleteBucket: [], ensureCredentialsCalls: [] }))
+    const actions = yield* bucketPlanActions({ config, configDir: "." }).pipe(Effect.provide(layer))
     assert.deepStrictEqual(actions, [{ _tag: "Delete", name: "bucket/orphan" }])
   }))
 
@@ -274,4 +295,34 @@ it.effect("bucketStatus reports recorded buckets + whether the credentials file 
     const info = yield* bucketStatus({ config, configDir: "." }).pipe(Effect.provide(_fakeFs(seed)))
     assert.strictEqual(info.credentialsExist, true)
     assert.deepStrictEqual(info.buckets.map((b) => b.name), ["staging-eu-backups"])
+  }))
+
+it.effect("bucketPlanActions plans Create for a recorded bucket deleted out-of-band", () =>
+  Effect.gen(function*() {
+    const config = yield* parseConfigYaml(_yaml(_oneBucketYaml))
+    const seed = _outputsSeed(".", {
+      cluster: "staging",
+      buckets: [{ name: "staging-eu-backups", region: "DE1", versioning: false, encryption: false, retain: true }]
+    })
+    // No `live` seeding: OVH no longer has the bucket.
+    const layer = Layer.merge(_fakeFs(seed), _fakeProviderLayer({ ensureBucket: [], deleteBucket: [], ensureCredentialsCalls: [] }))
+    const actions = yield* bucketPlanActions({ config, configDir: "." }).pipe(Effect.provide(layer))
+    assert.deepStrictEqual(actions, [{ _tag: "Create", name: "bucket/staging-eu-backups" }])
+  }))
+
+it.effect("convergeBuckets re-ensures recorded (noop) buckets so out-of-band deletions heal", () =>
+  Effect.gen(function*() {
+    const config = yield* parseConfigYaml(_yaml(_oneBucketYaml))
+    const seed = _outputsSeed(".", {
+      cluster: "staging",
+      buckets: [{ name: "staging-eu-backups", region: "DE1", versioning: false, encryption: false, retain: true }]
+    })
+    const calls: FakeProviderCalls = { ensureBucket: [], deleteBucket: [], ensureCredentialsCalls: [] }
+    const writes: Array<ReadonlyArray<CredentialEntry>> = []
+    const layer = Layer.mergeAll(_fakeProviderLayer(calls), _fakeSinkLayer(writes), _fakeFs(seed))
+
+    yield* convergeBuckets({ config, configDir: "." }).pipe(Effect.provide(layer))
+
+    // The diff says noop, but the bucket still goes through ensureBucket.
+    assert.deepStrictEqual(calls.ensureBucket.map((b) => b.name), ["staging-eu-backups"])
   }))
