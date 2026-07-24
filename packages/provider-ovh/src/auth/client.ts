@@ -35,8 +35,11 @@ export const ovhHttpClientLayer = (
                 })
               ))
           )
-        ),
-        HttpClient.filterStatusOk
+        )
+        // No filterStatusOk here: the generated clients match statuses
+        // themselves and capture OVH's JSON error body into the error
+        // description — filtering first would replace it with a generic
+        // "non 2xx status code".
       )
     })
   )
