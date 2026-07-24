@@ -85,7 +85,6 @@ const _applyFlow = Effect.fn(function*() {
   // depend on buckets, sequenced inside `convergeBuckets`) — converge all
   // three concurrently.
   const mksStep = applyMks(config).pipe(
-    Effect.tap((info) => Console.log(`Cluster "${config.name}" is ${info.status} (${info.apiEndpoint}).`)),
     Effect.tap(() => _logApplied({ plan, prefixes: ["mks-cluster/", "mks-pool/"] }))
   )
   // Same Cinder-backed volumes as the k3s path's `_reconcileVolumes`
@@ -100,7 +99,8 @@ const _applyFlow = Effect.fn(function*() {
       Effect.provide(storageLayer),
       Effect.tap(() => _logApplied({ plan, prefixes: ["bucket/"] }))
     )
-  yield* Effect.all([mksStep, volumesStep, bucketsStep], { concurrency: 3 })
+  const [info] = yield* Effect.all([mksStep, volumesStep, bucketsStep], { concurrency: 3 })
+  yield* Console.log(`\nCluster "${config.name}" is ${info.status} (${info.apiEndpoint}).`)
 })
 
 export const create = Command.make("create", {}, _applyFlow).pipe(
