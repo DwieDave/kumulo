@@ -2,7 +2,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { buildFr57Rules } from "../../src/provider/security-group-rules.ts"
 
 describe("buildFr57Rules", () => {
-  it("encodes every FR-5.7 rule for flannel", () => {
+  it("encodes every security group rule for flannel", () => {
     const rules = buildFr57Rules({
       allowedSshCidrs: ["1.2.3.0/24"],
       allowedApiCidrs: ["4.5.6.0/24"],

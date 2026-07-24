@@ -93,7 +93,7 @@ const _noopK8sClient: K8sClient["Service"] = {
   evict: (_ns: string, _pod: string) => Effect.void
 }
 
-describe("AC-2 k3s full lifecycle", () => {
+describe("k3s full lifecycle", () => {
   it.effect("provisions HA masters + 2 pools, bootstraps, and fetches a rewritten kubeconfig", () =>
     Effect.gen(function*() {
       const specs = [

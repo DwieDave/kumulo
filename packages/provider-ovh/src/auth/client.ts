@@ -4,7 +4,7 @@ import * as HttpClientError from "effect/unstable/http/HttpClientError"
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
 import { OvhAuth } from "./port.ts"
 
-/** OVH API v1 base URL (design §4.5 — MKS `kube`/`nodepool`, DNS `domain/zone` routes). */
+/** OVH API v1 base URL — used by MKS `kube`/`nodepool` and DNS `domain/zone` routes. */
 export const OVH_API_BASE_URL = "https://eu.api.ovh.com/1.0"
 
 /**

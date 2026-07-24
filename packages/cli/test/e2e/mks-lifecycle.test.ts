@@ -64,7 +64,7 @@ const _fsTestLayer = layerNoop({
   readFileString: () => Effect.succeed(_yaml)
 })
 
-it.effect("yaml → plan → apply → nodepool scale-update → kubeconfig → delete (AC-3, fixture-replayed OVH API)", () =>
+it.effect("yaml → plan → apply → nodepool scale-update → kubeconfig → delete (fixture-replayed OVH API)", () =>
   Effect.gen(function*() {
     const server = makeFakeMksServer()
     const mksEnvLayer = Layer.succeed(MksEnv, { mks: makeMksClient(server.httpClient), serviceName: "service-1" })

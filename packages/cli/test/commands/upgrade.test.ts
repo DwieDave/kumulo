@@ -66,7 +66,7 @@ const _fakeHttpClient = (sucDeploymentExists: boolean) => {
   return { client, requests: () => requests, gets: () => gets }
 }
 
-describe("upgrade command — SUC Plan apply (FR-5.6)", () => {
+describe("upgrade command — SUC Plan apply", () => {
   it.effect("applies masters then workers Plans via SSA, skipping the SUC readiness wait when already installed", () =>
     Effect.gen(function*() {
       const { client, requests } = _fakeHttpClient(true)

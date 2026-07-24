@@ -1,8 +1,7 @@
 #!/usr/bin/env bun
 // Regenerates src/releases/fixture.ts from the live rancher/k3s GitHub tags —
 // run manually (`bun run scripts/refresh-releases.ts`), never in CI/tests
-// (offline requirement, FR-5.6). Mirrors the `@effect/openapi-generator`
-// specs-update-script precedent: a one-shot, human-triggered refresh.
+// (tests must stay offline): a one-shot, human-triggered refresh.
 const _isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null
 
 const _tagName = (value: unknown): string | undefined => {

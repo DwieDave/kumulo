@@ -109,8 +109,7 @@ const _ensureSucReady = (k8sClient: K8sClient["Service"]) =>
 
 // Applies the SUC Plan CRs through the in-house k8s SSA client:
 // masters first (workers' `prepare` step polls the masters Plan by name, so
-// applying it second would only cost an extra reconcile loop, not correctness,
-// but masters-first matches the upstream hetzner-k3s ordering this ports).
+// applying it second would only cost an extra reconcile loop, not correctness).
 export const applyK3sUpgradeWith = (
   { config, workerConcurrency, k8sClient }: {
     readonly config: ClusterConfig

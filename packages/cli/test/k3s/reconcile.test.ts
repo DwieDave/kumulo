@@ -178,7 +178,7 @@ const _FakeSshLive = (log: SshLog): Layer.Layer<Ssh> =>
 
 const _configWithWorkerCount = (count: number) => Effect.runSync(decodeConfig({ ..._encoded, worker_pools: [{ name: "general", flavor: "b3-16", count }] }))
 
-describe("k3s CLI composition root (FR-2.3/FR-5)", () => {
+describe("k3s CLI composition root", () => {
   it.effect("create: provisions HA masters + a worker pool, DNS, retained volume, TLS SANs, readiness gates, kubeconfig", () =>
     Effect.gen(function*() {
       const log: SshLog = { executed: [], cloudInitGates: [], clusterInfoGates: [] }
@@ -246,7 +246,7 @@ describe("k3s CLI composition root (FR-2.3/FR-5)", () => {
       expect(deletedServers).toEqual([])
     }))
 
-  it.effect("scale down: FR-2.7 drains (through the fake K8sClient seam) AND deletes the orphaned worker's VM", () => {
+  it.effect("scale down: drains (through the fake K8sClient seam) AND deletes the orphaned worker's VM", () => {
     const log: SshLog = { executed: [], cloudInitGates: [], clusterInfoGates: [] }
     const deletedServers: Array<string> = []
     const cordonedNodes: Array<string> = []
@@ -270,7 +270,7 @@ describe("k3s CLI composition root (FR-2.3/FR-5)", () => {
     )
   })
 
-  it("scale down: a worker no longer in the desired spec set is the one FR-2.7 drains", () => {
+  it("scale down: a worker no longer in the desired spec set is the one that drains", () => {
     const workerInfos: ReadonlyArray<ServerInfo> = [
       { id: "1", name: "kumulo-test-k3s-worker-general-1", ip: "10.0.0.4" },
       { id: "2", name: "kumulo-test-k3s-worker-general-2", ip: "10.0.0.5" }
@@ -281,7 +281,7 @@ describe("k3s CLI composition root (FR-2.3/FR-5)", () => {
     expect(orphanedWorkers({ config: _configWithWorkerCount(2), workerInfos })).toEqual([])
   })
 
-  it.effect("delete: reverse teardown — retained volume kept, owned DNS records removed, servers deleted by tag (FR-2.6)", () =>
+  it.effect("delete: reverse teardown — retained volume kept, owned DNS records removed, servers deleted by tag", () =>
     Effect.gen(function*() {
       const dnsCalls: DnsCalls = { ensured: [], removed: [] }
       const volumeCalls: VolumeCalls = { ensured: [], deleted: [] }
@@ -292,14 +292,14 @@ describe("k3s CLI composition root (FR-2.3/FR-5)", () => {
         Effect.provide(_fakeCloudProviderLive())
       )
 
-      // `retain: true` -> never deleted (AC-7).
+      // `retain: true` -> never deleted.
       expect(volumeCalls.deleted).toEqual([])
       // Owned DNS records for this cluster's zone are removed.
       expect(dnsCalls.removed).toEqual(["test-k3s"])
     }))
 })
 
-describe("k3s status (FR-10)", () => {
+describe("k3s status", () => {
   const _nodeManifest = (name: string, ready: boolean): K8sManifest => ({
     apiVersion: "v1",
     kind: "Node",

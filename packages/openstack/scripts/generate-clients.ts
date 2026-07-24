@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * Regenerates the six OpenStack generated clients (`src/generated/<service>.ts`)
- * from the vendored specs, per FR-4.1's filter -> patch -> generate pipeline.
+ * from the vendored specs, via a filter -> patch -> generate pipeline.
  *
  * Run via `bun run generate` in this package, or the root `specs:update:openstack`
  * flow (re-fetch specs, then re-run this to pick up upstream changes). CI does

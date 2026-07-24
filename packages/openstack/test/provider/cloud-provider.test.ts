@@ -43,7 +43,7 @@ describe("openstack CloudProvider", () => {
     }).pipe(Effect.provide(fake.layer))
   })
 
-  it.effect("ensureSecurityGroups decodes FR-5.7 rules and tolerates already-applied (409) rules", () => {
+  it.effect("ensureSecurityGroups decodes security group rules and tolerates already-applied (409) rules", () => {
     const fake = makeFakeOpenStack({
       "GET /v2.0/security-groups": () => ({ status: 200, body: { security_groups: [] } }),
       "POST /v2.0/security-groups": () => ({ status: 201, body: { security_group: { id: "sg-1" } } }),

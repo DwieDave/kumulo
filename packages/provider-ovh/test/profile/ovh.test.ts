@@ -12,7 +12,7 @@ const baseConfig: ClusterConfigShape = {
   volumes: { retained: [{ type: "classic" }] }
 }
 
-it("ovh profile defaults per design §3.2", () => {
+it("ovh profile defaults", () => {
   const profile = makeOvhProfile("GRA5")
   assert.strictEqual(profile.name, "ovh")
   assert.strictEqual(profile.defaults.externalNetworkName, "Ext-Net")
@@ -28,7 +28,7 @@ it.effect("accepts a valid HA config in an Octavia region with an OVH volume typ
     yield* profile.validate(baseConfig)
   }))
 
-it.effect("rejects HA control plane in a region without Octavia (FR-1.4)", () =>
+it.effect("rejects HA control plane in a region without Octavia", () =>
   Effect.gen(function*() {
     const profile = makeOvhProfile("BHS1")
     const result = yield* Effect.flip(profile.validate({ ...baseConfig, auth: { region: "BHS1" } }))

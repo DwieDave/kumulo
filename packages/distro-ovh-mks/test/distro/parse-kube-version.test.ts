@@ -2,7 +2,7 @@ import { Effect } from "effect"
 import { assert, it } from "@effect/vitest"
 import { parseKubeVersion } from "../../src/distro/parse-kube-version.ts"
 
-it.effect("FR-6.1 — a plain semver config version maps onto OVH's major.minor enum", () =>
+it.effect("a plain semver config version maps onto OVH's major.minor enum", () =>
   Effect.gen(function*() {
     assert.strictEqual(yield* parseKubeVersion("1.31.0"), "1.31")
     assert.strictEqual(yield* parseKubeVersion("v1.34.2"), "1.34")

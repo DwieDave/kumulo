@@ -65,7 +65,7 @@ k3s:
 
 const _fsTestLayer = layerNoop({ readFileString: () => Effect.succeed(_yaml) })
 
-it.effect("FR-2.6 — delete against a nonexistent MKS cluster is a no-op, never creates one", () =>
+it.effect("delete against a nonexistent MKS cluster is a no-op, never creates one", () =>
   Effect.gen(function*() {
     const config = yield* loadConfig("cluster.yaml")
     const server = makeFakeMksServer()

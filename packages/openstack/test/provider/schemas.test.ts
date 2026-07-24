@@ -18,7 +18,7 @@ describe("decodeListField / decodeSingleField", () => {
     expect(failure).toBeInstanceOf(ResourceNotFound)
   })
 
-  it("decodeListField tolerates entries missing id/name (lenient FR-4.6 decode)", async () => {
+  it("decodeListField tolerates entries missing id/name (lenient decode)", async () => {
     const decode = decodeListField({ itemSchema: NamedResource, listField: "networks", kind: "network" })
     const result = await Effect.runPromise(decode({ networks: [{ id: "net-1", extra: "ignored" }] }))
     expect(result).toEqual([{ id: "net-1" }])

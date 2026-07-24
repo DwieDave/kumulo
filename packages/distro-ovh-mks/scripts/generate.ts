@@ -1,7 +1,7 @@
 /**
  * Regenerates `src/generated/client.ts` from the vendored OVH v1 `cloud.json`
- * schema (FR-4.3/4.5). Run with `bun run scripts/generate.ts` from this
- * package's directory; output is committed, not built at CI time (T3.4).
+ * schema. Run with `bun run scripts/generate.ts` from this package's
+ * directory; output is committed, not built at CI time.
  *
  * Order: trim (this package's allowlist, at OVH-schema level — path+method,
  * plus a transitive model closure) -> ovh2openapi `convert` -> `codegen`
@@ -13,7 +13,7 @@
  * whole thing through `convert` hits `ConversionUnsupported` on constructs
  * used by unrelated (non-MKS) routes. Filtering the OVH schema itself to
  * only the allowlisted apis/models keeps `convert` inside constructs it
- * actually supports. See memories.md T3.4 entry.
+ * actually supports.
  */
 import { readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"

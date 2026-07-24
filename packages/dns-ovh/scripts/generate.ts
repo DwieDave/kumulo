@@ -1,7 +1,7 @@
 /**
  * Regenerates `src/generated/client.ts` from the vendored OVH v1 `domain.json`
- * schema (FR-4.3/4.5). Run with `bun run scripts/generate.ts` from this
- * package's directory; output is committed, not built at CI time (T3.4).
+ * schema. Run with `bun run scripts/generate.ts` from this package's
+ * directory; output is committed, not built at CI time.
  *
  * See `packages/distro-ovh-mks/scripts/generate.ts` for the pipeline order
  * and the "why trim before convert" rationale (same shape, different spec —

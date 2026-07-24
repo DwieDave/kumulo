@@ -71,7 +71,7 @@ describe("convert", () => {
     assert.strictEqual(error.detail, "x.NotAModel")
   })
 
-  it("converts an OVH map[K]V type to an open object schema (T3.4: OVH MKS labels/annotations)", () => {
+  it("converts an OVH map[K]V type to an open object schema (OVH MKS labels/annotations)", () => {
     const schema = Effect.runSync(convertModels({
       "cloud.kube.NodePoolTemplateMetadata": {
         id: "NodePoolTemplateMetadata",
@@ -86,7 +86,7 @@ describe("convert", () => {
     })
   })
 
-  it("converts uuid/duration-typed model properties to formatted string schemas (T3.4: OVH MKS ids/timers)", () => {
+  it("converts uuid/duration-typed model properties to formatted string schemas (OVH MKS ids/timers)", () => {
     const doc = Effect.runSync(
       convert({
         apiVersion: "1.0",
