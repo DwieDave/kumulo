@@ -158,6 +158,27 @@ export const convergeBuckets = (
   })
 
 /**
+ * Delete-plan rows from the recorded outputs: non-retained buckets as
+ * Delete, retained ones as NoOp tagged "(retained)" so the plan shows why
+ * they survive.
+ */
+export const bucketDeletePlanActions = (
+  { config, configDir }: { readonly config: ClusterConfig; readonly configDir: string }
+): Effect.Effect<ReadonlyArray<PlanAction>, OutputsInvalid | PlatformError, FileSystem> =>
+  Effect.gen(function*() {
+    if (config.object_storage.module !== "ovh") return []
+    const file = yield* readOutputs({ dir: configDir, tag: config.name })
+    const diff = diffBuckets({ desired: [], existing: file.buckets })
+    return [
+      ...diff.toDelete.map((ref) => ({ _tag: "Delete" as const, name: `bucket/${ref.name}` })),
+      ...file.buckets.filter((bucket) => bucket.retain).map((bucket) => ({
+        _tag: "NoOp" as const,
+        name: `bucket/${bucket.name} (retained)`
+      }))
+    ]
+  })
+
+/**
  * `delete` (R11): removes every non-retained recorded bucket (R6 refuses a
  * non-empty one, surfaced as-is — nothing else here is rolled back). Retained
  * buckets stay recorded in the outputs file so a future rebuild still sees

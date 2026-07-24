@@ -5,7 +5,7 @@ import { CredentialsSink, ObjectStorageProvider, parseConfigYaml } from "@kumulo
 import type { BucketInfo, BucketRef, BucketSpec, ClusterTag, CredentialEntry } from "@kumulo/core"
 import { stringifyOutputsYaml } from "@kumulo/storage-ovh"
 import type { OutputsFile } from "@kumulo/storage-ovh"
-import { bucketPlanActions, bucketStatus, convergeBuckets, reconcileBucketsOnDelete } from "../../src/storage/reconcile.ts"
+import { bucketDeletePlanActions, bucketPlanActions, bucketStatus, convergeBuckets, reconcileBucketsOnDelete } from "../../src/storage/reconcile.ts"
 
 const _yaml = (bucketsYaml: string) => `
 name: staging
@@ -326,4 +326,21 @@ it.effect("convergeBuckets re-ensures recorded (noop) buckets so out-of-band del
 
     // The diff says noop, but the bucket still goes through ensureBucket.
     assert.deepStrictEqual(calls.ensureBucket.map((b) => b.name), ["staging-eu-backups"])
+  }))
+
+it.effect("bucketDeletePlanActions: Delete for non-retained, NoOp \"(retained)\" for retained", () =>
+  Effect.gen(function*() {
+    const config = yield* parseConfigYaml(_yaml(_emptyBucketsOvhYaml))
+    const seed = _outputsSeed(".", {
+      cluster: "staging",
+      buckets: [
+        { name: "drop-me", region: "DE1", versioning: false, encryption: false, retain: false },
+        { name: "keep-me", region: "DE1", versioning: false, encryption: false, retain: true }
+      ]
+    })
+    const actions = yield* bucketDeletePlanActions({ config, configDir: "." }).pipe(Effect.provide(_fakeFs(seed)))
+    assert.deepStrictEqual(actions, [
+      { _tag: "Delete", name: "bucket/drop-me" },
+      { _tag: "NoOp", name: "bucket/keep-me (retained)" }
+    ])
   }))

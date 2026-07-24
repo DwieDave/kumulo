@@ -12,7 +12,7 @@ import { applyK3s, deleteK3s, kubeconfigK3s } from "./k3s/reconcile.ts"
 import { buildMksPlan } from "./mks/plan.ts"
 import { applyMks, deleteMks, kubeconfigMks, lookupMksInventory } from "./mks/reconcile.ts"
 import { StorageEnv, storageLayers } from "./storage/env.ts"
-import { bucketPlanActions, convergeBuckets, reconcileBucketsOnDelete } from "./storage/reconcile.ts"
+import { bucketDeletePlanActions, bucketPlanActions, convergeBuckets, reconcileBucketsOnDelete } from "./storage/reconcile.ts"
 import { decidePlanAction, dim, green, red, renderPlan, yellow } from "./present.ts"
 import { kumulo } from "./root.ts"
 
@@ -121,6 +121,28 @@ export const kubeconfig = Command.make(
   })
 ).pipe(Command.withDescription("Print the cluster's kubeconfig"))
 
+// Delete plan: cluster + non-retained volumes as Delete rows; retained
+// volumes as NoOp "(retained)"; buckets from the recorded outputs. Volume
+// rows only appear for volumes that actually exist on Cinder right now.
+const _deletePlan = Effect.fn(function*(config: ClusterConfig, configDir: string) {
+  const clusterAction = _isK3s(config)
+    ? [{ _tag: "Delete" as const, name: `cluster/${config.name}` }]
+    : (yield* lookupMksInventory(config)).clusterExists
+    ? [{ _tag: "Delete" as const, name: `mks-cluster/${config.name}` }]
+    : [{ _tag: "NoOp" as const, name: `mks-cluster/${config.name} (already absent)` }]
+  const liveVolumes = yield* lookupManagedVolumeNames(config)
+  const volumeActions = config.volumes.managed
+    .filter((entry) => liveVolumes.has(entry.name))
+    .map((entry) =>
+      entry.retain
+        ? { _tag: "NoOp" as const, name: `volume/${entry.name} (retained)` }
+        : { _tag: "Delete" as const, name: `volume/${entry.name}` }
+    )
+  const bucketActions = yield* bucketDeletePlanActions({ config, configDir })
+  const plan: Plan = { actions: [...clusterAction, ...volumeActions, ...bucketActions] }
+  return plan
+})
+
 export const del = Command.make(
   "delete",
   {},
@@ -128,6 +150,9 @@ export const del = Command.make(
     const root = yield* kumulo
     const config = yield* loadConfig(root.config)
 
+    const plan = yield* _deletePlan(config, dirname(root.config))
+    yield* Console.log(`${renderPlan(plan)}\n`)
+    if (root.dryRun) return
     if (!root.yes) {
       yield* Console.log(`Re-run with --yes to delete cluster "${config.name}".`)
       return
@@ -137,7 +162,7 @@ export const del = Command.make(
     const clusterAndVolumesStep = Effect.gen(function*() {
       if (_isK3s(config)) yield* deleteK3s(config)
       else yield* deleteMks(config)
-      yield* Console.log(`${red("Deleted")} mks-cluster/${config.name}`)
+      yield* Console.log(`${red("Deleted")} ${_isK3s(config) ? "cluster" : "mks-cluster"}/${config.name}`)
 
       // Retained volumes (`volumes.managed[].retain: true`) survive `delete`;
       // anything else recorded there is torn down alongside the cluster.
