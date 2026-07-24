@@ -3,7 +3,8 @@ import type { ClusterTag, VolumeError, VolumeInfo, VolumeRef, VolumeSpec } from 
 import { Effect, Layer } from "effect"
 import type { HttpClient } from "effect/unstable/http"
 import { CinderAuth } from "./auth.ts"
-import { asArray, cinderRequest, field, stringField, isRecord } from "./rest.ts"
+import { cinderRequest } from "./rest.ts"
+import { decodeVolumeSingle, decodeVolumesList, type VolumeRecord } from "./schemas.ts"
 import { staticPvManifest } from "./manifests.ts"
 
 export interface VolumeProviderOptions {
@@ -18,27 +19,22 @@ type R<A> = Effect.Effect<A, VolumeError, Deps>
 // name-prefix scheme (design §3.6: ensure-by-tag+name).
 const _tagMetadataKey = "kumulo_cluster"
 
-const _volumeInfo = (record: unknown): VolumeInfo => ({
-  id: stringField({ value: record, key: "id" }),
-  name: stringField({ value: record, key: "name" })
+const _volumeInfo = (record: VolumeRecord): VolumeInfo => ({
+  id: record.id ?? "",
+  name: record.name ?? ""
 })
 
-const _metadataTag = (record: unknown): string =>
-  stringField({ value: field({ value: record, key: "metadata" }), key: _tagMetadataKey })
+const _metadataTag = (record: VolumeRecord): string => record.metadata?.kumulo_cluster ?? ""
 
-const _listAll = (): R<ReadonlyArray<Record<string, unknown>>> =>
-  cinderRequest({ path: "volumes/detail", method: "GET", ref: "volumes" }).pipe(
-    Effect.map((body) => asArray(field({ value: body, key: "volumes" })).filter(isRecord))
-  )
+const _listAll = (): R<ReadonlyArray<VolumeRecord>> =>
+  cinderRequest({ path: "volumes/detail", method: "GET", ref: "volumes" }).pipe(Effect.flatMap(decodeVolumesList))
 
 export const ensureVolume = (
   { options, spec }: { readonly options: VolumeProviderOptions; readonly spec: VolumeSpec }
 ): R<VolumeInfo> =>
   Effect.gen(function*() {
     const all = yield* _listAll()
-    const existing = all.find((record) =>
-      stringField({ value: record, key: "name" }) === spec.name && _metadataTag(record) === options.tag
-    )
+    const existing = all.find((record) => (record.name ?? "") === spec.name && _metadataTag(record) === options.tag)
     if (existing !== undefined) return _volumeInfo(existing)
     const created = yield* cinderRequest({
       path: "volumes",
@@ -52,8 +48,8 @@ export const ensureVolume = (
           metadata: { [_tagMetadataKey]: options.tag }
         }
       }
-    })
-    return _volumeInfo(field({ value: created, key: "volume" }))
+    }).pipe(Effect.flatMap(decodeVolumeSingle))
+    return _volumeInfo(created)
   })
 
 export const listClusterVolumes = (tag: ClusterTag): R<ReadonlyArray<VolumeInfo>> =>

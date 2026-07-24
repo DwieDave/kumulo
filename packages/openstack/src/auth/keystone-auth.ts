@@ -1,6 +1,7 @@
 import { AuthenticationFailed, type ResourceNotFound } from "@kumulo/core"
 import { Context, Effect, Layer, Option, Ref } from "effect"
 import { Headers, HttpClient, HttpClientRequest } from "effect/unstable/http"
+import * as Schema from "effect/Schema"
 import type { OpenStackCredentials } from "./credentials.ts"
 import { parseCatalog, resolveEndpoint, type ServiceCatalog } from "./service-catalog.ts"
 
@@ -21,9 +22,14 @@ interface CachedToken {
   readonly catalog: ServiceCatalog
 }
 
-const _isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null
-
-const _field = (value: unknown, key: string): unknown => _isRecord(value) ? value[key] : undefined
+// kumulo: only the one field this layer reads out of the token envelope
+// (FR-4.6) — a missing/malformed `expires_at` is not a hard failure, it just
+// falls back to "expires now" (see `_expiresAtMs` below), same as before.
+const _ExpiresAt = Schema.Struct({
+  token: Schema.Struct({
+    expires_at: Schema.optionalKey(Schema.String)
+  })
+})
 
 // kumulo: Keystone's identity/scope request shape per credential method —
 // mechanical translation only, no judgment calls (design §4.4 pattern).
@@ -64,8 +70,9 @@ const _authBody = (credentials: OpenStackCredentials): unknown =>
 const _authFailed = (hint: string) => new AuthenticationFailed({ hint })
 
 const _expiresAtMs = (body: unknown): number => {
-  const raw = _field(_field(body, "token"), "expires_at")
-  const parsed = typeof raw === "string" ? Date.parse(raw) : NaN
+  const decoded = Schema.decodeUnknownOption(_ExpiresAt)(body)
+  const raw = Option.isSome(decoded) ? decoded.value.token.expires_at : undefined
+  const parsed = raw === undefined ? NaN : Date.parse(raw)
   return Number.isNaN(parsed) ? Date.now() : parsed
 }
 

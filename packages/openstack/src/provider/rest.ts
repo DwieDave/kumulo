@@ -59,10 +59,3 @@ export const restRequest = (
     if (response.status === 204) return undefined
     return yield* response.json.pipe(Effect.orElseSucceed(() => undefined))
   })
-
-export const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null
-
-export const field = ({ key, value }: { readonly value: unknown; readonly key: string }): unknown =>
-  isRecord(value) ? value[key] : undefined
-
-export const asArray = (value: unknown): ReadonlyArray<unknown> => Array.isArray(value) ? value : []

@@ -1,5 +1,25 @@
 import { ResourceNotFound, ResponseDecodeError } from "@kumulo/core"
-import { Effect, Option, SchemaIssue } from "effect"
+import { Effect } from "effect"
+import * as Schema from "effect/Schema"
+
+const CatalogEndpointSchema = Schema.Struct({
+  interface: Schema.optionalKey(Schema.String),
+  region: Schema.optionalKey(Schema.String),
+  url: Schema.optionalKey(Schema.String)
+})
+
+const CatalogEntrySchema = Schema.Struct({
+  type: Schema.optionalKey(Schema.String),
+  endpoints: Schema.optionalKey(Schema.Array(CatalogEndpointSchema))
+})
+
+// kumulo: only the fields the auth layer consumes (FR-4.6) — everything else
+// Keystone's token response carries is left undeclared and ignored.
+const TokenResponse = Schema.Struct({
+  token: Schema.Struct({
+    catalog: Schema.Array(CatalogEntrySchema)
+  })
+})
 
 export interface CatalogEndpoint {
   readonly interface: string
@@ -14,37 +34,20 @@ export interface CatalogEntry {
 
 export type ServiceCatalog = ReadonlyArray<CatalogEntry>
 
-const _isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null
-
-const _field = (value: unknown, key: string): unknown => _isRecord(value) ? value[key] : undefined
-
-const _string = (value: unknown): string => typeof value === "string" ? value : ""
-
-// kumulo: lenient by design (FR-4.6) — only the fields we consume are
-// validated; every other field OpenStack's catalog carries is ignored
-// rather than rejected.
-export const parseCatalog = (body: unknown): Effect.Effect<ServiceCatalog, ResponseDecodeError> => {
-  const catalog = _field(_field(body, "token"), "catalog")
-  if (!Array.isArray(catalog)) {
-    const issue = new SchemaIssue.InvalidValue(Option.some(body), { message: "missing token.catalog" })
-    return Effect.fail(new ResponseDecodeError({ endpoint: "/v3/auth/tokens", issue }))
-  }
-  return Effect.succeed(
-    catalog.map((entry: unknown) => {
-      const endpoints = _field(entry, "endpoints")
-      return {
-        type: _string(_field(entry, "type")),
-        endpoints: Array.isArray(endpoints)
-          ? endpoints.map((endpoint: unknown) => ({
-            interface: _string(_field(endpoint, "interface")),
-            region: _string(_field(endpoint, "region")),
-            url: _string(_field(endpoint, "url"))
-          }))
-          : []
-      }
-    })
+export const parseCatalog = (body: unknown): Effect.Effect<ServiceCatalog, ResponseDecodeError> =>
+  Schema.decodeUnknownEffect(TokenResponse)(body).pipe(
+    Effect.mapError((error) => new ResponseDecodeError({ endpoint: "/v3/auth/tokens", issue: error.issue })),
+    Effect.map((decoded) =>
+      decoded.token.catalog.map((entry) => ({
+        type: entry.type ?? "",
+        endpoints: (entry.endpoints ?? []).map((endpoint) => ({
+          interface: endpoint.interface ?? "",
+          region: endpoint.region ?? "",
+          url: endpoint.url ?? ""
+        }))
+      }))
+    )
   )
-}
 
 export interface ResolveEndpointOptions {
   readonly catalog: ServiceCatalog
