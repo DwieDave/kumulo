@@ -1,10 +1,21 @@
 import { dirname } from "node:path"
 import { Console, Effect } from "effect"
+import { FileSystem } from "effect/FileSystem"
+import type { PlatformError } from "effect/PlatformError"
 import type { HttpClient } from "effect/unstable/http"
 import { Command, Flag } from "effect/unstable/cli"
 import type { ClusterConfig, VolumeError, VolumeSpec } from "@kumulo/core"
 import { ConfigInvalid, VolumeProvider } from "@kumulo/core"
-import { adoptVolume, CinderAuth, listVolumes, readOutputs, VolumeProviderLive, writeOutputs } from "@kumulo/volumes-cinder"
+import {
+  adoptVolume,
+  CinderAuth,
+  listVolumes,
+  readOutputs,
+  upsertVolume,
+  VolumeProviderLive,
+  writeOutputs
+} from "@kumulo/volumes-cinder"
+import type { OutputsInvalid } from "@kumulo/volumes-cinder"
 import { loadConfig } from "../config.ts"
 
 const configFlag = Flag.string("config").pipe(
@@ -75,6 +86,41 @@ export const volumes = Command.make("volumes").pipe(
   Command.withSubcommands([volumesList, volumesAdopt]),
   Command.withDescription("Manage retained volumes across cluster rebuilds")
 )
+
+const _toManagedSpec = (entry: ClusterConfig["volumes"]["managed"][number]): VolumeSpec => ({
+  name: entry.name,
+  sizeGb: entry.size_gb,
+  type: entry.type,
+  retain: entry.retain
+})
+
+/**
+ * `create`/`scale` (mks path): converges `volumes.managed` via the Cinder
+ * `VolumeProvider`, same as `k3sVolumeProviderLayer`'s `_reconcileVolumes`,
+ * recording ids in `<cluster>.outputs.yaml` (the same outputs file
+ * `reconcileVolumesOnDelete`/`volumes adopt` read/write). No-op when
+ * `volumes.module` isn't `cinder` or nothing is managed; missing `OS_*`
+ * credentials surface as `AuthenticationFailed` from `CinderAuth` itself
+ * (see `volumes/env.ts`), never a silent skip.
+ *
+ * TODO(mks-volumes): the mks CLI path has no manifest-apply mechanism yet
+ * (unlike k3s's `installAddons`, run against a fetched kubeconfig) — once one
+ * exists, apply `staticVolumeManifests` here too instead of only recording ids.
+ */
+export const convergeManagedVolumes = (
+  { config, configDir }: { readonly config: ClusterConfig; readonly configDir: string }
+): Effect.Effect<void, VolumeError | OutputsInvalid | PlatformError, CinderAuth | HttpClient.HttpClient | FileSystem> =>
+  Effect.gen(function*() {
+    if (config.volumes.module !== "cinder" || config.volumes.managed.length === 0) return
+    const provider = yield* Effect.provide(VolumeProvider, VolumeProviderLive({ tag: config.name }))
+    const file = yield* readOutputs({ dir: configDir, tag: config.name })
+    const ensured = yield* Effect.forEach(config.volumes.managed, (entry) =>
+      provider.ensureVolume(_toManagedSpec(entry)).pipe(
+        Effect.map((info) => ({ name: entry.name, id: info.id, retain: entry.retain }))
+      ))
+    const outputs = ensured.reduce((acc, volume) => upsertVolume({ file: acc, volume }), file)
+    yield* writeOutputs({ dir: configDir, file: outputs })
+  })
 
 /**
  * `delete` skips `retain: true` volumes; called by `del` in

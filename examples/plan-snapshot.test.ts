@@ -55,6 +55,17 @@ const _bucketActions = (diff: BucketDiff): ReadonlyArray<PlanAction> => [
   ...diff.noop.map((ref) => ({ _tag: "NoOp" as const, name: `bucket/${ref.name}` }))
 ]
 
+// Mirrors `buildMksPlan`'s volume-action addition in
+// packages/cli/src/mks/plan.ts — wired only into the ovh-mks CLI path,
+// k3s already converges `volumes.managed` (`k3s/reconcile.ts`) without
+// showing it in the plan, unchanged here. Same "always Create" caveat as
+// `buildMksPlan`, so unlike `_bucketActions` this ignores the fake
+// inventory entirely.
+const _volumeActions = (config: ClusterConfig): ReadonlyArray<PlanAction> =>
+  config.distro === "k3s" || config.volumes.module !== "cinder"
+    ? []
+    : config.volumes.managed.map((v) => ({ _tag: "Create" as const, name: `volume/${v.name}` }))
+
 const _cases = [
   { file: "ovh-mks.yaml", label: "ovh-mks" },
   { file: "k3s.yaml", label: "k3s" }
@@ -70,6 +81,7 @@ for (const { file, label } of _cases) {
   const _fullPlan = (nodes: PlanInventory, buckets: ReadonlyArray<ExistingBucket>) => ({
     actions: [
       ...computePlan({ desired: _desired, actual: nodes }).actions,
+      ..._volumeActions(_config),
       ..._bucketActions(diffBuckets({ desired: _desiredBkts, existing: buckets }))
     ]
   })
@@ -87,11 +99,15 @@ for (const { file, label } of _cases) {
       expect(renderPlan(_fullPlan(nodes, buckets))).toMatchSnapshot()
     })
 
-    it("complete matching inventory -> all no-ops, nothing to do", () => {
+    it("complete matching inventory -> all no-ops, nothing to do (mks: except its always-Create volumes)", () => {
       const nodes: PlanInventory = _desired.map(toTaggedResource)
       const buckets = _desiredBkts.map(_toExisting)
       const plan = _fullPlan(nodes, buckets)
-      expect(decidePlanAction({ plan, yes: false, dryRun: false })).toEqual({ _tag: "NothingToDo" })
+      // mks volume actions are always "Create" (no real diff yet, see
+      // `_volumeActions`), so a fully-converged mks cluster with managed
+      // volumes still needs confirmation — never silently "nothing to do".
+      const expected = _volumeActions(_config).length > 0 ? { _tag: "NeedsConfirm" } : { _tag: "NothingToDo" }
+      expect(decidePlanAction({ plan, yes: false, dryRun: false })).toEqual(expected)
       expect(renderPlan(plan)).toMatchSnapshot()
     })
 

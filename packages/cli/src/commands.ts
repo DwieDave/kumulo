@@ -4,7 +4,7 @@ import { Command } from "effect/unstable/cli"
 import type { ClusterConfig, Plan } from "@kumulo/core"
 import { ovhObjectStorageProviderLive } from "@kumulo/storage-ovh"
 import { loadConfig } from "./config.ts"
-import { reconcileVolumesOnDelete, volumes } from "./commands/volumes.ts"
+import { convergeManagedVolumes, reconcileVolumesOnDelete, volumes } from "./commands/volumes.ts"
 import { status } from "./commands/status.ts"
 import { upgrade } from "./commands/upgrade.ts"
 import { buildK3sPlan } from "./k3s/plan.ts"
@@ -50,6 +50,11 @@ const _applyFlow = Effect.fn(function*() {
   }
   const info = yield* applyMks(config)
   yield* Console.log(`\nCluster "${config.name}" is ${info.status} (${info.apiEndpoint}).`)
+
+  // Same Cinder-backed volumes as the k3s path's `_reconcileVolumes`
+  // (`k3s/reconcile.ts`), just no cluster-side manifest apply yet — see
+  // `convergeManagedVolumes`'s doc comment.
+  yield* convergeManagedVolumes({ config, configDir })
 
   // Buckets converge only after the cluster is READY, credentials are
   // written last (R6/R7 ordering) — both handled inside `convergeBuckets`.
