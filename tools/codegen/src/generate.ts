@@ -14,12 +14,13 @@ export interface GenerateResult {
   readonly warnings: ReadonlyArray<OpenApiGenerator.OpenApiGeneratorWarning>
 }
 
-// kumulo: OpenStack vendor-extension `additionalProperties: { type: ... }` (Glance image
-// extra-properties, Nova scheduler_hints, ...) combined with typed optional sibling keys
-// produces TypeScript that fails to compile (TS2411: optional key vs. plain index signature).
-// FR-4.6's lenient-decode policy handles unknown/extra fields at the transport layer, so the
-// generated schema doesn't need to type them structurally — close every free-form
-// `additionalProperties` (any value except literal `false`) before generating.
+// kumulo: WHY close free-form additionalProperties — OpenStack vendor-extension
+// `additionalProperties: { type: ... }` (Glance image extra-properties, Nova
+// scheduler_hints, ...) combined with typed optional sibling keys produces TypeScript that
+// fails to compile (TS2411: optional key vs. plain index signature). Unknown/extra fields
+// are handled leniently at the transport layer, so the generated schema doesn't need to
+// type them structurally — close every free-form `additionalProperties` (any value except
+// literal `false`) before generating.
 const _closeFreeformAdditionalProperties = (value: unknown): unknown => {
   if (Array.isArray(value)) return value.map(_closeFreeformAdditionalProperties)
   if (typeof value !== "object" || value === null) return value
@@ -40,9 +41,10 @@ export const generateSource = (args: {
   Effect.gen(function* () {
     const generator = yield* OpenApiGenerator.OpenApiGenerator
     const warnings: Array<OpenApiGenerator.OpenApiGeneratorWarning> = []
-    // kumulo: `_closeFreeformAdditionalProperties` returns `unknown` by construction (see its
-    // own comment); JSON.parse(JSON.stringify(...)) gives a genuine `any`, assignable to
-    // `OpenAPISpec` without a type assertion (same pattern as patch.ts's `applyPatches`).
+    // kumulo: WHY JSON.parse(JSON.stringify(...)) — `_closeFreeformAdditionalProperties`
+    // returns `unknown` by construction (see its own comment); this gives a genuine `any`,
+    // assignable to `OpenAPISpec` without a type assertion (same pattern as patch.ts's
+    // `applyPatches`).
     const spec: OpenAPISpec = JSON.parse(JSON.stringify(_closeFreeformAdditionalProperties(args.spec)))
     const source = yield* generator.generate(spec, {
       ...args.options,

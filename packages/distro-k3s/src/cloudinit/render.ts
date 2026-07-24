@@ -1,4 +1,4 @@
-// FR-5.1 — minimal cloud-init: hostname, packages, SSH hardening only.
+// Minimal cloud-init: hostname, packages, SSH hardening only.
 // Deliberately no k3s install here (that happens over SSH — bootstrap/install-script.ts).
 export interface CloudInitArgs {
   readonly hostname: string
@@ -10,8 +10,8 @@ const DEFAULT_PACKAGES: ReadonlyArray<string> = ["curl", "open-iscsi"]
 
 const _packagesYaml = (packages: ReadonlyArray<string>): string => packages.map((pkg) => `  - ${pkg}`).join("\n")
 
-// kumulo: WHY prohibit-password/no-password-auth — matches hetzner-k3s's
-// ssh/configure_ssh.sh hardening (key-only root login, no password fallback).
+// kumulo: WHY prohibit-password/no-password-auth — key-only root login,
+// no password fallback.
 export const renderCloudInit = (args: CloudInitArgs): string => {
   const packages = args.packages ?? DEFAULT_PACKAGES
   return `#cloud-config

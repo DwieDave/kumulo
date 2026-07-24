@@ -7,7 +7,7 @@ export interface WriteKubeconfigFileArgs {
   readonly content: string
 }
 
-// FR-5.5 — persisted kubeconfig must be 0600 (contains a client cert/token).
+// Persisted kubeconfig must be 0600 (contains a client cert/token).
 export const writeKubeconfigFile = (args: WriteKubeconfigFileArgs): Effect.Effect<void, BootstrapFailed> =>
   Effect.try({
     try: () => writeFileSync(args.path, args.content, { mode: 0o600 }),

@@ -11,15 +11,15 @@ export interface ReleaseCache {
 }
 
 export interface MakeReleaseCacheArgs {
-  // kumulo: injected instead of a live GitHub fetch — tests stay offline;
-  // production wiring (composition root) can pass a real fetcher later.
+  // kumulo: WHY injected instead of a live GitHub fetch — tests stay offline;
+  // production wiring can pass a real fetcher later.
   readonly source?: () => ReadonlyArray<string>
   readonly ttlMs?: number
   readonly now?: () => number
 }
 
-// FR-5.6 — `releases` lists k3s versions with a TTL cache; `validateVersion`
-// rejects anything not in that list.
+// `releases` lists k3s versions with a TTL cache; `validateVersion` rejects
+// anything not in that list.
 export const makeReleaseCache = (args: MakeReleaseCacheArgs = {}): Effect.Effect<ReleaseCache> =>
   Effect.gen(function*() {
     const source = args.source ?? (() => K3S_RELEASE_FIXTURE)

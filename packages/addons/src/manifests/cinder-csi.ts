@@ -4,7 +4,7 @@ import { CLOUD_CONF_NAMESPACE, CLOUD_CONF_SECRET_NAME, cloudConfSecretManifest, 
 const SERVICE_ACCOUNT = "cinder-csi-controller-sa"
 const IMAGE = "registry.k8s.io/provider-os/cinder-csi-plugin:v1.30.0"
 
-// design §3.4 / FR-9.1: shares the cloud.conf Secret with openstack-ccm;
+// Shares the cloud.conf Secret with openstack-ccm;
 // `defaultVolumeType` comes from config.addons.cinder_csi.default_volume_type.
 export interface CinderCsiParams {
   readonly conf: CloudConf

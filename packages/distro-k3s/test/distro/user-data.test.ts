@@ -2,7 +2,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
 import { renderUserData } from "../../src/distro/user-data.ts"
 
-// FR-2.1 — per-node hostname must be unique (k3s derives node names from
+// Per-node hostname must be unique (k3s derives node names from
 // the hostname); a template keyed only on cluster name + role collides
 // across every master/every worker of a role.
 describe("renderUserData", () => {

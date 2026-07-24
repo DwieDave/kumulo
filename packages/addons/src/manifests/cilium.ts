@@ -3,9 +3,9 @@ import type { K8sManifest } from "@kumulo/core"
 const NAMESPACE = "kube-system"
 const IMAGE = "quay.io/cilium/cilium:v1.16.5"
 
-// design §3.4 / D5: optional CNI replacing k3s's built-in flannel — only
-// selectable capability-gated (`cilium`), never under ovh-mks (CNI fixed by
-// OVH; rejected earlier by core's validateCni, see packages/core/src/ports/validation.ts).
+// Optional CNI replacing k3s's built-in flannel — only selectable
+// capability-gated (`cilium`), never under ovh-mks (CNI fixed by OVH;
+// rejected earlier by core's validateCni, see packages/core/src/ports/validation.ts).
 export const ciliumManifests = (): ReadonlyArray<K8sManifest> => [
   {
     apiVersion: "v1",

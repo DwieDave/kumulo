@@ -34,7 +34,7 @@ const _toMksConfig = (
   worker_pools: config.worker_pools.map(_toPool)
 })
 
-/** FR-6.1 — converge control plane + nodepools onto the config (create and scale share this). */
+/** Converge control plane + nodepools onto the config (create and scale share this). */
 export const applyMks = (
   config: ClusterConfig
 ): Effect.Effect<ManagedClusterInfo, MksError, MksEnv> =>
@@ -48,7 +48,7 @@ export const applyMks = (
     return info
   })
 
-/** FR-6.2 — kubeconfig via the OVH API; resolves the cluster by name first (stateless, FR-2.1), never creates one. */
+/** Kubeconfig via the OVH API; resolves the cluster by name first (stateless), never creates one. */
 export const kubeconfigMks = (
   config: ClusterConfig
 ): Effect.Effect<Kubeconfig, MksError, MksEnv> =>
@@ -62,7 +62,7 @@ export const kubeconfigMks = (
     return yield* fetchKubeconfig({ mks, ref: { serviceName, kubeId: info.id } })
   })
 
-/** FR-2.6 — delete: resolves the cluster by name (idempotent lookup); missing cluster is a no-op, never provisions one. */
+/** Delete: resolves the cluster by name (idempotent lookup); missing cluster is a no-op, never provisions one. */
 export const deleteMks = (config: ClusterConfig): Effect.Effect<void, MksError, MksEnv> =>
   Effect.gen(function*() {
     const { mks, serviceName } = yield* MksEnv

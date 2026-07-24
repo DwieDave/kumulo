@@ -23,10 +23,10 @@ export interface MakeSelfManagedDistroArgs {
   readonly apiDnsName?: string
 }
 
-// Design §3.3 — assembles the k3s `SelfManagedDistroShape`, wiring T7.1's
-// SSH/readiness, T7.2's bootstrap orchestration, and this task's
-// kubeconfig/releases/drain into the one port core drives. Dependencies are
-// closed over here (not requested via Effect context) because the port's
+// Assembles the k3s `SelfManagedDistroShape`, wiring SSH/readiness,
+// bootstrap orchestration, and kubeconfig/releases/drain into the one port
+// core drives. Dependencies are closed over here (not requested via Effect
+// context) because the port's
 // method signatures carry no `R` — a Layer-provided service can't leak into
 // a `Effect.Effect<A, E>` return type.
 export const makeSelfManagedDistro = (args: MakeSelfManagedDistroArgs): SelfManagedDistroShape => {
@@ -48,7 +48,7 @@ export const makeSelfManagedDistro = (args: MakeSelfManagedDistroArgs): SelfMana
           masterIp: apiEndpoint
         })
       }).pipe(provideSsh),
-    upgradePlan: (target) => Effect.succeed(renderUpgradePlan({ version: target })), // FR-5.6 (T8.3)
+    upgradePlan: (target) => Effect.succeed(renderUpgradePlan({ version: target })),
     validateVersion: releases.validateVersion,
     drainAndRemove: (node) => drainAndRemove({ client: args.k8s, node })
   }

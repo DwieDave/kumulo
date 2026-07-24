@@ -29,7 +29,7 @@ const workerConcurrencyFlag = Flag.integer("worker-concurrency").pipe(
   Flag.withDescription("k3s only: how many worker nodes the SUC agent Plan upgrades at once")
 )
 
-// FR-6.2 — OVH drives the upgrade itself via its API; there's no local plan
+// OVH drives the upgrade itself via its API; there's no local plan
 // to render, just a lookup (by name, same as every other mks command) + the
 // update call.
 const _upgradeMks = (
@@ -47,8 +47,8 @@ const _upgradeMks = (
     yield* Console.log(`Upgrade requested for cluster "${config.name}" (strategy: ${strategy}).`)
   })
 
-// FR-5.6 — `--dry-run` just renders the Plan CRs (design §3.4 "SUC plan for
-// new k3s version") without touching the cluster.
+// `--dry-run` just renders the Plan CRs (the SUC plan for a new k3s
+// version) without touching the cluster.
 const _renderK3s = (
   { config, workerConcurrency }: { readonly config: ClusterConfig; readonly workerConcurrency: number }
 ) =>
@@ -107,7 +107,7 @@ const _ensureSucReady = (k8sClient: K8sClient["Service"]) =>
     }
   })
 
-// FR-5.6 — applies the SUC Plan CRs through the in-house k8s SSA client:
+// Applies the SUC Plan CRs through the in-house k8s SSA client:
 // masters first (workers' `prepare` step polls the masters Plan by name, so
 // applying it second would only cost an extra reconcile loop, not correctness,
 // but masters-first matches the upstream hetzner-k3s ordering this ports).
@@ -147,4 +147,4 @@ export const upgrade = Command.make(
     if (root.dryRun) return yield* _renderK3s({ config, workerConcurrency })
     yield* _applyK3s({ config, workerConcurrency })
   })
-).pipe(Command.withDescription("Upgrade the cluster: applies SUC Plans for k3s, drives the OVH API for ovh-mks (FR-5.6, FR-6.2)"))
+).pipe(Command.withDescription("Upgrade the cluster: applies SUC Plans for k3s, drives the OVH API for ovh-mks"))

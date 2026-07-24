@@ -8,10 +8,9 @@ export interface MksPlanInput {
   readonly worker_pools: ReadonlyArray<{ readonly name: string }>
 }
 
-// ponytail: a real Create/NoOp/Delete diff (design §6 step 1 "Inventory")
-// needs a read-only cluster/nodepool lookup by name, which distro-ovh-mks
-// doesn't currently export (only the idempotent ensure* verbs, T4.2 scope).
-// Every resource is presented as "Create" regardless of whether it already
+// ponytail: a real Create/NoOp/Delete diff needs a read-only cluster/nodepool
+// lookup by name, which distro-ovh-mks doesn't currently export (only the
+// idempotent ensure* verbs). Every resource is presented as "Create" regardless of whether it already
 // exists; `ensureCluster`/`ensureNodePools` are the actual convergence and
 // are genuinely idempotent, so this only affects what the plan *prints*,
 // not what apply does. Upgrade to a real diff once a lookup is exported.

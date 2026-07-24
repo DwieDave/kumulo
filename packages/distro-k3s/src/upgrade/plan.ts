@@ -1,12 +1,10 @@
 import type { K8sManifest, ResourceRef } from "@kumulo/core"
 import { Result, Schema } from "effect"
 
-// FR-5.6 / design §3.4: SUC (rancher/system-upgrade-controller) Plan CRs for
-// a k3s version bump. Ports hetzner-k3s's templates/upgrade_plan_for_*.yaml
-// mechanics (concurrency, cordon, prepare-waits-on-server), fixing the
-// source's duplicate-`matchExpressions`-key YAML bug (the second key
-// silently clobbers the first there) by folding both role labels into one
-// selector.
+// SUC (rancher/system-upgrade-controller) Plan CRs for a k3s version bump.
+// kumulo: WHY one selector per role — folding both role labels into a single
+// `matchExpressions` selector avoids a duplicate-key YAML clobber some
+// upstream templates hit when emitting two separate keys.
 const NAMESPACE = "system-upgrade"
 const SERVICE_ACCOUNT = "system-upgrade"
 const UPGRADE_IMAGE = "rancher/k3s-upgrade"
@@ -68,13 +66,13 @@ export interface UpgradePlanArgs {
   readonly workerConcurrency?: number
 }
 
-/** FR-5.6 — the full SUC plan set for a target k3s version; masters listed before workers (apply order matters: agents' `prepare` step polls the server Plan by name). */
+/** The full SUC plan set for a target k3s version; masters listed before workers (apply order matters: agents' `prepare` step polls the server Plan by name). */
 export const renderUpgradePlan = (
   { version, workerConcurrency = 1 }: UpgradePlanArgs
 ): ReadonlyArray<K8sManifest> => [renderMastersPlan(version), renderWorkersPlan({ version, concurrency: workerConcurrency })]
 
-// FR-4.6 lenient decode: only `name`/`namespace` are extracted, any other
-// metadata fields (labels, ...) pass through unexamined.
+// kumulo: WHY lenient decode — only `name`/`namespace` are extracted, any
+// other metadata fields (labels, ...) pass through unexamined.
 const PlanObjectMeta = Schema.Struct({
   name: Schema.optionalKey(Schema.String),
   namespace: Schema.optionalKey(Schema.String)

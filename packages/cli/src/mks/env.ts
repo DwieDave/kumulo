@@ -13,8 +13,7 @@ export interface MksEnvShape {
  * Holds the composed MKS API client + the OVH cloud project id (`serviceName`)
  * that every MKS endpoint is scoped under. `ClusterConfig` has no such field
  * (it's an OVH account concept, not part of the cluster shape) — read from
- * env, same as the OAuth2 client credentials (FR-3.2: module wiring is
- * explicit at the composition root, not runtime discovery).
+ * env, same as the OAuth2 client credentials.
  */
 export class MksEnv extends Context.Service<MksEnv, MksEnvShape>()("@kumulo/cli/MksEnv") {}
 

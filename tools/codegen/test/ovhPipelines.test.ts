@@ -5,7 +5,7 @@ import { join } from "node:path"
 import { checkNoop } from "../src/regenCheck.ts"
 
 /**
- * FR-4.4/AC-5 — the OVH-generated clients (mks, dns) have their own
+ * The OVH-generated clients (mks, dns) have their own
  * `ovh2openapi`-shaped generation pipeline, separate from
  * `services.json`'s OpenStack (httpapi-format) entries, but must still be
  * caught by a "regen is a no-op" gate: a hand-edit to either committed

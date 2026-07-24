@@ -8,7 +8,7 @@ export interface NovaLimits {
   readonly totalInstancesUsed: number
 }
 
-// kumulo: lenient decode (FR-4.6) — either absolute field missing/wrong-typed
+// kumulo: WHY lenient decode — either absolute field missing/wrong-typed
 // defaults to 0/unset rather than failing, matching the previous "coerce to
 // 0" narrowing; a response that isn't shaped like this at all falls through
 // to `_unknownLimits` via `Effect.orElseSucceed` below.
@@ -26,9 +26,8 @@ const _unknownLimits: NovaLimits = { maxTotalInstances: -1, totalInstancesUsed: 
 /**
  * Raw `GET /limits` — quota totals + current usage in one call. No dedicated
  * codegen allowlist entry exists for it (same gap noted in
- * `doctor/ovh/capability.ts`'s ponytail comment: this task can't extend the
- * generated-client allowlists), so it's read directly here instead of
- * through a generated client method.
+ * `doctor/ovh/capability.ts`'s ponytail comment), so it's read directly here
+ * instead of through a generated client method.
  */
 export const fetchNovaLimits = (args: {
   readonly client: HttpClient.HttpClient
@@ -57,7 +56,7 @@ const _passMessage = (total: number, max: number): string =>
     ? `Quota headroom OK: ${total} Nova instances planned, no quota limit reported.`
     : `Quota headroom OK: ${total}/${max} Nova instances after this plan.`
 
-/** FR-10.2 — quota headroom vs plan: existing Nova instance usage + this plan's servers, against Nova's own limit. */
+/** Quota headroom vs plan: existing Nova instance usage + this plan's servers, against Nova's own limit. */
 export const quotaHeadroomCheck = (args: {
   readonly limits: Effect.Effect<NovaLimits>
   readonly plannedInstanceCount: number

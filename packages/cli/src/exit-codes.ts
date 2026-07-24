@@ -4,10 +4,10 @@ import type { CliDomainError } from "./errors.ts"
 export type CliExitError = CliDomainError
 
 /**
- * FR-10.3 — one distinct exit code per error family, so scripts/CI can
- * branch on failure kind without parsing the message. `0` is reserved for
- * success and never appears here; unlisted tags (defects escaping the
- * boundary) fall back to `1` in `exitCodeFor`.
+ * One distinct exit code per error family, so scripts/CI can branch on
+ * failure kind without parsing the message. `0` is reserved for success and
+ * never appears here; unlisted tags (defects escaping the boundary) fall
+ * back to `1` in `exitCodeFor`.
  */
 const _codeByTag: Record<KumuloErrorTag, number> = {
   ConfigInvalid: 2,

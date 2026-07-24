@@ -5,11 +5,11 @@ import { OpenStackEnv } from "../doctor-openstack/env.ts"
 
 /**
  * `CinderAuth` built from the already-resolved OpenStack Keystone auth
- * (T6.3's `OpenStackEnv`, shared with the doctor checks) — Cinder is a
- * plain OpenStack service under the same project, no separate credential
- * set (design §3.6). Mirrors `OpenStackEnv`'s "never-failing at Layer-build
- * time" contract: a missing/broken OpenStack env only surfaces once a
- * volumes operation actually calls `.token`/`.endpoint`.
+ * (`OpenStackEnv`, shared with the doctor checks) — Cinder is a plain
+ * OpenStack service under the same project, no separate credential set.
+ * Mirrors `OpenStackEnv`'s "never-failing at Layer-build time" contract: a
+ * missing/broken OpenStack env only surfaces once a volumes operation
+ * actually calls `.token`/`.endpoint`.
  */
 export const CinderAuthLive: Layer.Layer<CinderAuth, never, OpenStackEnv> = Layer.effect(
   CinderAuth,

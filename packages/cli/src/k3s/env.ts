@@ -17,7 +17,7 @@ const _requiredEnv = (name: string): Effect.Effect<string, AuthenticationFailed>
     : Effect.succeed(value)
 }
 
-/** FR-5.7 — security-group rules for this cluster's network CIDR/allowed CIDRs/CNI choice. */
+/** Security-group rules for this cluster's network CIDR/allowed CIDRs/CNI choice. */
 export const secGroupRules = (config: ClusterConfig) =>
   buildFr57Rules({
     allowedSshCidrs: config.ssh.allowed_cidrs,
@@ -34,9 +34,9 @@ const _cloudProviderOptions = (config: ClusterConfig, region: string): CloudProv
 })
 
 /**
- * FR-3.1/FR-5.7 — the k3s composition root's `CloudProvider`, reusing the
- * already-resolved `OpenStackEnv` (T6.3, shared with the doctor checks and
- * `CinderAuth`) instead of re-deriving Keystone auth. Fails at first use
+ * The k3s composition root's `CloudProvider`, reusing the already-resolved
+ * `OpenStackEnv` (shared with the doctor checks and `CinderAuth`) instead of
+ * re-deriving Keystone auth. Fails at first use
  * (never at Layer-build time) when OpenStack credentials are missing, same
  * contract as `OpenStackEnv`/`CinderAuthLive`.
  */
@@ -55,13 +55,13 @@ export const k3sCloudProviderLayer = (
     })
   )
 
-/** FR-8 — same Cinder-backed `VolumeProvider` construction as `commands/volumes.ts`'s `reconcileVolumesOnDelete`. */
+/** Same Cinder-backed `VolumeProvider` construction as `commands/volumes.ts`'s `reconcileVolumesOnDelete`. */
 export const k3sVolumeProviderLayer = (
   options: VolumeProviderOptions
 ): Layer.Layer<import("@kumulo/core").VolumeProvider, never, CinderAuth | HttpClient.HttpClient> => VolumeProviderLive(options)
 
 /**
- * FR-7 — `dns-ovh`'s `DnsProvider`, built from the same OVH OAuth2
+ * `dns-ovh`'s `DnsProvider`, built from the same OVH OAuth2
  * client-credentials env vars as `MksEnv` (one OVH account, shared by
  * whichever distro's config asks for `dns.module: ovh`).
  */

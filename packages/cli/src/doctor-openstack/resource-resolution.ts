@@ -2,7 +2,7 @@ import type { CloudError } from "@kumulo/core"
 import { Effect } from "effect"
 import type { DoctorCheck } from "../doctor/types.ts"
 
-/** FR-10.2 — image/flavor resolution: fail loudly here rather than mid-`create`. Shared by both kinds (DRY). */
+/** Image/flavor resolution: fail loudly here rather than mid-`create`. Shared by both kinds (DRY). */
 export const resourceResolutionCheck = (args: {
   readonly kind: "image" | "flavor"
   readonly ref: string

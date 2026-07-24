@@ -17,7 +17,7 @@ import {
 import { DistroNotWired } from "../src/distro-not-wired.ts"
 import { renderCliError } from "../src/errors.ts"
 
-// AC-6 — every `KumuloError` tag has a renderer (compile-enforced by
+// Every `KumuloError` tag has a renderer (compile-enforced by
 // `RendererRegistry`'s mapped type) and at least one test asserting its
 // message here.
 

@@ -1,10 +1,10 @@
 /**
- * codegen:check — regen-is-noop CI gate (FR-4.4/AC-5).
+ * codegen:check — regen-is-noop CI gate.
  *
  * Reads `services.json` (a list of per-service pipeline configs), regenerates
  * each into memory, and diffs it against the committed output file. Empty
- * manifest exits 0 — no service pipelines are registered yet (they land in
- * T3.4/T5.2); this script is the reusable gate they wire into.
+ * manifest exits 0 — no service pipelines are registered yet; this script is
+ * the reusable gate they wire into.
  */
 import { Effect } from "effect"
 import { readFileSync } from "node:fs"
@@ -52,7 +52,7 @@ const _loadService = (entry: ServiceEntry) =>
 
 const services: ReadonlyArray<ServiceEntry> = JSON.parse(readFileSync(join(root, "services.json"), "utf8"))
 
-// FR-4.4/AC-5 — the OVH-generated clients (mks, dns) run their own
+// The OVH-generated clients (mks, dns) run their own
 // `ovh2openapi`-shaped pipeline (trim -> convert -> patch -> generate),
 // registered separately from `services.json`'s httpapi-format OpenStack
 // entries; still gated by the same "regen is a no-op" check.

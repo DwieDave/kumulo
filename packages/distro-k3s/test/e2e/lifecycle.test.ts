@@ -11,12 +11,12 @@ import { SshCommandError } from "../../src/ssh/errors.ts"
 import type { SshHost } from "../../src/ssh/port.ts"
 import { FakeSshLive } from "../ssh/fake-ssh.ts"
 
-// AC-2 — full create lifecycle for `distro: k3s`: HA 3-master control plane
+// Full create lifecycle for `distro: k3s`: HA 3-master control plane
 // + 2 worker pools, provisioned through the real `applyServers`/`runPhases`
 // reconcile pipeline (core) against an in-memory `CloudProvider` fake,
 // bootstrapped via the real token/orchestration/install-script logic over a
 // fake `Ssh`, and a kubeconfig fetched + rewritten via the real k3s distro
-// assembly (T7.3).
+// assembly.
 const TAG = "e2e-cluster"
 
 // ponytail: a minimal local fake, not core's — cross-package imports of a
@@ -105,7 +105,7 @@ describe("AC-2 k3s full lifecycle", () => {
         _workerSpec("pool-b", 1)
       ]
 
-      // 1. Nodes phase, through the real reconcile pipeline (design §2/§3.3.1).
+      // 1. Nodes phase, through the real reconcile pipeline.
       const runNodesPhase = runPhases({
         order: phasesForKind("self-managed"),
         phases: [{ name: "Nodes", run: applyServers({ specs, concurrency: 6 }) }]
@@ -199,7 +199,7 @@ describe("AC-2 k3s full lifecycle", () => {
       expect(kubeconfig.content).toContain(`server: https://${lb.vip}:6443`)
       expect(kubeconfig.content).toContain("name: e2e-cluster")
 
-      // 4. Scale-down: drainAndRemove via the k8s client (FR-2.7), before
+      // 4. Scale-down: drainAndRemove via the k8s client, before
       // the reconciler would call CloudProvider.deleteByTag/ensureServer diff.
       yield* distro.drainAndRemove({ name: "pool-b-1", role: "worker" })
     }).pipe(Effect.provide(FakeCloudProviderLive)))

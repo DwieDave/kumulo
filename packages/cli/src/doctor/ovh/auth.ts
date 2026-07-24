@@ -5,7 +5,7 @@ import { probeStatus } from "./probe.ts"
 
 const _name = "ovh-auth-validity"
 
-/** FR-10.2 — OVH auth validity: a 401 on any authenticated call means bad/expired credentials. */
+/** OVH auth validity: a 401 on any authenticated call means bad/expired credentials. */
 export const authValidityCheck = (args: {
   readonly mks: OvhProjectClient
   readonly serviceName: string

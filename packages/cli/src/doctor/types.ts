@@ -1,6 +1,6 @@
 import type { Effect } from "effect"
 
-/** FR-10.2 / AC-4 — one diagnostic outcome, always actionable when it fails. */
+/** One diagnostic outcome, always actionable when it fails. */
 export interface DoctorCheckResult {
   readonly name: string
   readonly status: "pass" | "fail"

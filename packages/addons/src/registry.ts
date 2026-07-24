@@ -21,9 +21,9 @@ export interface AddonSelectionInput {
   readonly cloudConf: CloudConf
 }
 
-// FR-6.3 / D5: these three are always OVH-managed under ovh-mks (OCCM,
-// cinder-csi preinstalled; SUC unneeded, OVH drives upgrades via its own API,
-// see distro Port's `upgrade`) — skipped regardless of toggle state.
+// These three are always OVH-managed under ovh-mks (OCCM, cinder-csi
+// preinstalled; SUC unneeded, OVH drives upgrades via its own API, see
+// distro Port's `upgrade`) — skipped regardless of toggle state.
 const OVH_MANAGED_ADDONS: ReadonlySet<string> = new Set(["openstack-ccm", "cinder-csi", "system-upgrade-controller"])
 
 interface AsAddonParams {
@@ -75,7 +75,6 @@ export const gateAddons = ({ all, capabilities, distro }: GateAddonsParams): Rea
     .filter((addon) => addon.requiredCapabilities.every((cap) => capabilities.includes(cap)))
     .filter((addon) => distro !== "ovh-mks" || !OVH_MANAGED_ADDONS.has(addon.name))
 
-// design §3.4 / FR-9.1 + FR-6.3 + D5: toggled-on built-ins, in install order,
-// capability- and MKS-subset-gated.
+// Toggled-on built-ins, in install order, capability- and MKS-subset-gated.
 export const resolveAddons = (input: AddonSelectionInput): ReadonlyArray<Addon["Service"]> =>
   gateAddons({ all: _toggledOn(input), capabilities: input.capabilities, distro: input.distro })

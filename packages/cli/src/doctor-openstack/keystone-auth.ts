@@ -4,7 +4,7 @@ import type { DoctorCheck } from "../doctor/types.ts"
 
 const _name = "openstack-keystone-auth"
 
-/** FR-10.2 — Keystone auth: a failed token issue means bad/missing OpenStack credentials. */
+/** Keystone auth: a failed token issue means bad/missing OpenStack credentials. */
 export const keystoneAuthCheck = (args: {
   readonly token: Effect.Effect<string, AuthenticationFailed>
 }): DoctorCheck => ({

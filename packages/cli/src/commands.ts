@@ -15,11 +15,11 @@ import { kumulo } from "./root.ts"
 
 export { kumulo }
 
-// FR-2.3 — the one distro-kind branch point; every command below dispatches
-// on it the same way `upgrade.ts` already does.
+// The one distro-kind branch point; every command below dispatches on it
+// the same way `upgrade.ts` already does.
 const _isK3s = (config: ClusterConfig): boolean => config.distro === "k3s"
 
-/** Config → plan → present → apply (FR-2.2), shared by `create` and `scale`. */
+/** Config → plan → present → apply, shared by `create` and `scale`. */
 const _applyFlow = Effect.fn(function*() {
   const root = yield* kumulo
   const config = yield* loadConfig(root.config)
@@ -47,7 +47,7 @@ export const create = Command.make("create", {}, _applyFlow).pipe(
 )
 
 export const scale = Command.make("scale", {}, _applyFlow).pipe(
-  Command.withDescription("Converge worker pool sizes onto the config (same reconcile as create, FR-2.7)")
+  Command.withDescription("Converge worker pool sizes onto the config (same reconcile as create)")
 )
 
 export const kubeconfig = Command.make(
@@ -76,12 +76,12 @@ export const del = Command.make(
     else yield* deleteMks(config)
     yield* Console.log(`Cluster "${config.name}" deleted.`)
 
-    // AC-7 — retained volumes (`volumes.retained[].retain: true`) survive
-    // `delete`; anything else recorded there is torn down alongside the cluster.
+    // Retained volumes (`volumes.retained[].retain: true`) survive `delete`;
+    // anything else recorded there is torn down alongside the cluster.
     const kept = yield* reconcileVolumesOnDelete(config)
     if (kept.length > 0) yield* Console.log(`Retained volumes (kept): ${kept.join(", ")}`)
   })
-).pipe(Command.withDescription("Delete a cluster (FR-2.6)"))
+).pipe(Command.withDescription("Delete a cluster"))
 
 export const kumuloCli = kumulo.pipe(
   Command.withSubcommands([create, scale, status, kubeconfig, del, upgrade, volumes])

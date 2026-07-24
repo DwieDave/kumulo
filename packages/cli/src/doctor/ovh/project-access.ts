@@ -5,7 +5,7 @@ import { probeStatus } from "./probe.ts"
 
 const _name = "ovh-project-access"
 
-/** FR-10.2 — project access: a 403 means valid credentials without rights on this project. */
+/** Project access: a 403 means valid credentials without rights on this project. */
 export const projectAccessCheck = (args: {
   readonly mks: OvhProjectClient
   readonly serviceName: string

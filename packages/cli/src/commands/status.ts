@@ -39,7 +39,7 @@ const _statusMks = Effect.fn(function*(config: ClusterConfig) {
   )
 })
 
-/** FR-10 — `status`: inventory + cluster health, for both distro kinds. */
+/** `status`: inventory + cluster health, for both distro kinds. */
 export const status = Command.make(
   "status",
   {},
@@ -48,4 +48,4 @@ export const status = Command.make(
     const config = yield* loadConfig(root.config)
     yield* config.distro === "k3s" ? _statusK3s(config) : _statusMks(config)
   })
-).pipe(Command.withDescription("Show cluster inventory + health (FR-10)"))
+).pipe(Command.withDescription("Show cluster inventory + health"))

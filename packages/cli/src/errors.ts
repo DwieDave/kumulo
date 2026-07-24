@@ -5,10 +5,10 @@ import type { OutputsInvalid } from "@kumulo/volumes-cinder"
 import type { DistroNotWired } from "./distro-not-wired.ts"
 
 /**
- * Full renderer registry (design §6 step 3, FR-10.1) — `RendererRegistry`'s
- * mapped type requires every tag in `KumuloErrorTag`, not just the ones the
- * ovh-mks path can currently raise, so unreached tags get a plain generic
- * message rather than being left unimplemented.
+ * Full renderer registry — `RendererRegistry`'s mapped type requires every
+ * tag in `KumuloErrorTag`, not just the ones the ovh-mks path can currently
+ * raise, so unreached tags get a plain generic message rather than being
+ * left unimplemented.
  */
 export const cliErrorRegistry: RendererRegistry = {
   HttpTransportError: (error) => `Network error talking to the provider API: ${String(error.cause)}`,

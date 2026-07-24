@@ -5,7 +5,7 @@ import type { OvhProjectClient } from "./probe.ts"
 const _name = "ovh-plan-vs-quota"
 
 /**
- * FR-10.2 — plan-vs-quota preview: existing cluster count (live, via the
+ * Plan-vs-quota preview: existing cluster count (live, via the
  * generated MKS list endpoint) plus this plan's new clusters, against a
  * caller-supplied ceiling. `maxClusters` is a parameter rather than a
  * hardcoded OVH default — no vendored quota endpoint exists yet to read it

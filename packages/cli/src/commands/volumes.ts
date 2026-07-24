@@ -18,7 +18,7 @@ const volumeIdFlag = Flag.string("volume-id").pipe(
   Flag.withDescription("Existing Cinder volume ID to bind into this cluster's outputs + generated PVs")
 )
 
-/** FR-8.3 — `kumulo volumes list`: pure projection of `<cluster>.outputs.yaml`. */
+/** `kumulo volumes list`: pure projection of `<cluster>.outputs.yaml`. */
 export const volumesList = Command.make(
   "list",
   { config: configFlag },
@@ -34,7 +34,7 @@ export const volumesList = Command.make(
       volumes.map((v) => `${v.name}  id=${v.id}  retain=${v.retain}`).join("\n")
     )
   })
-).pipe(Command.withDescription("List recorded volumes for a cluster (FR-8.3)"))
+).pipe(Command.withDescription("List recorded volumes for a cluster"))
 
 const _retainedSpec = (config: ClusterConfig, name: string): VolumeSpec | undefined => {
   const entry = config.volumes.retained.find((candidate) => candidate.name === name)
@@ -42,7 +42,7 @@ const _retainedSpec = (config: ClusterConfig, name: string): VolumeSpec | undefi
 }
 
 /**
- * FR-8.3 — `kumulo volumes adopt`: re-binds an existing Cinder volume ID
+ * `kumulo volumes adopt`: re-binds an existing Cinder volume ID
  * into this cluster's outputs file + regenerates its static PV(+PVC)
  * manifest, pinned to that volume's `csi.volumeHandle`. No Cinder call
  * needed (the volume already exists) — the spec (size/type/retain/pvc)
@@ -69,7 +69,7 @@ export const volumesAdopt = Command.make(
     yield* Console.log(manifests.map((manifest) => JSON.stringify(manifest, null, 2)).join("\n---\n"))
     yield* Console.log(`\nAdopted volume "${name}" (${volumeId}) into ${config.name}'s outputs.`)
   })
-).pipe(Command.withDescription("Bind an existing volume ID into a cluster's generated PVs (FR-8.3)"))
+).pipe(Command.withDescription("Bind an existing volume ID into a cluster's generated PVs"))
 
 export const volumes = Command.make("volumes").pipe(
   Command.withSubcommands([volumesList, volumesAdopt]),
@@ -77,7 +77,7 @@ export const volumes = Command.make("volumes").pipe(
 )
 
 /**
- * AC-7 — `delete` skips `retain: true` volumes; called by `del` in
+ * `delete` skips `retain: true` volumes; called by `del` in
  * `commands.ts` after the cluster itself is torn down. Non-retained
  * volumes with a matching config entry are deleted; anything not present
  * in `volumes.retained` (or module !== "cinder") is left untouched — this

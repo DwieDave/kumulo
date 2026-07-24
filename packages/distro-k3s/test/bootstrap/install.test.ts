@@ -48,7 +48,7 @@ describe("runBootstrap", () => {
       expect(result.token).toMatch(/^[0-9a-f]{64}$/)
 
       // Every node's rendered script was actually executed via Ssh.exec, not
-      // merely rendered — this is the production gap T7.3's e2e test left open.
+      // merely rendered.
       expect(executed).toHaveLength(4)
       const byHost = new Map(executed.map((e) => [e.host, e.command]))
       expect(byHost.get("10.0.0.1")).toContain("--cluster-init")

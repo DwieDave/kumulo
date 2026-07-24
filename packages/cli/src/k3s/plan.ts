@@ -3,7 +3,7 @@ import type { ClusterConfig, Plan, ServerSpec } from "@kumulo/core"
 
 const MASTER_POOL = "masters"
 
-/** FR-2.3/§6 Appendix B naming — one `ServerSpec` per master, per-index named. */
+/** One `ServerSpec` per master, per-index named. */
 const _masterSpecs = (config: ClusterConfig): ReadonlyArray<ServerSpec> =>
   Array.from({ length: config.masters.count }, (_, i) => ({
     name: resourceName({ cluster: config.name, role: "master", pool: MASTER_POOL, index: i + 1 }),
@@ -13,9 +13,8 @@ const _masterSpecs = (config: ClusterConfig): ReadonlyArray<ServerSpec> =>
     tag: config.name
   }))
 
-// kumulo: worker pools carry no `image` field (config schema §5) — every
-// pool shares the masters' image, same assumption hetzner-k3s makes (one
-// image per cluster, not per pool).
+// kumulo: WHY worker pools carry no `image` field — every pool shares the
+// masters' image (one image per cluster, not per pool).
 const _workerSpecs = (config: ClusterConfig): ReadonlyArray<ServerSpec> =>
   config.worker_pools.flatMap((pool) =>
     Array.from({ length: pool.count }, (_, i) => ({
@@ -27,7 +26,7 @@ const _workerSpecs = (config: ClusterConfig): ReadonlyArray<ServerSpec> =>
     }))
   )
 
-/** FR-2.4 — every desired node for the "Nodes" phase, masters first (bootstrap order needs them created first). */
+/** Every desired node for the "Nodes" phase, masters first (bootstrap order needs them created first). */
 export const buildK3sServerSpecs = (config: ClusterConfig): ReadonlyArray<ServerSpec> => [
   ..._masterSpecs(config),
   ..._workerSpecs(config)

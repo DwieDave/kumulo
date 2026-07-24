@@ -6,8 +6,8 @@ import { SshCommandError } from "./errors.ts"
 import { Ssh } from "./port.ts"
 import type { SshHost } from "./port.ts"
 
-// kumulo: WHY root@key-only — matches hetzner-k3s's Util::SSH defaults
-// (user "root", BatchMode/PubkeyAuthentication only, no password fallback).
+// kumulo: WHY root@key-only — user "root", pubkey-auth only, no password
+// fallback.
 const SSH_USER = "root"
 const PRIVATE_KEY_PATH = process.env["KUMULO_SSH_PRIVATE_KEY_PATH"] ?? `${homedir()}/.ssh/id_ed25519`
 

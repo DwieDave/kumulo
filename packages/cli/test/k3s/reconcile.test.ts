@@ -113,8 +113,7 @@ const _trackingDnsProvider = (calls: DnsCalls) =>
     removeClusterRecords: (_zone: string, cluster: string) => Effect.sync(() => calls.removed.push(cluster))
   })
 
-// ponytail: local, minimal fakes (not reused across packages) — same
-// precedent as `distro-k3s/test/e2e/lifecycle.test.ts`'s own note on why a
+// ponytail: local, minimal fakes (not reused across packages) — a
 // package doesn't import a sibling's test/ fixtures.
 const _fakeCloudProviderLive = (deletedServers: Array<string> = []): Layer.Layer<CloudProvider> => Layer.effect(
   CloudProvider,
@@ -198,27 +197,27 @@ describe("k3s CLI composition root (FR-2.3/FR-5)", () => {
       expect(result.kubeconfigPath).toBe("/tmp/test-k3s.kubeconfig")
 
       // 3 masters + 2 workers, every one's install script actually executed
-      // (not merely rendered) over the fake `Ssh` — the gap this task closes.
+      // (not merely rendered) over the fake `Ssh`.
       expect(log.executed).toHaveLength(5)
       expect(log.executed.filter((e) => e.command.includes("--cluster-init"))).toHaveLength(1)
       expect(log.executed.filter((e) => e.command.includes("agent"))).toHaveLength(2)
 
-      // Readiness gates (FR-5.4/D7): cloud-init+ssh before every node, cluster-info once for master 1.
+      // Readiness gates: cloud-init+ssh before every node, cluster-info once for master 1.
       expect(log.cloudInitGates).toHaveLength(5)
       expect(log.clusterInfoGates).toHaveLength(1)
 
-      // TLS SANs (FR-5.3): every master IP + the LB VIP + the DNS api record FQDN.
+      // TLS SANs: every master IP + the LB VIP + the DNS api record FQDN.
       const masterScripts = log.executed.filter((e) => e.command.includes("--cluster-init") || e.command.includes("--server https://10.0.0."))
       for (const { command } of masterScripts) {
         expect(command).toContain("--tls-san=10.0.0.100") // LB VIP
         expect(command).toContain("--tls-san=api.test-k3s.example.com") // DNS api record
       }
 
-      // DNS (FR-7): the api_server target record was ensured against the LB VIP.
+      // DNS: the api_server target record was ensured against the LB VIP.
       expect(dnsCalls.ensured).toHaveLength(1)
       expect(dnsCalls.ensured[0]).toEqual([{ name: "api.test-k3s", target: "10.0.0.100" }])
 
-      // Volumes (FR-8): the retained volume was ensured (created).
+      // Volumes: the retained volume was ensured (created).
       expect(volumeCalls.ensured).toEqual(["pg-data"])
     }))
 

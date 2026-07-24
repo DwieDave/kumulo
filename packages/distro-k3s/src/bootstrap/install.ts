@@ -26,7 +26,7 @@ export interface BootstrapResult {
   readonly firstMaster: SshHost
 }
 
-// FR-5.4/D7 — cloud-init/ssh readiness always gate an install; controlPlaneReady
+// cloud-init/ssh readiness always gate an install; controlPlaneReady
 // only gates master 1 (the others' `--server` join needs it already serving).
 const _gateBefore = (host: SshHost): Effect.Effect<void, BootstrapFailed, Ssh> =>
   cloudInitReady(host).pipe(Effect.andThen(sshReady(host)))
@@ -39,7 +39,7 @@ const _exec = (host: SshHost, script: string, phase: string): Effect.Effect<void
     )
   })
 
-/** FR-5.1-5.4/D7 — the real (executed, not merely rendered) master install path. */
+/** The real (executed, not merely rendered) master install path. */
 const _installMaster = (
   args: RunBootstrapArgs,
   token: string,
@@ -63,7 +63,7 @@ const _installMaster = (
     if (isFirstMaster) yield* controlPlaneReady(host)
   })
 
-/** FR-5.1/D7 — the real (executed) worker install path. */
+/** The real (executed) worker install path. */
 const _installWorker = (
   args: RunBootstrapArgs,
   token: string,
@@ -86,8 +86,8 @@ const _installWorker = (
   })
 
 /**
- * FR-5.1-5.4/D7 — the single production Bootstrap-phase entrypoint: resolve
- * the join token/first-master (FR-5.2), then install masters (serial-first
+ * The single production Bootstrap-phase entrypoint: resolve the
+ * join token/first-master, then install masters (serial-first
  * then parallel) and workers, each gated by readiness and actually executed
  * over the `Ssh` port (not just rendered).
  */

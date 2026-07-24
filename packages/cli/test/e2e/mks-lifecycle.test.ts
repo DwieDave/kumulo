@@ -82,7 +82,7 @@ it.effect("yaml → plan → apply → nodepool scale-update → kubeconfig → 
     assert.strictEqual(info.status, "READY")
     assert.strictEqual([...server.pools.get(info.id)!.values()][0]?.desiredNodes, 3)
 
-    // scale: re-run apply with a bumped worker count — same reconcile (FR-2.7).
+    // scale: re-run apply with a bumped worker count — same reconcile.
     const scaledConfig = { ...config, worker_pools: [{ ...config.worker_pools[0]!, count: 5 }] }
     yield* applyMks(scaledConfig).pipe(Effect.provide(mksEnvLayer))
     assert.strictEqual([...server.pools.get(info.id)!.values()][0]?.desiredNodes, 5)

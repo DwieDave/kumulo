@@ -1,7 +1,5 @@
-// FR-5.3 / D7 — k3s install-over-SSH scripts, ported from hetzner-k3s's
-// templates/{master,worker}_install_script.sh (bash structure kept, Crinja
-// templating replaced with plain string interpolation — no template engine
-// dependency needed for a handful of substitutions).
+// k3s install-over-SSH scripts, plain string interpolation — no template
+// engine dependency needed for a handful of substitutions.
 
 export interface AddonDisableFlags {
   readonly cloudControllerManager: boolean
@@ -42,7 +40,7 @@ const _labelArgs = (labels: Readonly<Record<string, string>>): string =>
 
 const _taintArgs = (taints: ReadonlyArray<string>): string => taints.map((taint) => `--node-taint "${taint}"`).join(" ")
 
-/** Render the k3s server-node install script (`--cluster-init` or `--server` join). FR-5.3. */
+/** Render the k3s server-node install script (`--cluster-init` or `--server` join). */
 export const renderServerInstallScript = (args: ServerInstallArgs): string => {
   const server = args.isFirstMaster ? "--cluster-init" : `--server https://${args.firstMasterIp}:6443`
   const disableCcm = args.addons.cloudControllerManager ? "" : "--disable-cloud-controller"
@@ -67,7 +65,7 @@ curl -sfL https://get.k3s.io | \\
 `
 }
 
-/** Render the k3s agent-node install script (join via master 1). FR-5.3. */
+/** Render the k3s agent-node install script (join via master 1). */
 export const renderAgentInstallScript = (args: AgentInstallArgs): string =>
   `#!/bin/bash
 set -euo pipefail

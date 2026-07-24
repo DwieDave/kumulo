@@ -4,9 +4,9 @@ import type { DoctorCheck } from "../doctor/types.ts"
 const _name = "openstack-octavia-capability"
 
 /**
- * FR-10.2 — per-region Octavia (load balancer) capability. `supported` comes
- * from the active `ProviderProfile.capabilities.octavia(region)` (T6.2,
- * core) — a pure lookup, no network call needed here.
+ * Per-region Octavia (load balancer) capability. `supported` comes
+ * from the active `ProviderProfile.capabilities.octavia(region)` — a pure
+ * lookup, no network call needed here.
  */
 export const octaviaCapabilityCheck = (args: { readonly region: string; readonly supported: boolean }): DoctorCheck => ({
   name: _name,

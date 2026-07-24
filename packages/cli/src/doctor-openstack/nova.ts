@@ -3,8 +3,8 @@ import { Effect } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import type { DoctorCheck } from "../doctor/types.ts"
 
-// design §4.3 — pinned to the generated client's spec version (v2.96); sent
-// explicitly on every Nova request rather than relying on "latest".
+// Pinned to the generated client's spec version (v2.96); sent explicitly on
+// every Nova request rather than relying on "latest".
 export const NOVA_MICROVERSION = "2.96"
 
 export type MicroversionStatus = "accepted" | "rejected" | "unreachable"
@@ -47,7 +47,7 @@ export const probeMicroversion = (args: {
 
 const _name = "openstack-nova-microversion"
 
-/** FR-10.2 — microversion acceptance: fail loudly here, not mid-`create`, if the pin isn't supported. */
+/** Microversion acceptance: fail loudly here, not mid-`create`, if the pin isn't supported. */
 export const microversionCheck = (args: {
   readonly probe: Effect.Effect<MicroversionStatus>
   readonly microversion: string

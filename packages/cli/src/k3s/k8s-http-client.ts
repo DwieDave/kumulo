@@ -3,7 +3,7 @@ import * as BunHttpClient from "@effect/platform-bun/BunHttpClient"
 import type * as HttpClient from "effect/unstable/http/HttpClient"
 import type { KubeconfigAuth } from "@kumulo/core"
 
-// FR-9.2 — an authenticated `HttpClient` for the freshly-bootstrapped
+// An authenticated `HttpClient` for the freshly-bootstrapped
 // cluster (k3s's own client-cert kubeconfig, or a bearer token if some
 // future distro's kubeconfig uses one). `FetchHttpClient.RequestInit` (bare
 // re-exported through `BunHttpClient`) is the documented hook for default

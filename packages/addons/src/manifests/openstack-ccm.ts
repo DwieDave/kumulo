@@ -4,9 +4,9 @@ import { CLOUD_CONF_NAMESPACE, CLOUD_CONF_SECRET_NAME, cloudConfSecretManifest, 
 const SERVICE_ACCOUNT = "openstack-cloud-controller-manager"
 const IMAGE = "registry.k8s.io/provider-os/openstack-cloud-controller-manager:v1.30.0"
 
-// design §3.4 / FR-9.1: openstack-ccm consumes the generated cloud.conf
-// Secret; manifests are static (no Helm) — a DaemonSet on control-plane
-// nodes, per upstream's recommended install.
+// openstack-ccm consumes the generated cloud.conf Secret; manifests are
+// static (no Helm) — a DaemonSet on control-plane nodes, per upstream's
+// recommended install.
 export const openstackCcmManifests = (conf: CloudConf): ReadonlyArray<K8sManifest> => [
   cloudConfSecretManifest(conf),
   {

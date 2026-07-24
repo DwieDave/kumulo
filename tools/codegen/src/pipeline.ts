@@ -13,11 +13,12 @@ export interface PipelineInput {
   readonly generate: GenerateOptions
 }
 
-// kumulo: applyPatches returns `unknown` (see patch.ts) — a patched spec is still an
-// OpenAPISpec at runtime by construction (patches only add/replace/remove fields within
-// it). Only the two fields the pipeline actually branches on are checked; every other
-// field (paths' contents, components, ...) passes through untouched — FR-4.6 leniency —
-// so this intentionally isn't a full OpenAPISpec schema.
+// kumulo: WHY not a full schema — applyPatches returns `unknown` (see patch.ts), but a
+// patched spec is still an OpenAPISpec at runtime by construction (patches only
+// add/replace/remove fields within it). Only the two fields the pipeline actually branches
+// on are checked; every other field (paths' contents, components, ...) passes through
+// untouched (handled leniently downstream), so this intentionally isn't a full OpenAPISpec
+// schema.
 const OpenApiSpecShape = Schema.Struct({
   openapi: Schema.Unknown,
   paths: Schema.Unknown
@@ -27,7 +28,7 @@ const OpenApiSpecShape = Schema.Struct({
 const _matchesOpenApiSpecShape = Schema.is(OpenApiSpecShape)
 const _isOpenApiSpec = (value: unknown): value is OpenAPISpec => _matchesOpenApiSpecShape(value)
 
-/** Runs allowlist filter -> patch apply -> generator invocation, in that order (design §4.2/§4.3). */
+/** Runs allowlist filter -> patch apply -> generator invocation, in that order. */
 export const runPipeline = (
   input: PipelineInput
 ): Effect.Effect<GenerateResult, AllowlistOperationNotFound | JsonPatchAggregateError> =>

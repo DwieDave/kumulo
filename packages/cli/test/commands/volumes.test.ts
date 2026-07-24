@@ -54,7 +54,7 @@ k3s:
   extra_agent_args: []
 `
 
-// AC-7 — `delete` retains `retain: true` volumes and prints what it kept;
+// `delete` retains `retain: true` volumes and prints what it kept;
 // non-retained entries recorded in config are actually deleted.
 it.effect("keeps retain:true volumes and deletes the rest", () =>
   Effect.gen(function*() {

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Re-fetch OVH's proprietary v1 schema JSON (never done in tests — network only here).
 # Drift shows up as a clean `git diff` on specs/ovh/*.json, or a hard failure
-# downstream in the converter/patch/generate pipeline (per FR-4.4).
+# downstream in the converter/patch/generate pipeline.
 set -euo pipefail
 
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/specs/ovh"

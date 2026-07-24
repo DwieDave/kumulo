@@ -17,9 +17,10 @@ const PLURALS: Record<string, string> = {
 
 const _apiPrefix = (apiVersion: string): string => apiVersion === "v1" ? "/api/v1" : `/apis/${apiVersion}`
 
-// FR-4.6 lenient decode: manifests come from our own generators (manifests/*.ts)
-// and may carry any other metadata fields (labels, annotations, ...) — only
-// `name`/`namespace` are extracted, everything else passes through untouched.
+// kumulo: WHY lenient decode — manifests come from our own generators
+// (manifests/*.ts) and may carry any other metadata fields (labels,
+// annotations, ...) — only `name`/`namespace` are extracted, everything else
+// passes through untouched.
 const K8sObjectMeta = Schema.Struct({
   name: Schema.optionalKey(Schema.String),
   namespace: Schema.optionalKey(Schema.String)

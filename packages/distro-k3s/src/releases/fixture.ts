@@ -1,6 +1,6 @@
 // Vendored snapshot of k3s GitHub release tags (`rancher/k3s` releases API,
 // stable channel), refreshed by `scripts/refresh-releases.ts` — never
-// fetched live in code or tests (offline requirement). FR-5.6.
+// fetched live in code or tests (offline requirement).
 export const K3S_RELEASE_FIXTURE: ReadonlyArray<string> = [
   "v1.31.2+k3s1",
   "v1.31.1+k3s1",

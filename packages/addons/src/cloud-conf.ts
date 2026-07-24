@@ -1,6 +1,6 @@
 import type { K8sManifest } from "@kumulo/core"
 
-// Minimal-scope cloud.conf for openstack-ccm/cinder-csi (design §3.4, FR-9.1):
+// Minimal-scope cloud.conf for openstack-ccm/cinder-csi:
 // application-credential auth only, no username/password fallback — the
 // credential itself is created out-of-band, scoped to just what CCM/CSI need.
 export interface CloudConf {

@@ -13,7 +13,7 @@ const dryRunFlag = Flag.boolean("dry-run").pipe(
 )
 
 /**
- * FR-10.1 — root command; `--config`/`--yes`/`--dry-run` are shared by every
+ * Root command; `--config`/`--yes`/`--dry-run` are shared by every
  * subcommand. Lives in its own module (not `commands.ts`) so subcommand
  * files can depend on it (`yield* kumulo`) without a circular import — a
  * subcommand must never redeclare its own `config`/`yes` flag, which the CLI

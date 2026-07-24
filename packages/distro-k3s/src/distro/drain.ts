@@ -12,9 +12,9 @@ export interface DrainAndRemoveArgs {
   readonly node: NodeRef
 }
 
-// FR-2.7 scale-down: cordon → evict pods → delete the k8s Node object.
+// Scale-down: cordon → evict pods → delete the k8s Node object.
 // Actual server deletion is the reconciler's CloudProvider call, made after
-// this succeeds (design §3.3's Distro port only owns the k8s-side drain).
+// this succeeds (the Distro port only owns the k8s-side drain).
 export const drainAndRemove = (args: DrainAndRemoveArgs): Effect.Effect<void, BootstrapFailed> => {
   const { client, node } = args
   return Effect.gen(function*() {

@@ -4,21 +4,20 @@ import { BootstrapFailed, pollUntil } from "@kumulo/core"
 import { Ssh } from "./port.ts"
 import type { SshHost } from "./port.ts"
 
-// kumulo: WHY 300s cap — hetzner-k3s's cloud_init_wait_script.sh polls
-// /var/lib/cloud/instance/boot-finished for MAX_WAIT=300 (1s steps); we poll
-// less often over SSH instead of embedding a wait loop in cloud-init itself.
+// kumulo: WHY 300s cap — cloud-init can finish minutes after SSH comes up;
+// 300s covers slow images. We poll over SSH instead of embedding a wait
+// loop in cloud-init itself.
 const CLOUD_INIT_POLL_INTERVAL = "5 seconds"
 const CLOUD_INIT_TIMEOUT = "300 seconds"
 const CLOUD_INIT_MARKER = "/var/lib/cloud/instance/boot-finished"
 
-// kumulo: WHY 100s cap — hetzner-k3s's Util::SSH::DEFAULT_MAX_ATTEMPTS (20)
-// * DEFAULT_RETRY_DELAY (5s) = 100s of polling for a session to open.
+// kumulo: WHY 100s cap — 20 attempts * 5s retry delay = 100s of polling for
+// an SSH session to open.
 const SSH_READY_POLL_INTERVAL = "5 seconds"
 const SSH_READY_TIMEOUT = "100 seconds"
 
-// kumulo: WHY retry x3 / 30s each — hetzner-k3s's control_plane/setup.cr
-// wraps `kubectl cluster-info` in Retriable.retry(max_attempts: 3) with a
-// per-attempt Tasker.timeout(30.seconds).
+// kumulo: WHY retry x3 / 30s each — `kubectl cluster-info` gets 3 attempts,
+// each capped at a 30s timeout.
 const CLUSTER_INFO_MAX_ATTEMPTS = 3
 const CLUSTER_INFO_ATTEMPT_TIMEOUT = "30 seconds"
 
@@ -48,7 +47,7 @@ const _pollReady = (args: {
     Effect.mapError(() => new BootstrapFailed({ node: args.host.ip, phase: args.phase, log: `${args.kind} never became ready` }))
   )
 
-/** Poll until cloud-init reports boot-finished, capped at 300s (FR-5.4). */
+/** Poll until cloud-init reports boot-finished, capped at 300s. */
 export const cloudInitReady = (host: SshHost): Effect.Effect<void, BootstrapFailed, Ssh> =>
   Effect.gen(function*() {
     const ssh = yield* Ssh
@@ -62,7 +61,7 @@ export const cloudInitReady = (host: SshHost): Effect.Effect<void, BootstrapFail
     })
   })
 
-/** Poll until an SSH session can be opened, capped at 100s (FR-5.4). */
+/** Poll until an SSH session can be opened, capped at 100s. */
 export const sshReady = (host: SshHost): Effect.Effect<void, BootstrapFailed, Ssh> =>
   Effect.gen(function*() {
     const ssh = yield* Ssh
@@ -98,7 +97,7 @@ const _clusterInfoReady = (
     )
   )
 
-/** Retry `kubectl cluster-info` on the control plane up to 3x, 30s each (FR-5.4). */
+/** Retry `kubectl cluster-info` on the control plane up to 3x, 30s each. */
 export const controlPlaneReady = (host: SshHost): Effect.Effect<void, BootstrapFailed, Ssh> =>
   Effect.gen(function*() {
     const ssh = yield* Ssh

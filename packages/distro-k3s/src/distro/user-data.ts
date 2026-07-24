@@ -7,7 +7,7 @@ export interface RenderUserDataArgs {
   readonly sshPublicKey: string
 }
 
-// FR-5.1 — cloud-init only (hostname, packages, SSH hardening); k3s install
+// Cloud-init only (hostname, packages, SSH hardening); k3s install
 // happens over SSH afterward (bootstrap/install-script.ts), so `ctx`'s
 // token/apiEndpoint aren't needed at this layer — same split the cloud-init
 // renderer itself documents. Hostname is `ctx.name` (the node's own unique

@@ -13,8 +13,8 @@ export interface FetchKubeconfigArgs {
   readonly serverUrl: string
 }
 
-// FR-5.5 — fetch k3s's generated kubeconfig from master 1 over SSH and
-// rewrite it for the real cluster name/endpoint (§rewrite.ts).
+// Fetch k3s's generated kubeconfig from master 1 over SSH and
+// rewrite it for the real cluster name/endpoint (see rewrite.ts).
 export const fetchKubeconfig = (args: FetchKubeconfigArgs): Effect.Effect<Kubeconfig, BootstrapFailed, Ssh> =>
   Effect.gen(function*() {
     const ssh = yield* Ssh

@@ -3,8 +3,8 @@ import type { K8sManifest } from "@kumulo/core"
 const NAMESPACE = "system-upgrade"
 const IMAGE = "rancher/system-upgrade-controller:v0.13.4"
 
-// design §3.4 / FR-9.1, FR-6.2: SUC itself is addon-installed; `upgrade`
-// (T8.3) renders the Plan CRs consumed by this controller.
+// SUC itself is addon-installed; `upgrade` renders the Plan CRs consumed
+// by this controller.
 export const systemUpgradeControllerManifests = (): ReadonlyArray<K8sManifest> => [
   { apiVersion: "v1", kind: "Namespace", metadata: { name: NAMESPACE } },
   {

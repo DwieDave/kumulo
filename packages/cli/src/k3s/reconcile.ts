@@ -75,7 +75,7 @@ const _requireNonEmpty = <A>(
     : Effect.succeed([first, ...rest])
 }
 
-// FR-5.3 — TLS SANs: every master IP + the LB VIP + the DNS api record when
+// TLS SANs: every master IP + the LB VIP + the DNS api record when
 // configured (127.0.0.1 is always added by `renderServerInstallScript` itself).
 const _apiDnsRecordName = (config: ClusterConfig): string | undefined =>
   config.dns.module === "none" ? undefined : config.dns.records.find((r) => r.target === "api_server")?.name
@@ -98,7 +98,7 @@ interface Infra {
   readonly workerInfos: ReadonlyArray<ServerInfo>
 }
 
-/** FR-2.3/FR-2.4 — Network → Security → LB → Nodes (ServerGroups is absorbed into `ensureServer`, FR-5.7). */
+/** Network → Security → LB → Nodes (ServerGroups is absorbed into `ensureServer`). */
 const _provisionInfra = (config: ClusterConfig): Effect.Effect<Infra, CloudError, CloudProvider> =>
   Effect.gen(function*() {
     const cloudProvider = yield* CloudProvider
@@ -114,7 +114,7 @@ const _provisionInfra = (config: ClusterConfig): Effect.Effect<Infra, CloudError
     return { lbVip: lb.vip, masterInfos, workerInfos }
   })
 
-/** FR-5.1-5.4/D7 — Bootstrap: real SSH-executed install (`runBootstrap`), readiness-gated; returns master 1. */
+/** Bootstrap: real SSH-executed install (`runBootstrap`), readiness-gated; returns master 1. */
 const _bootstrap = (config: ClusterConfig, infra: Infra): Effect.Effect<SshHost, BootstrapFailed, Ssh> =>
   Effect.gen(function*() {
     const masters = yield* _requireNonEmpty(infra.masterInfos.map(_toHost), "master")
@@ -139,7 +139,7 @@ const _cloudConfFromEnv = (region: string) => ({
 })
 
 /**
- * Injectable K8sClient seam (item 3): a `K8sClient` `Layer` built from master
+ * Injectable K8sClient seam: a `K8sClient` `Layer` built from master
  * 1's own (unrewritten) kubeconfig, fetched over `Ssh` — Addons/scale-down
  * drain/`status` all take `K8sClient` from context instead of a hand-threaded
  * parameter, so production wiring stays identical (`k8sClientLive` is the
@@ -158,7 +158,7 @@ export const k8sClientLive = (
     })
   )
 
-/** FR-9.1/D5 — Addons phase. */
+/** Addons phase. */
 const _installAddons = (config: ClusterConfig): Effect.Effect<void, AddonError, OpenStackEnv | K8sClient> =>
   Effect.gen(function*() {
     const k8sClient = yield* K8sClient
@@ -169,7 +169,7 @@ const _installAddons = (config: ClusterConfig): Effect.Effect<void, AddonError, 
     yield* installAddons({ k8sClient, addons, ctx })
   })
 
-/** FR-7 — DNS phase: only wired for `dns.module: ovh` (the only implemented `DnsProvider`). */
+/** DNS phase: only wired for `dns.module: ovh` (the only implemented `DnsProvider`). */
 const _reconcileDns = (config: ClusterConfig, apiTarget: string): Effect.Effect<void, DnsError, DnsProvider> =>
   config.dns.module !== "ovh"
     ? Effect.void
@@ -182,7 +182,7 @@ const _reconcileDns = (config: ClusterConfig, apiTarget: string): Effect.Effect<
       yield* dns.ensureRecords(config.dns.zone, records)
     })
 
-/** FR-8 — Volumes phase: only wired for `volumes.module: cinder`. */
+/** Volumes phase: only wired for `volumes.module: cinder`. */
 const _reconcileVolumes = (config: ClusterConfig): Effect.Effect<void, VolumeError, VolumeProvider> =>
   config.volumes.module !== "cinder"
     ? Effect.void
@@ -195,7 +195,7 @@ const _reconcileVolumes = (config: ClusterConfig): Effect.Effect<void, VolumeErr
       )
     })
 
-/** FR-2.7 — any currently-running worker not in the desired spec set (exported for direct unit testing, no k8s client needed). */
+/** Any currently-running worker not in the desired spec set (exported for direct unit testing, no k8s client needed). */
 export const orphanedWorkers = (
   { config, workerInfos }: { readonly config: ClusterConfig; readonly workerInfos: ReadonlyArray<ServerInfo> }
 ): ReadonlyArray<ServerInfo> => {
@@ -204,7 +204,7 @@ export const orphanedWorkers = (
 }
 
 /**
- * FR-2.7 — scale-down: `infra.workerInfos` only covers this apply's *desired*
+ * Scale-down: `infra.workerInfos` only covers this apply's *desired*
  * specs (`ensureServer` is create-if-missing-by-name, it never reports a
  * server that's no longer desired) — orphan detection needs the actual
  * tagged inventory instead, filtered to workers by the same naming
@@ -229,7 +229,7 @@ const _drainOrphanedWorkers = (
     )
   })
 
-/** FR-5.5 — Kubeconfig phase: LB VIP / DNS name / master IP precedence, written 0600 to `<name>.kubeconfig`. */
+/** Kubeconfig phase: LB VIP / DNS name / master IP precedence, written 0600 to `<name>.kubeconfig`. */
 const _writeKubeconfig = (
   config: ClusterConfig,
   master1: SshHost,
@@ -249,16 +249,15 @@ const _noopDns = { ensureRecords: () => Effect.void, removeClusterRecords: () =>
 const _dnsLayer = (config: ClusterConfig): Layer.Layer<DnsProvider, AuthenticationFailed, HttpClient.HttpClient> =>
   config.dns.module === "ovh" ? k3sDnsProviderLayer() : Layer.succeed(DnsProvider, _noopDns)
 
-// FR-2.3/FR-5/FR-10.1 — the full self-managed (k3s) phase pipeline, in
-// `SELF_MANAGED_PHASES` order, expressed purely against the ports
-// (`CloudProvider`/`Ssh`/`DnsProvider`/`VolumeProvider`/`OpenStackEnv`) —
+// The full self-managed (k3s) phase pipeline, expressed purely against the
+// ports (`CloudProvider`/`Ssh`/`DnsProvider`/`VolumeProvider`/`OpenStackEnv`) —
 // kept separate from `applyK3s`'s live Layer wiring below so tests can
 // drive it against fake `CloudProvider`/`Ssh` Layers instead.
 //
-// `k8sClientLayer` (item 3's seam) defaults to `k8sClientLive` (the real,
-// kubeconfig-derived client) — production callers (`applyK3s`) never pass
-// it, so wiring is identical; tests pass a fake `K8sClient` Layer to drive
-// the Addons/drain phases without a real kubeconfig/HTTP round-trip.
+// `k8sClientLayer` defaults to `k8sClientLive` (the real, kubeconfig-derived
+// client) — production callers (`applyK3s`) never pass it, so wiring is
+// identical; tests pass a fake `K8sClient` Layer to drive the Addons/drain
+// phases without a real kubeconfig/HTTP round-trip.
 export const applyK3sEffect = (
   { config, configDir, k8sClientLayer = k8sClientLive }: {
     readonly config: ClusterConfig
@@ -281,7 +280,7 @@ export const applyK3sEffect = (
     return { apiEndpoint: infra.lbVip, kubeconfigPath }
   })
 
-/** FR-2.3/FR-5/FR-10.1 — `applyK3sEffect` wired to its live Layers (OpenStack `CloudProvider`, real SSH, dns-ovh, Cinder). */
+/** `applyK3sEffect` wired to its live Layers (OpenStack `CloudProvider`, real SSH, dns-ovh, Cinder). */
 export const applyK3s = (
   args: { readonly config: ClusterConfig; readonly configDir: string }
 ): Effect.Effect<K3sApplyResult, K3sError, OpenStackEnv | CinderAuth | HttpClient.HttpClient> =>
@@ -292,7 +291,7 @@ export const applyK3s = (
     Effect.provide(k3sCloudProviderLayer(args.config))
   )
 
-/** FR-2.6 — delete: inventory-by-tag, `retain: true` volumes skipped (AC-7); ports-only, see `applyK3sEffect`. */
+/** Delete: inventory-by-tag, `retain: true` volumes skipped; ports-only, see `applyK3sEffect`. */
 export const deleteK3sEffect = (
   config: ClusterConfig
 ): Effect.Effect<void, K3sError, CloudProvider | DnsProvider | VolumeProvider> =>
@@ -313,7 +312,7 @@ export const deleteK3sEffect = (
     yield* cloudProvider.deleteByTag(config.name)
   })
 
-/** FR-2.6 — `deleteK3sEffect` wired to its live Layers. */
+/** `deleteK3sEffect` wired to its live Layers. */
 export const deleteK3s = (config: ClusterConfig): Effect.Effect<void, K3sError, OpenStackEnv | CinderAuth | HttpClient.HttpClient> =>
   deleteK3sEffect(config).pipe(
     Effect.provide(k3sVolumeProviderLayer({ tag: config.name })),
@@ -321,7 +320,7 @@ export const deleteK3s = (config: ClusterConfig): Effect.Effect<void, K3sError, 
     Effect.provide(k3sCloudProviderLayer(config))
   )
 
-/** FR-6.2/FR-2.1 — kubeconfig: resolves the tagged inventory + LB, re-fetches from master 1; ports-only, see `applyK3sEffect`. */
+/** Kubeconfig: resolves the tagged inventory + LB, re-fetches from master 1; ports-only, see `applyK3sEffect`. */
 export const kubeconfigK3sEffect = (config: ClusterConfig): Effect.Effect<Kubeconfig, K3sError, CloudProvider | Ssh> =>
   Effect.gen(function*() {
     const cloudProvider = yield* CloudProvider
@@ -333,7 +332,7 @@ export const kubeconfigK3sEffect = (config: ClusterConfig): Effect.Effect<Kubeco
     return yield* fetchKubeconfig({ master1: _toHost(masterInfo), clusterName: config.name, serverUrl })
   })
 
-/** FR-6.2/FR-2.1 — `kubeconfigK3sEffect` wired to its live Layers. */
+/** `kubeconfigK3sEffect` wired to its live Layers. */
 export const kubeconfigK3s = (
   config: ClusterConfig
 ): Effect.Effect<Kubeconfig, K3sError, OpenStackEnv | CinderAuth | HttpClient.HttpClient> =>
@@ -355,7 +354,7 @@ export interface K3sStatus {
 
 const NODES_REF = { path: "/api/v1/nodes", kind: "Node" }
 
-// kumulo: lenient decode (FR-4.6) — a Node manifest missing/malformed
+// kumulo: WHY lenient decode — a Node manifest missing/malformed
 // metadata.name or status.conditions decodes to the same "not ready" /
 // "" defaults the manual guards previously fell back to, rather than
 // failing status reporting outright.
@@ -380,9 +379,8 @@ const _nodeName = (manifest: K8sManifest): string => {
 }
 
 /**
- * FR-10 — k3s status: inventory via `CloudProvider` by tag (D5.7 gone, this
- * is the real, wired part of FR-2.7's twin gap), node health via `K8sClient`
- * (item 3's seam — same `k8sClientLive` production wiring as `applyK3sEffect`,
+ * k3s status: inventory via `CloudProvider` by tag, node health via
+ * `K8sClient` (same `k8sClientLive` production wiring as `applyK3sEffect`,
  * built from master 1's kubeconfig once the cluster's inventory says it exists).
  */
 export const k3sStatusEffect = (
@@ -407,7 +405,7 @@ export const k3sStatusEffect = (
     return { exists: true, apiEndpoint: lb.vip, nodes }
   })
 
-/** FR-10 — `k3sStatusEffect` wired to its live Layers. */
+/** `k3sStatusEffect` wired to its live Layers. */
 export const k3sStatus = (
   config: ClusterConfig
 ): Effect.Effect<K3sStatus, K3sError, OpenStackEnv | CinderAuth | HttpClient.HttpClient> =>

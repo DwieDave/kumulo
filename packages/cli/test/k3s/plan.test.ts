@@ -4,7 +4,7 @@ import { decodeConfig } from "@kumulo/core"
 import type { ClusterConfigEncoded } from "@kumulo/core"
 import { buildK3sPlan, buildK3sServerSpecs } from "../../src/k3s/plan.ts"
 
-// Mirrors the design doc's §5 sample config (same fixture core's own tests use).
+// Same fixture core's own tests use.
 const _encoded: ClusterConfigEncoded = {
   name: "prod-eu",
   provider: "ovh",

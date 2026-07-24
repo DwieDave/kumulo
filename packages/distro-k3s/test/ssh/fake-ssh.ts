@@ -6,7 +6,7 @@ import type { SshHost } from "../../src/ssh/port.ts"
 // Scriptable in-memory `Ssh` fake — each hook is a plain function so a test
 // can close over its own mutable state (e.g. a call counter) to simulate
 // "not ready yet, then ready" sequences without a shared queue abstraction.
-// Reused across T7.1 (readiness gates) and (future) T7.2 (bootstrap exec).
+// Reused across readiness-gate and bootstrap-exec tests.
 export interface SshScript {
   readonly exec?: (host: SshHost, command: string) => Effect.Effect<string, SshCommandError>
   readonly readFile?: (host: SshHost, path: string) => Effect.Effect<string, SshCommandError>

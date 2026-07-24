@@ -5,7 +5,7 @@ export class AllowlistOperationNotFound extends Data.TaggedError("AllowlistOpera
   readonly operationIds: ReadonlyArray<string>
 }> {}
 
-/** Regenerated source differs from the committed output — upstream spec/patch drift, per FR-4.4/AC-5. */
+/** Regenerated source differs from the committed output — upstream spec/patch drift. */
 export class DriftDetected extends Data.TaggedError("DriftDetected")<{
   readonly committedPath: string
   readonly firstDiffLine: number
