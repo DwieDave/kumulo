@@ -193,7 +193,7 @@ export const del = Command.make(
     })
 
     yield* Effect.all([clusterAndVolumesStep, bucketsStep], { concurrency: 2 })
-    yield* Console.log(`Cluster "${config.name}" deleted.`)
+    yield* Console.log(`\nCluster "${config.name}" deleted.`)
   })
 ).pipe(Command.withDescription("Delete a cluster"))
 
