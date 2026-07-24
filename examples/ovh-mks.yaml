@@ -4,32 +4,32 @@ distro: ovh-mks
 version: 1.31.1
 auth:
   method: application_credential
-  region: GRA11
+  region: DE1
 network:
   cidr: 10.1.0.0/16
   public_access: nat
 api_server:
   high_availability: true
   allowed_cidrs:
-    - 203.0.113.0/24
+    - 0.0.0.0/0
 ssh:
   public_key_path: ~/.ssh/id_ed25519.pub
   allowed_cidrs:
-    - 203.0.113.0/24
+    - 0.0.0.0/0
 masters:
   flavor: b3-8
   count: 3
   image: ubuntu-24.04
 worker_pools:
   - name: general
-    flavor: b3-16
-    count: 3
+    flavor: d2-4
+    count: 1
     labels:
       workload: general
     autoscaling:
-      enabled: true
-      min: 3
-      max: 8
+      enabled: false
+      min: 1
+      max: 1
 dns:
   module: none
   zone: example.com
