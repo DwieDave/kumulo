@@ -1,4 +1,4 @@
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import type { OpenAPISpec } from "effect/unstable/httpapi/OpenApi"
 import { filterAllowlist } from "./allowlist.ts"
 import { applyPatches, type NamedPatch } from "./patch.ts"
@@ -15,13 +15,17 @@ export interface PipelineInput {
 
 // kumulo: applyPatches returns `unknown` (see patch.ts) — a patched spec is still an
 // OpenAPISpec at runtime by construction (patches only add/replace/remove fields within
-// it); narrow it back with a proper runtime type guard rather than a type assertion.
-const _isOpenApiSpec = (value: unknown): value is OpenAPISpec =>
-  typeof value === "object" &&
-  value !== null &&
-  !Array.isArray(value) &&
-  "openapi" in value &&
-  "paths" in value
+// it). Only the two fields the pipeline actually branches on are checked; every other
+// field (paths' contents, components, ...) passes through untouched — FR-4.6 leniency —
+// so this intentionally isn't a full OpenAPISpec schema.
+const OpenApiSpecShape = Schema.Struct({
+  openapi: Schema.Unknown,
+  paths: Schema.Unknown
+})
+
+// A real runtime type guard (no `as` cast) built from the schema above.
+const _matchesOpenApiSpecShape = Schema.is(OpenApiSpecShape)
+const _isOpenApiSpec = (value: unknown): value is OpenAPISpec => _matchesOpenApiSpecShape(value)
 
 /** Runs allowlist filter -> patch apply -> generator invocation, in that order (design §4.2/§4.3). */
 export const runPipeline = (

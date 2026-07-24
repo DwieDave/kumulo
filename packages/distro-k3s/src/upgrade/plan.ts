@@ -1,4 +1,5 @@
 import type { K8sManifest, ResourceRef } from "@kumulo/core"
+import { Result, Schema } from "effect"
 
 // FR-5.6 / design §3.4: SUC (rancher/system-upgrade-controller) Plan CRs for
 // a k3s version bump. Ports hetzner-k3s's templates/upgrade_plan_for_*.yaml
@@ -72,14 +73,27 @@ export const renderUpgradePlan = (
   { version, workerConcurrency = 1 }: UpgradePlanArgs
 ): ReadonlyArray<K8sManifest> => [renderMastersPlan(version), renderWorkersPlan({ version, concurrency: workerConcurrency })]
 
-const _isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null
+// FR-4.6 lenient decode: only `name`/`namespace` are extracted, any other
+// metadata fields (labels, ...) pass through unexamined.
+const PlanObjectMeta = Schema.Struct({
+  name: Schema.optionalKey(Schema.String),
+  namespace: Schema.optionalKey(Schema.String)
+})
+
+// A decode failure (missing/malformed metadata) falls back to the same
+// defaults the old manual guard used, rather than throwing.
+const _metadata = (manifest: K8sManifest): { name: string; namespace: string } => {
+  const decoded = Result.getOrElse(
+    Schema.decodeUnknownResult(PlanObjectMeta)(manifest.metadata),
+    () => ({ name: undefined, namespace: undefined })
+  )
+  return { name: decoded.name ?? "", namespace: decoded.namespace ?? NAMESPACE }
+}
 
 // kumulo: WHY not core's addons `refFor` — that helper's PLURALS map only
 // covers built-in addon kinds, and `Plan` is a CRD this package alone emits
 // (upgrade.cattle.io/v1, namespaced under `system-upgrade`).
 export const refForPlan = (manifest: K8sManifest): ResourceRef => {
-  const metadata = manifest.metadata
-  const name = _isRecord(metadata) && typeof metadata.name === "string" ? metadata.name : ""
-  const namespace = _isRecord(metadata) && typeof metadata.namespace === "string" ? metadata.namespace : NAMESPACE
+  const { name, namespace } = _metadata(manifest)
   return { path: `/apis/upgrade.cattle.io/v1/namespaces/${namespace}/plans/${name}`, kind: "Plan" }
 }

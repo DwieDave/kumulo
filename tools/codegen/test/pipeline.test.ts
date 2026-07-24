@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Effect } from "effect"
+import { Cause, Effect, Exit } from "effect"
 import { runPipeline } from "../src/pipeline.ts"
 import { checkNoop } from "../src/regenCheck.ts"
 import { syntheticSpec } from "./fixtures.ts"
@@ -40,5 +40,21 @@ describe("runPipeline", () => {
         })
       )
       expect(result._tag).toEqual("AllowlistOperationNotFound")
+    }))
+
+  it.effect("dies when a patch strips the document down to a non-OpenAPISpec shape", () =>
+    Effect.gen(function* () {
+      const exit = yield* Effect.exit(
+        runPipeline({
+          spec: syntheticSpec,
+          allowlist: ["listWidgets"],
+          patches: [{ source: "strip-paths.patch.json", patch: [{ op: "remove", path: "/paths" }] }],
+          generate: { name: "Widgets", format: "httpclient" }
+        })
+      )
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        expect(Cause.hasDies(exit.cause)).toBe(true)
+      }
     }))
 })

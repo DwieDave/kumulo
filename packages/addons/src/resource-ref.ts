@@ -1,4 +1,5 @@
 import type { K8sManifest, ResourceRef } from "@kumulo/core"
+import { Result, Schema } from "effect"
 
 // kumulo: only the kinds our built-in addons actually emit — a full
 // GVK->plural mapper is unneeded complexity (core's own K8sClient makes the
@@ -16,15 +17,24 @@ const PLURALS: Record<string, string> = {
 
 const _apiPrefix = (apiVersion: string): string => apiVersion === "v1" ? "/api/v1" : `/apis/${apiVersion}`
 
-const _isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null
+// FR-4.6 lenient decode: manifests come from our own generators (manifests/*.ts)
+// and may carry any other metadata fields (labels, annotations, ...) — only
+// `name`/`namespace` are extracted, everything else passes through untouched.
+const K8sObjectMeta = Schema.Struct({
+  name: Schema.optionalKey(Schema.String),
+  namespace: Schema.optionalKey(Schema.String)
+})
 
 // kumulo: narrows without an `as` cast — manifests are ones we generated
-// ourselves (see manifests/*.ts), all of which set metadata.name.
+// ourselves (see manifests/*.ts), all of which set metadata.name. A decode
+// failure (missing/malformed metadata) falls back to the same defaults the
+// old manual guard used, rather than throwing.
 const _metadata = (manifest: K8sManifest): { name: string; namespace?: string } => {
-  const metadata = manifest.metadata
-  const name = _isRecord(metadata) && typeof metadata.name === "string" ? metadata.name : ""
-  const namespace = _isRecord(metadata) && typeof metadata.namespace === "string" ? metadata.namespace : undefined
-  return { name, namespace }
+  const decoded = Result.getOrElse(
+    Schema.decodeUnknownResult(K8sObjectMeta)(manifest.metadata),
+    () => ({ name: undefined, namespace: undefined })
+  )
+  return { name: decoded.name ?? "", namespace: decoded.namespace }
 }
 
 // Derives the REST path K8sClient.apply needs from a manifest we generated
