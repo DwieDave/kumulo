@@ -59,7 +59,13 @@ const _ensureContainer = (
 ): Effect.Effect<Container, ObjectStorageError> =>
   Effect.gen(function*() {
     const ctx = { kind: "bucket", ref: `${spec.region}/${spec.name}` }
-    const containers = yield* mapStorageError({ self: storage.getStorageContainersOnRegion(serviceName, spec.region, undefined), ctx })
+    // Region-scoped list: a 404 here means the S3 region itself (compute
+    // regions like "DE1" are a different namespace than S3's "DE"), never the
+    // bucket — context it accordingly.
+    const containers = yield* mapStorageError({
+      self: storage.getStorageContainersOnRegion(serviceName, spec.region, undefined),
+      ctx: { kind: "storage-region", ref: spec.region }
+    })
     if (!containers.some((c) => c.name === spec.name)) return yield* _create({ storage, serviceName, spec })
     const current = yield* mapStorageError({ self: storage.getStorageContainerOnRegion(serviceName, spec.region, spec.name, undefined), ctx })
     if ((current.versioning?.status === "enabled") === spec.versioning) return current
@@ -105,7 +111,7 @@ export const listBuckets = (
 ) =>
   (region: string): Effect.Effect<ReadonlyArray<BucketInfo>, ObjectStorageError> =>
     Effect.map(
-      mapStorageError({ self: storage.getStorageContainersOnRegion(serviceName, region, undefined), ctx: { kind: "bucket", ref: region } }),
+      mapStorageError({ self: storage.getStorageContainersOnRegion(serviceName, region, undefined), ctx: { kind: "storage-region", ref: region } }),
       (containers) => containers.map((c) => _toBucketInfo(c, region))
     )
 

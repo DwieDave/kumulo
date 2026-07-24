@@ -50,12 +50,12 @@ object_storage:
   module: ovh
   buckets:
     - name: staging-eu-backups
-      region: DE1
+      region: DE
       versioning: false
       encryption: false
       retain: true
     - name: staging-eu-logs
-      region: DE1
+      region: DE
       versioning: true
       encryption: false
       retain: false

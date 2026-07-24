@@ -12,16 +12,16 @@ export type BucketReconcileError = ObjectStorageError | CredentialsSinkError | O
 
 type StorageProvider = ObjectStorageProvider["Service"]
 
-const _toBucketSpec = (bucket: ClusterConfig["object_storage"]["buckets"][number], defaultRegion: string): BucketSpec => ({
+const _toBucketSpec = (bucket: ClusterConfig["object_storage"]["buckets"][number]): BucketSpec => ({
   name: bucket.name,
-  region: bucket.region ?? defaultRegion,
+  region: bucket.region,
   versioning: bucket.versioning,
   encryption: bucket.encryption,
   retain: bucket.retain
 })
 
 const _desiredBuckets = (config: ClusterConfig): ReadonlyArray<BucketSpec> =>
-  config.object_storage.buckets.map((bucket) => _toBucketSpec(bucket, config.auth.region))
+  config.object_storage.buckets.map(_toBucketSpec)
 
 const _bucketDiff = (
   { config, configDir }: { readonly config: ClusterConfig; readonly configDir: string }

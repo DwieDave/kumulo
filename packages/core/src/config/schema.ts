@@ -127,7 +127,10 @@ const BucketName = Schema.String.check(isS3BucketName)
 
 const Bucket = Schema.Struct({
   name: BucketName,
-  region: Schema.optionalKey(Schema.NonEmptyString),
+  // Required on purpose: OVH's S3 regions ("DE", "GRA", ...) are a different
+  // namespace than compute regions ("DE1", ...), so defaulting from
+  // auth.region would manufacture 404s.
+  region: Schema.NonEmptyString,
   versioning: Schema.Boolean,
   encryption: Schema.Boolean,
   retain: Schema.Boolean

@@ -68,7 +68,9 @@ Status: DRAFT — awaiting human approval.
 
 - D1: module-style config (`dns`/`volumes` precedent) — approved.
 - D2: refuse non-empty deletes, no force_destroy in v1 — approved.
-- D3: per-bucket region defaulting to auth.region — approved.
+- D3 (amended 2026-07-24, live-verified): per-bucket `region` is REQUIRED, no
+  auth.region default — OVH S3 regions ("DE", "GRA", ...) are a different namespace
+  than compute regions ("DE1", ...); defaulting manufactured 404s.
 - D4: credentials via agnostic sink, sops first backend — approved.
 - D5+D6 (approved 2026-07-24): a resource-type-agnostic top-level `secrets` section —
   NOT nested under `object_storage` — so future secret-bearing resources (e.g.
