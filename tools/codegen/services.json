@@ -46,5 +46,13 @@
     "patchPaths": ["../../packages/openstack/patches/octavia.patch.json5"],
     "format": "httpapi",
     "outputPath": "../../packages/openstack/src/generated/octavia.ts"
+  },
+  {
+    "name": "Hcloud",
+    "specPath": "../../packages/hetzner/specs/hcloud/cloud.spec.json",
+    "allowlistPath": "../../packages/hetzner/allowlists/hcloud.json",
+    "patchPaths": ["../../packages/hetzner/patches/hcloud.patch.json5"],
+    "format": "httpapi",
+    "outputPath": "../../packages/hetzner/src/generated/hcloud.ts"
   }
 ]

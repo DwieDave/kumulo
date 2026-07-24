@@ -1,0 +1,22 @@
+{
+  "name": "@kumulo/hetzner",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "main": "src/index.ts",
+  "scripts": {
+    "generate": "bun run scripts/generate-client.ts"
+  },
+  "dependencies": {
+    "effect": "catalog:",
+    "@kumulo/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "vitest": "catalog:",
+    "codegen": "workspace:*"
+  }
+}

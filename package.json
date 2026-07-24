@@ -34,7 +34,8 @@
     "lint": "oxlint",
     "build:binary": "bash scripts/build-binary.sh",
     "specs:update:ovh": "bash tools/ovh2openapi/scripts/update-specs.sh",
-    "specs:update:openstack": "bash packages/openstack/scripts/update-specs.sh"
+    "specs:update:openstack": "bash packages/openstack/scripts/update-specs.sh",
+    "specs:update:hetzner": "bash packages/hetzner/scripts/update-specs.sh"
   },
   "devDependencies": {
     "@effect/tsgo": "catalog:",

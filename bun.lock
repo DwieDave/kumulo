@@ -95,6 +95,18 @@
         "vitest": "catalog:",
       },
     },
+    "packages/dns-hetzner": {
+      "name": "@kumulo/dns-hetzner",
+      "version": "0.0.0",
+      "dependencies": {
+        "@kumulo/core": "workspace:*",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@effect/vitest": "catalog:",
+        "vitest": "catalog:",
+      },
+    },
     "packages/dns-ovh": {
       "name": "@kumulo/dns-ovh",
       "version": "0.0.0",
@@ -106,6 +118,19 @@
         "@effect/vitest": "catalog:",
         "codegen": "workspace:*",
         "ovh2openapi": "workspace:*",
+        "vitest": "catalog:",
+      },
+    },
+    "packages/hetzner": {
+      "name": "@kumulo/hetzner",
+      "version": "0.0.0",
+      "dependencies": {
+        "@kumulo/core": "workspace:*",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@effect/vitest": "catalog:",
+        "codegen": "workspace:*",
         "vitest": "catalog:",
       },
     },
@@ -277,7 +302,11 @@
 
     "@kumulo/distro-ovh-mks": ["@kumulo/distro-ovh-mks@workspace:packages/distro-ovh-mks"],
 
+    "@kumulo/dns-hetzner": ["@kumulo/dns-hetzner@workspace:packages/dns-hetzner"],
+
     "@kumulo/dns-ovh": ["@kumulo/dns-ovh@workspace:packages/dns-ovh"],
+
+    "@kumulo/hetzner": ["@kumulo/hetzner@workspace:packages/hetzner"],
 
     "@kumulo/openstack": ["@kumulo/openstack@workspace:packages/openstack"],
 
