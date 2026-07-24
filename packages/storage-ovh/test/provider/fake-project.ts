@@ -16,6 +16,9 @@ interface StoredUser {
   id: number
   username: string
   description: string
+  // Mirrors OVH's async user provisioning: POST answers "creating", a later
+  // GET observes "ok".
+  status: "creating" | "ok"
 }
 
 interface StoredCredential {
@@ -104,11 +107,20 @@ export const makeFakeProject = (serviceName: string) => {
     if (request.method === "POST") {
       const body = _bodyOf(request)
       const id = nextUserId++
-      const user: StoredUser = { id, username: `user-${id}`, description: body.description ?? "" }
+      const user: StoredUser = { id, username: `user-${id}`, description: body.description ?? "", status: "creating" }
       users.set(id, user)
       return new Response(JSON.stringify(user), { status: 200 })
     }
     return new Response(null, { status: 404 })
+  }
+
+  const _handleUser = (request: HttpClientRequest.HttpClientRequest, userId: number): Response => {
+    const user = users.get(userId)
+    if (request.method !== "GET" || user === undefined) return new Response(null, { status: 404 })
+    // The async provisioning completes by the time anyone polls.
+    const settled: StoredUser = { ...user, status: "ok" }
+    users.set(userId, settled)
+    return new Response(JSON.stringify(settled), { status: 200 })
   }
 
   const _handleCredentials = (request: HttpClientRequest.HttpClientRequest, userId: number): Response => {
@@ -141,6 +153,9 @@ export const makeFakeProject = (serviceName: string) => {
     const userCredentials = path.match(new RegExp(`^${_basePath}/user/(\\d+)/s3Credentials$`))
     if (userCredentials) return _handleCredentials(request, Number(userCredentials[1]))
 
+    const singleUser = path.match(new RegExp(`^${_basePath}/user/(\\d+)$`))
+    if (singleUser) return _handleUser(request, Number(singleUser[1]))
+
     return new Response(JSON.stringify({ message: "not found" }), { status: 404 })
   }
 
@@ -155,7 +170,7 @@ export const makeFakeProject = (serviceName: string) => {
     },
     seedUser: (description: string): number => {
       const id = nextUserId++
-      users.set(id, { id, username: `user-${id}`, description })
+      users.set(id, { id, username: `user-${id}`, description, status: "ok" })
       return id
     },
     seedCredential: (userId: number): void => {

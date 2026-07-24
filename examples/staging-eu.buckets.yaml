@@ -1,0 +1,12 @@
+cluster: staging-eu
+buckets:
+  - name: staging-eu-backups
+    region: DE
+    versioning: false
+    encryption: false
+    retain: true
+  - name: staging-eu-logs
+    region: DE
+    versioning: true
+    encryption: false
+    retain: false

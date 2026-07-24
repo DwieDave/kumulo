@@ -1,4 +1,4 @@
-import { Effect, Layer, Redacted } from "effect"
+import { Effect, Layer, Redacted, Schedule } from "effect"
 import { BucketNotEmpty, ObjectStorageProvider, ResourceConflict, ResourceNotFound } from "@kumulo/core"
 import type { BucketInfo, BucketRef, BucketSpec, ClusterTag, ObjectStorageError, S3Credentials } from "@kumulo/core"
 import type { Cloud_StorageContainer, Cloud_storage_VersioningStatusEnum, Cloud_user_User, Storage } from "../generated/client.ts"
@@ -83,17 +83,44 @@ const _findUser = (
     (users) => users.find((u) => u.description === username)
   )
 
-/** Get-or-create the per-cluster project user (idempotent, matched by `description`: OVH assigns its own opaque `username`). */
+// OVH creates project users asynchronously: the POST answers with
+// status "creating", and until it reaches "ok" the user's sub-resources
+// (/s3Credentials) 404. Poll before anyone touches those.
+const _awaitUserReady = (
+  { storage, serviceName, userId, username }: {
+    readonly storage: Storage
+    readonly serviceName: string
+    readonly userId: string
+    readonly username: string
+  }
+): Effect.Effect<Cloud_user_User, ObjectStorageError> =>
+  mapStorageError({
+    self: storage.getCloudProjectServiceNameUserUserId(serviceName, userId, undefined),
+    ctx: { kind: "s3-user", ref: username }
+  }).pipe(
+    Effect.flatMap((user) =>
+      user.status === "ok"
+        ? Effect.succeed(user)
+        : Effect.fail(new ResourceNotFound({ kind: "s3-user", ref: `${username} (status: ${user.status ?? "unknown"})` }))
+    ),
+    Effect.retry({
+      schedule: Schedule.spaced("3 seconds").pipe(Schedule.upTo({ elapsed: "2 minutes" })),
+      while: (error) => error._tag === "ResourceNotFound"
+    })
+  )
+
+/** Get-or-create the per-cluster project user (idempotent, matched by `description`: OVH assigns its own opaque `username`), awaited to status "ok". */
 const _ensureUser = (
   { storage, serviceName, username }: { readonly storage: Storage; readonly serviceName: string; readonly username: string }
 ): Effect.Effect<Cloud_user_User, ObjectStorageError> =>
   Effect.gen(function*() {
     const existing = yield* _findUser({ storage, serviceName, username })
-    if (existing) return existing
-    return yield* mapStorageError({
+    const user = existing ?? (yield* mapStorageError({
       self: storage.postCloudProjectServiceNameUser(serviceName, { payload: { description: username, role: "objectstore_operator" } }),
       ctx: { kind: "s3-user", ref: username }
-    })
+    }))
+    if (user.status === "ok" || user.id === undefined) return user
+    return yield* _awaitUserReady({ storage, serviceName, userId: String(user.id), username })
   })
 
 // OVH only ever returns an S3 secret once, in the create response — a
