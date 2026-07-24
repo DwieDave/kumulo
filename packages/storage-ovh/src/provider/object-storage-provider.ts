@@ -1,5 +1,5 @@
 import { Effect, Layer, Redacted, Schedule } from "effect"
-import { BucketNotEmpty, ObjectStorageProvider, ResourceConflict, ResourceNotFound } from "@kumulo/core"
+import { BucketNotEmpty, ObjectStorageProvider, ResourceNotFound } from "@kumulo/core"
 import type { BucketInfo, BucketRef, BucketSpec, ClusterTag, ObjectStorageError, S3Credentials } from "@kumulo/core"
 import type { Cloud_StorageContainer, Cloud_storage_VersioningStatusEnum, Cloud_user_User, Storage } from "../generated/client.ts"
 import { mapStorageError } from "./errors.ts"
@@ -124,14 +124,29 @@ const _ensureUser = (
   })
 
 // OVH only ever returns an S3 secret once, in the create response — a
-// pre-existing credential can't be re-read (R7 "no rotation"). Refuse rather
-// than fabricate a secret; the caller's credentials sink is expected to
-// already hold the value from the run that created it.
-const _reuseConflict = (username: string): ObjectStorageError =>
-  new ResourceConflict({
-    kind: "s3-credential",
-    ref: `${username}: an s3Credential already exists for this user and OVH does not expose its secret again — delete it via the OVH API and re-run to issue a fresh one`
-  })
+// pre-existing credential can't be re-read. The reconcile layer only calls
+// ensureCredentials when no credentials file exists on disk, so any
+// credential found here is an unrecoverable orphan (e.g. a prior run whose
+// sink write failed): deleting it loses nothing, and re-issuing restores
+// idempotence.
+const _deleteOrphanedCredentials = (
+  { storage, serviceName, userId, username, existing }: {
+    readonly storage: Storage
+    readonly serviceName: string
+    readonly userId: string
+    readonly username: string
+    readonly existing: ReadonlyArray<{ readonly access?: string }>
+  }
+): Effect.Effect<void, ObjectStorageError> =>
+  Effect.forEach(
+    existing.flatMap((cred) => (cred.access === undefined ? [] : [cred.access])),
+    (access) =>
+      mapStorageError({
+        self: storage.deleteCloudProjectServiceNameUserUserIdS3CredentialsAccess(serviceName, userId, access, undefined),
+        ctx: { kind: "s3-credential", ref: `${username}/${access}` }
+      }),
+    { discard: true }
+  )
 
 export const listBuckets = (
   { storage, serviceName }: { readonly storage: Storage; readonly serviceName: string }
@@ -181,7 +196,7 @@ export const ensureCredentials = (
         self: storage.getCloudProjectServiceNameUserUserIdS3Credentials(serviceName, userId, undefined),
         ctx
       })
-      if (existing.length > 0) return yield* Effect.fail(_reuseConflict(username))
+      if (existing.length > 0) yield* _deleteOrphanedCredentials({ storage, serviceName, userId, username, existing })
       const created = yield* mapStorageError({
         self: storage.postCloudProjectServiceNameUserUserIdS3Credentials(serviceName, userId, undefined),
         ctx

@@ -45,39 +45,35 @@ exports[`dry-run plan against fake inventory (k3s) > partial inventory -> mix of
 `;
 
 exports[`dry-run plan against fake inventory (ovh-mks) > complete matching inventory -> all no-ops, nothing to do (mks: except its always-Create volumes) 1`] = `
-"Plan: 1 to create, 0 to delete, 0 to replace, 4 unchanged.
+"Plan: 1 to create, 0 to delete, 0 to replace, 3 unchanged.
 
   + volume/staging-eu-data
   = kumulo-staging-eu-worker-general-0
-  = kumulo-staging-eu-worker-general-1
   = bucket/staging-eu-backups
   = bucket/staging-eu-logs"
 `;
 
 exports[`dry-run plan against fake inventory (ovh-mks) > drifted inventory -> replace-needs-confirm, never a silent apply 1`] = `
-"Plan: 1 to create, 0 to delete, 4 to replace, 0 unchanged.
+"Plan: 1 to create, 0 to delete, 3 to replace, 0 unchanged.
 
   + volume/staging-eu-data
   ~ kumulo-staging-eu-worker-general-0 (config-hash drifted from desired spec)
-  ~ kumulo-staging-eu-worker-general-1 (config-hash drifted from desired spec)
   ~ bucket/staging-eu-backups (region or encryption changed (immutable, delete+recreate))
   ~ bucket/staging-eu-logs (region or encryption changed (immutable, delete+recreate))"
 `;
 
 exports[`dry-run plan against fake inventory (ovh-mks) > empty inventory -> all creates 1`] = `
-"Plan: 5 to create, 0 to delete, 0 to replace, 0 unchanged.
+"Plan: 4 to create, 0 to delete, 0 to replace, 0 unchanged.
 
   + kumulo-staging-eu-worker-general-0
-  + kumulo-staging-eu-worker-general-1
   + volume/staging-eu-data
   + bucket/staging-eu-backups
   + bucket/staging-eu-logs"
 `;
 
 exports[`dry-run plan against fake inventory (ovh-mks) > partial inventory -> mix of no-op and create 1`] = `
-"Plan: 3 to create, 0 to delete, 0 to replace, 2 unchanged.
+"Plan: 2 to create, 0 to delete, 0 to replace, 2 unchanged.
 
-  + kumulo-staging-eu-worker-general-1
   + volume/staging-eu-data
   + bucket/staging-eu-logs
   = kumulo-staging-eu-worker-general-0

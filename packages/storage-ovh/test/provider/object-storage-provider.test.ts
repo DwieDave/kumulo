@@ -90,13 +90,15 @@ describe("ovh storage-ovh provider — credentials", () => {
       assert.strictEqual(fake.userCount(), 1)
     }))
 
-  it.effect("ensureCredentials refuses to fabricate a secret when a credential already exists", () =>
+  it.effect("ensureCredentials rotates an orphaned credential (deletes it, issues a fresh one)", () =>
     Effect.gen(function*() {
       const fake = makeFakeProject(_serviceName)
       const userId = fake.seedUser("kumulo-staging")
       fake.seedCredential(userId)
       const provider = makeOvhObjectStorageProvider({ storage: fake.storage, serviceName: _serviceName })
-      const failure = yield* Effect.flip(provider.ensureCredentials("staging"))
-      assert.strictEqual(failure._tag, "ResourceConflict")
+      const creds = yield* provider.ensureCredentials("staging")
+      // The orphan's secret is unrecoverable, so it must be replaced, not kept.
+      assert.notStrictEqual(Redacted.value(creds.accessKey), `AK-${userId}-seed`)
+      assert.strictEqual(fake.credentialCount(userId), 1)
     }))
 })

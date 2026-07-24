@@ -274,6 +274,13 @@ export const make = (
       "2xx": decodeSuccess(PostCloudProjectServiceNameUserUserIdS3Credentials200),
       orElse: unexpectedStatus
     }))
+  ),
+    "deleteCloudProjectServiceNameUserUserIdS3CredentialsAccess": (serviceName, userId, access, options) => HttpClientRequest.delete(`/cloud/project/${serviceName}/user/${userId}/s3Credentials/${access}`).pipe(
+    withResponse(options?.config)(HttpClientResponse.matchStatus({
+      "200": () => Effect.void,
+      "204": () => Effect.void,
+      orElse: unexpectedStatus
+    }))
   )
   }
 }
@@ -328,6 +335,10 @@ readonly "getCloudProjectServiceNameUserUserIdS3Credentials": <Config extends Op
 * Create a new S3™* compatible storage credentials for an user
 */
 readonly "postCloudProjectServiceNameUserUserIdS3Credentials": <Config extends OperationConfig>(serviceName: string, userId: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<typeof PostCloudProjectServiceNameUserUserIdS3Credentials200.Type, Config>, HttpClientError.HttpClientError | SchemaError>
+  /**
+* Delete an S3™* compatible storage credential
+*/
+readonly "deleteCloudProjectServiceNameUserUserIdS3CredentialsAccess": <Config extends OperationConfig>(serviceName: string, userId: string, access: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<void, Config>, HttpClientError.HttpClientError | SchemaError>
 }
 
 export interface StorageError<Tag extends string, E> {

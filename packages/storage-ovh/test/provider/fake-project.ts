@@ -153,6 +153,13 @@ export const makeFakeProject = (serviceName: string) => {
     const userCredentials = path.match(new RegExp(`^${_basePath}/user/(\\d+)/s3Credentials$`))
     if (userCredentials) return _handleCredentials(request, Number(userCredentials[1]))
 
+    const singleCredential = path.match(new RegExp(`^${_basePath}/user/(\\d+)/s3Credentials/([^/]+)$`))
+    if (singleCredential && request.method === "DELETE") {
+      const userId = Number(singleCredential[1])
+      credentials.set(userId, (credentials.get(userId) ?? []).filter((c) => c.access !== singleCredential[2]))
+      return new Response(null, { status: 204 })
+    }
+
     const singleUser = path.match(new RegExp(`^${_basePath}/user/(\\d+)$`))
     if (singleUser) return _handleUser(request, Number(singleUser[1]))
 
@@ -177,6 +184,7 @@ export const makeFakeProject = (serviceName: string) => {
       credentials.set(userId, [...(credentials.get(userId) ?? []), { access: `AK-${userId}-seed`, secret: `SK-${userId}-seed` }])
     },
     peekContainer: (region: string, name: string) => containers.get(_containerKey(region, name)),
-    userCount: (): number => users.size
+    userCount: (): number => users.size,
+    credentialCount: (userId: number): number => (credentials.get(userId) ?? []).length
   }
 }

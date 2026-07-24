@@ -2,17 +2,57 @@
   "service": "storage",
   "spec": "../../tools/ovh2openapi/specs/ovh/cloud.json",
   "operations": [
-    { "path": "/cloud/project/{serviceName}/region/{regionName}/storage", "method": "GET" },
-    { "path": "/cloud/project/{serviceName}/region/{regionName}/storage", "method": "POST" },
-    { "path": "/cloud/project/{serviceName}/region/{regionName}/storage/{name}", "method": "GET" },
-    { "path": "/cloud/project/{serviceName}/region/{regionName}/storage/{name}", "method": "PUT" },
-    { "path": "/cloud/project/{serviceName}/region/{regionName}/storage/{name}", "method": "DELETE" },
-    { "path": "/cloud/project/{serviceName}/region/{regionName}/storage/{name}/object", "method": "GET" },
-    { "path": "/cloud/project/{serviceName}/user", "method": "GET" },
-    { "path": "/cloud/project/{serviceName}/user", "method": "POST" },
-    { "path": "/cloud/project/{serviceName}/user/{userId}", "method": "GET" },
-    { "path": "/cloud/project/{serviceName}/user/{userId}", "method": "DELETE" },
-    { "path": "/cloud/project/{serviceName}/user/{userId}/s3Credentials", "method": "GET" },
-    { "path": "/cloud/project/{serviceName}/user/{userId}/s3Credentials", "method": "POST" }
+    {
+      "path": "/cloud/project/{serviceName}/region/{regionName}/storage",
+      "method": "GET"
+    },
+    {
+      "path": "/cloud/project/{serviceName}/region/{regionName}/storage",
+      "method": "POST"
+    },
+    {
+      "path": "/cloud/project/{serviceName}/region/{regionName}/storage/{name}",
+      "method": "GET"
+    },
+    {
+      "path": "/cloud/project/{serviceName}/region/{regionName}/storage/{name}",
+      "method": "PUT"
+    },
+    {
+      "path": "/cloud/project/{serviceName}/region/{regionName}/storage/{name}",
+      "method": "DELETE"
+    },
+    {
+      "path": "/cloud/project/{serviceName}/region/{regionName}/storage/{name}/object",
+      "method": "GET"
+    },
+    {
+      "path": "/cloud/project/{serviceName}/user",
+      "method": "GET"
+    },
+    {
+      "path": "/cloud/project/{serviceName}/user",
+      "method": "POST"
+    },
+    {
+      "path": "/cloud/project/{serviceName}/user/{userId}",
+      "method": "GET"
+    },
+    {
+      "path": "/cloud/project/{serviceName}/user/{userId}",
+      "method": "DELETE"
+    },
+    {
+      "path": "/cloud/project/{serviceName}/user/{userId}/s3Credentials",
+      "method": "GET"
+    },
+    {
+      "path": "/cloud/project/{serviceName}/user/{userId}/s3Credentials",
+      "method": "POST"
+    },
+    {
+      "path": "/cloud/project/{serviceName}/user/{userId}/s3Credentials/{access}",
+      "method": "DELETE"
+    }
   ]
 }
