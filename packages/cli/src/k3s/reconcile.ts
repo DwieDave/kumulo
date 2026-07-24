@@ -135,24 +135,31 @@ const _cloudConfFromEnv = (region: string) => ({
   applicationCredentialSecret: process.env["OS_APPLICATION_CREDENTIAL_SECRET"] ?? ""
 })
 
-/** Builds a live `K8sClient` against master 1's own (unrewritten) kubeconfig — Addons/scale-down drain both need one. */
-const _liveK8sClient = (
+/**
+ * Injectable K8sClient seam (item 3): a `K8sClient` `Layer` built from master
+ * 1's own (unrewritten) kubeconfig, fetched over `Ssh` — Addons/scale-down
+ * drain/`status` all take `K8sClient` from context instead of a hand-threaded
+ * parameter, so production wiring stays identical (`k8sClientLive` is the
+ * default) while tests can `Effect.provide` a fake `K8sClient` Layer instead.
+ */
+export const k8sClientLive = (
   config: ClusterConfig,
   master1: SshHost
-): Effect.Effect<K8sClient["Service"], BootstrapFailed | ConfigInvalid, Ssh> =>
-  Effect.gen(function*() {
-    const raw = yield* fetchKubeconfig({ master1, clusterName: config.name, serverUrl: `https://${master1.ip}:6443` })
-    const parsed = yield* parseKubeconfig(raw.content)
-    const client = yield* Effect.provide(HttpClient.HttpClient, k8sHttpClientLayer({ auth: parsed.auth, caPem: parsed.caPem }))
-    return makeK8sClient({ client, server: parsed.server })
-  })
+): Layer.Layer<K8sClient, BootstrapFailed | ConfigInvalid, Ssh> =>
+  Layer.effect(
+    K8sClient,
+    Effect.gen(function*() {
+      const raw = yield* fetchKubeconfig({ master1, clusterName: config.name, serverUrl: `https://${master1.ip}:6443` })
+      const parsed = yield* parseKubeconfig(raw.content)
+      const client = yield* Effect.provide(HttpClient.HttpClient, k8sHttpClientLayer({ auth: parsed.auth, caPem: parsed.caPem }))
+      return makeK8sClient({ client, server: parsed.server })
+    })
+  )
 
 /** FR-9.1/D5 — Addons phase. */
-const _installAddons = (
-  config: ClusterConfig,
-  k8sClient: K8sClient["Service"]
-): Effect.Effect<void, AddonError, OpenStackEnv> =>
+const _installAddons = (config: ClusterConfig): Effect.Effect<void, AddonError, OpenStackEnv | K8sClient> =>
   Effect.gen(function*() {
+    const k8sClient = yield* K8sClient
     const env = yield* OpenStackEnv
     const cloudConf = _cloudConfFromEnv(env.region ?? "")
     const addons = resolveAddons({ distro: "k3s", addons: config.addons, capabilities: _capabilities(config), cloudConf })
@@ -194,22 +201,31 @@ export const orphanedWorkers = (
   return workerInfos.filter((info) => !desiredNames.has(info.name))
 }
 
-/** FR-2.7 — scale-down: any currently-running worker not in the desired spec set is drained before removal. */
+/**
+ * FR-2.7 — scale-down: `infra.workerInfos` only covers this apply's *desired*
+ * specs (`ensureServer` is create-if-missing-by-name, it never reports a
+ * server that's no longer desired) — orphan detection needs the actual
+ * tagged inventory instead, filtered to workers by the same naming
+ * convention `kubeconfigK3sEffect` uses to pick out masters.
+ */
 const _drainOrphanedWorkers = (
-  config: ClusterConfig,
-  infra: Infra,
-  k8sClient: K8sClient["Service"]
-): Effect.Effect<void, BootstrapFailed> => {
-  const orphaned = orphanedWorkers({ config, workerInfos: infra.workerInfos })
-  // ponytail: `CloudProvider` has no per-server delete verb (only whole-cluster
-  // `deleteByTag`) — draining the k8s Node object is the real, wired part of
-  // FR-2.7; VM teardown for a single orphaned worker awaits that port growing one.
-  return Effect.forEach(
-    orphaned,
-    (info) => drainAndRemove({ client: k8sClient, node: { name: info.name, role: "worker" } }),
-    { discard: true }
-  )
-}
+  config: ClusterConfig
+): Effect.Effect<void, BootstrapFailed | CloudError, CloudProvider | K8sClient> =>
+  Effect.gen(function*() {
+    const cloudProvider = yield* CloudProvider
+    const k8sClient = yield* K8sClient
+    const inventory = yield* cloudProvider.listClusterResources(config.name)
+    const existingWorkers = inventory.servers.filter((s) => s.name.includes("-worker-"))
+    const orphaned = orphanedWorkers({ config, workerInfos: existingWorkers })
+    yield* Effect.forEach(
+      orphaned,
+      (info) =>
+        drainAndRemove({ client: k8sClient, node: { name: info.name, role: "worker" } }).pipe(
+          Effect.andThen(cloudProvider.deleteServer(info))
+        ),
+      { discard: true }
+    )
+  })
 
 /** FR-5.5 — Kubeconfig phase: LB VIP / DNS name / master IP precedence, written 0600 to `<name>.kubeconfig`. */
 const _writeKubeconfig = (
@@ -236,15 +252,28 @@ const _dnsLayer = (config: ClusterConfig): Layer.Layer<DnsProvider, Authenticati
 // (`CloudProvider`/`Ssh`/`DnsProvider`/`VolumeProvider`/`OpenStackEnv`) —
 // kept separate from `applyK3s`'s live Layer wiring below so tests can
 // drive it against fake `CloudProvider`/`Ssh` Layers instead.
+//
+// `k8sClientLayer` (item 3's seam) defaults to `k8sClientLive` (the real,
+// kubeconfig-derived client) — production callers (`applyK3s`) never pass
+// it, so wiring is identical; tests pass a fake `K8sClient` Layer to drive
+// the Addons/drain phases without a real kubeconfig/HTTP round-trip.
 export const applyK3sEffect = (
-  { config, configDir }: { readonly config: ClusterConfig; readonly configDir: string }
+  { config, configDir, k8sClientLayer = k8sClientLive }: {
+    readonly config: ClusterConfig
+    readonly configDir: string
+    readonly k8sClientLayer?: (
+      config: ClusterConfig,
+      master1: SshHost
+    ) => Layer.Layer<K8sClient, BootstrapFailed | ConfigInvalid, Ssh>
+  }
 ): Effect.Effect<K3sApplyResult, K3sError, CloudProvider | Ssh | DnsProvider | VolumeProvider | OpenStackEnv> =>
   Effect.gen(function*() {
     const infra = yield* _provisionInfra(config)
     const master1 = yield* _bootstrap(config, infra)
-    const k8sClient = yield* _liveK8sClient(config, master1)
-    yield* _installAddons(config, k8sClient)
-    yield* _drainOrphanedWorkers(config, infra, k8sClient)
+    yield* Effect.gen(function*() {
+      yield* _installAddons(config)
+      yield* _drainOrphanedWorkers(config)
+    }).pipe(Effect.provide(k8sClientLayer(config, master1)))
     yield* _reconcileDns(config, infra.lbVip)
     yield* _reconcileVolumes(config)
     const kubeconfigPath = yield* _writeKubeconfig(config, master1, infra.lbVip, configDir)

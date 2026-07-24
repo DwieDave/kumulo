@@ -4,12 +4,31 @@ import {
   CloudProvider,
   decodeConfig,
   DnsProvider,
+  K8sClient,
   VolumeProvider
 } from "@kumulo/core"
-import type { ClusterConfigEncoded, DesiredRecord, ServerInfo } from "@kumulo/core"
+import type { ClusterConfigEncoded, DesiredRecord, K8sManifest, ServerInfo } from "@kumulo/core"
 import { Ssh, SshCommandError } from "@kumulo/distro-k3s"
 import { OpenStackEnv } from "../../src/doctor-openstack/env.ts"
 import { applyK3sEffect, deleteK3sEffect, orphanedWorkers } from "../../src/k3s/reconcile.ts"
+
+// Item 3 — the injectable K8sClient seam: a fake `K8sClient` Layer proves
+// the drain phase takes its client from context instead of a real
+// kubeconfig/HTTP round-trip. Just enough behavior for `drainAndRemove`
+// (cordon=apply, drain=list+evict, delete=delete) to succeed.
+const _fakeK8sClientLayer = (cordonedNodes: Array<string>): Layer.Layer<K8sClient> =>
+  Layer.succeed(K8sClient, {
+    get: () => Effect.die("not used by drain"),
+    list: () => Effect.succeed([] as ReadonlyArray<K8sManifest>),
+    apply: (_ref, manifest) =>
+      Effect.sync(() => {
+        const name = (manifest["metadata"] as { readonly name?: string } | undefined)?.name
+        if (name !== undefined) cordonedNodes.push(name)
+        return manifest
+      }),
+    delete: () => Effect.void,
+    evict: () => Effect.void
+  })
 
 const K3S_KUBECONFIG = [
   "apiVersion: v1",
@@ -93,7 +112,7 @@ const _trackingDnsProvider = (calls: DnsCalls) =>
 // ponytail: local, minimal fakes (not reused across packages) — same
 // precedent as `distro-k3s/test/e2e/lifecycle.test.ts`'s own note on why a
 // package doesn't import a sibling's test/ fixtures.
-const FakeCloudProviderLive: Layer.Layer<CloudProvider> = Layer.effect(
+const _fakeCloudProviderLive = (deletedServers: Array<string> = []): Layer.Layer<CloudProvider> => Layer.effect(
   CloudProvider,
   Effect.gen(function*() {
     const servers = yield* Ref.make<ReadonlyMap<string, ServerInfo>>(new Map())
@@ -109,6 +128,11 @@ const FakeCloudProviderLive: Layer.Layer<CloudProvider> = Layer.effect(
             const info: ServerInfo = { id: `srv-${map.size + 1}`, name: spec.name, ip: `10.0.0.${map.size + 1}` }
             return Ref.update(servers, (current) => new Map(current).set(spec.name, info)).pipe(Effect.as(info))
           })
+        ),
+      deleteServer: (ref) =>
+        Ref.update(servers, (current) => new Map([...current].filter(([name]) => name !== ref.name))).pipe(
+          Effect.tap(() => Effect.sync(() => deletedServers.push(ref.name))),
+          Effect.asVoid
         ),
       deleteByTag: () => Ref.set(servers, new Map()),
       listClusterResources: () =>
@@ -163,7 +187,7 @@ describe("k3s CLI composition root (FR-2.3/FR-5)", () => {
         Effect.provide(_trackingVolumeProvider(volumeCalls)),
         Effect.provide(_trackingDnsProvider(dnsCalls)),
         Effect.provide(OpenStackEnvFake),
-        Effect.provide(FakeCloudProviderLive)
+        Effect.provide(_fakeCloudProviderLive())
       )
 
       expect(result.apiEndpoint).toBe("10.0.0.100")
@@ -197,7 +221,8 @@ describe("k3s CLI composition root (FR-2.3/FR-5)", () => {
   it.effect("scale up: re-applying with an added worker only bootstraps the new node's join, existing nodes stay idempotent", () =>
     Effect.gen(function*() {
       const log: SshLog = { executed: [], cloudInitGates: [], clusterInfoGates: [] }
-      const cloudLayer = FakeCloudProviderLive
+      const deletedServers: Array<string> = []
+      const cloudLayer = _fakeCloudProviderLive(deletedServers)
       const sshLayer = _FakeSshLive(log)
       const provide = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         effect.pipe(
@@ -215,7 +240,32 @@ describe("k3s CLI composition root (FR-2.3/FR-5)", () => {
       // Every apply re-runs bootstrap against the full current inventory (the
       // install script itself is idempotent shell) — 3 masters + 3 workers this time.
       expect(log.executed).toHaveLength(5 + 6)
+      expect(deletedServers).toEqual([])
     }))
+
+  it.effect("scale down: FR-2.7 drains (through the fake K8sClient seam) AND deletes the orphaned worker's VM", () => {
+    const log: SshLog = { executed: [], cloudInitGates: [], clusterInfoGates: [] }
+    const deletedServers: Array<string> = []
+    const cordonedNodes: Array<string> = []
+    const k8sClientLayer = () => _fakeK8sClientLayer(cordonedNodes)
+    return Effect.gen(function*() {
+      yield* applyK3sEffect({ config: _configWithWorkerCount(2), configDir: "/tmp", k8sClientLayer })
+      yield* applyK3sEffect({ config: _configWithWorkerCount(1), configDir: "/tmp", k8sClientLayer })
+      expect(deletedServers).toEqual(["kumulo-test-k3s-worker-general-2"])
+      expect(cordonedNodes).toEqual(["kumulo-test-k3s-worker-general-2"])
+    }).pipe(
+      // `CloudProvider` state (which servers exist) must persist across both
+      // applies to prove the second one detects worker-2 as orphaned — one
+      // `Effect.provide` for the whole sequence, not per-apply (a fresh
+      // `Effect.provide` per call rebuilds the fake Layer, i.e. a fresh
+      // in-memory store, each time).
+      Effect.provide(_FakeSshLive(log)),
+      Effect.provide(_trackingVolumeProvider({ ensured: [], deleted: [] })),
+      Effect.provide(_trackingDnsProvider({ ensured: [], removed: [] })),
+      Effect.provide(OpenStackEnvFake),
+      Effect.provide(_fakeCloudProviderLive(deletedServers))
+    )
+  })
 
   it("scale down: a worker no longer in the desired spec set is the one FR-2.7 drains", () => {
     const workerInfos: ReadonlyArray<ServerInfo> = [
@@ -236,7 +286,7 @@ describe("k3s CLI composition root (FR-2.3/FR-5)", () => {
       yield* deleteK3sEffect(_config).pipe(
         Effect.provide(_trackingVolumeProvider(volumeCalls)),
         Effect.provide(_trackingDnsProvider(dnsCalls)),
-        Effect.provide(FakeCloudProviderLive)
+        Effect.provide(_fakeCloudProviderLive())
       )
 
       // `retain: true` -> never deleted (AC-7).
