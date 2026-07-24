@@ -1,6 +1,6 @@
 import type { Plan, PlanAction } from "../plan/types.ts"
 
-// Terraform-plan-style, one line per action — design §6 step 3 "Present".
+// Terraform-plan-style, one line per action.
 const _renderLine = (action: PlanAction): string => {
   if (action._tag === "Create") return `  + ${action.name}`
   if (action._tag === "Delete") return `  - ${action.name}`

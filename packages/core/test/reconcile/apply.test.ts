@@ -35,7 +35,7 @@ const specs: ReadonlyArray<ServerSpec> = [0, 1, 2, 3].map((index) => ({
 }))
 
 describe("applyServers", () => {
-  it.effect("re-running an idempotent apply converges without duplicating servers (FR-2.4)", () =>
+  it.effect("re-running an idempotent apply converges without duplicating servers", () =>
     Effect.gen(function*() {
       const cloudProvider = yield* CloudProvider
       yield* applyServers({ specs, concurrency: 2 })
@@ -44,7 +44,7 @@ describe("applyServers", () => {
       expect(inventory.servers).toHaveLength(specs.length)
     }).pipe(Effect.provide(FakeCloudProviderLive)))
 
-  it.effect("interrupting mid-apply leaves the store consistent, and a re-run still converges (NFR-6)", () =>
+  it.effect("interrupting mid-apply leaves the store consistent, and a re-run still converges", () =>
     Effect.gen(function*() {
       const cloudProvider = yield* CloudProvider
       const fiber = yield* Effect.forkChild(applyServers({ specs, concurrency: 1 }))

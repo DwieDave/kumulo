@@ -3,7 +3,7 @@ import { resourceName } from "./naming.ts"
 import type { DesiredResource, Inventory, Plan, PlanAction, TaggedResource } from "./types.ts"
 
 // One desired resource vs. its matching tagged inventory entry (if any) —
-// design §6 step 2: create (missing), no-op (hash matches), or replace-with-
+// create (missing), no-op (hash matches), or replace-with-
 // confirmation (flavor/image/etc. changed, i.e. config-hash drifted).
 const _planForDesired = (
   { actual, desired }: { readonly desired: DesiredResource; readonly actual: TaggedResource | undefined }
@@ -26,8 +26,8 @@ const _planForOrphaned = (
   }))
 
 // Turns a desired resource into what its tagged inventory entry would look
-// like once created — the "apply" half of design §6, used to prove
-// plan-after-apply converges to all no-ops.
+// like once created — used to prove plan-after-apply converges to all
+// no-ops.
 export const toTaggedResource = (desired: DesiredResource): TaggedResource => ({
   name: resourceName(desired),
   cluster: desired.cluster,

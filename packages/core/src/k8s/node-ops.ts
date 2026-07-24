@@ -10,7 +10,7 @@ export interface CordonNodeOptions {
   readonly name: string
 }
 
-// FR-9.2 scale-down: mark a node unschedulable via server-side apply
+// Scale-down: mark a node unschedulable via server-side apply
 // (spec.unschedulable is a plain field, no dedicated cordon subresource).
 export const cordonNode = (
   options: CordonNodeOptions
@@ -53,7 +53,7 @@ export interface DrainNodeOptions {
   readonly podsRef: ResourceRef
 }
 
-// FR-9.2 drain: list a node's pods, evict each.
+// Drain: list a node's pods, evict each.
 export const drainNode = (
   options: DrainNodeOptions
 ): Effect.Effect<void, ResourceNotFound | ResourceConflict | HttpTransportError> =>

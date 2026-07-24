@@ -3,8 +3,8 @@ import type { CloudError } from "../ports/cloud-provider.ts"
 import { CloudProvider } from "../ports/cloud-provider.ts"
 import type { ServerSpec } from "../domain/types.ts"
 
-// FR-2.4/NFR-6 — the "Nodes" phase: bounded-concurrency, idempotent apply.
-// `ensureServer` is create-if-missing by tag+name (design §3.1), so an
+// The "Nodes" phase: bounded-concurrency, idempotent apply.
+// `ensureServer` is create-if-missing by tag+name, so an
 // interrupted or re-run apply always converges without duplicating servers.
 export const applyServers = (
   { concurrency, specs }: { readonly specs: ReadonlyArray<ServerSpec>; readonly concurrency: number }

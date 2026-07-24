@@ -32,13 +32,13 @@ export type CloudError =
   | CapabilityMissing
   | ProvisioningTimeout
 
-// Design §3.1 — the only interface the reconciler talks to for infrastructure.
+// The only interface the reconciler talks to for infrastructure.
 export class CloudProvider extends Context.Service<CloudProvider, {
   readonly ensureNetwork: (spec: NetworkSpec) => Effect.Effect<NetworkInfo, CloudError>
   readonly ensureSecurityGroups: (spec: SecGroupSpec) => Effect.Effect<SecGroupInfo, CloudError>
   readonly ensureLoadBalancer: (spec: LbSpec) => Effect.Effect<LbInfo, CloudError>
   readonly ensureServer: (spec: ServerSpec) => Effect.Effect<ServerInfo, CloudError>
-  // FR-2.7 — scale-down: deletes one orphaned worker VM (waits until it's
+  // Scale-down: deletes one orphaned worker VM (waits until it's
   // actually gone, so the caller can rely on the delete having landed).
   readonly deleteServer: (ref: ServerInfo) => Effect.Effect<void, CloudError>
   readonly deleteByTag: (tag: ClusterTag) => Effect.Effect<void, CloudError>

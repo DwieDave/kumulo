@@ -9,7 +9,7 @@ export interface AuthDefaults {
   readonly domainDefault: string
 }
 
-// Design §3.2 — data + small logic parameterizing the OpenStack
+// Data + small logic parameterizing the OpenStack
 // implementation; never makes HTTP calls itself.
 export class ProviderProfile extends Context.Service<ProviderProfile, {
   readonly name: string

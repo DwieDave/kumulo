@@ -1,7 +1,7 @@
 import { Effect, Layer } from "effect"
 import { DnsProvider } from "../ports/dns-provider.ts"
 
-// Design §3.5 — `dns.module: none` built-in: DNS managed elsewhere, every
+// `dns.module: none` built-in: DNS managed elsewhere, every
 // call is a no-op. Ships in core since it has no external backend.
 export const dnsNoop = {
   ensureRecords: () => Effect.void,

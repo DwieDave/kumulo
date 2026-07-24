@@ -9,7 +9,7 @@ import type { ClusterTag, K8sManifest, VolumeInfo, VolumeRef, VolumeSpec } from 
 
 export type VolumeError = ResourceNotFound | ResourceConflict | AuthenticationFailed | QuotaExceeded
 
-// Design §3.6 — retained volumes with stable IDs; `deleteVolume` is never
+// Retained volumes with stable IDs; `deleteVolume` is never
 // called for `retain: true` volumes (that policy lives at the reconciler,
 // not here).
 export class VolumeProvider extends Context.Service<VolumeProvider, {

@@ -24,7 +24,7 @@ import type {
   Version
 } from "../domain/types.ts"
 
-// Design §3.3 — self-managed distros (k3s) drive the full phase pipeline
+// Self-managed distros (k3s) drive the full phase pipeline
 // themselves via cloud-init + SSH.
 export interface SelfManagedDistroShape {
   readonly kind: "self-managed"
@@ -50,7 +50,7 @@ export type MksError =
   | ProvisioningTimeout
   | QuotaExceeded
 
-// Design §3.3.1 — managed distros (ovh-mks) skip the infra phases; OVH runs
+// Managed distros (ovh-mks) skip the infra phases; OVH runs
 // the control plane and provisions nodes via its own API.
 export interface ManagedDistroShape {
   readonly kind: "managed"
@@ -62,7 +62,7 @@ export interface ManagedDistroShape {
   readonly delete: (ref: ManagedClusterRef) => Effect.Effect<void, MksError>
 }
 
-// Discriminated on `kind` — the reconciler branches once, per design §3.3.1.
+// Discriminated on `kind` — the reconciler branches once.
 export type DistroShape = SelfManagedDistroShape | ManagedDistroShape
 
 export class Distro extends Context.Service<Distro, DistroShape>()("@kumulo/core/Distro") {}

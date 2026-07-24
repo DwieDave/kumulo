@@ -1,4 +1,4 @@
-// Design §6: kumulo.config-hash tags a resource with a hash of "the relevant
+// kumulo.config-hash tags a resource with a hash of "the relevant
 // spec" so drift/no-op/replace can be decided without a state file. Stability
 // (same spec, any key order -> same hash) matters more than cryptographic
 // strength here, so a small FNV-1a over a recursively key-sorted JSON

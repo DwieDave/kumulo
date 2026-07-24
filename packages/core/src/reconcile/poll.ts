@@ -11,7 +11,7 @@ export interface PollOptions<Status, E, R> {
   readonly ref: string
 }
 
-// FR-2.5 — async OpenStack/OVH provisioning statuses are polled on a fixed
+// Async OpenStack/OVH provisioning statuses are polled on a fixed
 // Schedule until `isDone`, bounded by `timeout`. Timing out fails with
 // `ProvisioningTimeout` carrying the last observed status, never a bare
 // "timed out".

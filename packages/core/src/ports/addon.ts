@@ -4,7 +4,6 @@ import type { AddonContext, Capability, K8sManifest } from "../domain/types.ts"
 
 export type AddonError = AddonInstallFailed
 
-// Design §3.4.
 export class Addon extends Context.Service<Addon, {
   readonly name: string
   readonly requiredCapabilities: ReadonlyArray<Capability>

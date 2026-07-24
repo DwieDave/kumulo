@@ -33,7 +33,7 @@ const _transportError = (cause: unknown): HttpTransportError => new HttpTranspor
 const _statusError = (ref: ResourceRef, status: number): ResourceNotFound | HttpTransportError =>
   status === 404 ? new ResourceNotFound({ kind: ref.kind, ref: ref.path }) : _transportError(`status ${status}`)
 
-// kumulo: lenient decode (FR-4.6) — apiVersion/kind are the only fields any
+// kumulo: lenient decode — apiVersion/kind are the only fields any
 // caller relies on structurally; every other field is passed through
 // untouched via the trailing `Record` so node-ops/addons/readiness can read
 // arbitrary manifest fields (metadata, status, spec) without a schema per
@@ -102,7 +102,7 @@ export const makeK8sClient = (options: K8sClientOptions): K8sClient["Service"] =
       return decoded.flatMap(Option.toArray)
     })
 
-  // kumulo: server-side apply per FR-9.2 — PATCH with
+  // kumulo: server-side apply — PATCH with
   // application/apply-patch+yaml, fieldManager=kumulo, force=true (last
   // writer wins on field-manager conflict, since kumulo owns these
   // resources wholesale, no shared ownership to negotiate).

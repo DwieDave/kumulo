@@ -5,7 +5,7 @@ import type { HttpTransportError, ProvisioningTimeout, ResourceNotFound } from "
 import type { K8sManifest } from "../domain/types.ts"
 import type { ResourceRef } from "./client.ts"
 
-// kumulo: lenient decode (FR-4.6) — a manifest missing/malformed `status`
+// kumulo: lenient decode — a manifest missing/malformed `status`
 // (not yet populated by the controller, e.g. a brand-new Node) decodes to
 // `undefined` conditions rather than failing, same as before.
 const _ConditionsShape = Schema.Struct({
@@ -27,7 +27,7 @@ export interface WaitOptions {
   readonly timeout: Duration.Input
 }
 
-// FR-9.2 readiness helper — polls a Deployment until its "Available"
+// Readiness helper — polls a Deployment until its "Available"
 // condition is "True".
 export const waitForDeploymentAvailable = (
   options: WaitOptions
@@ -41,7 +41,7 @@ export const waitForDeploymentAvailable = (
     ref: options.ref.path
   })
 
-// FR-9.2 readiness helper — polls a Node until its "Ready" condition is
+// Readiness helper — polls a Node until its "Ready" condition is
 // "True".
 export const waitForNodeReady = (
   options: WaitOptions

@@ -23,7 +23,7 @@ const _invalid = (message: string): ConfigInvalid => new ConfigInvalid({ issues:
 
 const _base64Decode = (value: string): string => globalThis.atob(value)
 
-// kumulo: lenient decode (FR-4.6) — every field is optional at the schema
+// kumulo: lenient decode — every field is optional at the schema
 // level (a kubeconfig's cluster/user entry may carry only some of these),
 // with "is the shape we need actually present" decided afterward in
 // `_parseAuth`/`parseKubeconfig` rather than by the schema failing outright.
@@ -47,7 +47,7 @@ const _KubeconfigDoc = Schema.Struct({
 type KubeconfigDoc = typeof _KubeconfigDoc.Type
 type KubeconfigUser = NonNullable<NonNullable<KubeconfigDoc["users"]>[number]["user"]>
 
-// kumulo: only token and client-cert auth are needed (FR-9.2) — kubeconfigs
+// kumulo: only token and client-cert auth are needed — kubeconfigs
 // from k3s (client-cert) and MKS (token) never use exec/oidc plugins.
 const _parseAuth = (user: KubeconfigUser | undefined): KubeconfigAuth | undefined => {
   if (user?.token !== undefined) return { kind: "token", token: user.token }

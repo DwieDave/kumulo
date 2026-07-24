@@ -80,7 +80,7 @@ describe("ClusterConfig", () => {
       )
   )
 
-  it("accepts the autoscaling block on a worker pool (schema-level only, per FR-1.3)", () =>
+  it("accepts the autoscaling block on a worker pool (schema-level only)", () =>
     Effect.runPromise(decodeConfig(validConfig)).then((decoded) => {
       expect(decoded.worker_pools[1]?.autoscaling).toEqual({ enabled: false, min: 2, max: 6 })
     }))

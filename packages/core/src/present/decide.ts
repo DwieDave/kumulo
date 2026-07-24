@@ -1,7 +1,7 @@
 import type { Plan } from "../plan/types.ts"
 
-// Pure confirm/--yes/--dry-run decision (design §6 step 3, FR-2.2/AC-1) —
-// the CLI boundary interprets this to prompt, print, or proceed.
+// Pure confirm/--yes/--dry-run decision — the CLI boundary interprets this
+// to prompt, print, or proceed.
 export type PlanDecision =
   | { readonly _tag: "DryRun" }
   | { readonly _tag: "NothingToDo" }

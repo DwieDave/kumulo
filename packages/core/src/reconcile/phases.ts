@@ -1,7 +1,7 @@
-// Design §2/§3.3.1, FR-2.3 — the phase pipeline branches exactly once on
-// distro kind. Ordering is data, not control flow, so the branch itself
-// stays a one-line lookup and every phase's dependency order is visible
-// in one place instead of scattered across if/else chains.
+// The phase pipeline branches exactly once on distro kind. Ordering is
+// data, not control flow, so the branch itself stays a one-line lookup and
+// every phase's dependency order is visible in one place instead of
+// scattered across if/else chains.
 
 export type PhaseName =
   | "Network"
@@ -17,7 +17,7 @@ export type PhaseName =
   | "EnsureCluster"
   | "EnsureNodePools"
 
-// Self-managed (k3s): full infra pipeline, design §2.
+// Self-managed (k3s): full infra pipeline.
 export const SELF_MANAGED_PHASES: ReadonlyArray<PhaseName> = [
   "Network",
   "Security",
@@ -31,7 +31,7 @@ export const SELF_MANAGED_PHASES: ReadonlyArray<PhaseName> = [
   "Kubeconfig"
 ]
 
-// Managed (ovh-mks): OVH owns the infra phases, design §3.3.1.
+// Managed (ovh-mks): OVH owns the infra phases.
 export const MANAGED_PHASES: ReadonlyArray<PhaseName> = [
   "EnsureCluster",
   "EnsureNodePools",
@@ -41,7 +41,7 @@ export const MANAGED_PHASES: ReadonlyArray<PhaseName> = [
   "Kubeconfig"
 ]
 
-// The single distro-kind branch point (FR-2.3). Concrete phase Effects are
-// supplied by callers (later milestones); this just picks the order.
+// The single distro-kind branch point. Concrete phase Effects are
+// supplied by callers; this just picks the order.
 export const phasesForKind = (kind: "self-managed" | "managed"): ReadonlyArray<PhaseName> =>
   kind === "self-managed" ? SELF_MANAGED_PHASES : MANAGED_PHASES

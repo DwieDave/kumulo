@@ -29,7 +29,7 @@ const AccessMode = Schema.Literals(["ReadWriteOnce", "ReadWriteMany", "ReadOnlyM
 const k3sVersionPattern = /^v\d+\.\d+\.\d+\+k3s\d+$/
 const plainK8sVersionPattern = /^v?\d+\.\d+\.\d+$/
 
-// kumulo: version format is distro-dependent (§5/FR-1.2) — k3s embeds a
+// kumulo: version format is distro-dependent — k3s embeds a
 // `+k3sN` build suffix, ovh-mks uses plain upstream Kubernetes versions.
 const isVersionValidForDistro = Schema.makeFilter((config: { distro: string; version: string }) => {
   const pattern = config.distro === "k3s" ? k3sVersionPattern : plainK8sVersionPattern

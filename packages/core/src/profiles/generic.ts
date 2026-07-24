@@ -2,7 +2,7 @@ import { Effect, Layer } from "effect"
 import type { ClusterConfigShape } from "../domain/types.ts"
 import { ProviderProfile } from "../ports/provider-profile.ts"
 
-// Design §3.2 — `generic` ships in core for vanilla OpenStack clouds
+// `generic` ships in core for vanilla OpenStack clouds
 // (clouds.yaml-driven, no assumptions). No capability restrictions, no
 // image/network defaults to guess at; users set what OVH gives away free.
 export const genericProfile = {

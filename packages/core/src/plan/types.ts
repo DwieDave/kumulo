@@ -1,7 +1,7 @@
 import type { NodeRole } from "../domain/types.ts"
 
-// A resource kumulo wants to exist, keyed by the name-convention coordinates
-// (design §6/Appendix B). `spec` is whatever the owning phase/provider needs
+// A resource kumulo wants to exist, keyed by the name-convention coordinates.
+// `spec` is whatever the owning phase/provider needs
 // to create it — only its hash matters to the plan/diff domain.
 export interface DesiredResource<S = unknown> {
   readonly cluster: string
@@ -11,7 +11,7 @@ export interface DesiredResource<S = unknown> {
   readonly spec: S
 }
 
-// A resource discovered by tag (design §6 "Inventory" step) — provider-
+// A resource discovered by tag — provider-
 // agnostic: any tagged/named resource collapses to this shape for diffing.
 export interface TaggedResource {
   readonly name: string

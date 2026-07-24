@@ -2,7 +2,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { MANAGED_PHASES, phasesForKind, SELF_MANAGED_PHASES } from "../../src/reconcile/phases.ts"
 
 describe("phasesForKind", () => {
-  it("orders self-managed phases per design §2", () => {
+  it("orders self-managed phases", () => {
     expect(phasesForKind("self-managed")).toEqual([
       "Network",
       "Security",
@@ -18,7 +18,7 @@ describe("phasesForKind", () => {
     expect(phasesForKind("self-managed")).toBe(SELF_MANAGED_PHASES)
   })
 
-  it("orders managed phases per design §3.3.1 (skips infra phases)", () => {
+  it("orders managed phases (skips infra phases)", () => {
     expect(phasesForKind("managed")).toEqual([
       "EnsureCluster",
       "EnsureNodePools",
