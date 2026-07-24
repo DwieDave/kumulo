@@ -3,10 +3,12 @@ import type {
   AuthenticationFailed,
   BootstrapFailed,
   ConfigInvalid,
+  HttpTransportError,
   ProvisioningTimeout,
   QuotaExceeded,
   ResourceConflict,
-  ResourceNotFound
+  ResourceNotFound,
+  ResponseDecodeError
 } from "../errors/tagged.ts"
 import type {
   BootstrapPlan,
@@ -49,6 +51,8 @@ export type MksError =
   | ResourceConflict
   | ProvisioningTimeout
   | QuotaExceeded
+  | HttpTransportError
+  | ResponseDecodeError
 
 // Managed distros (ovh-mks) skip the infra phases; OVH runs
 // the control plane and provisions nodes via its own API.

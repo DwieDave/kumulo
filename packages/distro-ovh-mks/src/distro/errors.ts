@@ -1,7 +1,14 @@
 import { Effect } from "effect"
 import type { SchemaError } from "effect/Schema"
 import * as HttpClientError from "effect/unstable/http/HttpClientError"
-import { AuthenticationFailed, QuotaExceeded, ResourceConflict, ResourceNotFound } from "@kumulo/core"
+import {
+  AuthenticationFailed,
+  HttpTransportError,
+  QuotaExceeded,
+  ResourceConflict,
+  ResourceNotFound,
+  ResponseDecodeError
+} from "@kumulo/core"
 import type { MksError } from "@kumulo/core"
 
 interface ErrorContext {
@@ -29,11 +36,14 @@ const _byStatus: Record<number, (ctx: ErrorContext) => MksError> = {
   429: _quotaExceeded
 }
 
-// ponytail: no status code in `MksError`'s union maps cleanly onto
-// transport/decode failures (bad JSON, DNS, timeouts) — fall back to
-// `ResourceConflict` describing the raw failure. Revisit if a caller needs
-// to distinguish "OVH said no" from "the network broke".
-const _fallback = (ctx: ErrorContext): MksError => new ResourceConflict(ctx)
+// Anything without a mapped status keeps its full cause: decode failures
+// carry the schema issue tree, everything else (unexpected statuses,
+// network/TLS) the raw HttpClientError — no more collapsing into a fake
+// "conflict".
+const _fallback = (cause: HttpClientError.HttpClientError | SchemaError, ctx: ErrorContext): MksError =>
+  HttpClientError.isHttpClientError(cause)
+    ? new HttpTransportError({ cause })
+    : new ResponseDecodeError({ endpoint: `${ctx.kind}/${ctx.ref}`, issue: cause.issue })
 
 const _statusOf = (cause: HttpClientError.HttpClientError | SchemaError): number | undefined =>
   HttpClientError.isHttpClientError(cause) ? cause.response?.status : undefined
@@ -44,7 +54,7 @@ export const toMksError = (
 ): MksError => {
   const status = _statusOf(cause)
   const mapped = status === undefined ? undefined : _byStatus[status]
-  return mapped ? mapped(ctx) : _fallback(ctx)
+  return mapped ? mapped(ctx) : _fallback(cause, ctx)
 }
 
 export const mapMksError = <A, R>(
