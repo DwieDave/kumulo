@@ -70,21 +70,23 @@ const _applyBucketDiff = (
   { provider, diff, desired }: { readonly provider: StorageProvider; readonly diff: BucketDiff; readonly desired: ReadonlyArray<BucketSpec> }
 ): Effect.Effect<void, ObjectStorageError> =>
   Effect.gen(function*() {
-    yield* Effect.forEach(diff.toCreate, provider.ensureBucket, { discard: true })
+    // Buckets are independent of each other — each diff class converges
+    // concurrently (bounded: OVH rate limits).
+    yield* Effect.forEach(diff.toCreate, provider.ensureBucket, { discard: true, concurrency: 4 })
     // Heal out-of-band deletions: a bucket the outputs file says is converged
     // may have been removed behind kumulo's back — `ensureBucket` checks live
     // state and only creates when actually missing, so re-ensuring noops is
     // both cheap and safe.
     const byName = new Map(desired.map((spec) => [spec.name, spec]))
     const noopSpecs = diff.noop.flatMap((ref) => byName.get(ref.name) ?? [])
-    yield* Effect.forEach(noopSpecs, provider.ensureBucket, { discard: true })
-    yield* Effect.forEach(diff.toUpdate, (u) => provider.ensureBucket(u.spec), { discard: true })
+    yield* Effect.forEach(noopSpecs, provider.ensureBucket, { discard: true, concurrency: 4 })
+    yield* Effect.forEach(diff.toUpdate, (u) => provider.ensureBucket(u.spec), { discard: true, concurrency: 4 })
     yield* Effect.forEach(
       diff.toReplace,
       (r) => Effect.andThen(provider.deleteBucket(r.ref), provider.ensureBucket(r.spec)),
-      { discard: true }
+      { discard: true, concurrency: 4 }
     )
-    yield* Effect.forEach(diff.toDelete, provider.deleteBucket, { discard: true })
+    yield* Effect.forEach(diff.toDelete, provider.deleteBucket, { discard: true, concurrency: 4 })
   })
 
 const _bucketInfosFor = (
@@ -175,7 +177,7 @@ export const reconcileBucketsOnDelete = (
     if (file.buckets.length === 0) return { kept: [], deleted: [] }
 
     const diff = diffBuckets({ desired: [], existing: file.buckets })
-    yield* Effect.forEach(diff.toDelete, provider.deleteBucket, { discard: true })
+    yield* Effect.forEach(diff.toDelete, provider.deleteBucket, { discard: true, concurrency: 4 })
 
     const retained = file.buckets.filter((bucket) => bucket.retain)
     yield* writeOutputs({ dir: configDir, file: { cluster: config.name, buckets: retained } })

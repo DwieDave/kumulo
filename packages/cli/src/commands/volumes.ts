@@ -128,7 +128,7 @@ export const convergeManagedVolumes = (
     const ensured = yield* Effect.forEach(config.volumes.managed, (entry) =>
       provider.ensureVolume(_toManagedSpec(entry)).pipe(
         Effect.map((info) => ({ name: entry.name, id: info.id, retain: entry.retain }))
-      ))
+      ), { concurrency: 4 })
     const outputs = ensured.reduce((acc, volume) => upsertVolume({ file: acc, volume }), file)
     yield* writeOutputs({ dir: configDir, file: outputs })
   })

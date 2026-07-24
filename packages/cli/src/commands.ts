@@ -79,22 +79,27 @@ const _applyFlow = Effect.fn(function*() {
     yield* Console.log(`\nCluster "${config.name}" is up (${result.apiEndpoint}); kubeconfig at ${result.kubeconfigPath}.`)
     return
   }
-  const info = yield* applyMks(config)
-  yield* Console.log(`\nCluster "${config.name}" is ${info.status} (${info.apiEndpoint}).`)
-  yield* _logApplied({ plan, prefixes: ["mks-cluster/", "mks-pool/"] })
-
+  // Cluster+pools, volumes, and buckets have no dependencies on each other
+  // (pools depend on the cluster, sequenced inside `applyMks`; credentials
+  // depend on buckets, sequenced inside `convergeBuckets`) — converge all
+  // three concurrently.
+  const mksStep = applyMks(config).pipe(
+    Effect.tap((info) => Console.log(`\nCluster "${config.name}" is ${info.status} (${info.apiEndpoint}).`)),
+    Effect.tap(() => _logApplied({ plan, prefixes: ["mks-cluster/", "mks-pool/"] }))
+  )
   // Same Cinder-backed volumes as the k3s path's `_reconcileVolumes`
   // (`k3s/reconcile.ts`), just no cluster-side manifest apply yet — see
   // `convergeManagedVolumes`'s doc comment.
-  yield* convergeManagedVolumes({ config, configDir })
-  yield* _logApplied({ plan, prefixes: ["volume/"] })
-
-  // Buckets converge only after the cluster is READY, credentials are
-  // written last (R6/R7 ordering) — both handled inside `convergeBuckets`.
-  if (storageLayer !== undefined) {
-    yield* convergeBuckets({ config, configDir }).pipe(Effect.provide(storageLayer))
-    yield* _logApplied({ plan, prefixes: ["bucket/"] })
-  }
+  const volumesStep = convergeManagedVolumes({ config, configDir }).pipe(
+    Effect.tap(() => _logApplied({ plan, prefixes: ["volume/"] }))
+  )
+  const bucketsStep = storageLayer === undefined
+    ? Effect.void
+    : convergeBuckets({ config, configDir }).pipe(
+      Effect.provide(storageLayer),
+      Effect.tap(() => _logApplied({ plan, prefixes: ["bucket/"] }))
+    )
+  yield* Effect.all([mksStep, volumesStep, bucketsStep], { concurrency: 3 })
 })
 
 export const create = Command.make("create", {}, _applyFlow).pipe(
@@ -127,19 +132,24 @@ export const del = Command.make(
       yield* Console.log(`Re-run with --yes to delete cluster "${config.name}".`)
       return
     }
-    if (_isK3s(config)) yield* deleteK3s(config)
-    else yield* deleteMks(config)
-    yield* Console.log(`Cluster "${config.name}" deleted.`)
+    // Volumes must wait for the cluster (attachments); buckets don't — the
+    // bucket teardown runs concurrently with cluster+volume teardown.
+    const clusterAndVolumesStep = Effect.gen(function*() {
+      if (_isK3s(config)) yield* deleteK3s(config)
+      else yield* deleteMks(config)
+      yield* Console.log(`Deleted mks-cluster/${config.name}`)
 
-    // Retained volumes (`volumes.managed[].retain: true`) survive `delete`;
-    // anything else recorded there is torn down alongside the cluster.
-    const volumesResult = yield* reconcileVolumesOnDelete(config)
-    yield* Effect.forEach(volumesResult.deleted, (name) => Console.log(`Deleted volume/${name}`), { discard: true })
-    if (volumesResult.kept.length > 0) yield* Console.log(`Retained volumes (kept): ${volumesResult.kept.join(", ")}`)
+      // Retained volumes (`volumes.managed[].retain: true`) survive `delete`;
+      // anything else recorded there is torn down alongside the cluster.
+      const volumesResult = yield* reconcileVolumesOnDelete(config)
+      yield* Effect.forEach(volumesResult.deleted, (name) => Console.log(`Deleted volume/${name}`), { discard: true })
+      if (volumesResult.kept.length > 0) yield* Console.log(`Retained volumes (kept): ${volumesResult.kept.join(", ")}`)
+    })
 
     // Same retain semantics for buckets (R6/R11) — a non-empty, non-retained
     // bucket surfaces `BucketNotEmpty` as-is, nothing else here rolls back.
-    if (_isOvhStorage(config)) {
+    const bucketsStep = Effect.gen(function*() {
+      if (!_isOvhStorage(config)) return
       const env = yield* StorageEnv
       const providerLayer = ovhObjectStorageProviderLive(env)
       const buckets = yield* reconcileBucketsOnDelete({ config, configDir: dirname(root.config) }).pipe(
@@ -147,7 +157,10 @@ export const del = Command.make(
       )
       yield* Effect.forEach(buckets.deleted, (name) => Console.log(`Deleted bucket/${name}`), { discard: true })
       if (buckets.kept.length > 0) yield* Console.log(`Retained buckets (kept): ${buckets.kept.join(", ")}`)
-    }
+    })
+
+    yield* Effect.all([clusterAndVolumesStep, bucketsStep], { concurrency: 2 })
+    yield* Console.log(`Cluster "${config.name}" deleted.`)
   })
 ).pipe(Command.withDescription("Delete a cluster"))
 
