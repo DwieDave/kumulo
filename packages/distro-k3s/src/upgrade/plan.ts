@@ -1,4 +1,4 @@
-import type { K8sManifest } from "@kumulo/core"
+import type { K8sManifest, ResourceRef } from "@kumulo/core"
 
 // FR-5.6 / design §3.4: SUC (rancher/system-upgrade-controller) Plan CRs for
 // a k3s version bump. Ports hetzner-k3s's templates/upgrade_plan_for_*.yaml
@@ -71,3 +71,15 @@ export interface UpgradePlanArgs {
 export const renderUpgradePlan = (
   { version, workerConcurrency = 1 }: UpgradePlanArgs
 ): ReadonlyArray<K8sManifest> => [renderMastersPlan(version), renderWorkersPlan({ version, concurrency: workerConcurrency })]
+
+const _isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null
+
+// kumulo: WHY not core's addons `refFor` — that helper's PLURALS map only
+// covers built-in addon kinds, and `Plan` is a CRD this package alone emits
+// (upgrade.cattle.io/v1, namespaced under `system-upgrade`).
+export const refForPlan = (manifest: K8sManifest): ResourceRef => {
+  const metadata = manifest.metadata
+  const name = _isRecord(metadata) && typeof metadata.name === "string" ? metadata.name : ""
+  const namespace = _isRecord(metadata) && typeof metadata.namespace === "string" ? metadata.namespace : NAMESPACE
+  return { path: `/apis/upgrade.cattle.io/v1/namespaces/${namespace}/plans/${name}`, kind: "Plan" }
+}

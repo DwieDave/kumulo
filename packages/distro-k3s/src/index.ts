@@ -36,5 +36,5 @@ export type { MakeReleaseCacheArgs, ReleaseCache } from "./releases/index.ts"
 export { bootstrapOrder, drainAndRemove, makeSelfManagedDistro } from "./distro/index.ts"
 export type { MakeSelfManagedDistroArgs } from "./distro/index.ts"
 
-export { renderMastersPlan, renderUpgradePlan, renderWorkersPlan } from "./upgrade/index.ts"
+export { refForPlan, renderMastersPlan, renderUpgradePlan, renderWorkersPlan } from "./upgrade/index.ts"
 export type { UpgradePlanArgs, WorkersPlanArgs } from "./upgrade/index.ts"
