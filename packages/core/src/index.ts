@@ -21,7 +21,7 @@ export { isRetryable } from "./errors/retryable.ts"
 export { renderError } from "./errors/renderer.ts"
 export type { RendererRegistry } from "./errors/renderer.ts"
 
-export { ClusterConfig, decodeConfig, encodeConfig, parseConfigYaml, stringifyConfigYaml } from "./config/index.ts"
+export { ClusterConfig, decodeConfig, encodeConfig, OutputsFormat, parseConfigYaml, stringifyConfigYaml } from "./config/index.ts"
 export type { ClusterConfigEncoded, WorkerPool } from "./config/index.ts"
 
 export { Addon } from "./ports/addon.ts"

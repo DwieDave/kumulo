@@ -235,8 +235,18 @@ const K3sPassthrough = Schema.Struct({
   extra_agent_args: Schema.Array(Schema.String)
 })
 
+export const OutputsFormat = Schema.Literals(["yaml", "json"])
+export type OutputsFormat = typeof OutputsFormat.Type
+
+// Format of the files kumulo itself writes next to the config
+// (`<cluster>.outputs.*`, `<cluster>.buckets.*`). Defaults to yaml.
+const Outputs = Schema.Struct({
+  format: OutputsFormat
+})
+
 export const ClusterConfig = Schema.Struct({
   name: Schema.NonEmptyString,
+  outputs: Schema.optionalKey(Outputs),
   provider: Provider,
   distro: Distro,
   version: Schema.NonEmptyString,
