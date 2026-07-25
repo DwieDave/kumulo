@@ -47,12 +47,11 @@ import {
 import type { SshHost } from "@kumulo/distro-k3s"
 import { installAddons, resolveAddons } from "@kumulo/addons"
 import { CinderAuth } from "@kumulo/volumes-cinder"
+import { providerFor } from "../provider/registry.ts"
 import { OpenStackEnv } from "../doctor-openstack/env.ts"
 import {
   CloudCredentialEnv,
   k3sCloudCredentialLayer,
-  k3sCloudProviderLayer,
-  k3sHetznerCloudProviderLayer,
   k3sHetznerVolumeProviderLayer,
   k3sVolumeProviderLayer,
   secGroupRules
@@ -244,7 +243,7 @@ const _writeKubeconfig = (
 const _cloudProviderLayerFor = (
   config: ClusterConfig
 ): Layer.Layer<CloudProvider, AuthenticationFailed, OpenStackEnv | HttpClient.HttpClient> =>
-  config.provider === "hetzner" ? k3sHetznerCloudProviderLayer(config) : k3sCloudProviderLayer(config)
+  providerFor(config).cloudProviderLayer(config)
 
 /**
  * `volumes.module` → `VolumeProvider` Layer. `"none"` and `"cinder"` both

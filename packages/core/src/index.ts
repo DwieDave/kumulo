@@ -38,6 +38,8 @@ export type { ObjectStorageError } from "./ports/object-storage-provider.ts"
 export { ProviderProfile } from "./ports/provider-profile.ts"
 export type { AuthDefaults, ProfileError } from "./ports/provider-profile.ts"
 export { validateAutoscaling, validateCni } from "./ports/validation.ts"
+export { distroCapabilities } from "./domain/capabilities.ts"
+export type { DistroCapabilities } from "./domain/capabilities.ts"
 export { VolumeProvider } from "./ports/volume-provider.ts"
 export type { VolumeError } from "./ports/volume-provider.ts"
 

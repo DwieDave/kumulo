@@ -1,40 +1,22 @@
 import { dirname } from "node:path"
 import { Console, Effect } from "effect"
 import { Command } from "effect/unstable/cli"
-import type { ClusterConfig, Plan } from "@kumulo/core"
+import type { Layer } from "effect"
+import type { ClusterConfig, CredentialsSink, ObjectStorageProvider, Plan } from "@kumulo/core"
 import { ovhObjectStorageProviderLive } from "@kumulo/storage-ovh"
 import { loadConfig } from "./config.ts"
+import { envSummary } from "./env-summary.ts"
 import { convergeManagedVolumes, lookupManagedVolumeNames, reconcileVolumesOnDelete, volumes } from "./commands/volumes.ts"
 import { status } from "./commands/status.ts"
 import { upgrade } from "./commands/upgrade.ts"
-import { buildK3sPlan } from "./k3s/plan.ts"
-import { applyK3s, deleteK3s, kubeconfigK3s } from "./k3s/reconcile.ts"
-import { buildMksPlan } from "./mks/plan.ts"
-import { applyMks, deleteMks, kubeconfigMks, lookupMksInventory } from "./mks/reconcile.ts"
+import { distroFor, wantsObjectStorage } from "./distro/registry.ts"
+import type { DistroEntry } from "./distro/types.ts"
 import { StorageEnv, storageLayers } from "./storage/env.ts"
 import { bucketDeletePlanActions, bucketPlanActions, convergeBuckets, reconcileBucketsOnDelete } from "./storage/reconcile.ts"
 import { decidePlanAction, dim, green, red, renderPlan, yellow } from "./present.ts"
 import { kumulo } from "./root.ts"
 
 export { kumulo }
-
-// The one distro-kind branch point; every command below dispatches on it
-// the same way `upgrade.ts` already does.
-const _isK3s = (config: ClusterConfig): boolean => config.distro === "k3s"
-
-// Object storage is only wired for the ovh-mks path (scope.md) — k3s
-// compiles against the same config shape but never converges buckets.
-const _isOvhStorage = (config: ClusterConfig): boolean => !_isK3s(config) && config.object_storage.module === "ovh"
-
-// Live plan for the ovh-mks path: cluster/pool existence via the OVH API,
-// volume existence via Cinder — spec drift still converges through the
-// idempotent ensure* verbs without showing here (see `buildMksPlan`).
-const _mksPlanLive = (config: ClusterConfig) =>
-  Effect.gen(function*() {
-    const mks = yield* lookupMksInventory(config)
-    const volumeNames = yield* lookupManagedVolumeNames(config)
-    return buildMksPlan({ config, inventory: { ...mks, volumeNames } })
-  })
 
 const _appliedVerb: Record<string, string> = {
   Create: green("Created"),
@@ -55,37 +37,23 @@ const _logApplied = (
     { discard: true }
   )
 
-/** Config → plan → present → apply, shared by `create` and `scale`. */
-const _applyFlow = Effect.fn(function*() {
-  const root = yield* kumulo
-  const config = yield* loadConfig(root.config)
-  const configDir = dirname(root.config)
-  const storageLayer = _isOvhStorage(config) ? yield* storageLayers(config) : undefined
-  const basePlan = _isK3s(config) ? buildK3sPlan(config) : yield* _mksPlanLive(config)
-  const bucketActions = storageLayer === undefined
-    ? []
-    : yield* bucketPlanActions({ config, configDir }).pipe(Effect.provide(storageLayer))
-  const plan: Plan = { actions: [...basePlan.actions, ...bucketActions] }
-  const decision = decidePlanAction({ plan, yes: root.yes, dryRun: root.dryRun })
-  yield* Console.log(`${renderPlan(plan)}\n`)
-
-  if (decision._tag === "DryRun" || decision._tag === "NothingToDo") return
-  if (decision._tag === "NeedsConfirm") {
-    yield* Console.log("Re-run with --yes to apply.")
-    return
+/**
+ * Cluster+pools, volumes, and buckets have no dependencies on each other
+ * (pools depend on the cluster, sequenced inside the distro's `apply`;
+ * credentials depend on buckets, sequenced inside `convergeBuckets`) —
+ * converge all three concurrently.
+ */
+const _convergeAll = Effect.fn(function*(
+  { entry, config, configDir, plan, storageLayer }: {
+    readonly entry: DistroEntry
+    readonly config: ClusterConfig
+    readonly configDir: string
+    readonly plan: Plan
+    readonly storageLayer: Layer.Layer<ObjectStorageProvider | CredentialsSink> | undefined
   }
-
-  if (_isK3s(config)) {
-    const result = yield* applyK3s({ config, configDir })
-    yield* Console.log(`Cluster "${config.name}" is up (${result.apiEndpoint}); kubeconfig at ${result.kubeconfigPath}.`)
-    return
-  }
-  // Cluster+pools, volumes, and buckets have no dependencies on each other
-  // (pools depend on the cluster, sequenced inside `applyMks`; credentials
-  // depend on buckets, sequenced inside `convergeBuckets`) — converge all
-  // three concurrently.
-  const mksStep = applyMks(config).pipe(
-    Effect.tap(() => _logApplied({ plan, prefixes: ["mks-cluster/", "mks-pool/"] }))
+) {
+  const clusterStep = entry.apply({ config, configDir }).pipe(
+    Effect.tap(() => _logApplied({ plan, prefixes: entry.appliedPrefixes }))
   )
   // Same Cinder-backed volumes as the k3s path's `_reconcileVolumes`
   // (`k3s/reconcile.ts`), just no cluster-side manifest apply yet — see
@@ -99,8 +67,41 @@ const _applyFlow = Effect.fn(function*() {
       Effect.provide(storageLayer),
       Effect.tap(() => _logApplied({ plan, prefixes: ["bucket/"] }))
     )
-  const [info] = yield* Effect.all([mksStep, volumesStep, bucketsStep], { concurrency: 3 })
-  yield* Console.log(`\nCluster "${config.name}" is ${info.status} (${info.apiEndpoint}).`)
+  const [result] = yield* Effect.all([clusterStep, volumesStep, bucketsStep], { concurrency: 3 })
+  return result
+})
+
+/** Config → plan → present → apply, shared by `create` and `scale`. */
+const _applyFlow = Effect.fn(function*() {
+  const root = yield* kumulo
+  const config = yield* loadConfig(root.config)
+  const configDir = dirname(root.config)
+  const entry = distroFor(config)
+  yield* Console.log(`${yield* envSummary(config)}\n`)
+  const storageLayer = wantsObjectStorage(config) ? yield* storageLayers(config) : undefined
+  const basePlan = yield* entry.plan(config)
+  const bucketActions = storageLayer === undefined
+    ? []
+    : yield* bucketPlanActions({ config, configDir }).pipe(Effect.provide(storageLayer))
+  const plan: Plan = { actions: [...basePlan.actions, ...bucketActions] }
+  const decision = decidePlanAction({ plan, yes: root.yes, dryRun: root.dryRun })
+  yield* Console.log(`${renderPlan(plan)}\n`)
+
+  if (decision._tag === "DryRun" || decision._tag === "NothingToDo") return
+  if (decision._tag === "NeedsConfirm") {
+    yield* Console.log("Re-run with --yes to apply.")
+    return
+  }
+
+  // An entry with no applied prefixes converges everything itself (k3s
+  // reconciles volumes inside `applyK3s`) — nothing to fan out here.
+  if (entry.appliedPrefixes.length === 0) {
+    const result = yield* entry.apply({ config, configDir })
+    yield* Console.log(result.summary)
+    return
+  }
+  const result = yield* _convergeAll({ entry, config, configDir, plan, storageLayer })
+  yield* Console.log(result.summary)
 })
 
 export const create = Command.make("create", {}, _applyFlow).pipe(
@@ -117,7 +118,7 @@ export const kubeconfig = Command.make(
   Effect.fn(function*() {
     const root = yield* kumulo
     const config = yield* loadConfig(root.config)
-    const result = _isK3s(config) ? yield* kubeconfigK3s(config) : yield* kubeconfigMks(config)
+    const result = yield* distroFor(config).kubeconfig(config)
     yield* Console.log(result.content)
   })
 ).pipe(Command.withDescription("Print the cluster's kubeconfig"))
@@ -126,21 +127,11 @@ export const kubeconfig = Command.make(
 // volumes as NoOp "(retained)"; buckets from the recorded outputs. Volume
 // rows only appear for volumes that actually exist on Cinder right now.
 const _deletePlan = Effect.fn(function*(config: ClusterConfig, configDir: string) {
-  const [inventory, liveVolumes, bucketActions] = yield* Effect.all([
-    _isK3s(config) ? Effect.succeed(undefined) : lookupMksInventory(config),
+  const [clusterActions, liveVolumes, bucketActions] = yield* Effect.all([
+    distroFor(config).deletePlanActions(config),
     lookupManagedVolumeNames(config),
     bucketDeletePlanActions({ config, configDir })
   ], { concurrency: 3 })
-  const clusterAction = inventory === undefined
-    ? [{ _tag: "Delete" as const, name: `cluster/${config.name}` }]
-    : inventory.clusterExists
-    ? [{ _tag: "Delete" as const, name: `mks-cluster/${config.name}` }]
-    : [{ _tag: "NoOp" as const, name: `mks-cluster/${config.name} (already absent)` }]
-  // Node pools go down with the cluster — one row per live pool.
-  const poolActions = [...(inventory?.poolNames ?? [])].toSorted().map((pool) => ({
-    _tag: "Delete" as const,
-    name: `mks-pool/${config.name}/${pool}`
-  }))
   const volumeActions = config.volumes.managed
     .filter((entry) => liveVolumes.has(entry.name))
     .map((entry) =>
@@ -148,7 +139,7 @@ const _deletePlan = Effect.fn(function*(config: ClusterConfig, configDir: string
         ? { _tag: "NoOp" as const, name: `volume/${entry.name} (retained)` }
         : { _tag: "Delete" as const, name: `volume/${entry.name}` }
     )
-  const plan: Plan = { actions: [...clusterAction, ...poolActions, ...volumeActions, ...bucketActions] }
+  const plan: Plan = { actions: [...clusterActions, ...volumeActions, ...bucketActions] }
   return plan
 })
 
@@ -158,7 +149,9 @@ export const del = Command.make(
   Effect.fn(function*() {
     const root = yield* kumulo
     const config = yield* loadConfig(root.config)
+    const entry = distroFor(config)
 
+    yield* Console.log(`${yield* envSummary(config)}\n`)
     const plan = yield* _deletePlan(config, dirname(root.config))
     yield* Console.log(`${renderPlan(plan)}\n`)
     if (root.dryRun) return
@@ -169,9 +162,8 @@ export const del = Command.make(
     // Volumes must wait for the cluster (attachments); buckets don't — the
     // bucket teardown runs concurrently with cluster+volume teardown.
     const clusterAndVolumesStep = Effect.gen(function*() {
-      if (_isK3s(config)) yield* deleteK3s(config)
-      else yield* deleteMks(config)
-      yield* Console.log(`${red("Deleted")} ${_isK3s(config) ? "cluster" : "mks-cluster"}/${config.name}`)
+      yield* entry.delete(config)
+      yield* Console.log(`${red("Deleted")} ${entry.deletedLabel}/${config.name}`)
       yield* _logApplied({ plan, prefixes: ["mks-pool/"] })
 
       // Retained volumes (`volumes.managed[].retain: true`) survive `delete`;
@@ -184,7 +176,7 @@ export const del = Command.make(
     // Same retain semantics for buckets (R6/R11) — a non-empty, non-retained
     // bucket surfaces `BucketNotEmpty` as-is, nothing else here rolls back.
     const bucketsStep = Effect.gen(function*() {
-      if (!_isOvhStorage(config)) return
+      if (!wantsObjectStorage(config)) return
       const env = yield* StorageEnv
       const providerLayer = ovhObjectStorageProviderLive(env)
       const buckets = yield* reconcileBucketsOnDelete({ config, configDir: dirname(root.config) }).pipe(
