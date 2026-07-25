@@ -1,5 +1,6 @@
 import { resourceName } from "@kumulo/core"
 import type { ClusterConfig, Plan, ServerSpec } from "@kumulo/core"
+import { dnsPlanActions } from "../dns-plan.ts"
 
 const MASTER_POOL = "masters"
 
@@ -38,5 +39,9 @@ export const buildK3sServerSpecs = (config: ClusterConfig): ReadonlyArray<Server
 // carry yet. `ensureServer`/`ensureNetwork`/etc are genuinely idempotent, so
 // this only affects what the plan *prints*. Upgrade alongside mks/plan.ts.
 export const buildK3sPlan = (config: ClusterConfig): Plan => ({
-  actions: buildK3sServerSpecs(config).map((spec) => ({ _tag: "Create", name: spec.name }))
+  actions: [
+    ...buildK3sServerSpecs(config).map((spec) => ({ _tag: "Create" as const, name: spec.name })),
+    // k3s points `api_server` at a master IP → A record (see `applyK3s`).
+    ...dnsPlanActions({ config: config.dns, targetKind: "ip" })
+  ]
 })

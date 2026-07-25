@@ -1,4 +1,5 @@
 import type { Plan, PlanAction } from "@kumulo/core"
+import { type DnsPlanInput, dnsPlanActions } from "../dns-plan.ts"
 
 // Structural slice of `ClusterConfig` (same pattern as core's
 // `ClusterConfigShape`) — keeps this module's test fixtures minimal instead
@@ -10,6 +11,9 @@ export interface MksPlanInput {
     readonly module: string
     readonly managed: ReadonlyArray<{ readonly name: string }>
   }
+  // Optional so existing plan fixtures stay minimal; a real `ClusterConfig`
+  // always carries it.
+  readonly dns?: DnsPlanInput
 }
 
 /** Live existence, as looked up right before planning (see `lookupMksInventory`). */
@@ -44,6 +48,8 @@ export const buildMksPlan = (
     ),
     ...(config.volumes.module === "cinder"
       ? config.volumes.managed.map((v) => _createOrNoOp({ exists: inventory.volumeNames.has(v.name), name: `volume/${v.name}` }))
-      : [])
+      : []),
+    // MKS exposes the api server as a hostname → CNAME (see `applyMks`).
+    ...(config.dns === undefined ? [] : dnsPlanActions({ config: config.dns, targetKind: "hostname" }))
   ]
 })
