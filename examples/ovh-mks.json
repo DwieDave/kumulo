@@ -1,0 +1,106 @@
+{
+  "$schema": "../kumulo.schema.json",
+  "name": "staging-eu",
+  "provider": "ovh",
+  "distro": "ovh-mks",
+  "version": "1.35.0",
+  "auth": {
+    "method": "application_credential",
+    "region": "DE1"
+  },
+  "network": {
+    "cidr": "10.1.0.0/16",
+    "public_access": "nat"
+  },
+  "api_server": {
+    "high_availability": true,
+    "allowed_cidrs": ["0.0.0.0/0"]
+  },
+  "ssh": {
+    "public_key_path": "~/.ssh/id_ed25519.pub",
+    "allowed_cidrs": ["0.0.0.0/0"]
+  },
+  "masters": {
+    "flavor": "b3-8",
+    "count": 3,
+    "image": "ubuntu-24.04"
+  },
+  "worker_pools": [
+    {
+      "name": "general",
+      "flavor": "d2-4",
+      "count": 1,
+      "labels": {
+        "workload": "general"
+      },
+      "autoscaling": {
+        "enabled": true,
+        "min": 1,
+        "max": 1
+      }
+    }
+  ],
+  "dns": {
+    "module": "none",
+    "zone": "example.com",
+    "ttl": 300,
+    "records": []
+  },
+  "volumes": {
+    "module": "cinder",
+    "managed": [
+      {
+        "name": "staging-eu-data",
+        "size_gb": 10,
+        "type": "classic",
+        "retain": false,
+        "pvc": {
+          "namespace": "default",
+          "access_modes": ["ReadWriteOnce"]
+        }
+      }
+    ]
+  },
+  "object_storage": {
+    "module": "ovh",
+    "buckets": [
+      {
+        "name": "staging-eu-backups",
+        "region": "DE",
+        "versioning": false,
+        "encryption": false,
+        "retain": false
+      },
+      {
+        "name": "staging-eu-logs",
+        "region": "DE",
+        "versioning": true,
+        "encryption": false,
+        "retain": false
+      }
+    ]
+  },
+  "secrets": {
+    "sink": "sops",
+    "dir": ".",
+    "sops": {
+      "age_recipient": "age1xv0gzkxnvr08jtqyfjmcqd0qrfxlg4vu0gwnjradd4dy6ufh5v0sgd6c3t"
+    }
+  },
+  "addons": {
+    "cloud_controller_manager": true,
+    "cinder_csi": {
+      "enabled": true,
+      "default_volume_type": "high-speed"
+    },
+    "hcloud_csi": {
+      "enabled": false
+    },
+    "system_upgrade_controller": false,
+    "cni": "flannel"
+  },
+  "k3s": {
+    "extra_server_args": [],
+    "extra_agent_args": []
+  }
+}

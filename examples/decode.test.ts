@@ -21,6 +21,12 @@ describe("example configs", () => {
     expect(config.name).toBe("staging-eu")
   })
 
+  it("ovh-mks.json decodes to the same ClusterConfig as ovh-mks.yaml", () => {
+    const fromJson = Effect.runSync(parseConfigYaml(_load("ovh-mks.json")))
+    const fromYaml = Effect.runSync(parseConfigYaml(_load("ovh-mks.yaml")))
+    expect(fromJson).toEqual(fromYaml)
+  })
+
   it("k3s-hetzner.yaml decodes to a valid ClusterConfig", () => {
     const config = Effect.runSync(parseConfigYaml(_load("k3s-hetzner.yaml")))
     expect(config.distro).toBe("k3s")
