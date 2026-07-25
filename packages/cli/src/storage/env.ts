@@ -6,8 +6,7 @@ import { AuthenticationFailed, ConfigInvalid, CredentialsSink, ObjectStorageProv
 import type { ClusterConfig } from "@kumulo/core"
 import { makeStorageClient, ovhObjectStorageProviderLive, type Storage } from "@kumulo/storage-ovh"
 import { sopsCredentialsSinkLive } from "@kumulo/secrets-sops"
-import { OvhAuthLive, ovhHttpClientLayer } from "@kumulo/provider-ovh"
-import { MksEnv, requiredEnv, requiredRedactedEnv } from "../mks/env.ts"
+import { MksEnv, ovhHttpClientFromEnv } from "../mks/env.ts"
 
 const ChildProcessSpawner = ChildProcessSpawnerNS.ChildProcessSpawner
 
@@ -29,11 +28,7 @@ export const StorageEnvLive: Layer.Layer<StorageEnv, AuthenticationFailed, MksEn
   StorageEnv,
   Effect.gen(function*() {
     const { serviceName } = yield* MksEnv
-    const clientId = yield* requiredEnv("OVH_CLIENT_ID")
-    const clientSecret = yield* requiredRedactedEnv("OVH_CLIENT_SECRET")
-    const authLayer = OvhAuthLive({ clientId, clientSecret })
-    const httpClientLayer = ovhHttpClientLayer().pipe(Layer.provide(authLayer))
-    const httpClient = yield* Effect.provide(HttpClient.HttpClient, httpClientLayer)
+    const httpClient = yield* Effect.provide(HttpClient.HttpClient, ovhHttpClientFromEnv())
     return { storage: makeStorageClient(httpClient), serviceName }
   })
 )

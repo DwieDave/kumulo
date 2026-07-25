@@ -2,7 +2,7 @@ import { Config, Context, Effect, Layer, Option, Redacted } from "effect"
 import * as HttpClient from "effect/unstable/http/HttpClient"
 import { KeystoneAuth, KeystoneAuthLive, loadCredentials } from "@kumulo/openstack"
 
-const OS_ENV_KEYS = [
+export const OS_ENV_KEYS = [
   "OS_AUTH_URL",
   "OS_REGION_NAME",
   "OS_APPLICATION_CREDENTIAL_ID",
@@ -14,7 +14,7 @@ const OS_ENV_KEYS = [
   "OS_CLOUD"
 ] as const
 
-const OS_SECRET_ENV_KEYS = ["OS_APPLICATION_CREDENTIAL_SECRET", "OS_PASSWORD"] as const
+export const OS_SECRET_ENV_KEYS = ["OS_APPLICATION_CREDENTIAL_SECRET", "OS_PASSWORD"] as const
 
 // `Schema.String`/`Schema.Redacted(Schema.String)` accept any string, so the
 // only way `Config.option` here fails is missing data — already folded into
