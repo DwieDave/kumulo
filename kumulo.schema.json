@@ -1,138 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "kumulo cluster config",
-  "type": "object",
-  "properties": {
-    "$schema": {
-      "type": "string"
-    },
-    "name": {
-      "type": "string",
-      "allOf": [
-        {
-          "minLength": 1
-        }
-      ]
-    },
-    "outputs": {
+  "anyOf": [
+    {
       "type": "object",
       "properties": {
-        "format": {
-          "type": "string",
-          "enum": [
-            "yaml",
-            "json"
-          ]
-        }
-      },
-      "required": [
-        "format"
-      ],
-      "additionalProperties": false
-    },
-    "provider": {
-      "type": "string",
-      "enum": [
-        "ovh",
-        "generic",
-        "hetzner"
-      ]
-    },
-    "distro": {
-      "type": "string",
-      "enum": [
-        "k3s",
-        "ovh-mks"
-      ]
-    },
-    "version": {
-      "type": "string",
-      "allOf": [
-        {
-          "minLength": 1
-        }
-      ]
-    },
-    "auth": {
-      "type": "object",
-      "properties": {
-        "method": {
-          "type": "string",
-          "enum": [
-            "application_credential",
-            "clouds_yaml",
-            "env",
-            "api_token"
-          ]
+        "$schema": {
+          "type": "string"
         },
-        "region": {
-          "type": "string",
-          "allOf": [
-            {
-              "minLength": 1
-            }
-          ]
-        }
-      },
-      "required": [
-        "method",
-        "region"
-      ],
-      "additionalProperties": false
-    },
-    "network": {
-      "type": "object",
-      "properties": {
-        "cidr": {
-          "type": "string",
-          "allOf": [
-            {
-              "pattern": "^(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\/(3[0-2]|[12]?\\d)$"
-            }
-          ]
-        },
-        "public_access": {
-          "type": "string",
-          "enum": [
-            "bastionless",
-            "nat"
-          ]
-        }
-      },
-      "required": [
-        "cidr",
-        "public_access"
-      ],
-      "additionalProperties": false
-    },
-    "api_server": {
-      "type": "object",
-      "properties": {
-        "high_availability": {
-          "type": "boolean"
-        },
-        "allowed_cidrs": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "allOf": [
-              {
-                "pattern": "^(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\/(3[0-2]|[12]?\\d)$"
-              }
-            ]
-          }
-        }
-      },
-      "required": [
-        "high_availability",
-        "allowed_cidrs"
-      ],
-      "additionalProperties": false
-    },
-    "ssh": {
-      "type": "object",
-      "properties": {
-        "public_key_path": {
+        "name": {
           "type": "string",
           "allOf": [
             {
@@ -140,402 +16,35 @@
             }
           ]
         },
-        "allowed_cidrs": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "allOf": [
-              {
-                "pattern": "^(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\/(3[0-2]|[12]?\\d)$"
-              }
-            ]
-          }
-        }
-      },
-      "required": [
-        "public_key_path",
-        "allowed_cidrs"
-      ],
-      "additionalProperties": false
-    },
-    "masters": {
-      "type": "object",
-      "properties": {
-        "flavor": {
-          "type": "string",
-          "allOf": [
-            {
-              "minLength": 1
-            }
-          ]
-        },
-        "count": {
-          "type": "integer"
-        },
-        "image": {
-          "type": "string",
-          "allOf": [
-            {
-              "minLength": 1
-            }
-          ]
-        }
-      },
-      "required": [
-        "flavor",
-        "count",
-        "image"
-      ],
-      "additionalProperties": false
-    },
-    "worker_pools": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "allOf": [
-              {
-                "minLength": 1
-              }
-            ]
-          },
-          "flavor": {
-            "type": "string",
-            "allOf": [
-              {
-                "minLength": 1
-              }
-            ]
-          },
-          "count": {
-            "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
-          },
-          "labels": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "string"
-            }
-          },
-          "taints": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "autoscaling": {
-            "type": "object",
-            "properties": {
-              "enabled": {
-                "type": "boolean"
-              },
-              "min": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 0
-                  }
-                ]
-              },
-              "max": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "exclusiveMinimum": 0
-                  }
-                ]
-              }
-            },
-            "required": [
-              "enabled",
-              "min",
-              "max"
-            ],
-            "additionalProperties": false
-          }
-        },
-        "required": [
-          "name",
-          "flavor",
-          "count"
-        ],
-        "additionalProperties": false
-      }
-    },
-    "dns": {
-      "type": "object",
-      "properties": {
-        "module": {
-          "type": "string",
-          "enum": [
-            "ovh",
-            "designate",
-            "none",
-            "hetzner"
-          ]
-        },
-        "zone": {
-          "type": "string",
-          "allOf": [
-            {
-              "minLength": 1
-            }
-          ]
-        },
-        "ttl": {
-          "type": "integer",
-          "allOf": [
-            {
-              "exclusiveMinimum": 0
-            }
-          ]
-        },
-        "records": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string",
-                "allOf": [
-                  {
-                    "minLength": 1
-                  }
-                ]
-              },
-              "target": {
-                "type": "string",
-                "allOf": [
-                  {
-                    "minLength": 1
-                  }
-                ]
-              }
-            },
-            "required": [
-              "name",
-              "target"
-            ],
-            "additionalProperties": false
-          }
-        }
-      },
-      "required": [
-        "module",
-        "zone",
-        "ttl",
-        "records"
-      ],
-      "additionalProperties": false
-    },
-    "volumes": {
-      "type": "object",
-      "properties": {
-        "module": {
-          "type": "string",
-          "enum": [
-            "cinder",
-            "hcloud",
-            "none"
-          ]
-        },
-        "managed": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string",
-                "allOf": [
-                  {
-                    "minLength": 1
-                  }
-                ]
-              },
-              "size_gb": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "exclusiveMinimum": 0
-                  }
-                ]
-              },
-              "type": {
-                "type": "string",
-                "allOf": [
-                  {
-                    "minLength": 1
-                  }
-                ]
-              },
-              "retain": {
-                "type": "boolean"
-              },
-              "pvc": {
-                "type": "object",
-                "properties": {
-                  "namespace": {
-                    "type": "string",
-                    "allOf": [
-                      {
-                        "minLength": 1
-                      }
-                    ]
-                  },
-                  "access_modes": {
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "enum": [
-                        "ReadWriteOnce",
-                        "ReadWriteMany",
-                        "ReadOnlyMany"
-                      ]
-                    }
-                  }
-                },
-                "required": [
-                  "namespace",
-                  "access_modes"
-                ],
-                "additionalProperties": false
-              }
-            },
-            "required": [
-              "name",
-              "size_gb",
-              "type",
-              "retain"
-            ],
-            "additionalProperties": false
-          }
-        }
-      },
-      "required": [
-        "module",
-        "managed"
-      ],
-      "additionalProperties": false
-    },
-    "object_storage": {
-      "type": "object",
-      "properties": {
-        "module": {
-          "type": "string",
-          "enum": [
-            "ovh",
-            "none"
-          ]
-        },
-        "buckets": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string",
-                "allOf": [
-                  {
-                    "pattern": "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
-                  }
-                ]
-              },
-              "region": {
-                "type": "string",
-                "allOf": [
-                  {
-                    "minLength": 1
-                  }
-                ]
-              },
-              "versioning": {
-                "type": "boolean"
-              },
-              "encryption": {
-                "type": "boolean"
-              },
-              "retain": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "name",
-              "region",
-              "versioning",
-              "encryption",
-              "retain"
-            ],
-            "additionalProperties": false
-          }
-        }
-      },
-      "required": [
-        "module",
-        "buckets"
-      ],
-      "additionalProperties": false
-    },
-    "secrets": {
-      "type": "object",
-      "properties": {
-        "sink": {
-          "type": "string",
-          "enum": [
-            "sops",
-            "none"
-          ]
-        },
-        "dir": {
-          "type": "string",
-          "allOf": [
-            {
-              "minLength": 1
-            }
-          ]
-        },
-        "sops": {
+        "outputs": {
           "type": "object",
           "properties": {
-            "age_recipient": {
+            "format": {
               "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^age1"
-                }
+              "enum": [
+                "yaml",
+                "json"
               ]
             }
           },
           "required": [
-            "age_recipient"
+            "format"
           ],
           "additionalProperties": false
-        }
-      },
-      "required": [
-        "sink",
-        "dir"
-      ],
-      "additionalProperties": false
-    },
-    "addons": {
-      "type": "object",
-      "properties": {
-        "cloud_controller_manager": {
-          "type": "boolean"
         },
-        "cinder_csi": {
+        "auth": {
           "type": "object",
           "properties": {
-            "enabled": {
-              "type": "boolean"
+            "method": {
+              "type": "string",
+              "enum": [
+                "application_credential",
+                "clouds_yaml",
+                "env",
+                "api_token"
+              ]
             },
-            "default_volume_type": {
+            "region": {
               "type": "string",
               "allOf": [
                 {
@@ -545,126 +54,1005 @@
             }
           },
           "required": [
-            "enabled",
-            "default_volume_type"
+            "method",
+            "region"
           ],
           "additionalProperties": false
         },
-        "hcloud_csi": {
+        "worker_pools": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "allOf": [
+                  {
+                    "minLength": 1
+                  }
+                ]
+              },
+              "flavor": {
+                "type": "string",
+                "allOf": [
+                  {
+                    "minLength": 1
+                  }
+                ]
+              },
+              "count": {
+                "type": "integer",
+                "allOf": [
+                  {
+                    "minimum": 0
+                  }
+                ]
+              },
+              "labels": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "taints": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "autoscaling": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "min": {
+                    "type": "integer",
+                    "allOf": [
+                      {
+                        "minimum": 0
+                      }
+                    ]
+                  },
+                  "max": {
+                    "type": "integer",
+                    "allOf": [
+                      {
+                        "exclusiveMinimum": 0
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "enabled",
+                  "min",
+                  "max"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "name",
+              "flavor",
+              "count"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "volumes": {
           "type": "object",
           "properties": {
-            "enabled": {
-              "type": "boolean"
+            "module": {
+              "type": "string",
+              "enum": [
+                "cinder",
+                "hcloud",
+                "none"
+              ]
+            },
+            "managed": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "allOf": [
+                      {
+                        "minLength": 1
+                      }
+                    ]
+                  },
+                  "size_gb": {
+                    "type": "integer",
+                    "allOf": [
+                      {
+                        "exclusiveMinimum": 0
+                      }
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "allOf": [
+                      {
+                        "minLength": 1
+                      }
+                    ]
+                  },
+                  "retain": {
+                    "type": "boolean"
+                  },
+                  "pvc": {
+                    "type": "object",
+                    "properties": {
+                      "namespace": {
+                        "type": "string",
+                        "allOf": [
+                          {
+                            "minLength": 1
+                          }
+                        ]
+                      },
+                      "access_modes": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "ReadWriteOnce",
+                            "ReadWriteMany",
+                            "ReadOnlyMany"
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "namespace",
+                      "access_modes"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "name",
+                  "size_gb",
+                  "type",
+                  "retain"
+                ],
+                "additionalProperties": false
+              }
             }
           },
           "required": [
-            "enabled"
+            "module",
+            "managed"
           ],
           "additionalProperties": false
         },
-        "system_upgrade_controller": {
-          "type": "boolean"
+        "object_storage": {
+          "type": "object",
+          "properties": {
+            "module": {
+              "type": "string",
+              "enum": [
+                "ovh",
+                "none"
+              ]
+            },
+            "buckets": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "allOf": [
+                      {
+                        "pattern": "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
+                      }
+                    ]
+                  },
+                  "region": {
+                    "type": "string",
+                    "allOf": [
+                      {
+                        "minLength": 1
+                      }
+                    ]
+                  },
+                  "versioning": {
+                    "type": "boolean"
+                  },
+                  "encryption": {
+                    "type": "boolean"
+                  },
+                  "retain": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "name",
+                  "region",
+                  "versioning",
+                  "encryption",
+                  "retain"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "module",
+            "buckets"
+          ],
+          "additionalProperties": false
         },
-        "cni": {
+        "secrets": {
+          "type": "object",
+          "properties": {
+            "sink": {
+              "type": "string",
+              "enum": [
+                "sops",
+                "none"
+              ]
+            },
+            "dir": {
+              "type": "string",
+              "allOf": [
+                {
+                  "minLength": 1
+                }
+              ]
+            },
+            "sops": {
+              "type": "object",
+              "properties": {
+                "age_recipient": {
+                  "type": "string",
+                  "allOf": [
+                    {
+                      "pattern": "^age1"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "age_recipient"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "sink",
+            "dir"
+          ],
+          "additionalProperties": false
+        },
+        "provider": {
           "type": "string",
           "enum": [
-            "flannel",
-            "cilium"
+            "ovh",
+            "generic",
+            "hetzner"
           ]
+        },
+        "distro": {
+          "type": "string",
+          "enum": [
+            "k3s"
+          ]
+        },
+        "version": {
+          "type": "string",
+          "allOf": [
+            {
+              "pattern": "^v\\d+\\.\\d+\\.\\d+\\+k3s\\d+$"
+            }
+          ]
+        },
+        "dns": {
+          "type": "object",
+          "properties": {
+            "module": {
+              "type": "string",
+              "enum": [
+                "ovh",
+                "designate",
+                "none",
+                "hetzner"
+              ]
+            },
+            "zone": {
+              "type": "string",
+              "allOf": [
+                {
+                  "minLength": 1
+                }
+              ]
+            },
+            "ttl": {
+              "type": "integer",
+              "allOf": [
+                {
+                  "exclusiveMinimum": 0
+                }
+              ]
+            },
+            "records": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "allOf": [
+                      {
+                        "minLength": 1
+                      }
+                    ]
+                  },
+                  "target": {
+                    "type": "string",
+                    "allOf": [
+                      {
+                        "minLength": 1
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "name",
+                  "target"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "module",
+            "zone",
+            "ttl",
+            "records"
+          ],
+          "additionalProperties": false
+        },
+        "network": {
+          "type": "object",
+          "properties": {
+            "cidr": {
+              "type": "string",
+              "allOf": [
+                {
+                  "pattern": "^(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\/(3[0-2]|[12]?\\d)$"
+                }
+              ]
+            },
+            "public_access": {
+              "type": "string",
+              "enum": [
+                "bastionless",
+                "nat"
+              ]
+            }
+          },
+          "required": [
+            "cidr",
+            "public_access"
+          ],
+          "additionalProperties": false
+        },
+        "api_server": {
+          "type": "object",
+          "properties": {
+            "high_availability": {
+              "type": "boolean"
+            },
+            "allowed_cidrs": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "allOf": [
+                  {
+                    "pattern": "^(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\/(3[0-2]|[12]?\\d)$"
+                  }
+                ]
+              }
+            }
+          },
+          "required": [
+            "high_availability",
+            "allowed_cidrs"
+          ],
+          "additionalProperties": false
+        },
+        "ssh": {
+          "type": "object",
+          "properties": {
+            "public_key_path": {
+              "type": "string",
+              "allOf": [
+                {
+                  "minLength": 1
+                }
+              ]
+            },
+            "allowed_cidrs": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "allOf": [
+                  {
+                    "pattern": "^(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\/(3[0-2]|[12]?\\d)$"
+                  }
+                ]
+              }
+            }
+          },
+          "required": [
+            "public_key_path",
+            "allowed_cidrs"
+          ],
+          "additionalProperties": false
+        },
+        "masters": {
+          "type": "object",
+          "properties": {
+            "flavor": {
+              "type": "string",
+              "allOf": [
+                {
+                  "minLength": 1
+                }
+              ]
+            },
+            "count": {
+              "type": "integer"
+            },
+            "image": {
+              "type": "string",
+              "allOf": [
+                {
+                  "minLength": 1
+                }
+              ]
+            }
+          },
+          "required": [
+            "flavor",
+            "count",
+            "image"
+          ],
+          "additionalProperties": false
+        },
+        "addons": {
+          "type": "object",
+          "properties": {
+            "cloud_controller_manager": {
+              "type": "boolean"
+            },
+            "cinder_csi": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "default_volume_type": {
+                  "type": "string",
+                  "allOf": [
+                    {
+                      "minLength": 1
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "enabled",
+                "default_volume_type"
+              ],
+              "additionalProperties": false
+            },
+            "hcloud_csi": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "enabled"
+              ],
+              "additionalProperties": false
+            },
+            "system_upgrade_controller": {
+              "type": "boolean"
+            },
+            "cni": {
+              "type": "string",
+              "enum": [
+                "flannel",
+                "cilium"
+              ]
+            }
+          },
+          "required": [
+            "cloud_controller_manager",
+            "cinder_csi",
+            "hcloud_csi",
+            "system_upgrade_controller",
+            "cni"
+          ],
+          "additionalProperties": false
+        },
+        "k3s": {
+          "type": "object",
+          "properties": {
+            "extra_server_args": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "extra_agent_args": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "extra_server_args",
+            "extra_agent_args"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
-        "cloud_controller_manager",
-        "cinder_csi",
-        "hcloud_csi",
-        "system_upgrade_controller",
-        "cni"
+        "name",
+        "auth",
+        "worker_pools",
+        "volumes",
+        "object_storage",
+        "secrets",
+        "provider",
+        "distro",
+        "version",
+        "dns",
+        "network",
+        "api_server",
+        "ssh",
+        "masters",
+        "addons",
+        "k3s"
       ],
       "additionalProperties": false
     },
-    "k3s": {
+    {
       "type": "object",
       "properties": {
-        "extra_server_args": {
+        "$schema": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string",
+          "allOf": [
+            {
+              "minLength": 1
+            }
+          ]
+        },
+        "outputs": {
+          "type": "object",
+          "properties": {
+            "format": {
+              "type": "string",
+              "enum": [
+                "yaml",
+                "json"
+              ]
+            }
+          },
+          "required": [
+            "format"
+          ],
+          "additionalProperties": false
+        },
+        "auth": {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "enum": [
+                "application_credential",
+                "clouds_yaml",
+                "env",
+                "api_token"
+              ]
+            },
+            "region": {
+              "type": "string",
+              "allOf": [
+                {
+                  "minLength": 1
+                }
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "region"
+          ],
+          "additionalProperties": false
+        },
+        "worker_pools": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "allOf": [
+                  {
+                    "minLength": 1
+                  }
+                ]
+              },
+              "flavor": {
+                "type": "string",
+                "allOf": [
+                  {
+                    "minLength": 1
+                  }
+                ]
+              },
+              "count": {
+                "type": "integer",
+                "allOf": [
+                  {
+                    "minimum": 0
+                  }
+                ]
+              },
+              "labels": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "taints": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "autoscaling": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "min": {
+                    "type": "integer",
+                    "allOf": [
+                      {
+                        "minimum": 0
+                      }
+                    ]
+                  },
+                  "max": {
+                    "type": "integer",
+                    "allOf": [
+                      {
+                        "exclusiveMinimum": 0
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "enabled",
+                  "min",
+                  "max"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "name",
+              "flavor",
+              "count"
+            ],
+            "additionalProperties": false
           }
         },
-        "extra_agent_args": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
+        "volumes": {
+          "type": "object",
+          "properties": {
+            "module": {
+              "type": "string",
+              "enum": [
+                "cinder",
+                "hcloud",
+                "none"
+              ]
+            },
+            "managed": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "allOf": [
+                      {
+                        "minLength": 1
+                      }
+                    ]
+                  },
+                  "size_gb": {
+                    "type": "integer",
+                    "allOf": [
+                      {
+                        "exclusiveMinimum": 0
+                      }
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "allOf": [
+                      {
+                        "minLength": 1
+                      }
+                    ]
+                  },
+                  "retain": {
+                    "type": "boolean"
+                  },
+                  "pvc": {
+                    "type": "object",
+                    "properties": {
+                      "namespace": {
+                        "type": "string",
+                        "allOf": [
+                          {
+                            "minLength": 1
+                          }
+                        ]
+                      },
+                      "access_modes": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "ReadWriteOnce",
+                            "ReadWriteMany",
+                            "ReadOnlyMany"
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "namespace",
+                      "access_modes"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "name",
+                  "size_gb",
+                  "type",
+                  "retain"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "module",
+            "managed"
+          ],
+          "additionalProperties": false
+        },
+        "object_storage": {
+          "type": "object",
+          "properties": {
+            "module": {
+              "type": "string",
+              "enum": [
+                "ovh",
+                "none"
+              ]
+            },
+            "buckets": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "allOf": [
+                      {
+                        "pattern": "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
+                      }
+                    ]
+                  },
+                  "region": {
+                    "type": "string",
+                    "allOf": [
+                      {
+                        "minLength": 1
+                      }
+                    ]
+                  },
+                  "versioning": {
+                    "type": "boolean"
+                  },
+                  "encryption": {
+                    "type": "boolean"
+                  },
+                  "retain": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "name",
+                  "region",
+                  "versioning",
+                  "encryption",
+                  "retain"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "module",
+            "buckets"
+          ],
+          "additionalProperties": false
+        },
+        "secrets": {
+          "type": "object",
+          "properties": {
+            "sink": {
+              "type": "string",
+              "enum": [
+                "sops",
+                "none"
+              ]
+            },
+            "dir": {
+              "type": "string",
+              "allOf": [
+                {
+                  "minLength": 1
+                }
+              ]
+            },
+            "sops": {
+              "type": "object",
+              "properties": {
+                "age_recipient": {
+                  "type": "string",
+                  "allOf": [
+                    {
+                      "pattern": "^age1"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "age_recipient"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "sink",
+            "dir"
+          ],
+          "additionalProperties": false
+        },
+        "provider": {
+          "type": "string",
+          "enum": [
+            "ovh"
+          ]
+        },
+        "distro": {
+          "type": "string",
+          "enum": [
+            "ovh-mks"
+          ]
+        },
+        "version": {
+          "type": "string",
+          "allOf": [
+            {
+              "pattern": "^v?\\d+\\.\\d+\\.\\d+$"
+            }
+          ]
+        },
+        "dns": {
+          "type": "object",
+          "properties": {
+            "module": {
+              "type": "string",
+              "enum": [
+                "none",
+                "hetzner"
+              ]
+            },
+            "zone": {
+              "type": "string",
+              "allOf": [
+                {
+                  "minLength": 1
+                }
+              ]
+            },
+            "ttl": {
+              "type": "integer",
+              "allOf": [
+                {
+                  "exclusiveMinimum": 0
+                }
+              ]
+            },
+            "records": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "allOf": [
+                      {
+                        "minLength": 1
+                      }
+                    ]
+                  },
+                  "target": {
+                    "type": "string",
+                    "allOf": [
+                      {
+                        "minLength": 1
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "name",
+                  "target"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "module",
+            "zone",
+            "ttl",
+            "records"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
-        "extra_server_args",
-        "extra_agent_args"
+        "name",
+        "auth",
+        "worker_pools",
+        "volumes",
+        "object_storage",
+        "secrets",
+        "provider",
+        "distro",
+        "version",
+        "dns"
       ],
       "additionalProperties": false
     }
-  },
-  "required": [
-    "name",
-    "provider",
-    "distro",
-    "version",
-    "auth",
-    "worker_pools",
-    "dns",
-    "volumes",
-    "object_storage",
-    "secrets"
   ],
-  "additionalProperties": false,
   "allOf": [
-    {
-      "if": {
-        "properties": {
-          "distro": {
-            "const": "k3s"
-          }
-        },
-        "required": [
-          "distro"
-        ]
-      },
-      "then": {
-        "required": [
-          "network",
-          "api_server",
-          "ssh",
-          "masters",
-          "addons",
-          "k3s"
-        ],
-        "properties": {
-          "version": {
-            "pattern": "^v\\d+\\.\\d+\\.\\d+\\+k3s\\d+$"
-          }
-        }
-      },
-      "else": {
-        "properties": {
-          "version": {
-            "pattern": "^v?\\d+\\.\\d+\\.\\d+$"
-          },
-          "dns": {
-            "properties": {
-              "module": {
-                "not": {
-                  "enum": [
-                    "ovh",
-                    "designate"
-                  ]
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     {
       "if": {
         "properties": {

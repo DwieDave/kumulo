@@ -3,7 +3,7 @@ import { Console, Effect } from "effect"
 import { Command } from "effect/unstable/cli"
 import type { ClusterConfig } from "@kumulo/core"
 import { loadConfig } from "../config.ts"
-import { distroFor, wantsObjectStorage } from "../distro/registry.ts"
+import { onDistro, wantsObjectStorage } from "../distro/registry.ts"
 import { bucketStatus } from "../storage/reconcile.ts"
 import { configArgument } from "../root.ts"
 
@@ -24,7 +24,7 @@ export const status = Command.make(
   { config: configArgument() },
   Effect.fn(function*({ config: configPath }) {
     const config = yield* loadConfig(configPath)
-    yield* distroFor(config).status(config)
+    yield* onDistro(config)(({ config: cfg, entry }) => entry.status(cfg))
     yield* _statusBuckets(config, dirname(configPath))
   })
 ).pipe(Command.withDescription("Show cluster inventory + health"))

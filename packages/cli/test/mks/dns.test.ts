@@ -6,13 +6,11 @@ import { deleteMksEffect, reconcileMksDns } from "../../src/mks/reconcile.ts"
 import { MksEnv } from "../../src/mks/env.ts"
 import { makeMksClient } from "@kumulo/distro-ovh-mks"
 import { makeFakeMksServer } from "../e2e/fake-mks-server.ts"
-import { baseEncodedConfig, decodeTestConfig } from "../fixtures.ts"
+import { baseMksEncodedConfig, decodeTestConfig } from "../fixtures.ts"
 
 const _config = decodeTestConfig({
-  ...baseEncodedConfig,
+  ...baseMksEncodedConfig,
   name: "c1",
-  distro: "ovh-mks",
-  version: "v1.31.4",
   dns: {
     module: "hetzner",
     zone: "example.com",

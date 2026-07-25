@@ -1,11 +1,12 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse, UrlParams } from "effect/unstable/http"
-import { decodeConfig, makeK8sClient } from "@kumulo/core"
-import type { ClusterConfigEncoded } from "@kumulo/core"
+import { makeK8sClient } from "@kumulo/core"
+import type { K3sClusterConfigEncoded } from "@kumulo/core"
 import { applyK3sUpgradeWith } from "../../src/commands/upgrade.ts"
+import { decodeK3sTestConfig } from "../fixtures.ts"
 
-const _encoded: ClusterConfigEncoded = {
+const _encoded: K3sClusterConfigEncoded = {
   name: "test-k3s",
   provider: "generic",
   distro: "k3s",
@@ -29,7 +30,7 @@ const _encoded: ClusterConfigEncoded = {
   },
   k3s: { extra_server_args: [], extra_agent_args: [] }
 }
-const _config = Effect.runSync(decodeConfig(_encoded))
+const _config = decodeK3sTestConfig(_encoded)
 
 // kumulo: local fixture-replay fake, same precedent as
 // `core/test/k8s/fake-http-client.ts` (dep-lint scopes `test/` per-package).

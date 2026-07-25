@@ -18,25 +18,26 @@ const PositiveInt = Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0))
 const NonNegativeInt = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))
 
 const Provider = Schema.Literals(["ovh", "generic", "hetzner"])
-const Distro = Schema.Literals(["k3s", "ovh-mks"])
 const PublicAccess = Schema.Literals(["bastionless", "nat"])
 const AuthMethod = Schema.Literals(["application_credential", "clouds_yaml", "env", "api_token"])
 const DnsModule = Schema.Literals(["ovh", "designate", "none", "hetzner"])
+// kumulo: only the k3s path wires the OpenStack-family DNS modules
+const ManagedDnsModule = Schema.Literals(["none", "hetzner"])
 const VolumesModule = Schema.Literals(["cinder", "hcloud", "none"])
 const ObjectStorageModule = Schema.Literals(["ovh", "none"])
 const SecretsSink = Schema.Literals(["sops", "none"])
 const Cni = Schema.Literals(["flannel", "cilium"])
 const AccessMode = Schema.Literals(["ReadWriteOnce", "ReadWriteMany", "ReadOnlyMany"])
 
-const k3sVersionPattern = /^v\d+\.\d+\.\d+\+k3s\d+$/
-const plainK8sVersionPattern = /^v?\d+\.\d+\.\d+$/
-
 // kumulo: version format is distro-dependent — k3s embeds a
 // `+k3sN` build suffix, ovh-mks uses plain upstream Kubernetes versions.
-const isVersionValidForDistro = Schema.makeFilter((config: { distro: string; version: string }) => {
-  const pattern = config.distro === "k3s" ? k3sVersionPattern : plainK8sVersionPattern
-  return pattern.test(config.version) ? undefined : "version does not match the format expected for this distro"
-})
+// Structural so the pattern lands in the generated JSON schema.
+const K3sVersion = Schema.String.check(
+  Schema.isPattern(/^v\d+\.\d+\.\d+\+k3s\d+$/, { message: "must be a k3s version like v1.31.4+k3s1" })
+)
+const PlainK8sVersion = Schema.String.check(
+  Schema.isPattern(/^v?\d+\.\d+\.\d+$/, { message: "must be a Kubernetes version like v1.31.4" })
+)
 
 // kumulo: object storage buckets carry secrets, so an ovh module requires a real sink
 const isSecretsRequiredForObjectStorage = Schema.makeFilter(
@@ -81,32 +82,6 @@ const isAddonsConsistentWithProvider = Schema.makeFilter(
       return "addons.cinder_csi cannot be enabled when provider is hetzner"
     return undefined
   }
-)
-
-/**
- * Config blocks only consumed by the k3s provisioning path — MKS's control
- * plane, networking and node access are OVH-managed, so managed distros may
- * omit all of these; k3s configs must carry every one.
- * Mirrored as an `if distro: k3s` conditional in `scripts/generate-schema.ts`
- * — keep both lists in sync.
- */
-export const K3S_ONLY_BLOCKS = ["network", "api_server", "ssh", "masters", "addons", "k3s"] as const
-
-const isK3sBlocksPresentForK3s = Schema.makeFilter(
-  (config: { distro: string } & Partial<Record<(typeof K3S_ONLY_BLOCKS)[number], unknown>>) => {
-    if (config.distro !== "k3s") return undefined
-    const missing = K3S_ONLY_BLOCKS.filter((key) => config[key] === undefined)
-    return missing.length === 0 ? undefined : `distro k3s requires the config blocks: ${missing.join(", ")}`
-  }
-)
-
-// kumulo: only the k3s path wires the OpenStack-family DNS modules; hetzner
-// and none work on every distro
-const isDnsModuleConsistentWithDistro = Schema.makeFilter(
-  (config: { distro: string; dns: { module: string } }) =>
-    (config.dns.module === "ovh" || config.dns.module === "designate") && config.distro !== "k3s"
-      ? `dns.module ${config.dns.module} is only supported on distro k3s, not ${config.distro}`
-      : undefined
 )
 
 const Auth = Schema.Struct({
@@ -155,12 +130,13 @@ const DnsRecord = Schema.Struct({
   target: Schema.NonEmptyString
 })
 
-const Dns = Schema.Struct({
-  module: DnsModule,
-  zone: Schema.NonEmptyString,
-  ttl: PositiveInt,
-  records: Schema.Array(DnsRecord)
-})
+const _makeDns = <M extends Schema.Top>(module: M) =>
+  Schema.Struct({
+    module,
+    zone: Schema.NonEmptyString,
+    ttl: PositiveInt,
+    records: Schema.Array(DnsRecord)
+  })
 
 const Pvc = Schema.Struct({
   namespace: Schema.NonEmptyString,
@@ -262,34 +238,60 @@ const Outputs = Schema.Struct({
   format: OutputsFormat
 })
 
-export const ClusterConfig = Schema.Struct({
+// Fields every distro carries; the variants below add their distro-specific
+// blocks so `distro` narrows a decoded config to exactly what that path needs.
+const _commonFields = {
   name: Schema.NonEmptyString,
   outputs: Schema.optionalKey(Outputs),
-  provider: Provider,
-  distro: Distro,
-  version: Schema.NonEmptyString,
   auth: Auth,
-  network: Schema.optionalKey(Network),
-  api_server: Schema.optionalKey(ApiServer),
-  ssh: Schema.optionalKey(Ssh),
-  masters: Schema.optionalKey(Masters),
   worker_pools: Schema.Array(WorkerPool),
-  dns: Dns,
   volumes: Volumes,
   object_storage: ObjectStorage,
-  secrets: Secrets,
-  addons: Schema.optionalKey(Addons),
-  k3s: Schema.optionalKey(K3sPassthrough)
+  secrets: Secrets
+}
+
+export const K3sClusterConfig = Schema.Struct({
+  ..._commonFields,
+  provider: Provider,
+  distro: Schema.Literal("k3s"),
+  version: K3sVersion,
+  dns: _makeDns(DnsModule),
+  // Required: the k3s path provisions its own control plane, network and nodes.
+  network: Network,
+  api_server: ApiServer,
+  ssh: Ssh,
+  masters: Masters,
+  addons: Addons,
+  k3s: K3sPassthrough
 }).check(
-  isVersionValidForDistro,
-  isK3sBlocksPresentForK3s,
   isSecretsRequiredForObjectStorage,
   isAuthMethodConsistentWithProvider,
   isVolumesModuleConsistentWithProvider,
-  isAddonsConsistentWithProvider,
-  isDnsModuleConsistentWithDistro
+  isAddonsConsistentWithProvider
 )
 
+// MKS's control plane, networking and node access are OVH-managed, so the
+// k3s-only blocks are absent and provider is fixed to ovh — which structurally
+// subsumes the addons-vs-provider gate (no addons block here); the auth and
+// volumes gates still bite, since `api_token`/`hcloud` stay expressible.
+export const MksClusterConfig = Schema.Struct({
+  ..._commonFields,
+  provider: Schema.Literal("ovh"),
+  distro: Schema.Literal("ovh-mks"),
+  version: PlainK8sVersion,
+  dns: _makeDns(ManagedDnsModule)
+}).check(
+  isSecretsRequiredForObjectStorage,
+  isAuthMethodConsistentWithProvider,
+  isVolumesModuleConsistentWithProvider
+)
+
+export const ClusterConfig = Schema.Union([K3sClusterConfig, MksClusterConfig])
+
+export type K3sClusterConfig = typeof K3sClusterConfig.Type
+export type K3sClusterConfigEncoded = typeof K3sClusterConfig.Encoded
+export type MksClusterConfig = typeof MksClusterConfig.Type
+export type MksClusterConfigEncoded = typeof MksClusterConfig.Encoded
 export type ClusterConfig = typeof ClusterConfig.Type
 export type ClusterConfigEncoded = typeof ClusterConfig.Encoded
 export type WorkerPool = typeof WorkerPool.Type

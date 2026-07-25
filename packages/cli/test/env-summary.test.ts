@@ -1,18 +1,19 @@
 import { describe, expect, it } from "vitest"
 import { providerSections, renderEnvSummary } from "../src/env-summary.ts"
-import type { ClusterConfig, ClusterConfigEncoded } from "@kumulo/core"
-import { baseEncodedConfig, decodeTestConfig } from "./fixtures.ts"
+import type { ClusterConfig, K3sClusterConfigEncoded, MksClusterConfigEncoded } from "@kumulo/core"
+import { baseEncodedConfig, baseMksEncodedConfig, decodeTestConfig } from "./fixtures.ts"
 
-const _config = (overrides: Partial<ClusterConfigEncoded>): ClusterConfig =>
+const _config = (overrides: Partial<K3sClusterConfigEncoded>): ClusterConfig =>
   decodeTestConfig({ ...baseEncodedConfig, ...overrides })
+
+const _mksConfig = (overrides: Partial<MksClusterConfigEncoded>): ClusterConfig =>
+  decodeTestConfig({ ...baseMksEncodedConfig, ...overrides })
 
 describe("providerSections", () => {
   it("ovh-mks config lists OVH vars plus each wired module", () => {
     const sections = providerSections(
-      _config({
-        distro: "ovh-mks",
-        version: "1.31.4",
-        dns: { ...baseEncodedConfig.dns, module: "hetzner" },
+      _mksConfig({
+        dns: { ...baseMksEncodedConfig.dns, module: "hetzner" },
         object_storage: { module: "ovh", buckets: [] },
         secrets: {
           sink: "sops",

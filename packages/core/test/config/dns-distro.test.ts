@@ -33,7 +33,7 @@ describe("ClusterConfig — dns.module × distro", () => {
   )
 
   it.prop(
-    "rejects ovh/designate on ovh-mks with a message naming the combination",
+    "rejects ovh/designate on ovh-mks with an issue pathed at dns.module",
     [fc.constantFrom("ovh" as const, "designate" as const)],
     ([module]) =>
       Effect.runSync(
@@ -41,7 +41,7 @@ describe("ClusterConfig — dns.module × distro", () => {
           const failure = yield* Effect.flip(decodeConfig(_candidateFor("ovh-mks", module)))
           return (
             failure._tag === "ConfigInvalid" &&
-            failure.issues.some((issue) => issue.message.includes(module) && issue.message.includes("ovh-mks"))
+            failure.issues.some((issue) => issue.path.join(".") === "dns.module")
           )
         })
       )

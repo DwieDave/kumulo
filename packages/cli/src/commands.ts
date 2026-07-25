@@ -9,8 +9,8 @@ import { envSummary } from "./env-summary.ts"
 import { convergeManagedVolumes, lookupManagedVolumeNames, reconcileVolumesOnDelete, volumes } from "./commands/volumes.ts"
 import { status } from "./commands/status.ts"
 import { upgrade } from "./commands/upgrade.ts"
-import { distroFor, wantsObjectStorage } from "./distro/registry.ts"
-import type { DistroEntry } from "./distro/types.ts"
+import { distroFor, onDistro, wantsObjectStorage } from "./distro/registry.ts"
+import type { DistroApplyResult, DistroFailure, DistroServices } from "./distro/types.ts"
 import { StorageEnv, storageLayers } from "./storage/env.ts"
 import { bucketDeletePlanActions, bucketPlanActions, convergeBuckets, reconcileBucketsOnDelete } from "./storage/reconcile.ts"
 import { decidePlanAction, dim, green, orderedActions, red, renderActionLine, renderPlan, yellow } from "./present.ts"
@@ -81,8 +81,9 @@ const _logApplied = (
  * converge all three concurrently.
  */
 const _convergeAll = Effect.fn(function*(
-  { entry, config, configDir, plan, storageLayer }: {
-    readonly entry: DistroEntry
+  { apply, appliedPrefixes, config, configDir, plan, storageLayer }: {
+    readonly apply: Effect.Effect<DistroApplyResult, DistroFailure, DistroServices>
+    readonly appliedPrefixes: ReadonlyArray<string>
     readonly config: ClusterConfig
     readonly configDir: string
     readonly plan: Plan
@@ -90,10 +91,10 @@ const _convergeAll = Effect.fn(function*(
   }
 ) {
   const clusterStep = withRowProgress({
-    match: (name) => entry.appliedPrefixes.some((prefix) => name.startsWith(prefix)),
-    effect: entry.apply({ config, configDir })
+    match: (name) => appliedPrefixes.some((prefix) => name.startsWith(prefix)),
+    effect: apply
   }).pipe(
-    Effect.tap(() => _logApplied({ plan, prefixes: entry.appliedPrefixes }))
+    Effect.tap(() => _logApplied({ plan, prefixes: appliedPrefixes }))
   )
   // Same Cinder-backed volumes as the k3s path's `_reconcileVolumes`
   // (`k3s/reconcile.ts`), just no cluster-side manifest apply yet — see
@@ -121,13 +122,15 @@ const _applyFlow = Effect.fn(function*({ config: configPath }: { readonly config
   const root = yield* kumulo
   const config = yield* loadConfig(configPath)
   const configDir = dirname(configPath)
-  const entry = distroFor(config)
+  const { appliedPrefixes } = distroFor(config)
+  // The distro's config-taking members, bound to this config's variant once.
+  const applyStep = onDistro(config)(({ config: cfg, entry }) => entry.apply({ config: cfg, configDir }))
   if (root.showEnv) yield* Console.log(`${yield* envSummary(config)}\n`)
   const storageLayer = wantsObjectStorage(config) ? yield* storageLayers(config) : undefined
   const plan: Plan = yield* withSpinner({
     label: _planPhrases,
     effect: Effect.gen(function*() {
-      const basePlan = yield* entry.plan(config)
+      const basePlan = yield* onDistro(config)(({ config: cfg, entry }) => entry.plan(cfg))
       const bucketActions = storageLayer === undefined
         ? []
         : yield* bucketPlanActions({ config, configDir }).pipe(Effect.provide(storageLayer))
@@ -152,9 +155,9 @@ const _applyFlow = Effect.fn(function*({ config: configPath }: { readonly config
   // reconciles volumes inside `applyK3s`) — one opaque apply, all rows spin together.
   const result = yield* withPlanView({
     ...view,
-    effect: entry.appliedPrefixes.length === 0
-      ? withRowProgress({ match: () => true, effect: entry.apply({ config, configDir }) })
-      : _convergeAll({ entry, config, configDir, plan, storageLayer })
+    effect: appliedPrefixes.length === 0
+      ? withRowProgress({ match: () => true, effect: applyStep })
+      : _convergeAll({ apply: applyStep, appliedPrefixes, config, configDir, plan, storageLayer })
   })
   yield* Console.log(result.summary)
 })
@@ -172,7 +175,7 @@ export const kubeconfig = Command.make(
   { config: configArgument() },
   Effect.fn(function*({ config: configPath }) {
     const config = yield* loadConfig(configPath)
-    const result = yield* distroFor(config).kubeconfig(config)
+    const result = yield* onDistro(config)(({ config: cfg, entry }) => entry.kubeconfig(cfg))
     yield* Console.log(result.content)
   })
 ).pipe(Command.withDescription("Print the cluster's kubeconfig"))
@@ -182,7 +185,7 @@ export const kubeconfig = Command.make(
 // rows only appear for volumes that actually exist on Cinder right now.
 const _deletePlan = Effect.fn(function*(config: ClusterConfig, configDir: string) {
   const [clusterActions, liveVolumes, bucketActions] = yield* Effect.all([
-    distroFor(config).deletePlanActions(config),
+    onDistro(config)(({ config: cfg, entry }) => entry.deletePlanActions(cfg)),
     lookupManagedVolumeNames(config),
     bucketDeletePlanActions({ config, configDir })
   ], { concurrency: 3 })
@@ -203,7 +206,7 @@ export const del = Command.make(
   Effect.fn(function*({ config: configPath }) {
     const root = yield* kumulo
     const config = yield* loadConfig(configPath)
-    const entry = distroFor(config)
+    const { deletedLabel } = distroFor(config)
 
     if (root.showEnv) yield* Console.log(`${yield* envSummary(config)}\n`)
     const plan = yield* withSpinner({ label: _planPhrases, effect: _deletePlan(config, dirname(configPath)) })
@@ -221,9 +224,9 @@ export const del = Command.make(
     const clusterAndVolumesStep = Effect.gen(function*() {
       yield* withRowProgress({
         match: (name) => !name.startsWith("volume/") && !name.startsWith("bucket/"),
-        effect: entry.delete(config)
+        effect: onDistro(config)(({ config: cfg, entry }) => entry.delete(cfg))
       })
-      yield* _ciLine(`${red("Deleted")} ${entry.deletedLabel}/${config.name}`)
+      yield* _ciLine(`${red("Deleted")} ${deletedLabel}/${config.name}`)
       yield* _logApplied({ plan, prefixes: ["mks-pool/"] })
 
       // Retained volumes (`volumes.managed[].retain: true`) survive `delete`;

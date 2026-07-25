@@ -21,8 +21,22 @@ export { isRetryable } from "./errors/retryable.ts"
 export { renderError } from "./errors/renderer.ts"
 export type { RendererRegistry } from "./errors/renderer.ts"
 
-export { ClusterConfig, decodeConfig, encodeConfig, K3S_ONLY_BLOCKS, OutputsFormat, parseConfigYaml, stringifyConfigYaml } from "./config/index.ts"
-export type { ClusterConfigEncoded, WorkerPool } from "./config/index.ts"
+export {
+  ClusterConfig,
+  decodeConfig,
+  encodeConfig,
+  K3sClusterConfig,
+  MksClusterConfig,
+  OutputsFormat,
+  parseConfigYaml,
+  stringifyConfigYaml
+} from "./config/index.ts"
+export type {
+  ClusterConfigEncoded,
+  K3sClusterConfigEncoded,
+  MksClusterConfigEncoded,
+  WorkerPool
+} from "./config/index.ts"
 
 export { Addon } from "./ports/addon.ts"
 export type { AddonError } from "./ports/addon.ts"

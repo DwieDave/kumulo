@@ -2,7 +2,7 @@ import { assert, it } from "@effect/vitest"
 import { dnsPlanActions } from "../src/dns-plan.ts"
 import { buildK3sPlan } from "../src/k3s/plan.ts"
 import { buildMksPlan, emptyMksInventory } from "../src/mks/plan.ts"
-import { baseEncodedConfig, decodeTestConfig } from "./fixtures.ts"
+import { baseEncodedConfig, decodeK3sTestConfig } from "./fixtures.ts"
 
 const _dns = {
   module: "hetzner",
@@ -10,7 +10,7 @@ const _dns = {
   records: [{ name: "api", target: "api_server" }, { name: "www", target: "ingress.example.com" }]
 } as const
 
-const _k3sConfig = decodeTestConfig({ ...baseEncodedConfig, dns: { ..._dns, ttl: 300 } })
+const _k3sConfig = decodeK3sTestConfig({ ...baseEncodedConfig, dns: { ..._dns, ttl: 300 } })
 
 it("plans an A record for the k3s api server and a CNAME for a hostname target", () => {
   assert.deepStrictEqual(dnsPlanActions({ config: _dns, targetKind: "ip" }), [

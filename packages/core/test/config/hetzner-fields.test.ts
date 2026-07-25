@@ -24,7 +24,7 @@ describe("ClusterConfig — hetzner fields", () => {
       expect(decoded.provider).toBe("hetzner")
       expect(decoded.auth.method).toBe("api_token")
       expect(decoded.volumes.module).toBe("hcloud")
-      expect(decoded.addons?.hcloud_csi.enabled).toBe(true)
+      expect(decoded.distro === "k3s" && decoded.addons.hcloud_csi.enabled).toBe(true)
     }))
 
   it.effect("decodes dns.module: hetzner", () =>
@@ -44,6 +44,20 @@ describe("ClusterConfig — hetzner fields", () => {
   it.effect("rejects auth.method: api_token on a non-hetzner provider", () =>
     Effect.gen(function* () {
       const candidate = { ...validConfig, auth: { ...validConfig.auth, method: "api_token" as const } }
+      const failure = yield* Effect.flip(decodeConfig(candidate))
+      expect(failure._tag).toBe("ConfigInvalid")
+    }))
+
+  // The ovh-mks variant fixes provider to ovh but still spells auth.method from
+  // the full enum, so the provider<->auth gate has to run there too.
+  it.effect("rejects auth.method: api_token on the ovh-mks variant", () =>
+    Effect.gen(function* () {
+      const candidate = {
+        ...validConfig,
+        distro: "ovh-mks" as const,
+        version: "v1.31.4",
+        auth: { ...validConfig.auth, method: "api_token" as const }
+      }
       const failure = yield* Effect.flip(decodeConfig(candidate))
       expect(failure._tag).toBe("ConfigInvalid")
     }))

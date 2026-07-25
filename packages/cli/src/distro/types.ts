@@ -18,24 +18,24 @@ export interface DistroApplyResult {
   readonly summary: string
 }
 
-export interface DistroEntry {
+export interface DistroEntry<C extends ClusterConfig = ClusterConfig> {
   readonly kind: DistroKind
   readonly supportsObjectStorage: boolean
-  readonly plan: (config: ClusterConfig) => Effect.Effect<Plan, DistroFailure, DistroServices>
+  readonly plan: (config: C) => Effect.Effect<Plan, DistroFailure, DistroServices>
   readonly deletePlanActions: (
-    config: ClusterConfig
+    config: C
   ) => Effect.Effect<Plan["actions"], DistroFailure, DistroServices>
   readonly apply: (
-    a: { readonly config: ClusterConfig; readonly configDir: string }
+    a: { readonly config: C; readonly configDir: string }
   ) => Effect.Effect<DistroApplyResult, DistroFailure, DistroServices>
-  readonly delete: (config: ClusterConfig) => Effect.Effect<void, DistroFailure, DistroServices>
-  readonly kubeconfig: (config: ClusterConfig) => Effect.Effect<Kubeconfig, DistroFailure, DistroServices>
+  readonly delete: (config: C) => Effect.Effect<void, DistroFailure, DistroServices>
+  readonly kubeconfig: (config: C) => Effect.Effect<Kubeconfig, DistroFailure, DistroServices>
   /** Used by `delete`'s log line: `Deleted <deletedLabel>/<name>`. */
   readonly deletedLabel: string
   /** Plan-row name prefixes converged by `apply` itself (empty when apply logs nothing). */
   readonly appliedPrefixes: ReadonlyArray<string>
-  readonly status: (config: ClusterConfig) => Effect.Effect<void, DistroFailure, DistroServices>
-  readonly upgrade: (a: DistroUpgradeArgs) => Effect.Effect<void, DistroFailure, DistroServices>
+  readonly status: (config: C) => Effect.Effect<void, DistroFailure, DistroServices>
+  readonly upgrade: (a: DistroUpgradeArgs<C>) => Effect.Effect<void, DistroFailure, DistroServices>
   /** How the credentials this distro reads are named in the env summary (`provider: ovh (ovh api)`). */
   readonly credentialsLabel: string
   /** Env vars this distro's own wiring reads — the env-summary source of truth. */
@@ -46,12 +46,12 @@ export interface DistroEntry {
    * reads are never-failing, so the error channel stays `never`.
    */
   readonly doctorChecks: (
-    a: { readonly config: ClusterConfig }
+    a: { readonly config: C }
   ) => Effect.Effect<ReadonlyArray<DoctorCheck>, never, DistroServices>
 }
 
-export interface DistroUpgradeArgs {
-  readonly config: ClusterConfig
+export interface DistroUpgradeArgs<C extends ClusterConfig = ClusterConfig> {
+  readonly config: C
   readonly strategy: "LATEST_PATCH" | "NEXT_MINOR"
   readonly workerConcurrency: number
   readonly yes: boolean

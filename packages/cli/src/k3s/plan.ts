@@ -1,35 +1,34 @@
 import { resourceName } from "@kumulo/core"
-import type { ClusterConfig, Plan, ServerSpec } from "@kumulo/core"
+import type { K3sClusterConfig, Plan, ServerSpec } from "@kumulo/core"
 import { dnsPlanActions } from "../dns-plan.ts"
-import { k3sBlocks } from "./env.ts"
 
 const MASTER_POOL = "masters"
 
 /** One `ServerSpec` per master, per-index named. */
-const _masterSpecs = (config: ClusterConfig): ReadonlyArray<ServerSpec> =>
-  Array.from({ length: k3sBlocks(config).masters.count }, (_, i) => ({
+const _masterSpecs = (config: K3sClusterConfig): ReadonlyArray<ServerSpec> =>
+  Array.from({ length: config.masters.count }, (_, i) => ({
     name: resourceName({ cluster: config.name, role: "master", pool: MASTER_POOL, index: i + 1 }),
     role: "master",
-    flavor: k3sBlocks(config).masters.flavor,
-    image: k3sBlocks(config).masters.image,
+    flavor: config.masters.flavor,
+    image: config.masters.image,
     tag: config.name
   }))
 
 // kumulo: WHY worker pools carry no `image` field — every pool shares the
 // masters' image (one image per cluster, not per pool).
-const _workerSpecs = (config: ClusterConfig): ReadonlyArray<ServerSpec> =>
+const _workerSpecs = (config: K3sClusterConfig): ReadonlyArray<ServerSpec> =>
   config.worker_pools.flatMap((pool) =>
     Array.from({ length: pool.count }, (_, i) => ({
       name: resourceName({ cluster: config.name, role: "worker", pool: pool.name, index: i + 1 }),
       role: "worker" as const,
       flavor: pool.flavor,
-      image: k3sBlocks(config).masters.image,
+      image: config.masters.image,
       tag: config.name
     }))
   )
 
 /** Every desired node for the "Nodes" phase, masters first (bootstrap order needs them created first). */
-export const buildK3sServerSpecs = (config: ClusterConfig): ReadonlyArray<ServerSpec> => [
+export const buildK3sServerSpecs = (config: K3sClusterConfig): ReadonlyArray<ServerSpec> => [
   ..._masterSpecs(config),
   ..._workerSpecs(config)
 ]
@@ -39,7 +38,7 @@ export const buildK3sServerSpecs = (config: ClusterConfig): ReadonlyArray<Server
 // `TaggedResource` shape (config-hash per resource), which the port doesn't
 // carry yet. `ensureServer`/`ensureNetwork`/etc are genuinely idempotent, so
 // this only affects what the plan *prints*. Upgrade alongside mks/plan.ts.
-export const buildK3sPlan = (config: ClusterConfig): Plan => ({
+export const buildK3sPlan = (config: K3sClusterConfig): Plan => ({
   actions: [
     ...buildK3sServerSpecs(config).map((spec) => ({ _tag: "Create" as const, name: spec.name })),
     // k3s points `api_server` at a master IP → A record (see `applyK3s`).

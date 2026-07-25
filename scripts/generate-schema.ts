@@ -8,24 +8,13 @@
  */
 import { writeFileSync } from "node:fs"
 import { JsonSchema, Schema } from "effect"
-import { ClusterConfig, K3S_ONLY_BLOCKS } from "@kumulo/core"
+import { ClusterConfig } from "@kumulo/core"
 
 // Mirrors the cross-field `.check(...)` filters in core's schema.ts (the
-// Effect->JSON-Schema conversion cannot express them) — keep in sync.
+// Effect->JSON-Schema conversion cannot express them) — keep in sync. The
+// distro rules are derived from the union's variants, so they live here no
+// longer.
 const crossFieldConstraints = [
-  {
-    if: { properties: { distro: { const: "k3s" } }, required: ["distro"] },
-    then: {
-      required: [...K3S_ONLY_BLOCKS],
-      properties: { version: { pattern: "^v\\d+\\.\\d+\\.\\d+\\+k3s\\d+$" } }
-    },
-    else: {
-      properties: {
-        version: { pattern: "^v?\\d+\\.\\d+\\.\\d+$" },
-        dns: { properties: { module: { not: { enum: ["ovh", "designate"] } } } }
-      }
-    }
-  },
   {
     if: { properties: { provider: { const: "hetzner" } }, required: ["provider"] },
     then: {
@@ -54,12 +43,13 @@ const crossFieldConstraints = [
 
 const document = Schema.toJsonSchemaDocument(ClusterConfig)
 // `additionalProperties: false` would otherwise reject the very `$schema` key
-// json configs use to reference this document — allow it explicitly.
+// json configs use to reference this document — allow it in every variant.
+type Variant = { properties: Record<string, unknown> }
+const variants = (document.schema as { anyOf: ReadonlyArray<Variant> }).anyOf
 const schema = {
   $schema: JsonSchema.META_SCHEMA_URI_DRAFT_2020_12,
   title: "kumulo cluster config",
-  ...document.schema,
-  properties: { $schema: { type: "string" }, ...(document.schema as { properties: object }).properties },
+  anyOf: variants.map((v) => ({ ...v, properties: { $schema: { type: "string" }, ...v.properties } })),
   allOf: crossFieldConstraints,
   $defs: document.definitions
 }

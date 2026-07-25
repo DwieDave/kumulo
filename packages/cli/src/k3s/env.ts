@@ -1,7 +1,7 @@
 import { Context, Effect, Layer, Redacted } from "effect"
 import * as HttpClient from "effect/unstable/http/HttpClient"
 import { AuthenticationFailed } from "@kumulo/core"
-import type { ClusterConfig } from "@kumulo/core"
+import type { ClusterConfig, K3sClusterConfig } from "@kumulo/core"
 import { buildFr57Rules } from "@kumulo/openstack"
 import { makeDnsClient, ovhDnsProviderLive } from "@kumulo/dns-ovh"
 import { HetznerHttpLive, hetznerDnsProviderLive, makeHetznerDnsClient } from "@kumulo/dns-hetzner"
@@ -13,20 +13,14 @@ import { requiredRedactedEnv } from "../env.ts"
 import { hcloudHttpClientLayer, providerFor } from "../provider/registry.ts"
 import { ovhHttpClientFromEnv } from "../mks/env.ts"
 
-import { k3sBlocks } from "./blocks.ts"
-
-export { k3sBlocks }
-
 /** Security-group rules for this cluster's network CIDR/allowed CIDRs/CNI choice. */
-export const secGroupRules = (config: ClusterConfig) => {
-  const blocks = k3sBlocks(config)
-  return buildFr57Rules({
-    allowedSshCidrs: blocks.ssh.allowed_cidrs,
-    allowedApiCidrs: blocks.api_server.allowed_cidrs,
-    networkCidr: blocks.network.cidr,
-    cni: blocks.addons.cni
+export const secGroupRules = (config: K3sClusterConfig) =>
+  buildFr57Rules({
+    allowedSshCidrs: config.ssh.allowed_cidrs,
+    allowedApiCidrs: config.api_server.allowed_cidrs,
+    networkCidr: config.network.cidr,
+    cni: config.addons.cni
   })
-}
 
 /** Same Cinder-backed `VolumeProvider` construction as `commands/volumes.ts`'s `reconcileVolumesOnDelete`. */
 export const k3sVolumeProviderLayer = (
@@ -91,6 +85,6 @@ export class CloudCredentialEnv extends Context.Service<CloudCredentialEnv, Clou
 
 /** `config.provider`-branched `CloudCredentialEnv` (R11) — the branch itself lives in the provider registry. */
 export const k3sCloudCredentialLayer = (
-  config: ClusterConfig
+  config: K3sClusterConfig
 ): Layer.Layer<CloudCredentialEnv, AuthenticationFailed, OpenStackEnv> =>
   Layer.effect(CloudCredentialEnv, providerFor(config).cloudCredential(config))

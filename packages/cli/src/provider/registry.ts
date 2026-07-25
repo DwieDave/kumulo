@@ -1,13 +1,12 @@
 import { Config, Effect, Layer, Redacted } from "effect"
 import * as HttpClient from "effect/unstable/http/HttpClient"
 import { AuthenticationFailed } from "@kumulo/core"
-import type { ClusterConfig, CloudProvider } from "@kumulo/core"
+import type { ClusterConfig, CloudProvider, K3sClusterConfig } from "@kumulo/core"
 import { CloudProviderLive, KeystoneAuth } from "@kumulo/openstack"
 import type { CloudProviderOptions } from "@kumulo/openstack"
 import { CloudProviderLive as HcloudCloudProviderLive, hcloudHttpClientLive } from "@kumulo/hetzner"
 import { OpenStackEnv } from "../doctor-openstack/env.ts"
 import { requiredRedactedEnv } from "../env.ts"
-import { k3sBlocks } from "../k3s/blocks.ts"
 import type { CloudCredentialShape } from "../k3s/env.ts"
 
 export type ProviderKind = ClusterConfig["provider"]
@@ -15,19 +14,19 @@ export type ProviderKind = ClusterConfig["provider"]
 export interface ProviderEntry {
   readonly kind: ProviderKind
   readonly cloudProviderLayer: (
-    config: ClusterConfig
+    config: K3sClusterConfig
   ) => Layer.Layer<CloudProvider, AuthenticationFailed, OpenStackEnv | HttpClient.HttpClient>
-  readonly cloudCredential: (config: ClusterConfig) => Effect.Effect<CloudCredentialShape, AuthenticationFailed, OpenStackEnv>
+  readonly cloudCredential: (config: K3sClusterConfig) => Effect.Effect<CloudCredentialShape, AuthenticationFailed, OpenStackEnv>
   /** Env vars this provider's own wiring reads (empty when the distro's credentials cover it). */
   readonly requiredEnvVars: ReadonlyArray<string>
   /** True when the distro's credentials cover this provider — the env summary then titles the section from the distro entry. */
   readonly credentialsFromDistro: boolean
 }
 
-const _cloudProviderOptions = (config: ClusterConfig, region: string): CloudProviderOptions => ({
+const _cloudProviderOptions = (config: K3sClusterConfig, region: string): CloudProviderOptions => ({
   tag: config.name,
   region,
-  octaviaEnabled: k3sBlocks(config).api_server.high_availability,
+  octaviaEnabled: config.api_server.high_availability,
   imageAliases: {}
 })
 
@@ -39,7 +38,7 @@ const _cloudProviderOptions = (config: ClusterConfig, region: string): CloudProv
  * contract as `OpenStackEnv`/`CinderAuthLive`.
  */
 export const k3sCloudProviderLayer = (
-  config: ClusterConfig
+  config: K3sClusterConfig
 ): Layer.Layer<CloudProvider, AuthenticationFailed, OpenStackEnv | HttpClient.HttpClient> =>
   Layer.unwrap(
     Effect.gen(function*() {
@@ -63,7 +62,7 @@ export const hcloudHttpClientLayer = (): Layer.Layer<HttpClient.HttpClient, Auth
  * field). Mirrors `k3sCloudProviderLayer`'s shape.
  */
 export const k3sHetznerCloudProviderLayer = (
-  config: ClusterConfig
+  config: K3sClusterConfig
 ): Layer.Layer<CloudProvider, AuthenticationFailed, HttpClient.HttpClient> =>
   HcloudCloudProviderLive({ tag: config.name, location: config.auth.region }).pipe(Layer.provide(hcloudHttpClientLayer()))
 

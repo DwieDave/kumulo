@@ -1,11 +1,10 @@
 import { Console, Effect } from "effect"
 import * as HttpClient from "effect/unstable/http/HttpClient"
 import { AuthenticationFailed, K8sClient, makeK8sClient, parseKubeconfig, waitForDeploymentAvailable } from "@kumulo/core"
-import type { ClusterConfig, CloudProvider, ResourceRef } from "@kumulo/core"
+import type { CloudProvider, K3sClusterConfig, ResourceRef } from "@kumulo/core"
 import { refForPlan, renderMastersPlan, renderUpgradePlan, renderWorkersPlan } from "@kumulo/distro-k3s"
 import { refFor, systemUpgradeControllerManifests } from "@kumulo/addons"
 import { Ssh, SshLive } from "@kumulo/distro-k3s"
-import { k3sBlocks } from "../k3s/env.ts"
 import { buildK3sPlan } from "../k3s/plan.ts"
 import { k3sCloudProviderLayer } from "../provider/registry.ts"
 import { k8sHttpClientLayer } from "../k3s/k8s-http-client.ts"
@@ -18,7 +17,7 @@ import { fetchNovaLimits, quotaHeadroomCheck } from "../doctor-openstack/quota.t
 import type { CinderAuth } from "@kumulo/volumes-cinder"
 import type { DistroEntry, DistroUpgradeArgs } from "./types.ts"
 
-const _statusK3s = Effect.fn(function*(config: ClusterConfig) {
+const _statusK3s = Effect.fn(function*(config: K3sClusterConfig) {
   const info: K3sStatus = yield* k3sStatus(config)
   if (!info.exists) {
     yield* Console.log(`Cluster "${config.name}" does not exist.`)
@@ -35,7 +34,7 @@ const _statusK3s = Effect.fn(function*(config: ClusterConfig) {
 // `--dry-run` just renders the Plan CRs (the SUC plan for a new k3s
 // version) without touching the cluster.
 const _renderK3s = (
-  { config, workerConcurrency }: { readonly config: ClusterConfig; readonly workerConcurrency: number }
+  { config, workerConcurrency }: { readonly config: K3sClusterConfig; readonly workerConcurrency: number }
 ) =>
   Effect.gen(function*() {
     const plan = renderUpgradePlan({ version: config.version, workerConcurrency })
@@ -49,7 +48,7 @@ const SUC_DEPLOYMENT_REF: ResourceRef = {
 
 /** Builds a `K8sClient` against the already-provisioned cluster's own kubeconfig (ports-only, see `reconcile.ts`'s identical split). */
 const _k8sClientForUpgradeEffect = (
-  config: ClusterConfig
+  config: K3sClusterConfig
 ): Effect.Effect<K8sClient["Service"], K3sError, CloudProvider | Ssh | HttpClient.HttpClient> =>
   Effect.gen(function*() {
     const kubeconfig = yield* kubeconfigK3sEffect(config)
@@ -60,7 +59,7 @@ const _k8sClientForUpgradeEffect = (
 
 /** `_k8sClientForUpgradeEffect` wired to its live Layers. */
 const _k8sClientForUpgrade = (
-  config: ClusterConfig
+  config: K3sClusterConfig
 ): Effect.Effect<K8sClient["Service"], K3sError, OpenStackEnv | CinderAuth | HttpClient.HttpClient> =>
   _k8sClientForUpgradeEffect(config).pipe(
     Effect.provide(SshLive),
@@ -97,7 +96,7 @@ const _ensureSucReady = (k8sClient: K8sClient["Service"]) =>
 // applying it second would only cost an extra reconcile loop, not correctness).
 export const applyK3sUpgradeWith = (
   { config, workerConcurrency, k8sClient }: {
-    readonly config: ClusterConfig
+    readonly config: K3sClusterConfig
     readonly workerConcurrency: number
     readonly k8sClient: K8sClient["Service"]
   }
@@ -114,24 +113,24 @@ export const applyK3sUpgradeWith = (
   })
 
 const _applyK3s = (
-  { config, workerConcurrency }: { readonly config: ClusterConfig; readonly workerConcurrency: number }
+  { config, workerConcurrency }: { readonly config: K3sClusterConfig; readonly workerConcurrency: number }
 ) =>
   Effect.gen(function*() {
     const k8sClient = yield* _k8sClientForUpgrade(config)
     yield* applyK3sUpgradeWith({ config, workerConcurrency, k8sClient })
   })
 
-const _upgradeK3s = ({ config, dryRun, workerConcurrency }: DistroUpgradeArgs) =>
+const _upgradeK3s = ({ config, dryRun, workerConcurrency }: DistroUpgradeArgs<K3sClusterConfig>) =>
   dryRun ? _renderK3s({ config, workerConcurrency }) : _applyK3s({ config, workerConcurrency })
 
-const _plannedInstanceCount = (config: ClusterConfig): number =>
-  k3sBlocks(config).masters.count + config.worker_pools.reduce((total, pool) => total + pool.count, 0)
+const _plannedInstanceCount = (config: K3sClusterConfig): number =>
+  config.masters.count + config.worker_pools.reduce((total, pool) => total + pool.count, 0)
 
 // ponytail: only the checks constructible from `OpenStackEnv` + config.
 // `octaviaCapabilityCheck` needs a `ProviderProfile` and
 // `resourceResolutionCheck` a live `CloudProvider` — neither is in
 // `DistroServices`; add them here once an entry carries them.
-const _k3sDoctorChecks = Effect.fn(function*({ config }: { readonly config: ClusterConfig }) {
+const _k3sDoctorChecks = Effect.fn(function*({ config }: { readonly config: K3sClusterConfig }) {
   const env = yield* OpenStackEnv
   const client = yield* HttpClient.HttpClient
   const keystone = env.keystone
@@ -153,12 +152,12 @@ const _k3sDoctorChecks = Effect.fn(function*({ config }: { readonly config: Clus
   ]
 })
 
-export const k3sEntry: DistroEntry = {
+export const k3sEntry: DistroEntry<K3sClusterConfig> = {
   kind: "k3s",
   // Object storage is only wired for the ovh-mks path (scope.md).
   supportsObjectStorage: false,
-  plan: (config: ClusterConfig) => Effect.succeed(buildK3sPlan(config)),
-  deletePlanActions: (config: ClusterConfig) =>
+  plan: (config: K3sClusterConfig) => Effect.succeed(buildK3sPlan(config)),
+  deletePlanActions: (config: K3sClusterConfig) =>
     Effect.succeed([{ _tag: "Delete" as const, name: `cluster/${config.name}` }]),
   apply: (a) =>
     applyK3s(a).pipe(

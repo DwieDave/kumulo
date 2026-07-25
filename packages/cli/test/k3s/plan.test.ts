@@ -1,11 +1,10 @@
 import { assert, it } from "@effect/vitest"
-import { Effect } from "effect"
-import { decodeConfig } from "@kumulo/core"
-import type { ClusterConfigEncoded } from "@kumulo/core"
+import type { K3sClusterConfigEncoded } from "@kumulo/core"
 import { buildK3sPlan, buildK3sServerSpecs } from "../../src/k3s/plan.ts"
+import { decodeK3sTestConfig } from "../fixtures.ts"
 
 // Same fixture core's own tests use.
-const _encoded: ClusterConfigEncoded = {
+const _encoded: K3sClusterConfigEncoded = {
   name: "prod-eu",
   provider: "ovh",
   distro: "k3s",
@@ -32,7 +31,7 @@ const _encoded: ClusterConfigEncoded = {
   k3s: { extra_server_args: [], extra_agent_args: [] }
 }
 
-const _config = Effect.runSync(decodeConfig(_encoded))
+const _config = decodeK3sTestConfig(_encoded)
 
 it("builds one ServerSpec per master and per worker-pool index, per-index named (Appendix B)", () => {
   const specs = buildK3sServerSpecs(_config)

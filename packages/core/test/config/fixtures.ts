@@ -1,7 +1,7 @@
-import type { ClusterConfigEncoded } from "../../src/config/schema.ts"
+import type { K3sClusterConfigEncoded } from "../../src/config/schema.ts"
 
 // kumulo: mirrors the §5 design-doc sample verbatim so tests exercise the real shape
-export const validConfig: ClusterConfigEncoded = {
+export const validConfig: K3sClusterConfigEncoded = {
   name: "prod-eu",
   provider: "ovh",
   distro: "k3s",

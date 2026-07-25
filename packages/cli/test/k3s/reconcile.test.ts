@@ -2,15 +2,15 @@ import { describe, expect, it } from "@effect/vitest"
 import { Effect, Layer, Ref } from "effect"
 import {
   CloudProvider,
-  decodeConfig,
   DnsProvider,
   K8sClient,
   VolumeProvider
 } from "@kumulo/core"
-import type { ClusterConfigEncoded, DesiredRecord, K8sManifest, ServerInfo } from "@kumulo/core"
+import type { K3sClusterConfigEncoded, DesiredRecord, K8sManifest, ServerInfo } from "@kumulo/core"
 import { Ssh, SshCommandError } from "@kumulo/distro-k3s"
 import { CloudCredentialEnv } from "../../src/k3s/env.ts"
 import { applyK3sEffect, deleteK3sEffect, k3sStatusEffect, orphanedWorkers } from "../../src/k3s/reconcile.ts"
+import { decodeK3sTestConfig } from "../fixtures.ts"
 
 // Item 3 — the injectable K8sClient seam: a fake `K8sClient` Layer proves
 // the drain phase takes its client from context instead of a real
@@ -49,7 +49,7 @@ const K3S_KUBECONFIG = [
   ""
 ].join("\n")
 
-const _encoded: ClusterConfigEncoded = {
+const _encoded: K3sClusterConfigEncoded = {
   name: "test-k3s",
   provider: "generic",
   distro: "k3s",
@@ -81,7 +81,7 @@ const _encoded: ClusterConfigEncoded = {
   },
   k3s: { extra_server_args: [], extra_agent_args: [] }
 }
-const _config = Effect.runSync(decodeConfig(_encoded))
+const _config = decodeK3sTestConfig(_encoded)
 
 const CloudCredentialEnvFake = Layer.succeed(CloudCredentialEnv, {
   provider: "openstack",
@@ -181,7 +181,7 @@ const _FakeSshLive = (log: SshLog): Layer.Layer<Ssh> =>
     waitReady: () => Effect.void
   })
 
-const _configWithWorkerCount = (count: number) => Effect.runSync(decodeConfig({ ..._encoded, worker_pools: [{ name: "general", flavor: "b3-16", count }] }))
+const _configWithWorkerCount = (count: number) => decodeK3sTestConfig({ ..._encoded, worker_pools: [{ name: "general", flavor: "b3-16", count }] })
 
 describe("k3s CLI composition root", () => {
   it.effect("create: provisions HA masters + a worker pool, DNS, retained volume, TLS SANs, readiness gates, kubeconfig", () =>
