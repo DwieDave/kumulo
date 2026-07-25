@@ -33,18 +33,25 @@ export const red = _color(31)
 export const yellow = _color(33)
 export const dim = _color(2)
 
-const _renderLine = (action: PlanAction): string => {
-  if (action._tag === "Create") return green(`  + ${action.name}`)
-  if (action._tag === "Delete") return red(`  - ${action.name}`)
-  if (action._tag === "NoOp") return dim(`  = ${action.name}`)
-  if (action._tag === "Update") return yellow(`  ~ ${action.name} (${action.reason})`)
-  return yellow(`  -/+ ${action.name} (${action.reason})`)
+/** One plan row without the two-space indent — the live view puts its spinner/check there instead. */
+export const renderActionLine = (action: PlanAction): string => {
+  if (action._tag === "Create") return green(`+ ${action.name}`)
+  if (action._tag === "Delete") return red(`- ${action.name}`)
+  if (action._tag === "NoOp") return dim(`= ${action.name}`)
+  if (action._tag === "Update") return yellow(`~ ${action.name} (${action.reason})`)
+  return yellow(`-/+ ${action.name} (${action.reason})`)
 }
+
+const _renderLine = (action: PlanAction): string => `  ${renderActionLine(action)}`
 
 const _count = (actions: ReadonlyArray<PlanAction>, tag: PlanAction["_tag"]): number =>
   actions.filter((action) => action._tag === tag).length
 
 const _groupOrder: ReadonlyArray<PlanAction["_tag"]> = ["Create", "Update", "ReplaceNeedsConfirm", "Delete", "NoOp"]
+
+/** Plan actions in display order (Create, Update, Replace, Delete, NoOp) — matches `renderPlan`'s row order. */
+export const orderedActions = (plan: Plan): ReadonlyArray<PlanAction> =>
+  _groupOrder.flatMap((tag) => plan.actions.filter((action) => action._tag === tag))
 
 export const renderPlan = (plan: Plan): string => {
   const summary = `Plan: ${green(`${_count(plan.actions, "Create")} to create`)}, ${
@@ -53,6 +60,5 @@ export const renderPlan = (plan: Plan): string => {
     yellow(`${_count(plan.actions, "ReplaceNeedsConfirm")} to replace`)
   }, ${dim(`${_count(plan.actions, "NoOp")} unchanged`)}.`
   if (plan.actions.length === 0) return summary
-  const grouped = _groupOrder.flatMap((tag) => plan.actions.filter((action) => action._tag === tag))
-  return [summary, "", ...grouped.map(_renderLine)].join("\n")
+  return [summary, "", ...orderedActions(plan).map(_renderLine)].join("\n")
 }
