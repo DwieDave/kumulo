@@ -304,22 +304,22 @@ describe("k3s CLI composition root", () => {
     }))
 })
 
+const _nodeManifest = (name: string, ready: boolean): K8sManifest => ({
+  apiVersion: "v1",
+  kind: "Node",
+  metadata: { name },
+  status: { conditions: [{ type: "Ready", status: ready ? "True" : "False" }] }
+})
+
+const _statusK8sClientLayer = (nodes: ReadonlyArray<K8sManifest>) => () => Layer.succeed(K8sClient, {
+  get: () => Effect.die("not used by status"),
+  list: () => Effect.succeed(nodes),
+  apply: () => Effect.die("not used by status"),
+  delete: () => Effect.die("not used by status"),
+  evict: () => Effect.die("not used by status")
+})
+
 describe("k3s status", () => {
-  const _nodeManifest = (name: string, ready: boolean): K8sManifest => ({
-    apiVersion: "v1",
-    kind: "Node",
-    metadata: { name },
-    status: { conditions: [{ type: "Ready", status: ready ? "True" : "False" }] }
-  })
-
-  const _statusK8sClientLayer = (nodes: ReadonlyArray<K8sManifest>) => () => Layer.succeed(K8sClient, {
-    get: () => Effect.die("not used by status"),
-    list: () => Effect.succeed(nodes),
-    apply: () => Effect.die("not used by status"),
-    delete: () => Effect.die("not used by status"),
-    evict: () => Effect.die("not used by status")
-  })
-
   it.effect("reports \"does not exist\" when the tagged inventory has no master", () =>
     Effect.gen(function*() {
       const log: SshLog = { executed: [], cloudInitGates: [], clusterInfoGates: [] }

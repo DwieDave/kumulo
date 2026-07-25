@@ -6,6 +6,16 @@ import type { ResourceRef } from "../../src/k8s/client.ts"
 
 const ref: ResourceRef = { path: "/apis/apps/v1/namespaces/default/deployments/d1", kind: "Deployment" }
 
+const _neverReady = (): Effect.Effect<K8sManifest, never> =>
+  Effect.succeed({
+    apiVersion: "v1",
+    kind: "Node",
+    status: { conditions: [{ type: "Ready", status: "False" }] }
+  })
+
+const _malformedStatusNode = (_ref: ResourceRef): Effect.Effect<K8sManifest, never> =>
+  Effect.succeed({ apiVersion: "v1", kind: "Node", status: "not-an-object" })
+
 describe("readiness waits", () => {
   it.live("waitForDeploymentAvailable resolves once the Available condition flips to True", () =>
     Effect.gen(function*() {
@@ -24,19 +34,10 @@ describe("readiness waits", () => {
       expect(calls).toBeGreaterThanOrEqual(2)
     }))
 
-  const _neverReady = (): Effect.Effect<K8sManifest, never> =>
-    Effect.succeed({
-      apiVersion: "v1",
-      kind: "Node",
-      status: { conditions: [{ type: "Ready", status: "False" }] }
-    })
-
   it.live("waitForNodeReady times out when status/conditions is missing/malformed (lenient decode, not a hard failure)", () =>
     Effect.gen(function*() {
-      const get = (_ref: ResourceRef): Effect.Effect<K8sManifest, never> =>
-        Effect.succeed({ apiVersion: "v1", kind: "Node", status: "not-an-object" })
       const error = yield* Effect.flip(waitForNodeReady({
-        get,
+        get: _malformedStatusNode,
         ref: { path: "/api/v1/nodes/n1", kind: "Node" },
         interval: "1 millis",
         timeout: "10 millis"
