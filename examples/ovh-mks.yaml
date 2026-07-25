@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=../kumulo.schema.json
 name: staging-eu
 provider: ovh
 distro: ovh-mks

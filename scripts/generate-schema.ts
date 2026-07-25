@@ -1,0 +1,22 @@
+#!/usr/bin/env bun
+/**
+ * Generates kumulo.schema.json (JSON Schema draft 2020-12) from the
+ * ClusterConfig Effect schema, for IDE type hinting:
+ *   - json configs: `"$schema": "./kumulo.schema.json"`
+ *   - yaml configs: `# yaml-language-server: $schema=./kumulo.schema.json`
+ * Run via `bun scripts/generate-schema.ts`; commit the result.
+ */
+import { writeFileSync } from "node:fs"
+import { JsonSchema, Schema } from "effect"
+// Relative import: root node_modules may hold a stale published @kumulo/core.
+import { ClusterConfig } from "../packages/core/src/index.ts"
+
+const document = Schema.toJsonSchemaDocument(ClusterConfig)
+const schema = {
+  $schema: JsonSchema.META_SCHEMA_URI_DRAFT_2020_12,
+  title: "kumulo cluster config",
+  ...document.schema,
+  $defs: document.definitions
+}
+writeFileSync(new URL("../kumulo.schema.json", import.meta.url), `${JSON.stringify(schema, null, 2)}\n`)
+console.log("wrote kumulo.schema.json")

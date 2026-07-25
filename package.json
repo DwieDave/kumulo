@@ -2,6 +2,15 @@
   "name": "kumulo",
   "type": "module",
   "private": true,
+  "license": "MIT",
+  "author": "David Stahl-Gruber",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DwieDave/kumulo.git"
+  },
+  "homepage": "https://github.com/DwieDave/kumulo#readme",
+  "bugs": "https://github.com/DwieDave/kumulo/issues",
+  "packageManager": "bun@1.3.13",
   "workspaces": {
     "packages": [
       "packages/*",
@@ -32,6 +41,10 @@
     "codegen:check": "cd tools/codegen && bun run check",
     "ci": "bun run typecheck && bun run build:binary && bun run test && bun run lint:deps && bun run lint && bun run codegen:check",
     "lint": "oxlint",
+    "build": "for d in core addons distro-k3s distro-ovh-mks dns-hetzner dns-ovh hetzner openstack provider-ovh secrets-sops storage-ovh volumes-cinder cli; do echo \"[build] $d\" && bun run --cwd \"packages/$d\" build || exit 1; done",
+    "schema:generate": "bun scripts/generate-schema.ts",
+    "version:bump": "node scripts/bump-version.mjs",
+    "release:rewrite-deps": "node scripts/rewrite-workspace-deps.cjs",
     "build:binary": "bash scripts/build-binary.sh",
     "specs:update:ovh": "bash tools/ovh2openapi/scripts/update-specs.sh",
     "specs:update:openstack": "bash packages/openstack/scripts/update-specs.sh",
