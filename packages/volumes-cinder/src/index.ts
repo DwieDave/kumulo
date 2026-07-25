@@ -24,6 +24,7 @@ export {
   parseOutputsYaml,
   readOutputs,
   removeVolume,
+  stringifyOutputs,
   stringifyOutputsYaml,
   upsertVolume,
   writeOutputs

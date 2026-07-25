@@ -18,6 +18,7 @@ export {
   outputsPath,
   parseOutputsYaml,
   readOutputs,
+  stringifyOutputs,
   stringifyOutputsYaml,
   toOutputsBucket,
   writeOutputs
