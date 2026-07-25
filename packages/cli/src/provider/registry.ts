@@ -7,6 +7,7 @@ import type { CloudProviderOptions } from "@kumulo/openstack"
 import { CloudProviderLive as HcloudCloudProviderLive, hcloudHttpClientLive } from "@kumulo/hetzner"
 import { OpenStackEnv } from "../doctor-openstack/env.ts"
 import { requiredRedactedEnv } from "../env.ts"
+import { k3sBlocks } from "../k3s/blocks.ts"
 import type { CloudCredentialShape } from "../k3s/env.ts"
 
 export type ProviderKind = ClusterConfig["provider"]
@@ -26,7 +27,7 @@ export interface ProviderEntry {
 const _cloudProviderOptions = (config: ClusterConfig, region: string): CloudProviderOptions => ({
   tag: config.name,
   region,
-  octaviaEnabled: config.api_server.high_availability,
+  octaviaEnabled: k3sBlocks(config).api_server.high_availability,
   imageAliases: {}
 })
 

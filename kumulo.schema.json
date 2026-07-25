@@ -611,9 +611,6 @@
     "distro",
     "version",
     "auth",
-    "network",
-    "api_server",
-    "ssh",
     "worker_pools",
     "dns",
     "volumes",
@@ -621,5 +618,162 @@
     "secrets"
   ],
   "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "distro": {
+            "const": "k3s"
+          }
+        },
+        "required": [
+          "distro"
+        ]
+      },
+      "then": {
+        "required": [
+          "network",
+          "api_server",
+          "ssh",
+          "masters",
+          "addons",
+          "k3s"
+        ],
+        "properties": {
+          "version": {
+            "pattern": "^v\\d+\\.\\d+\\.\\d+\\+k3s\\d+$"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "version": {
+            "pattern": "^v?\\d+\\.\\d+\\.\\d+$"
+          },
+          "dns": {
+            "properties": {
+              "module": {
+                "not": {
+                  "enum": [
+                    "ovh",
+                    "designate"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "provider": {
+            "const": "hetzner"
+          }
+        },
+        "required": [
+          "provider"
+        ]
+      },
+      "then": {
+        "properties": {
+          "auth": {
+            "properties": {
+              "method": {
+                "const": "api_token"
+              }
+            }
+          },
+          "volumes": {
+            "properties": {
+              "module": {
+                "enum": [
+                  "hcloud",
+                  "none"
+                ]
+              }
+            }
+          },
+          "addons": {
+            "properties": {
+              "cinder_csi": {
+                "properties": {
+                  "enabled": {
+                    "const": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "auth": {
+            "properties": {
+              "method": {
+                "not": {
+                  "const": "api_token"
+                }
+              }
+            }
+          },
+          "volumes": {
+            "properties": {
+              "module": {
+                "not": {
+                  "const": "hcloud"
+                }
+              }
+            }
+          },
+          "addons": {
+            "properties": {
+              "hcloud_csi": {
+                "properties": {
+                  "enabled": {
+                    "const": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "object_storage": {
+            "properties": {
+              "module": {
+                "const": "ovh"
+              }
+            },
+            "required": [
+              "module"
+            ]
+          }
+        },
+        "required": [
+          "object_storage"
+        ]
+      },
+      "then": {
+        "properties": {
+          "secrets": {
+            "properties": {
+              "sink": {
+                "not": {
+                  "const": "none"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
   "$defs": {}
 }

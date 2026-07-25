@@ -8,18 +8,6 @@
     "method": "application_credential",
     "region": "DE1"
   },
-  "network": {
-    "cidr": "10.1.0.0/16",
-    "public_access": "nat"
-  },
-  "api_server": {
-    "high_availability": true,
-    "allowed_cidrs": ["0.0.0.0/0"]
-  },
-  "ssh": {
-    "public_key_path": "~/.ssh/id_ed25519.pub",
-    "allowed_cidrs": ["0.0.0.0/0"]
-  },
   "worker_pools": [
     {
       "name": "general",

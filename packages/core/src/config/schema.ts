@@ -83,14 +83,21 @@ const isAddonsConsistentWithProvider = Schema.makeFilter(
   }
 )
 
-// kumulo: `masters`/`addons`/`k3s` are only consumed by the k3s reconcile path
-// (MKS's control plane is OVH-managed) — managed distros may omit them
-// entirely, but k3s configs must carry all three.
+/**
+ * Config blocks only consumed by the k3s provisioning path — MKS's control
+ * plane, networking and node access are OVH-managed, so managed distros may
+ * omit all of these; k3s configs must carry every one.
+ * Mirrored as an `if distro: k3s` conditional in `scripts/generate-schema.ts`
+ * — keep both lists in sync.
+ */
+export const K3S_ONLY_BLOCKS = ["network", "api_server", "ssh", "masters", "addons", "k3s"] as const
+
 const isK3sBlocksPresentForK3s = Schema.makeFilter(
-  (config: { distro: string; masters?: unknown; addons?: unknown; k3s?: unknown }) =>
-    config.distro === "k3s" && (config.masters === undefined || config.addons === undefined || config.k3s === undefined)
-      ? 'distro k3s requires the "masters", "addons" and "k3s" config blocks'
-      : undefined
+  (config: { distro: string } & Partial<Record<(typeof K3S_ONLY_BLOCKS)[number], unknown>>) => {
+    if (config.distro !== "k3s") return undefined
+    const missing = K3S_ONLY_BLOCKS.filter((key) => config[key] === undefined)
+    return missing.length === 0 ? undefined : `distro k3s requires the config blocks: ${missing.join(", ")}`
+  }
 )
 
 // kumulo: only the k3s path wires the OpenStack-family DNS modules; hetzner
@@ -262,9 +269,9 @@ export const ClusterConfig = Schema.Struct({
   distro: Distro,
   version: Schema.NonEmptyString,
   auth: Auth,
-  network: Network,
-  api_server: ApiServer,
-  ssh: Ssh,
+  network: Schema.optionalKey(Network),
+  api_server: Schema.optionalKey(ApiServer),
+  ssh: Schema.optionalKey(Ssh),
   masters: Schema.optionalKey(Masters),
   worker_pools: Schema.Array(WorkerPool),
   dns: Dns,

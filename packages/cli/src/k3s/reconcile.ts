@@ -110,7 +110,7 @@ interface Infra {
 const _provisionInfra = (config: ClusterConfig): Effect.Effect<Infra, CloudError, CloudProvider> =>
   Effect.gen(function*() {
     const cloudProvider = yield* CloudProvider
-    yield* cloudProvider.ensureNetwork({ cidr: config.network.cidr })
+    yield* cloudProvider.ensureNetwork({ cidr: k3sBlocks(config).network.cidr })
     yield* cloudProvider.ensureSecurityGroups({ rules: secGroupRules(config) })
     const lb = yield* cloudProvider.ensureLoadBalancer({ members: [] })
 
