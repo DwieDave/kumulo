@@ -16,6 +16,9 @@ const dryRunFlag = Flag.boolean("dry-run").pipe(
 const showEnvFlag = Flag.boolean("show-env").pipe(
   Flag.withDescription("Print the provider env-var summary before the plan")
 )
+const secretsFileFlag = Flag.optional(Flag.file("secrets-file").pipe(
+  Flag.withDescription("Sops-encrypted YAML file of credential env vars (fallback: KUMULO_SECRETS_FILE)")
+))
 
 /**
  * Root command; `--yes`/`--dry-run` are shared by every subcommand; the
@@ -26,6 +29,6 @@ const showEnvFlag = Flag.boolean("show-env").pipe(
  * parent/child name collision.
  */
 export const kumulo = Command.make("kumulo").pipe(
-  Command.withSharedFlags({ yes: yesFlag, dryRun: dryRunFlag, showEnv: showEnvFlag }),
+  Command.withSharedFlags({ yes: yesFlag, dryRun: dryRunFlag, showEnv: showEnvFlag, secretsFile: secretsFileFlag }),
   Command.withDescription("Provision and manage kumulo-managed Kubernetes clusters")
 )

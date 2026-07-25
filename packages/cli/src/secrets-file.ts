@@ -1,7 +1,8 @@
 /**
- * Secrets-file path discovery (R2). A plain argv scan — not a `Command` option —
- * because the path must be known before the CLI is built, to decide whether the
- * sops `ConfigProvider` gets installed at all.
+ * Secrets-file path resolution (R2): the parsed `--secrets-file` shared flag
+ * first, else `KUMULO_SECRETS_FILE`. The flag is a real `Command` flag (visible
+ * in `--help`); the resulting sops `ConfigProvider` is installed per-invocation
+ * via `Command.provide` in `main.ts`, after parsing.
  */
 import { resolve } from "node:path"
 import { ConfigProvider } from "effect"
@@ -10,37 +11,16 @@ import type { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/unstab
 
 type ChildProcessSpawnerService = (typeof ChildProcessSpawnerNS.ChildProcessSpawner)["Service"]
 
-const _flag = "--secrets-file"
-
 const _nonBlank = (value: string | undefined): string | undefined =>
   value !== undefined && value.trim().length > 0 ? value : undefined
 
-const _fromArgv = (argv: ReadonlyArray<string>): string | undefined => {
-  const index = argv.indexOf(_flag)
-  if (index >= 0) return _nonBlank(argv[index + 1]?.startsWith("--") ? undefined : argv[index + 1])
-  const inline = argv.find((arg) => arg.startsWith(`${_flag}=`))
-  return inline === undefined ? undefined : _nonBlank(inline.slice(_flag.length + 1))
-}
-
-/**
- * Removes `--secrets-file [<path>]` / `--secrets-file=<path>` tokens from argv.
- * The flag is consumed here, before the CLI parser ever sees it (R2) — it is not
- * declared on any `Command`, so leaving it in argv would be rejected by
- * `Command.run` as an unrecognized flag.
- */
-export const stripSecretsFileFlag = (argv: ReadonlyArray<string>): Array<string> =>
-  argv.filter((arg, index) => {
-    if (arg === _flag || arg.startsWith(`${_flag}=`)) return false
-    return !(argv[index - 1] === _flag && !arg.startsWith("--"))
-  })
-
-/** Resolves the secrets-file path from `--secrets-file <path>` / `--secrets-file=<path>`, else `KUMULO_SECRETS_FILE`, else `undefined`. Pure — no process globals. */
+/** Resolves the secrets-file path from the parsed `--secrets-file` flag, else `KUMULO_SECRETS_FILE`, else `undefined`. Pure — no process globals. */
 export const resolveSecretsFile = (
-  { argv, env }: {
-    readonly argv: ReadonlyArray<string>
+  { flag, env }: {
+    readonly flag: string | undefined
     readonly env: Readonly<Record<string, string | undefined>>
   }
-): string | undefined => _fromArgv(argv) ?? _nonBlank(env.KUMULO_SECRETS_FILE)
+): string | undefined => _nonBlank(flag) ?? _nonBlank(env.KUMULO_SECRETS_FILE)
 
 /**
  * Real env vars first, the sops file only as a fallback (R3) — a var present in

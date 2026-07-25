@@ -3,66 +3,33 @@ import { assert, describe, it } from "@effect/vitest"
 import { ConfigProvider, Effect, Redacted, Sink, Stream } from "effect"
 import { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/unstable/process"
 import { requiredEnv, requiredRedactedEnv } from "../src/env.ts"
-import { resolveSecretsFile, secretsConfigProvider, stripSecretsFileFlag } from "../src/secrets-file.ts"
+import { resolveSecretsFile, secretsConfigProvider } from "../src/secrets-file.ts"
 
 type ChildProcessSpawnerService = (typeof ChildProcessSpawnerNS.ChildProcessSpawner)["Service"]
 
 describe("resolveSecretsFile", () => {
-  it("reads the separate-argument form", () => {
-    assert.strictEqual(resolveSecretsFile({ argv: ["apply", "--secrets-file", "a.yaml"], env: {} }), "a.yaml")
-  })
-
-  it("reads the = form", () => {
-    assert.strictEqual(resolveSecretsFile({ argv: ["apply", "--secrets-file=a.yaml"], env: {} }), "a.yaml")
+  it("uses the parsed --secrets-file flag value", () => {
+    assert.strictEqual(resolveSecretsFile({ flag: "a.yaml", env: {} }), "a.yaml")
   })
 
   it("falls back to KUMULO_SECRETS_FILE", () => {
-    assert.strictEqual(resolveSecretsFile({ argv: ["apply"], env: { KUMULO_SECRETS_FILE: "env.yaml" } }), "env.yaml")
+    assert.strictEqual(resolveSecretsFile({ flag: undefined, env: { KUMULO_SECRETS_FILE: "env.yaml" } }), "env.yaml")
   })
 
   it("prefers the flag over the env var", () => {
     assert.strictEqual(
-      resolveSecretsFile({ argv: ["--secrets-file", "flag.yaml"], env: { KUMULO_SECRETS_FILE: "env.yaml" } }),
+      resolveSecretsFile({ flag: "flag.yaml", env: { KUMULO_SECRETS_FILE: "env.yaml" } }),
       "flag.yaml"
     )
   })
 
   it("is undefined with neither flag nor env var", () => {
-    assert.strictEqual(resolveSecretsFile({ argv: ["apply", "cluster.yaml"], env: {} }), undefined)
+    assert.strictEqual(resolveSecretsFile({ flag: undefined, env: {} }), undefined)
   })
 
-  it("is undefined when the flag has no value", () => {
-    assert.strictEqual(resolveSecretsFile({ argv: ["apply", "--secrets-file"], env: {} }), undefined)
-  })
-
-  it("is undefined for an empty = value or blank env var", () => {
-    assert.strictEqual(resolveSecretsFile({ argv: ["--secrets-file="], env: {} }), undefined)
-    assert.strictEqual(resolveSecretsFile({ argv: [], env: { KUMULO_SECRETS_FILE: "  " } }), undefined)
-  })
-
-  it("ignores a following flag as the value", () => {
-    assert.strictEqual(resolveSecretsFile({ argv: ["--secrets-file", "--verbose"], env: {} }), undefined)
-  })
-})
-
-describe("stripSecretsFileFlag", () => {
-  it("removes the separate-argument form, value included", () => {
-    assert.deepStrictEqual(
-      stripSecretsFileFlag(["apply", "--secrets-file", "a.yaml", "cluster.yaml"]),
-      ["apply", "cluster.yaml"]
-    )
-  })
-
-  it("removes the = form", () => {
-    assert.deepStrictEqual(stripSecretsFileFlag(["apply", "--secrets-file=a.yaml", "-y"]), ["apply", "-y"])
-  })
-
-  it("keeps a following flag when the value is absent", () => {
-    assert.deepStrictEqual(stripSecretsFileFlag(["--secrets-file", "--verbose"]), ["--verbose"])
-  })
-
-  it("leaves argv without the flag untouched", () => {
-    assert.deepStrictEqual(stripSecretsFileFlag(["apply", "cluster.yaml", "-y"]), ["apply", "cluster.yaml", "-y"])
+  it("is undefined for a blank flag or blank env var", () => {
+    assert.strictEqual(resolveSecretsFile({ flag: " ", env: {} }), undefined)
+    assert.strictEqual(resolveSecretsFile({ flag: undefined, env: { KUMULO_SECRETS_FILE: "  " } }), undefined)
   })
 })
 
