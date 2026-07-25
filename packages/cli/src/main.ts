@@ -1,9 +1,12 @@
+#!/usr/bin/env bun
 import { BunRuntime } from "@effect/platform-bun"
 import * as BunHttpClient from "@effect/platform-bun/BunHttpClient"
 import * as BunServices from "@effect/platform-bun/BunServices"
-import { Console, Effect, Layer } from "effect"
+import { ConfigProvider, Console, Effect, Layer } from "effect"
 import { CliError, Command } from "effect/unstable/cli"
+import { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/unstable/process"
 import { kumuloCli } from "./commands.ts"
+import { resolveSecretsFile, secretsConfigProvider, stripSecretsFileFlag } from "./secrets-file.ts"
 import { OpenStackEnvLive } from "./doctor-openstack/env.ts"
 import { exitCodeFor } from "./exit-codes.ts"
 import { renderCliError } from "./errors.ts"
@@ -33,9 +36,28 @@ const MainLive = Layer.mergeAll(
   BunHttpClient.layer
 ).pipe(Layer.provide(BunHttpClient.layer))
 
-const program = Command.run(kumuloCli, { version: "0.0.0" }).pipe(
+// `--secrets-file` / `KUMULO_SECRETS_FILE` (R2) is read here, not as a `Command`
+// option: the credential layers above read `Config` while they are *built*, so
+// the provider has to be in place before `Command.run` ever parses argv. With no
+// path configured the layer is empty and the default env provider stays in
+// charge, byte-identical to before. The spawner is resolved from Bun services
+// here and only here (N2) — `@kumulo/secrets-sops` stays runtime-agnostic.
+const _secretsFile = resolveSecretsFile({ argv: process.argv, env: process.env })
+
+const SecretsConfigProviderLive = _secretsFile === undefined ? Layer.empty : ConfigProvider.layer(
+  Effect.map(
+    Effect.service(ChildProcessSpawnerNS.ChildProcessSpawner),
+    (spawner) => secretsConfigProvider({ file: _secretsFile, spawner })
+  )
+).pipe(Layer.provide(BunServices.layer))
+
+// `runWith` instead of `run`: the parser must never see `--secrets-file` (it is
+// not a `Command` flag, see above), so it is stripped from the argv that `run`
+// would otherwise read verbatim from `Stdio` (`process.argv.slice(2)`).
+const program = Command.runWith(kumuloCli, { version: "0.0.0" })(stripSecretsFileFlag(process.argv.slice(2))).pipe(
   Effect.provide(MainLive),
   Effect.provide(BunServices.layer),
+  Effect.provide(SecretsConfigProviderLive),
   Effect.matchEffect({
     onFailure: (error) =>
       Effect.gen(function*() {
