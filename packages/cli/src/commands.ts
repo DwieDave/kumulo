@@ -1,6 +1,6 @@
 import { dirname } from "node:path"
 import { Console, Effect } from "effect"
-import { Command } from "effect/unstable/cli"
+import { Command, Prompt } from "effect/unstable/cli"
 import type { Layer } from "effect"
 import type { ClusterConfig, CredentialsSink, ObjectStorageProvider, Plan } from "@kumulo/core"
 import { ovhObjectStorageProviderLive } from "@kumulo/storage-ovh"
@@ -13,10 +13,43 @@ import { distroFor, wantsObjectStorage } from "./distro/registry.ts"
 import type { DistroEntry } from "./distro/types.ts"
 import { StorageEnv, storageLayers } from "./storage/env.ts"
 import { bucketDeletePlanActions, bucketPlanActions, convergeBuckets, reconcileBucketsOnDelete } from "./storage/reconcile.ts"
-import { decidePlanAction, dim, green, red, renderPlan, yellow } from "./present.ts"
+import { decidePlanAction, dim, green, orderedActions, red, renderActionLine, renderPlan, yellow } from "./present.ts"
+import { logLine, withPlanView, withRowProgress, withSpinner } from "./spinner.ts"
 import { kumulo } from "./root.ts"
 
 export { kumulo }
+
+/**
+ * Interactive confirm on a TTY; otherwise print `fallback` (the --yes hint)
+ * and answer no. Ctrl-C / quit counts as no.
+ */
+const _confirm = (
+  { fallback, message }: { readonly message: string; readonly fallback: string }
+): Effect.Effect<boolean, never, Prompt.Environment> =>
+  process.stdout.isTTY
+    ? Prompt.run(Prompt.confirm({ message })).pipe(Effect.catch(() => Effect.succeed(false)))
+    : Console.log(fallback).pipe(Effect.as(false))
+
+const _planPhrases: ReadonlyArray<string> = [
+  "Counting clouds...",
+  "Untangling YAML...",
+  "Consulting the scheduler...",
+  "Herding pods...",
+  "Negotiating with the control plane...",
+  "Politely asking OVH...",
+  "Rehearsing the plan..."
+]
+
+/** Progress line for non-TTY output only — the live plan view covers it on a TTY. */
+const _ciLine = (message: string): Effect.Effect<void> => process.stdout.isTTY ? Effect.void : logLine(message)
+
+/** Live-view rows in `renderPlan`'s display order; NoOp rows stay static. */
+const _viewRows = (plan: Plan): ReadonlyArray<{ name: string; text: string; active: boolean }> =>
+  orderedActions(plan).map((action) => ({
+    name: action.name,
+    text: renderActionLine(action),
+    active: action._tag !== "NoOp"
+  }))
 
 const _appliedVerb: Record<string, string> = {
   Create: green("Created"),
@@ -25,15 +58,19 @@ const _appliedVerb: Record<string, string> = {
   ReplaceNeedsConfirm: yellow("Replaced")
 }
 
-/** One line per non-NoOp plan row whose name matches `prefixes`, logged after the corresponding converge step succeeded. */
+/**
+ * One line per non-NoOp plan row whose name matches `prefixes`, logged after
+ * the corresponding converge step succeeded. Non-TTY only — on a TTY the live
+ * plan view checks the rows off in place instead.
+ */
 const _logApplied = (
   { plan, prefixes }: { readonly plan: Plan; readonly prefixes: ReadonlyArray<string> }
 ): Effect.Effect<void> =>
-  Effect.forEach(
+  process.stdout.isTTY ? Effect.void : Effect.forEach(
     plan.actions.filter((action) =>
       action._tag !== "NoOp" && prefixes.some((prefix) => action.name.startsWith(prefix))
     ),
-    (action) => Console.log(`${_appliedVerb[action._tag] ?? action._tag} ${action.name}`),
+    (action) => logLine(`${_appliedVerb[action._tag] ?? action._tag} ${action.name}`),
     { discard: true }
   )
 
@@ -52,19 +89,27 @@ const _convergeAll = Effect.fn(function*(
     readonly storageLayer: Layer.Layer<ObjectStorageProvider | CredentialsSink> | undefined
   }
 ) {
-  const clusterStep = entry.apply({ config, configDir }).pipe(
+  const clusterStep = withRowProgress({
+    match: (name) => entry.appliedPrefixes.some((prefix) => name.startsWith(prefix)),
+    effect: entry.apply({ config, configDir })
+  }).pipe(
     Effect.tap(() => _logApplied({ plan, prefixes: entry.appliedPrefixes }))
   )
   // Same Cinder-backed volumes as the k3s path's `_reconcileVolumes`
   // (`k3s/reconcile.ts`), just no cluster-side manifest apply yet — see
   // `convergeManagedVolumes`'s doc comment.
-  const volumesStep = convergeManagedVolumes({ config, configDir }).pipe(
+  const volumesStep = withRowProgress({
+    match: (name) => name.startsWith("volume/"),
+    effect: convergeManagedVolumes({ config, configDir })
+  }).pipe(
     Effect.tap(() => _logApplied({ plan, prefixes: ["volume/"] }))
   )
   const bucketsStep = storageLayer === undefined
     ? Effect.void
-    : convergeBuckets({ config, configDir }).pipe(
-      Effect.provide(storageLayer),
+    : withRowProgress({
+      match: (name) => name.startsWith("bucket/"),
+      effect: convergeBuckets({ config, configDir }).pipe(Effect.provide(storageLayer))
+    }).pipe(
       Effect.tap(() => _logApplied({ plan, prefixes: ["bucket/"] }))
     )
   const [result] = yield* Effect.all([clusterStep, volumesStep, bucketsStep], { concurrency: 3 })
@@ -77,30 +122,40 @@ const _applyFlow = Effect.fn(function*() {
   const config = yield* loadConfig(root.config)
   const configDir = dirname(root.config)
   const entry = distroFor(config)
-  yield* Console.log(`${yield* envSummary(config)}\n`)
+  if (root.showEnv) yield* Console.log(`${yield* envSummary(config)}\n`)
   const storageLayer = wantsObjectStorage(config) ? yield* storageLayers(config) : undefined
-  const basePlan = yield* entry.plan(config)
-  const bucketActions = storageLayer === undefined
-    ? []
-    : yield* bucketPlanActions({ config, configDir }).pipe(Effect.provide(storageLayer))
-  const plan: Plan = { actions: [...basePlan.actions, ...bucketActions] }
+  const plan: Plan = yield* withSpinner({
+    label: _planPhrases,
+    effect: Effect.gen(function*() {
+      const basePlan = yield* entry.plan(config)
+      const bucketActions = storageLayer === undefined
+        ? []
+        : yield* bucketPlanActions({ config, configDir }).pipe(Effect.provide(storageLayer))
+      return { actions: [...basePlan.actions, ...bucketActions] }
+    })
+  })
   const decision = decidePlanAction({ plan, yes: root.yes, dryRun: root.dryRun })
   yield* Console.log(`${renderPlan(plan)}\n`)
 
   if (decision._tag === "DryRun" || decision._tag === "NothingToDo") return
   if (decision._tag === "NeedsConfirm") {
-    yield* Console.log("Re-run with --yes to apply.")
-    return
+    const proceed = yield* _confirm({ message: "Apply these changes?", fallback: "Re-run with --yes to apply." })
+    if (!proceed) return
   }
 
-  // An entry with no applied prefixes converges everything itself (k3s
-  // reconciles volumes inside `applyK3s`) — nothing to fan out here.
-  if (entry.appliedPrefixes.length === 0) {
-    const result = yield* entry.apply({ config, configDir })
-    yield* Console.log(result.summary)
-    return
+  // Trailing blank line, plus the confirm prompt's submitted line if we asked.
+  const view = {
+    rows: _viewRows(plan),
+    offset: decision._tag === "NeedsConfirm" ? 2 : 1
   }
-  const result = yield* _convergeAll({ entry, config, configDir, plan, storageLayer })
+  // An entry with no applied prefixes converges everything itself (k3s
+  // reconciles volumes inside `applyK3s`) — one opaque apply, all rows spin together.
+  const result = yield* withPlanView({
+    ...view,
+    effect: entry.appliedPrefixes.length === 0
+      ? withRowProgress({ match: () => true, effect: entry.apply({ config, configDir }) })
+      : _convergeAll({ entry, config, configDir, plan, storageLayer })
+  })
   yield* Console.log(result.summary)
 })
 
@@ -151,26 +206,35 @@ export const del = Command.make(
     const config = yield* loadConfig(root.config)
     const entry = distroFor(config)
 
-    yield* Console.log(`${yield* envSummary(config)}\n`)
-    const plan = yield* _deletePlan(config, dirname(root.config))
+    if (root.showEnv) yield* Console.log(`${yield* envSummary(config)}\n`)
+    const plan = yield* withSpinner({ label: _planPhrases, effect: _deletePlan(config, dirname(root.config)) })
     yield* Console.log(`${renderPlan(plan)}\n`)
     if (root.dryRun) return
     if (!root.yes) {
-      yield* Console.log(`Re-run with --yes to delete cluster "${config.name}".`)
-      return
+      const proceed = yield* _confirm({
+        message: `Delete cluster "${config.name}"?`,
+        fallback: `Re-run with --yes to delete cluster "${config.name}".`
+      })
+      if (!proceed) return
     }
     // Volumes must wait for the cluster (attachments); buckets don't — the
     // bucket teardown runs concurrently with cluster+volume teardown.
     const clusterAndVolumesStep = Effect.gen(function*() {
-      yield* entry.delete(config)
-      yield* Console.log(`${red("Deleted")} ${entry.deletedLabel}/${config.name}`)
+      yield* withRowProgress({
+        match: (name) => !name.startsWith("volume/") && !name.startsWith("bucket/"),
+        effect: entry.delete(config)
+      })
+      yield* _ciLine(`${red("Deleted")} ${entry.deletedLabel}/${config.name}`)
       yield* _logApplied({ plan, prefixes: ["mks-pool/"] })
 
       // Retained volumes (`volumes.managed[].retain: true`) survive `delete`;
       // anything else recorded there is torn down alongside the cluster.
-      const volumesResult = yield* reconcileVolumesOnDelete(config)
-      yield* Effect.forEach(volumesResult.deleted, (name) => Console.log(`${red("Deleted")} volume/${name}`), { discard: true })
-      if (volumesResult.kept.length > 0) yield* Console.log(`${dim("Retained volumes (kept):")} ${volumesResult.kept.join(", ")}`)
+      const volumesResult = yield* withRowProgress({
+        match: (name) => name.startsWith("volume/"),
+        effect: reconcileVolumesOnDelete(config)
+      })
+      yield* Effect.forEach(volumesResult.deleted, (name) => _ciLine(`${red("Deleted")} volume/${name}`), { discard: true })
+      if (volumesResult.kept.length > 0) yield* _ciLine(`${dim("Retained volumes (kept):")} ${volumesResult.kept.join(", ")}`)
     })
 
     // Same retain semantics for buckets (R6/R11) — a non-empty, non-retained
@@ -179,14 +243,19 @@ export const del = Command.make(
       if (!wantsObjectStorage(config)) return
       const env = yield* StorageEnv
       const providerLayer = ovhObjectStorageProviderLive(env)
-      const buckets = yield* reconcileBucketsOnDelete({ config, configDir: dirname(root.config) }).pipe(
-        Effect.provide(providerLayer)
-      )
-      yield* Effect.forEach(buckets.deleted, (name) => Console.log(`${red("Deleted")} bucket/${name}`), { discard: true })
-      if (buckets.kept.length > 0) yield* Console.log(`${dim("Retained buckets (kept):")} ${buckets.kept.join(", ")}`)
+      const buckets = yield* withRowProgress({
+        match: (name) => name.startsWith("bucket/"),
+        effect: reconcileBucketsOnDelete({ config, configDir: dirname(root.config) }).pipe(Effect.provide(providerLayer))
+      })
+      yield* Effect.forEach(buckets.deleted, (name) => _ciLine(`${red("Deleted")} bucket/${name}`), { discard: true })
+      if (buckets.kept.length > 0) yield* _ciLine(`${dim("Retained buckets (kept):")} ${buckets.kept.join(", ")}`)
     })
 
-    yield* Effect.all([clusterAndVolumesStep, bucketsStep], { concurrency: 2 })
+    yield* withPlanView({
+      rows: _viewRows(plan),
+      offset: root.yes ? 1 : 2,
+      effect: Effect.all([clusterAndVolumesStep, bucketsStep], { concurrency: 2 })
+    })
     yield* Console.log(`\nCluster "${config.name}" deleted.`)
   })
 ).pipe(Command.withDescription("Delete a cluster"))
