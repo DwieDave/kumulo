@@ -72,14 +72,24 @@ const isVolumesModuleConsistentWithProvider = Schema.makeFilter(
 const isAddonsConsistentWithProvider = Schema.makeFilter(
   (config: {
     provider: string
-    addons: { hcloud_csi: { enabled: boolean }; cinder_csi: { enabled: boolean } }
+    addons?: { hcloud_csi: { enabled: boolean }; cinder_csi: { enabled: boolean } }
   }) => {
+    if (config.addons === undefined) return undefined
     if (config.addons.hcloud_csi.enabled && config.provider !== "hetzner")
       return "addons.hcloud_csi can only be enabled when provider is hetzner"
     if (config.addons.cinder_csi.enabled && config.provider === "hetzner")
       return "addons.cinder_csi cannot be enabled when provider is hetzner"
     return undefined
   }
+)
+
+// kumulo: `addons`/`k3s` are only consumed by the k3s reconcile path — managed
+// distros (ovh-mks) may omit them entirely, but k3s configs must carry both.
+const isK3sBlocksPresentForK3s = Schema.makeFilter(
+  (config: { distro: string; addons?: unknown; k3s?: unknown }) =>
+    config.distro === "k3s" && (config.addons === undefined || config.k3s === undefined)
+      ? 'distro k3s requires the "addons" and "k3s" config blocks'
+      : undefined
 )
 
 // kumulo: only the k3s path wires the OpenStack-family DNS modules; hetzner
@@ -260,10 +270,11 @@ export const ClusterConfig = Schema.Struct({
   volumes: Volumes,
   object_storage: ObjectStorage,
   secrets: Secrets,
-  addons: Addons,
-  k3s: K3sPassthrough
+  addons: Schema.optionalKey(Addons),
+  k3s: Schema.optionalKey(K3sPassthrough)
 }).check(
   isVersionValidForDistro,
+  isK3sBlocksPresentForK3s,
   isSecretsRequiredForObjectStorage,
   isAuthMethodConsistentWithProvider,
   isVolumesModuleConsistentWithProvider,

@@ -619,9 +619,7 @@
     "dns",
     "volumes",
     "object_storage",
-    "secrets",
-    "addons",
-    "k3s"
+    "secrets"
   ],
   "additionalProperties": false,
   "$defs": {}

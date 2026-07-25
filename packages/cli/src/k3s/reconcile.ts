@@ -53,6 +53,7 @@ import {
   CloudCredentialEnv,
   k3sCloudCredentialLayer,
   k3sHetznerVolumeProviderLayer,
+  k3sBlocks,
   k3sVolumeProviderLayer,
   secGroupRules
 } from "./env.ts"
@@ -68,7 +69,7 @@ export interface K3sApplyResult {
 const CILIUM_CAPS: ReadonlyArray<Capability> = ["cilium"]
 const NO_CAPS: ReadonlyArray<Capability> = []
 const _capabilities = (config: ClusterConfig): ReadonlyArray<Capability> =>
-  config.addons.cni === "cilium" ? CILIUM_CAPS : NO_CAPS
+  k3sBlocks(config).addons.cni === "cilium" ? CILIUM_CAPS : NO_CAPS
 
 const _toHost = (info: ServerInfo): SshHost => ({ ip: info.ip, port: 22 })
 
@@ -130,10 +131,10 @@ const _bootstrap = (config: ClusterConfig, infra: Infra): Effect.Effect<SshHost,
       workers: infra.workerInfos.map(_toHost),
       k3sVersion: config.version,
       tlsSans: _tlsSans({ config, masterIps: infra.masterInfos.map((m) => m.ip), lbVip: infra.lbVip }),
-      cloudControllerManager: config.addons.cloud_controller_manager,
-      cni: config.addons.cni,
-      extraServerArgs: config.k3s.extra_server_args,
-      extraAgentArgs: config.k3s.extra_agent_args
+      cloudControllerManager: k3sBlocks(config).addons.cloud_controller_manager,
+      cni: k3sBlocks(config).addons.cni,
+      extraServerArgs: k3sBlocks(config).k3s.extra_server_args,
+      extraAgentArgs: k3sBlocks(config).k3s.extra_agent_args
     })
     return masters[0]
   })
@@ -172,7 +173,7 @@ const _installAddons = (config: ClusterConfig): Effect.Effect<void, AddonError, 
         applicationCredentialId: cred.applicationCredentialId,
         applicationCredentialSecret: cred.applicationCredentialSecret
       }
-    const addons = resolveAddons({ distro: "k3s", addons: config.addons, capabilities: _capabilities(config), cloudCredential })
+    const addons = resolveAddons({ distro: "k3s", addons: k3sBlocks(config).addons, capabilities: _capabilities(config), cloudCredential })
     const ctx: AddonContext = { clusterName: config.name, capabilities: _capabilities(config) }
     yield* installAddons({ k8sClient, addons, ctx })
   })

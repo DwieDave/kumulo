@@ -24,7 +24,7 @@ describe("ClusterConfig — hetzner fields", () => {
       expect(decoded.provider).toBe("hetzner")
       expect(decoded.auth.method).toBe("api_token")
       expect(decoded.volumes.module).toBe("hcloud")
-      expect(decoded.addons.hcloud_csi.enabled).toBe(true)
+      expect(decoded.addons?.hcloud_csi.enabled).toBe(true)
     }))
 
   it.effect("decodes dns.module: hetzner", () =>

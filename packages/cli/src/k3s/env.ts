@@ -13,13 +13,32 @@ import { requiredRedactedEnv } from "../env.ts"
 import { hcloudHttpClientLayer, providerFor } from "../provider/registry.ts"
 import { ovhHttpClientFromEnv } from "../mks/env.ts"
 
+/**
+ * `addons`/`k3s` are optional in `ClusterConfig` (managed distros omit them)
+ * but schema-guaranteed present when `distro: k3s` — the only path that reads
+ * them. The fallbacks here exist purely to keep the accessor total for the
+ * type system; they are unreachable after a successful decode.
+ */
+export const k3sBlocks = (
+  config: ClusterConfig
+): { addons: NonNullable<ClusterConfig["addons"]>; k3s: NonNullable<ClusterConfig["k3s"]> } => ({
+  addons: config.addons ?? {
+    cloud_controller_manager: false,
+    cinder_csi: { enabled: false, default_volume_type: "classic" },
+    hcloud_csi: { enabled: false },
+    system_upgrade_controller: false,
+    cni: "flannel"
+  },
+  k3s: config.k3s ?? { extra_server_args: [], extra_agent_args: [] }
+})
+
 /** Security-group rules for this cluster's network CIDR/allowed CIDRs/CNI choice. */
 export const secGroupRules = (config: ClusterConfig) =>
   buildFr57Rules({
     allowedSshCidrs: config.ssh.allowed_cidrs,
     allowedApiCidrs: config.api_server.allowed_cidrs,
     networkCidr: config.network.cidr,
-    cni: config.addons.cni
+    cni: k3sBlocks(config).addons.cni
   })
 
 /** Same Cinder-backed `VolumeProvider` construction as `commands/volumes.ts`'s `reconcileVolumesOnDelete`. */
