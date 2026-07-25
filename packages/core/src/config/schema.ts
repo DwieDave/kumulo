@@ -83,12 +83,13 @@ const isAddonsConsistentWithProvider = Schema.makeFilter(
   }
 )
 
-// kumulo: `addons`/`k3s` are only consumed by the k3s reconcile path — managed
-// distros (ovh-mks) may omit them entirely, but k3s configs must carry both.
+// kumulo: `masters`/`addons`/`k3s` are only consumed by the k3s reconcile path
+// (MKS's control plane is OVH-managed) — managed distros may omit them
+// entirely, but k3s configs must carry all three.
 const isK3sBlocksPresentForK3s = Schema.makeFilter(
-  (config: { distro: string; addons?: unknown; k3s?: unknown }) =>
-    config.distro === "k3s" && (config.addons === undefined || config.k3s === undefined)
-      ? 'distro k3s requires the "addons" and "k3s" config blocks'
+  (config: { distro: string; masters?: unknown; addons?: unknown; k3s?: unknown }) =>
+    config.distro === "k3s" && (config.masters === undefined || config.addons === undefined || config.k3s === undefined)
+      ? 'distro k3s requires the "masters", "addons" and "k3s" config blocks'
       : undefined
 )
 
@@ -264,7 +265,7 @@ export const ClusterConfig = Schema.Struct({
   network: Network,
   api_server: ApiServer,
   ssh: Ssh,
-  masters: Masters,
+  masters: Schema.optionalKey(Masters),
   worker_pools: Schema.Array(WorkerPool),
   dns: Dns,
   volumes: Volumes,

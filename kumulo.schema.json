@@ -614,7 +614,6 @@
     "network",
     "api_server",
     "ssh",
-    "masters",
     "worker_pools",
     "dns",
     "volumes",

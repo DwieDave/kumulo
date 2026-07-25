@@ -5,6 +5,7 @@ import type { ClusterConfig, CloudProvider, ResourceRef } from "@kumulo/core"
 import { refForPlan, renderMastersPlan, renderUpgradePlan, renderWorkersPlan } from "@kumulo/distro-k3s"
 import { refFor, systemUpgradeControllerManifests } from "@kumulo/addons"
 import { Ssh, SshLive } from "@kumulo/distro-k3s"
+import { k3sBlocks } from "../k3s/env.ts"
 import { buildK3sPlan } from "../k3s/plan.ts"
 import { k3sCloudProviderLayer } from "../provider/registry.ts"
 import { k8sHttpClientLayer } from "../k3s/k8s-http-client.ts"
@@ -124,7 +125,7 @@ const _upgradeK3s = ({ config, dryRun, workerConcurrency }: DistroUpgradeArgs) =
   dryRun ? _renderK3s({ config, workerConcurrency }) : _applyK3s({ config, workerConcurrency })
 
 const _plannedInstanceCount = (config: ClusterConfig): number =>
-  config.masters.count + config.worker_pools.reduce((total, pool) => total + pool.count, 0)
+  k3sBlocks(config).masters.count + config.worker_pools.reduce((total, pool) => total + pool.count, 0)
 
 // ponytail: only the checks constructible from `OpenStackEnv` + config.
 // `octaviaCapabilityCheck` needs a `ProviderProfile` and

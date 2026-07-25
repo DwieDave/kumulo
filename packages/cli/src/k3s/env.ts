@@ -14,14 +14,19 @@ import { hcloudHttpClientLayer, providerFor } from "../provider/registry.ts"
 import { ovhHttpClientFromEnv } from "../mks/env.ts"
 
 /**
- * `addons`/`k3s` are optional in `ClusterConfig` (managed distros omit them)
- * but schema-guaranteed present when `distro: k3s` — the only path that reads
- * them. The fallbacks here exist purely to keep the accessor total for the
- * type system; they are unreachable after a successful decode.
+ * `masters`/`addons`/`k3s` are optional in `ClusterConfig` (managed distros
+ * omit them) but schema-guaranteed present when `distro: k3s` — the only path
+ * that reads them. The fallbacks here exist purely to keep the accessor total
+ * for the type system; they are unreachable after a successful decode.
  */
 export const k3sBlocks = (
   config: ClusterConfig
-): { addons: NonNullable<ClusterConfig["addons"]>; k3s: NonNullable<ClusterConfig["k3s"]> } => ({
+): {
+  masters: NonNullable<ClusterConfig["masters"]>
+  addons: NonNullable<ClusterConfig["addons"]>
+  k3s: NonNullable<ClusterConfig["k3s"]>
+} => ({
+  masters: config.masters ?? { flavor: "", count: 0, image: "" },
   addons: config.addons ?? {
     cloud_controller_manager: false,
     cinder_csi: { enabled: false, default_volume_type: "classic" },
