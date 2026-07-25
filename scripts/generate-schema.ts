@@ -11,10 +11,13 @@ import { JsonSchema, Schema } from "effect"
 import { ClusterConfig } from "@kumulo/core"
 
 const document = Schema.toJsonSchemaDocument(ClusterConfig)
+// `additionalProperties: false` would otherwise reject the very `$schema` key
+// json configs use to reference this document — allow it explicitly.
 const schema = {
   $schema: JsonSchema.META_SCHEMA_URI_DRAFT_2020_12,
   title: "kumulo cluster config",
   ...document.schema,
+  properties: { $schema: { type: "string" }, ...(document.schema as { properties: object }).properties },
   $defs: document.definitions
 }
 writeFileSync(new URL("../kumulo.schema.json", import.meta.url), `${JSON.stringify(schema, null, 2)}\n`)

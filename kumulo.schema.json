@@ -3,6 +3,9 @@
   "title": "kumulo cluster config",
   "type": "object",
   "properties": {
+    "$schema": {
+      "type": "string"
+    },
     "name": {
       "type": "string",
       "allOf": [
