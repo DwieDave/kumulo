@@ -1,6 +1,6 @@
 import { ConfigProvider, Effect, Redacted } from "effect"
 import { assert, it } from "@effect/vitest"
-import { requiredEnv, requiredRedactedEnv } from "../../src/mks/env.ts"
+import { requiredEnv, requiredRedactedEnv } from "../src/env.ts"
 
 const _withEnv = (env: Record<string, string>) =>
   Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromEnv({ env }))
