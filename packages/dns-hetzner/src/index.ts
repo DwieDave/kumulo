@@ -7,3 +7,6 @@ export { makeHetznerDnsClient } from "./client/hetzner-dns.ts"
 export type { HetznerDns, HetznerDnsError, HetznerRRset, HetznerRRsetInput, HetznerRRsetRecord, HetznerZone } from "./client/hetzner-dns.ts"
 
 export { ensureRecords, hetznerDnsProviderLive, makeHetznerDnsProvider, removeClusterRecords } from "./provider/dns-provider.ts"
+
+export { recordKind } from "./provider/ownership.ts"
+export type { DnsRecordKind } from "./provider/ownership.ts"

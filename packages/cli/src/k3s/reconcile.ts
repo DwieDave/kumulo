@@ -5,7 +5,6 @@ import {
   CloudProvider,
   ConfigInvalid,
   DnsProvider,
-  dnsNoopLive,
   K8sClient,
   makeK8sClient,
   parseKubeconfig,
@@ -19,7 +18,6 @@ import type {
   Capability,
   CloudError,
   ClusterConfig,
-  DesiredRecord,
   DnsError,
   HttpTransportError,
   K8sManifest,
@@ -54,15 +52,14 @@ import {
   CloudCredentialEnv,
   k3sCloudCredentialLayer,
   k3sCloudProviderLayer,
-  k3sDnsProviderLayer,
   k3sHetznerCloudProviderLayer,
-  k3sHetznerDnsProviderLayer,
   k3sHetznerVolumeProviderLayer,
   k3sVolumeProviderLayer,
   secGroupRules
 } from "./env.ts"
 import { k8sHttpClientLayer } from "./k8s-http-client.ts"
 import { buildK3sServerSpecs } from "./plan.ts"
+import { dnsProviderLayerFor, reconcileDns, removeDns } from "../dns.ts"
 
 export interface K3sApplyResult {
   readonly apiEndpoint: string
@@ -181,21 +178,6 @@ const _installAddons = (config: ClusterConfig): Effect.Effect<void, AddonError, 
     yield* installAddons({ k8sClient, addons, ctx })
   })
 
-/**
- * DNS phase: always runs against the resolved `DnsProvider` —
- * `_dnsProviderLayerFor` is what makes `dns.module: none` a no-op and an
- * unhandled module a loud `ConfigInvalid` (R6), not this call site.
- */
-const _reconcileDns = (config: ClusterConfig, apiTarget: string): Effect.Effect<void, DnsError, DnsProvider> =>
-  Effect.gen(function*() {
-    const dns = yield* DnsProvider
-    const records: ReadonlyArray<DesiredRecord> = config.dns.records.map((r) => ({
-      name: r.name,
-      target: r.target === "api_server" ? apiTarget : r.target
-    }))
-    yield* dns.ensureRecords(config.dns.zone, records)
-  })
-
 /** Volumes phase: skipped for `volumes.module: none` — "cinder" and "hcloud" both converge through the resolved `VolumeProvider` (R2). */
 const _reconcileVolumes = (config: ClusterConfig): Effect.Effect<void, VolumeError, VolumeProvider> =>
   config.volumes.module === "none"
@@ -258,27 +240,6 @@ const _writeKubeconfig = (
     return path
   })
 
-/**
- * `dns.module` → `DnsProvider` Layer — one dispatch function, reused at
- * every construction site below (R6). `"none"` is a no-op, `"ovh"`/`"hetzner"`
- * hit their real providers, and any other value (today only `"designate"`)
- * fails loudly with `ConfigInvalid` instead of silently degrading to a no-op.
- */
-const _dnsProviderLayerFor = (
-  config: ClusterConfig
-): Layer.Layer<DnsProvider, AuthenticationFailed | ConfigInvalid, HttpClient.HttpClient> => {
-  const dnsModule = config.dns.module
-  if (dnsModule === "ovh") return k3sDnsProviderLayer()
-  if (dnsModule === "hetzner") return k3sHetznerDnsProviderLayer()
-  if (dnsModule === "none") return dnsNoopLive
-  return Layer.effect(
-    DnsProvider,
-    Effect.fail(
-      new ConfigInvalid({ issues: [{ path: ["dns", "module"], message: `dns.module "${dnsModule}" has no DnsProvider implementation` }] })
-    )
-  )
-}
-
 /** `config.provider` → `CloudProvider` Layer (R2/R7) — every apply/delete/kubeconfig/status entry point below dispatches through this. */
 const _cloudProviderLayerFor = (
   config: ClusterConfig
@@ -321,7 +282,7 @@ export const applyK3sEffect = (
       yield* _installAddons(config)
       yield* _drainOrphanedWorkers(config)
     }).pipe(Effect.provide(k8sClientLayer({ config, master1 })))
-    yield* _reconcileDns(config, infra.lbVip)
+    yield* reconcileDns({ config, apiTarget: { kind: "ip", value: infra.lbVip } })
     yield* _reconcileVolumes(config)
     const kubeconfigPath = yield* _writeKubeconfig(config, master1, infra.lbVip, configDir)
     return { apiEndpoint: infra.lbVip, kubeconfigPath }
@@ -334,7 +295,7 @@ export const applyK3s = (
   applyK3sEffect(args).pipe(
     Effect.provide(SshLive),
     Effect.provide(_volumeProviderLayerFor(args.config)),
-    Effect.provide(_dnsProviderLayerFor(args.config)),
+    Effect.provide(dnsProviderLayerFor(args.config)),
     Effect.provide(_cloudProviderLayerFor(args.config)),
     Effect.provide(k3sCloudCredentialLayer(args.config))
   )
@@ -346,7 +307,6 @@ export const deleteK3sEffect = (
   Effect.gen(function*() {
     const volumeProvider = yield* VolumeProvider
     const cloudProvider = yield* CloudProvider
-    const dns = yield* DnsProvider
     if (config.volumes.module !== "none") {
       const existing = yield* volumeProvider.listClusterVolumes(config.name)
       for (const vol of existing) {
@@ -354,7 +314,7 @@ export const deleteK3sEffect = (
         if (!retained) yield* volumeProvider.deleteVolume({ id: vol.id })
       }
     }
-    yield* dns.removeClusterRecords(config.dns.zone, config.name)
+    yield* removeDns(config)
     yield* cloudProvider.deleteByTag(config.name)
   })
 
@@ -362,7 +322,7 @@ export const deleteK3sEffect = (
 export const deleteK3s = (config: ClusterConfig): Effect.Effect<void, K3sError, OpenStackEnv | CinderAuth | HttpClient.HttpClient> =>
   deleteK3sEffect(config).pipe(
     Effect.provide(_volumeProviderLayerFor(config)),
-    Effect.provide(_dnsProviderLayerFor(config)),
+    Effect.provide(dnsProviderLayerFor(config)),
     Effect.provide(_cloudProviderLayerFor(config))
   )
 
