@@ -5,7 +5,7 @@
  * Layer/Context tag) and imports nothing from `@kumulo/provider-ovh` —
  * dependency-cruiser's `no-sibling-package-imports` rule forbids non-core
  * packages depending on each other by design (hexagonal boundary). Composing
- * `OvhAuthLive` + `ovhHttpClientLayer` (both in provider-ovh) with this
+ * `OvhAuthLive` + `ovhHttpClientLive` (both in provider-ovh) with this
  * client is the composition root's job (CLI wiring), not this
  * package's.
  */

@@ -1,6 +1,6 @@
 export const packageName = "@kumulo/hetzner"
 
-export { HCLOUD_API_BASE_URL, hcloudHttpClientLayer } from "./auth/client.ts"
+export { HCLOUD_API_BASE_URL, hcloudHttpClientLive } from "./auth/client.ts"
 
 export { hetznerLocationZones, hetznerLocations, isHetznerLocation, networkZoneForLocation } from "./profile/locations.ts"
 export { hetznerProfileLive, makeHetznerProfile } from "./profile/hetzner.ts"

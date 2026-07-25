@@ -12,7 +12,7 @@ export const OVH_API_BASE_URL = "https://eu.api.ovh.com/1.0"
  * OVH API base URL — feed the resulting client straight into a generated
  * client's `make(httpClient)` (distro-ovh-mks's `Mks`, dns-ovh's `Dns`).
  */
-export const ovhHttpClientLayer = (
+export const ovhHttpClientLive = (
   baseUrl: string = OVH_API_BASE_URL
 ): Layer.Layer<HttpClient.HttpClient, never, HttpClient.HttpClient | OvhAuth> =>
   Layer.effect(

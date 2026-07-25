@@ -64,7 +64,7 @@ const _addAuth = (token: Redacted.Redacted<string>) =>
  * one from scratch with `HttpClient.make`, which would re-validate
  * `request.url` at the wrong point in the pipeline.
  */
-export const hcloudHttpClientLayer = (
+export const hcloudHttpClientLive = (
   token: Redacted.Redacted<string>
 ): Layer.Layer<HttpClient.HttpClient, never, HttpClient.HttpClient> =>
   Layer.effect(

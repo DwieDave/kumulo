@@ -3,7 +3,7 @@ import { assert, it } from "@effect/vitest"
 import * as HttpClient from "effect/unstable/http/HttpClient"
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
-import { hcloudHttpClientLayer } from "../../src/auth/client.ts"
+import { hcloudHttpClientLive } from "../../src/auth/client.ts"
 
 const token = Redacted.make("hcloud-token")
 const request = HttpClientRequest.get("https://api.hetzner.cloud/v1/servers")
@@ -31,7 +31,7 @@ it.effect("injects a Bearer authorization header and passes a 200 through untouc
     assert.strictEqual(response.status, 200)
     assert.strictEqual(fake.seenAuth(), "Bearer hcloud-token")
     assert.strictEqual(fake.callCount(), 1)
-  }).pipe(Effect.provide(hcloudHttpClientLayer(token).pipe(Layer.provide(fake.layer))))
+  }).pipe(Effect.provide(hcloudHttpClientLive(token).pipe(Layer.provide(fake.layer))))
 })
 
 // kumulo: it.live, not it.effect — exercises the real `Effect.sleep` between
@@ -45,7 +45,7 @@ it.live("retries a 429 honoring Retry-After, then succeeds", () => {
     const response = yield* client.execute(request)
     assert.strictEqual(response.status, 200)
     assert.strictEqual(fake.callCount(), 2)
-  }).pipe(Effect.provide(hcloudHttpClientLayer(token).pipe(Layer.provide(fake.layer))))
+  }).pipe(Effect.provide(hcloudHttpClientLive(token).pipe(Layer.provide(fake.layer))))
 })
 
 it.live("gives up after the bounded retry cap, still surfacing the last response", () => {
@@ -56,5 +56,5 @@ it.live("gives up after the bounded retry cap, still surfacing the last response
     assert.strictEqual(response.status, 429)
     // 1 initial attempt + 5 bounded retries.
     assert.strictEqual(fake.callCount(), 6)
-  }).pipe(Effect.provide(hcloudHttpClientLayer(token).pipe(Layer.provide(fake.layer))))
+  }).pipe(Effect.provide(hcloudHttpClientLive(token).pipe(Layer.provide(fake.layer))))
 })
