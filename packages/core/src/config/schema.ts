@@ -82,6 +82,15 @@ const isAddonsConsistentWithProvider = Schema.makeFilter(
   }
 )
 
+// kumulo: only the k3s path wires the OpenStack-family DNS modules; hetzner
+// and none work on every distro
+const isDnsModuleConsistentWithDistro = Schema.makeFilter(
+  (config: { distro: string; dns: { module: string } }) =>
+    (config.dns.module === "ovh" || config.dns.module === "designate") && config.distro !== "k3s"
+      ? `dns.module ${config.dns.module} is only supported on distro k3s, not ${config.distro}`
+      : undefined
+)
+
 const Auth = Schema.Struct({
   method: AuthMethod,
   region: Schema.NonEmptyString
@@ -248,7 +257,8 @@ export const ClusterConfig = Schema.Struct({
   isSecretsRequiredForObjectStorage,
   isAuthMethodConsistentWithProvider,
   isVolumesModuleConsistentWithProvider,
-  isAddonsConsistentWithProvider
+  isAddonsConsistentWithProvider,
+  isDnsModuleConsistentWithDistro
 )
 
 export type ClusterConfig = typeof ClusterConfig.Type
