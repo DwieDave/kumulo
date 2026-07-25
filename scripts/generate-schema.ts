@@ -8,8 +8,7 @@
  */
 import { writeFileSync } from "node:fs"
 import { JsonSchema, Schema } from "effect"
-// Relative import: root node_modules may hold a stale published @kumulo/core.
-import { ClusterConfig } from "../packages/core/src/index.ts"
+import { ClusterConfig } from "@kumulo/core"
 
 const document = Schema.toJsonSchemaDocument(ClusterConfig)
 const schema = {
