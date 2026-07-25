@@ -1,0 +1,43 @@
+name: ci
+
+# Mirrors the root `ci` script, one step per check so a failure names itself.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+
+      - run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Build binary
+        run: bun run build:binary
+
+      - name: Test
+        run: bun run test
+
+      - name: Lint deps
+        run: bun run lint:deps
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Codegen check
+        run: bun run codegen:check

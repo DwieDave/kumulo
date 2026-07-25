@@ -1,0 +1,113 @@
+name: release
+
+# Tag-triggered publish of every public @kumulo/* package to npm via OIDC
+# trusted publishing (provenance attached automatically, no npm token).
+# The tag is the source of truth: publishing is refused if any public
+# package's version drifts from the tag name.
+#
+# Required configuration (human, one-time):
+#   - A Trusted Publisher on EACH @kumulo/* package on npmjs.com
+#     (GitHub Actions → this repo → workflow filename "release.yml").
+#   - Branch protection on main blocking force-push.
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-*"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: publish @kumulo/* to npm
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout tagged source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Verify tag → version match
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF##*/}"
+          TAG_VERSION="${TAG#v}"
+          echo "Tag ${TAG} → version ${TAG_VERSION}"
+          for pkg in packages/*/package.json; do
+            if [ "$(node -p "require('./$pkg').private === true")" = "true" ]; then
+              echo "skip (private, not published): $pkg"
+              continue
+            fi
+            PKG_VERSION=$(node -p "require('./$pkg').version")
+            if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+              echo "::error file=$pkg::version $PKG_VERSION does not match tag $TAG_VERSION"
+              exit 1
+            fi
+          done
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+
+      - name: Setup Node (trusted publishing needs Node >= 22.14)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Ensure npm >= 11.5.1 (OIDC trusted publishing)
+        run: npm install -g npm@latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Test
+        run: bun run test
+
+      - name: Lint
+        run: bun run lint
+
+      - name: "Rewrite workspace:* and catalog: deps to concrete versions"
+        run: node scripts/rewrite-workspace-deps.cjs
+
+      # Publish order: core has no @kumulo/* deps and everything depends on it;
+      # cli depends on every other package, so it goes last.
+      - name: Compute publish order
+        id: order
+        run: |
+          set -euo pipefail
+          ORDER=$(node -e '
+            const fs = require("node:fs");
+            const pub = fs.readdirSync("packages").filter((d) =>
+              fs.existsSync(`packages/${d}/package.json`)
+              && require(`${process.cwd()}/packages/${d}/package.json`).private !== true);
+            const mid = pub.filter((d) => d !== "core" && d !== "cli").sort();
+            console.log([...pub.filter((d) => d === "core"), ...mid, ...pub.filter((d) => d === "cli")].join(" "));
+          ')
+          echo "packages=$ORDER" >> "$GITHUB_OUTPUT"
+          echo "publish order: $ORDER"
+
+      - name: Verify published-artifact contents (dry-run pack)
+        run: |
+          set -euo pipefail
+          for pkg in ${{ steps.order.outputs.packages }}; do
+            echo "::group::npm pack --dry-run packages/$pkg"
+            (cd "packages/$pkg" && npm pack --dry-run)
+            echo "::endgroup::"
+          done
+
+      - name: Publish in dependency order (OIDC trusted publishing)
+        run: |
+          set -euo pipefail
+          for pkg in ${{ steps.order.outputs.packages }}; do
+            echo "::group::publish @kumulo/$pkg"
+            (cd "packages/$pkg" && npm publish --access public)
+            echo "::endgroup::"
+          done
