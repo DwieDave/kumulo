@@ -32,6 +32,7 @@ export const recordsAt = (
   Effect.gen(function*() {
     const name = subDomain ?? "*"
     const ids = yield* _wrap(zone, name, dns.getRecords(zone, subDomain === undefined ? undefined : { params: { subDomain } }))
-    const raws = yield* Effect.forEach(ids, (id) => _wrap(zone, name, dns.getRecord(zone, String(id), undefined)))
+    // ponytail: concurrency 4 — OVH client has no transport-level rate guard, keep it modest
+    const raws = yield* Effect.forEach(ids, (id) => _wrap(zone, name, dns.getRecord(zone, String(id), undefined)), { concurrency: 4 })
     return raws.map(_toZoneRecord)
   })

@@ -36,7 +36,8 @@ const _findByName = (
         mapMksError({
           self: mks.getCloudProjectServiceNameKubeKubeId(config.serviceName, id, undefined),
           ctx: { kind: "kube", ref: id }
-        })
+        }),
+      { concurrency: 4 }
     )
     return clusters.find((cluster) => cluster.name === config.name)
   })

@@ -250,10 +250,12 @@ const _listServersByTag = (options: CloudProviderOptions): R<ReadonlyArray<Serve
 
 export const listClusterResources = ({ options }: { readonly options: CloudProviderOptions }): R<Inventory> =>
   Effect.gen(function*() {
-    const serverRecords = yield* _listServersByTag(options)
-    const network = yield* _findByName({ itemSchema: NamedResource, service: "network", region: options.region, path: "v2.0/networks", listField: "networks", name: _name(options) })
-    const secGroup = yield* _findByName({ itemSchema: NamedResource, service: "network", region: options.region, path: "v2.0/security-groups", listField: "security_groups", name: _name(options) })
-    const lb = yield* _findByName({ itemSchema: LoadBalancerRecord, service: "load-balancer", region: options.region, path: "v2/lbaas/loadbalancers", listField: "loadbalancers", name: _name(options) })
+    const [serverRecords, network, secGroup, lb] = yield* Effect.all([
+      _listServersByTag(options),
+      _findByName({ itemSchema: NamedResource, service: "network", region: options.region, path: "v2.0/networks", listField: "networks", name: _name(options) }),
+      _findByName({ itemSchema: NamedResource, service: "network", region: options.region, path: "v2.0/security-groups", listField: "security_groups", name: _name(options) }),
+      _findByName({ itemSchema: LoadBalancerRecord, service: "load-balancer", region: options.region, path: "v2/lbaas/loadbalancers", listField: "loadbalancers", name: _name(options) })
+    ], { concurrency: 4 })
     return {
       servers: serverRecords.map((record) => ({ id: record.id ?? "", name: record.name ?? "", ip: _serverIp(record) })),
       networks: network === undefined ? [] : [{ id: network.id ?? "", cidr: "" }],

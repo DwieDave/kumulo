@@ -239,10 +239,12 @@ const _labeled = <A>(
 
 export const listClusterResources = ({ options }: { readonly options: CloudProviderOptions }): R<Inventory> =>
   Effect.gen(function*() {
-    const servers = yield* _labeled({ itemSchema: HcloudServerRecord, listField: "servers", path: "servers", options })
-    const networks = yield* _labeled({ itemSchema: HcloudNamedResource, listField: "networks", path: "networks", options })
-    const firewalls = yield* _labeled({ itemSchema: HcloudNamedResource, listField: "firewalls", path: "firewalls", options })
-    const lbs = yield* _labeled({ itemSchema: HcloudLoadBalancerRecord, listField: "load_balancers", path: "load_balancers", options })
+    const [servers, networks, firewalls, lbs] = yield* Effect.all([
+      _labeled({ itemSchema: HcloudServerRecord, listField: "servers", path: "servers", options }),
+      _labeled({ itemSchema: HcloudNamedResource, listField: "networks", path: "networks", options }),
+      _labeled({ itemSchema: HcloudNamedResource, listField: "firewalls", path: "firewalls", options }),
+      _labeled({ itemSchema: HcloudLoadBalancerRecord, listField: "load_balancers", path: "load_balancers", options })
+    ], { concurrency: 4 })
     return {
       servers: servers.map((s) => ({ id: String(s.id), name: s.name, ip: serverIp(s) })),
       networks: networks.map((n) => ({ id: String(n.id), cidr: "" })),

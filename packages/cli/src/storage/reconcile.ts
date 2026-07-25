@@ -46,7 +46,7 @@ export const bucketPlanActions = (
       const diff = yield* _bucketDiff({ config, configDir })
       const provider = yield* ObjectStorageProvider
       const regions = [...new Set(diff.noop.map((ref) => ref.region))]
-      const live = yield* Effect.forEach(regions, provider.listBuckets)
+      const live = yield* Effect.forEach(regions, provider.listBuckets, { concurrency: 4 })
       const liveNames = new Set(live.flat().map((bucket) => bucket.name))
       return [
         ...diff.toCreate.map((b) => ({ _tag: "Create" as const, name: `bucket/${b.name}` })),
@@ -94,7 +94,7 @@ const _bucketInfosFor = (
 ): Effect.Effect<ReadonlyArray<BucketInfo>, ObjectStorageError> =>
   Effect.gen(function*() {
     const regions = [...new Set(desired.map((bucket) => bucket.region))]
-    const lists = yield* Effect.forEach(regions, provider.listBuckets)
+    const lists = yield* Effect.forEach(regions, provider.listBuckets, { concurrency: 4 })
     const names = new Set(desired.map((bucket) => bucket.name))
     return lists.flat().filter((bucket) => names.has(bucket.name))
   })
