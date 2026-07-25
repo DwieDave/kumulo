@@ -1,4 +1,5 @@
 import { Option, SchemaIssue } from "effect"
+import { HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { assert, it } from "@effect/vitest"
 import {
   AddonInstallFailed,
@@ -35,7 +36,27 @@ it("renders ResourceNotFound", () => {
 
 it("renders HttpTransportError", () => {
   const message = renderCliError(new HttpTransportError({ cause: "ECONNRESET" }))
-  assert.match(message, /Network error.*ECONNRESET/)
+  assert.deepStrictEqual(message.split("\n"), ["Provider API request failed:", "  ECONNRESET"])
+})
+
+it("renders an HttpTransportError wrapping a StatusCodeError as an indented block", () => {
+  const url = "https://eu.api.ovh.com/1.0/cloud/project/p/kube/k"
+  const request = HttpClientRequest.make("DELETE")(url)
+  const response = HttpClientResponse.fromWeb(request, new Response(null, { status: 400 }))
+  const description = JSON.stringify({
+    class: "Client::BadRequest",
+    message: "[IntegrityError] 400: Cannot delete Service: pool is INSTALLING (request ID: d2cf0d60)"
+  })
+  const cause = new HttpClientError.HttpClientError({
+    reason: new HttpClientError.StatusCodeError({ request, response, description })
+  })
+  const message = renderCliError(new HttpTransportError({ cause }))
+  assert.deepStrictEqual(message.split("\n"), [
+    "Provider API request failed:",
+    `  DELETE ${url} → 400`,
+    "  Cannot delete Service: pool is INSTALLING",
+    "  request ID: d2cf0d60"
+  ])
 })
 
 it("renders ResponseDecodeError", () => {
@@ -81,7 +102,7 @@ it("renders BootstrapFailed", () => {
 
 it("renders AddonInstallFailed", () => {
   const message = renderCliError(new AddonInstallFailed({ addon: "cilium", cause: "timeout" }))
-  assert.match(message, /Failed to install addon cilium: timeout/)
+  assert.deepStrictEqual(message.split("\n"), ["Failed to install addon cilium:", "  timeout"])
 })
 
 it("renders BucketNotEmpty", () => {
