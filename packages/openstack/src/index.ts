@@ -1,4 +1,4 @@
-/** Placeholder export proving the package resolves; real implementation lands in later tasks. */
+/** @kumulo/openstack — package barrel. */
 export const packageName = "@kumulo/openstack"
 
 // kumulo: WHY re-exported here — dep-lint only allows importing another

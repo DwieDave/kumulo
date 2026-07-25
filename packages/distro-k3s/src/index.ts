@@ -1,4 +1,4 @@
-/** Placeholder export proving the package resolves; real implementation lands in later tasks. */
+/** @kumulo/distro-k3s — package barrel. */
 export const packageName = "@kumulo/distro-k3s"
 
 export { cloudInitReady, controlPlaneReady, Ssh, SshCommandError, sshReady, SshLive } from "./ssh/index.ts"

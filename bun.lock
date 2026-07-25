@@ -19,24 +19,26 @@
     },
     "packages/addons": {
       "name": "@kumulo/addons",
-      "version": "0.0.0",
+      "version": "0.1.0",
       "dependencies": {
         "@kumulo/core": "workspace:*",
-        "effect": "catalog:",
       },
       "devDependencies": {
         "@effect/vitest": "catalog:",
+        "effect": "catalog:",
         "vitest": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "4.0.0-beta.101",
       },
     },
     "packages/cli": {
       "name": "@kumulo/cli",
-      "version": "0.0.0",
+      "version": "0.1.0",
       "bin": {
-        "kumulo": "./src/main.ts",
+        "kumulo": "./dist/main.mjs",
       },
       "dependencies": {
-        "@effect/platform-bun": "catalog:",
         "@kumulo/addons": "workspace:*",
         "@kumulo/core": "workspace:*",
         "@kumulo/distro-k3s": "workspace:*",
@@ -49,105 +51,131 @@
         "@kumulo/secrets-sops": "workspace:*",
         "@kumulo/storage-ovh": "workspace:*",
         "@kumulo/volumes-cinder": "workspace:*",
-        "effect": "catalog:",
       },
       "devDependencies": {
+        "@effect/platform-bun": "catalog:",
         "@effect/vitest": "catalog:",
+        "effect": "catalog:",
         "vitest": "catalog:",
+      },
+      "peerDependencies": {
+        "@effect/platform-bun": "4.0.0-beta.101",
+        "effect": "4.0.0-beta.101",
       },
     },
     "packages/core": {
       "name": "@kumulo/core",
-      "version": "0.0.0",
+      "version": "0.1.0",
       "dependencies": {
-        "effect": "catalog:",
         "yaml": "catalog:",
       },
       "devDependencies": {
         "@effect/vitest": "catalog:",
+        "effect": "catalog:",
         "fast-check": "catalog:",
         "vitest": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "4.0.0-beta.101",
       },
     },
     "packages/distro-k3s": {
       "name": "@kumulo/distro-k3s",
-      "version": "0.0.0",
+      "version": "0.1.0",
       "dependencies": {
         "@kumulo/core": "workspace:*",
-        "effect": "catalog:",
         "ssh2": "catalog:",
       },
       "devDependencies": {
         "@effect/vitest": "catalog:",
         "@types/ssh2": "catalog:",
+        "effect": "catalog:",
         "vitest": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "4.0.0-beta.101",
       },
     },
     "packages/distro-ovh-mks": {
       "name": "@kumulo/distro-ovh-mks",
-      "version": "0.0.0",
+      "version": "0.1.0",
       "dependencies": {
         "@kumulo/core": "workspace:*",
-        "effect": "catalog:",
       },
       "devDependencies": {
         "@effect/vitest": "catalog:",
         "codegen": "workspace:*",
+        "effect": "catalog:",
         "ovh2openapi": "workspace:*",
         "vitest": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "4.0.0-beta.101",
       },
     },
     "packages/dns-hetzner": {
       "name": "@kumulo/dns-hetzner",
-      "version": "0.0.0",
+      "version": "0.1.0",
       "dependencies": {
         "@kumulo/core": "workspace:*",
-        "effect": "catalog:",
       },
       "devDependencies": {
         "@effect/vitest": "catalog:",
+        "effect": "catalog:",
         "vitest": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "4.0.0-beta.101",
       },
     },
     "packages/dns-ovh": {
       "name": "@kumulo/dns-ovh",
-      "version": "0.0.0",
+      "version": "0.1.0",
       "dependencies": {
         "@kumulo/core": "workspace:*",
-        "effect": "catalog:",
       },
       "devDependencies": {
         "@effect/vitest": "catalog:",
         "codegen": "workspace:*",
+        "effect": "catalog:",
         "ovh2openapi": "workspace:*",
         "vitest": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "4.0.0-beta.101",
       },
     },
     "packages/hetzner": {
       "name": "@kumulo/hetzner",
-      "version": "0.0.0",
+      "version": "0.1.0",
       "dependencies": {
         "@kumulo/core": "workspace:*",
-        "effect": "catalog:",
       },
       "devDependencies": {
         "@effect/vitest": "catalog:",
         "codegen": "workspace:*",
+        "effect": "catalog:",
         "vitest": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "4.0.0-beta.101",
       },
     },
     "packages/openstack": {
       "name": "@kumulo/openstack",
-      "version": "0.0.0",
+      "version": "0.1.0",
       "dependencies": {
         "@kumulo/core": "workspace:*",
-        "effect": "catalog:",
         "yaml": "catalog:",
       },
       "devDependencies": {
         "@effect/vitest": "catalog:",
         "codegen": "workspace:*",
+        "effect": "catalog:",
         "vitest": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "4.0.0-beta.101",
       },
     },
     "packages/oxlint": {
@@ -160,59 +188,71 @@
     },
     "packages/provider-ovh": {
       "name": "@kumulo/provider-ovh",
-      "version": "0.0.0",
+      "version": "0.1.0",
       "dependencies": {
         "@kumulo/core": "workspace:*",
-        "effect": "catalog:",
       },
       "devDependencies": {
         "@effect/vitest": "catalog:",
+        "effect": "catalog:",
         "vitest": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "4.0.0-beta.101",
       },
     },
     "packages/secrets-sops": {
       "name": "@kumulo/secrets-sops",
-      "version": "0.0.0",
+      "version": "0.1.0",
       "dependencies": {
         "@kumulo/core": "workspace:*",
-        "effect": "catalog:",
         "yaml": "catalog:",
       },
       "devDependencies": {
         "@effect/platform-bun": "catalog:",
         "@effect/vitest": "catalog:",
+        "effect": "catalog:",
         "fast-check": "catalog:",
         "vitest": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "4.0.0-beta.101",
       },
     },
     "packages/storage-ovh": {
       "name": "@kumulo/storage-ovh",
-      "version": "0.0.0",
+      "version": "0.1.0",
       "dependencies": {
         "@kumulo/core": "workspace:*",
-        "effect": "catalog:",
         "yaml": "catalog:",
       },
       "devDependencies": {
         "@effect/vitest": "catalog:",
         "codegen": "workspace:*",
+        "effect": "catalog:",
         "fast-check": "catalog:",
         "ovh2openapi": "workspace:*",
         "vitest": "catalog:",
       },
+      "peerDependencies": {
+        "effect": "4.0.0-beta.101",
+      },
     },
     "packages/volumes-cinder": {
       "name": "@kumulo/volumes-cinder",
-      "version": "0.0.0",
+      "version": "0.1.0",
       "dependencies": {
         "@kumulo/core": "workspace:*",
-        "effect": "catalog:",
         "yaml": "catalog:",
       },
       "devDependencies": {
         "@effect/vitest": "catalog:",
+        "effect": "catalog:",
         "fast-check": "catalog:",
         "vitest": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "4.0.0-beta.101",
       },
     },
     "tools/codegen": {

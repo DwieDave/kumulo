@@ -1,4 +1,4 @@
-/** Placeholder export proving the package resolves; real implementation lands in later tasks. */
+/** @kumulo/dns-ovh — package barrel. */
 export const packageName = "@kumulo/dns-ovh"
 
 export { makeDnsClient } from "./client/dns.ts"

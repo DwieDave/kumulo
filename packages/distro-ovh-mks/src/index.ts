@@ -1,4 +1,4 @@
-/** Placeholder export proving the package resolves; real implementation lands in later tasks. */
+/** @kumulo/distro-ovh-mks — package barrel. */
 export const packageName = "@kumulo/distro-ovh-mks"
 
 export { makeMksClient } from "./client/mks.ts"

@@ -1,7 +1,7 @@
 import { assert, it } from "@effect/vitest"
-import { coreDependency, packageName } from "../src/index.ts"
+import { kumuloCli, packageName } from "../src/index.ts"
 
-it("resolves the package export and links to @kumulo/core", () => {
+it("resolves the package export and the command tree", () => {
   assert.strictEqual(packageName, "@kumulo/cli")
-  assert.strictEqual(coreDependency, "@kumulo/core")
+  assert.isDefined(kumuloCli)
 })
