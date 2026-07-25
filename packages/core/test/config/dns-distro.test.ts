@@ -5,45 +5,62 @@ import { decodeConfig } from "../../src/config/decode.ts"
 import { validConfig } from "./fixtures.ts"
 
 const distros = ["k3s", "ovh-mks"] as const
-const dnsModules = ["none", "hetzner", "ovh", "designate"] as const
+const dnsModules = ["ovh", "hetzner"] as const
+
+const realDns = { zone: "example.com", ttl: 300, records: [{ name: "api.prod-eu", target: "api_server" }] }
 
 // kumulo: version format is distro-dependent, so vary it with the distro to
 // keep the version filter out of the way of the dns/distro property.
-const _candidateFor = (distro: (typeof distros)[number], module: (typeof dnsModules)[number]) => ({
+const _forDistro = (distro: (typeof distros)[number]) => ({
   ...validConfig,
   distro,
-  version: distro === "k3s" ? "v1.31.4+k3s1" : "v1.31.4",
-  dns: { ...validConfig.dns, module }
+  version: distro === "k3s" ? "v1.31.4+k3s1" : "v1.31.4"
 })
 
-const _isAllowed = (distro: (typeof distros)[number], module: (typeof dnsModules)[number]) =>
-  module === "none" || module === "hetzner" || distro === "k3s"
-
-describe("ClusterConfig — dns.module × distro", () => {
+describe("ClusterConfig — dns × distro", () => {
   it.prop(
-    "accepts exactly the wired dns.module/distro combinations",
+    "accepts every real dns.module on every distro (dns is orthogonal to distro)",
     [fc.constantFrom(...distros), fc.constantFrom(...dnsModules)],
     ([distro, module]) =>
       Effect.runSync(
         Effect.gen(function* () {
-          const result = yield* Effect.result(decodeConfig(_candidateFor(distro, module)))
-          return (result._tag === "Success") === _isAllowed(distro, module)
+          const candidate = { ..._forDistro(distro), dns: { ...realDns, module } }
+          const result = yield* Effect.result(decodeConfig(candidate))
+          return result._tag === "Success"
         })
       )
   )
 
+  it.prop("accepts dns.module: none with no zone/ttl/records on every distro", [fc.constantFrom(...distros)], ([
+    distro
+  ]) =>
+    Effect.runSync(
+      Effect.gen(function* () {
+        const candidate = { ..._forDistro(distro), dns: { module: "none" as const } }
+        const result = yield* Effect.result(decodeConfig(candidate))
+        return result._tag === "Success"
+      })
+    ))
+
   it.prop(
-    "rejects ovh/designate on ovh-mks with an issue pathed at dns.module",
-    [fc.constantFrom("ovh" as const, "designate" as const)],
-    ([module]) =>
+    "rejects the unimplemented designate module on every distro",
+    [fc.constantFrom(...distros)],
+    ([distro]) =>
       Effect.runSync(
         Effect.gen(function* () {
-          const failure = yield* Effect.flip(decodeConfig(_candidateFor("ovh-mks", module)))
-          return (
-            failure._tag === "ConfigInvalid" &&
-            failure.issues.some((issue) => issue.path.join(".") === "dns.module")
-          )
+          const candidate = { ..._forDistro(distro), dns: { ...realDns, module: "designate" } }
+          const failure = yield* Effect.flip(decodeConfig(candidate))
+          return failure._tag === "ConfigInvalid"
         })
       )
   )
+
+  it.prop("rejects a real dns.module without a zone", [fc.constantFrom(...dnsModules)], ([module]) =>
+    Effect.runSync(
+      Effect.gen(function* () {
+        const { zone: _dropped, ...dns } = realDns
+        const failure = yield* Effect.flip(decodeConfig({ ...validConfig, dns: { ...dns, module } }))
+        return failure._tag === "ConfigInvalid"
+      })
+    ))
 })

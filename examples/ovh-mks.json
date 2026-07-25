@@ -24,10 +24,7 @@
     }
   ],
   "dns": {
-    "module": "none",
-    "zone": "example.com",
-    "ttl": 300,
-    "records": []
+    "module": "none"
   },
   "volumes": {
     "module": "cinder",

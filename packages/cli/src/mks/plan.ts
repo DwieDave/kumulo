@@ -7,10 +7,9 @@ import { type DnsPlanInput, dnsPlanActions } from "../dns-plan.ts"
 export interface MksPlanInput {
   readonly name: string
   readonly worker_pools: ReadonlyArray<{ readonly name: string }>
-  readonly volumes: {
-    readonly module: string
-    readonly managed: ReadonlyArray<{ readonly name: string }>
-  }
+  readonly volumes:
+    | { readonly module: "none" }
+    | { readonly module: "cinder" | "hcloud"; readonly managed: ReadonlyArray<{ readonly name: string }> }
   // Optional so existing plan fixtures stay minimal; a real `ClusterConfig`
   // always carries it.
   readonly dns?: DnsPlanInput

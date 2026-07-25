@@ -21,8 +21,8 @@ const withOvhBucket = {
 
 const withNoObjectStorage = {
   ...validConfig,
-  object_storage: { module: "none" as const, buckets: [] },
-  secrets: { sink: "none" as const, dir: "." }
+  object_storage: { module: "none" as const },
+  secrets: { sink: "none" as const }
 }
 
 const _pathsOf = (issues: ReadonlyArray<{ path: ReadonlyArray<PropertyKey> }>) =>
@@ -33,16 +33,20 @@ describe("ClusterConfig — object_storage + secrets", () => {
     Effect.gen(function* () {
       const decoded = yield* decodeConfig(withOvhBucket)
       expect(decoded.object_storage.module).toBe("ovh")
-      expect(decoded.object_storage.buckets[0]?.name).toBe("staging-eu-backups")
+      expect(decoded.object_storage.module === "ovh" && decoded.object_storage.buckets[0]?.name).toBe(
+        "staging-eu-backups"
+      )
       expect(decoded.secrets.sink).toBe("sops")
-      expect(decoded.secrets.sops?.age_recipient).toBe(withOvhBucket.secrets.sops.age_recipient)
+      expect(decoded.secrets.sink === "sops" && decoded.secrets.sops.age_recipient).toBe(
+        withOvhBucket.secrets.sops.age_recipient
+      )
     }))
 
-  it.effect("decodes module: none with empty buckets and secrets.sink: none", () =>
+  it.effect("decodes the none variants: no buckets key, no secrets dir/sops", () =>
     Effect.gen(function* () {
       const decoded = yield* decodeConfig(withNoObjectStorage)
-      expect(decoded.object_storage.buckets).toEqual([])
-      expect(decoded.secrets.sink).toBe("none")
+      expect(decoded.object_storage).toEqual({ module: "none" })
+      expect(decoded.secrets).toEqual({ sink: "none" })
     }))
 
   it.effect("rejects a config missing the object_storage section", () =>
@@ -91,21 +95,23 @@ describe("ClusterConfig — object_storage + secrets", () => {
       )
   )
 
-  it.effect("rejects module: none with a non-empty buckets array", () =>
+  // The none variant has no buckets field at all, so a stray array is dropped
+  // rather than rejected — nothing downstream can read it.
+  it.effect("drops a buckets array supplied under module: none", () =>
     Effect.gen(function* () {
       const candidate = {
         ...withOvhBucket,
         object_storage: { ...withOvhBucket.object_storage, module: "none" as const }
       }
-      const failure = yield* Effect.flip(decodeConfig(candidate))
-      expect(failure._tag).toBe("ConfigInvalid")
+      const decoded = yield* decodeConfig(candidate)
+      expect(decoded.object_storage).toEqual({ module: "none" })
     }))
 
   it.effect("rejects module: ovh with secrets.sink: none", () =>
     Effect.gen(function* () {
       const candidate = {
         ...withOvhBucket,
-        secrets: { sink: "none" as const, dir: "." }
+        secrets: { sink: "none" as const }
       }
       const failure = yield* Effect.flip(decodeConfig(candidate))
       expect(failure._tag).toBe("ConfigInvalid")

@@ -20,7 +20,8 @@ const _resolveTarget = (record: DesiredRecord, apiTarget: DnsTarget): DesiredRec
 /** The desired records for a config, with `api_server` substituted (exported for plan rendering/testing). */
 export const desiredRecords = (
   { apiTarget, config }: { readonly config: ClusterConfig; readonly apiTarget: DnsTarget }
-): ReadonlyArray<DesiredRecord> => config.dns.records.map((r) => _resolveTarget(r, apiTarget))
+): ReadonlyArray<DesiredRecord> =>
+  config.dns.module === "none" ? [] : config.dns.records.map((r) => _resolveTarget(r, apiTarget))
 
 /**
  * DNS phase: always runs against the resolved `DnsProvider` —
@@ -31,15 +32,19 @@ export const reconcileDns = (
   { apiTarget, config }: { readonly config: ClusterConfig; readonly apiTarget: DnsTarget }
 ): Effect.Effect<void, DnsError, DnsProvider> =>
   Effect.gen(function*() {
+    const cfgDns = config.dns
+    if (cfgDns.module === "none") return
     const dns = yield* DnsProvider
-    yield* dns.ensureRecords(config.dns.zone, desiredRecords({ config, apiTarget }))
+    yield* dns.ensureRecords(cfgDns.zone, desiredRecords({ config, apiTarget }))
   })
 
 /** Delete phase: drop every record this cluster owns in its zone. */
 export const removeDns = (config: ClusterConfig): Effect.Effect<void, DnsError, DnsProvider> =>
   Effect.gen(function*() {
+    const cfgDns = config.dns
+    if (cfgDns.module === "none") return
     const dns = yield* DnsProvider
-    yield* dns.removeClusterRecords(config.dns.zone, config.name)
+    yield* dns.removeClusterRecords(cfgDns.zone, config.name)
   })
 
 /**

@@ -34,7 +34,7 @@ export const StorageEnvLive: Layer.Layer<StorageEnv, AuthenticationFailed, MksEn
 )
 
 const _sopsConfig = (config: ClusterConfig): Effect.Effect<{ readonly dir: string; readonly ageRecipient: string }, ConfigInvalid> =>
-  config.secrets.sops === undefined
+  config.secrets.sink !== "sops"
     ? Effect.fail(
       new ConfigInvalid({ issues: [{ path: ["secrets", "sops"], message: "sops config is required when object_storage.module is ovh" }] })
     )

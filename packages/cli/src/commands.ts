@@ -6,7 +6,13 @@ import type { ClusterConfig, CredentialsSink, ObjectStorageProvider, Plan } from
 import { ovhObjectStorageProviderLive } from "@kumulo/storage-ovh"
 import { loadConfig } from "./config.ts"
 import { envSummary } from "./env-summary.ts"
-import { convergeManagedVolumes, lookupManagedVolumeNames, reconcileVolumesOnDelete, volumes } from "./commands/volumes.ts"
+import {
+  convergeManagedVolumes,
+  lookupManagedVolumeNames,
+  managedVolumes,
+  reconcileVolumesOnDelete,
+  volumes
+} from "./commands/volumes.ts"
 import { status } from "./commands/status.ts"
 import { upgrade } from "./commands/upgrade.ts"
 import { distroFor, onDistro, wantsObjectStorage } from "./distro/registry.ts"
@@ -189,7 +195,7 @@ const _deletePlan = Effect.fn(function*(config: ClusterConfig, configDir: string
     lookupManagedVolumeNames(config),
     bucketDeletePlanActions({ config, configDir })
   ], { concurrency: 3 })
-  const volumeActions = config.volumes.managed
+  const volumeActions = managedVolumes(config)
     .filter((entry) => liveVolumes.has(entry.name))
     .map((entry) =>
       entry.retain

@@ -28,13 +28,15 @@ const _desiredFor = (config: ClusterConfig): ReadonlyArray<DesiredResource> =>
 // for `object_storage.module: none` (k3s), so these are no-ops there by
 // construction — no distro branch needed here.
 const _desiredBuckets = (config: ClusterConfig): ReadonlyArray<BucketSpec> =>
-  config.object_storage.buckets.map((bucket) => ({
-    name: bucket.name,
-    region: bucket.region ?? config.auth.region,
-    versioning: bucket.versioning,
-    encryption: bucket.encryption,
-    retain: bucket.retain
-  }))
+  config.object_storage.module === "none"
+    ? []
+    : config.object_storage.buckets.map((bucket) => ({
+        name: bucket.name,
+        region: bucket.region ?? config.auth.region,
+        versioning: bucket.versioning,
+        encryption: bucket.encryption,
+        retain: bucket.retain
+      }))
 
 const _toExisting = (bucket: BucketSpec): ExistingBucket => ({ ...bucket })
 

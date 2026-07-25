@@ -84,12 +84,11 @@ const _requireNonEmpty = <A>(
 
 // TLS SANs: every master IP + the LB VIP + the DNS api record when
 // configured (127.0.0.1 is always added by `renderServerInstallScript` itself).
-const _apiDnsRecordName = (config: K3sClusterConfig): string | undefined =>
-  config.dns.module === "none" ? undefined : config.dns.records.find((r) => r.target === "api_server")?.name
-
 const _apiDnsFqdn = (config: K3sClusterConfig): string | undefined => {
-  const name = _apiDnsRecordName(config)
-  return name === undefined ? undefined : `${name}.${config.dns.zone}`
+  const dns = config.dns
+  if (dns.module === "none") return undefined
+  const name = dns.records.find((r) => r.target === "api_server")?.name
+  return name === undefined ? undefined : `${name}.${dns.zone}`
 }
 
 const _tlsSans = (
@@ -178,17 +177,19 @@ const _installAddons = (config: K3sClusterConfig): Effect.Effect<void, AddonErro
   })
 
 /** Volumes phase: skipped for `volumes.module: none` — "cinder" and "hcloud" both converge through the resolved `VolumeProvider` (R2). */
-const _reconcileVolumes = (config: K3sClusterConfig): Effect.Effect<void, VolumeError, VolumeProvider> =>
-  config.volumes.module === "none"
+const _reconcileVolumes = (config: K3sClusterConfig): Effect.Effect<void, VolumeError, VolumeProvider> => {
+  const volumes = config.volumes
+  return volumes.module === "none"
     ? Effect.void
     : Effect.gen(function*() {
       const provider = yield* VolumeProvider
       yield* Effect.forEach(
-        config.volumes.managed,
+        volumes.managed,
         (v) => provider.ensureVolume({ name: v.name, sizeGb: v.size_gb, type: v.type, retain: v.retain }),
         { discard: true }
       )
     })
+}
 
 /** Any currently-running worker not in the desired spec set (exported for direct unit testing, no k8s client needed). */
 export const orphanedWorkers = (

@@ -12,7 +12,18 @@ export type BucketReconcileError = ObjectStorageError | CredentialsSinkError | O
 
 type StorageProvider = ObjectStorageProvider["Service"]
 
-const _toBucketSpec = (bucket: ClusterConfig["object_storage"]["buckets"][number]): BucketSpec => ({
+/** One configured bucket — only the `module: ovh` variant of the union carries them. */
+type ConfiguredBucket = Exclude<ClusterConfig["object_storage"], { readonly module: "none" }>["buckets"][number]
+
+/**
+ * `secrets.dir` behind the union discriminant. `undefined` means `sink: none`,
+ * which the schema only allows when `object_storage.module` isn't `ovh`
+ * (`isSecretsRequiredForObjectStorage`) — so there is nothing to write there.
+ */
+const _sopsDir = (config: ClusterConfig): string | undefined =>
+  config.secrets.sink === "sops" ? config.secrets.dir : undefined
+
+const _toBucketSpec = (bucket: ConfiguredBucket): BucketSpec => ({
   name: bucket.name,
   region: bucket.region,
   versioning: bucket.versioning,
@@ -21,7 +32,7 @@ const _toBucketSpec = (bucket: ClusterConfig["object_storage"]["buckets"][number
 })
 
 const _desiredBuckets = (config: ClusterConfig): ReadonlyArray<BucketSpec> =>
-  config.object_storage.buckets.map(_toBucketSpec)
+  config.object_storage.module === "none" ? [] : config.object_storage.buckets.map(_toBucketSpec)
 
 const _bucketDiff = (
   { config, configDir }: { readonly config: ClusterConfig; readonly configDir: string }
@@ -123,8 +134,10 @@ const _ensureCredentialsIfMissing = (
   { config, provider, desired }: { readonly config: ClusterConfig; readonly provider: StorageProvider; readonly desired: ReadonlyArray<BucketSpec> }
 ): Effect.Effect<void, BucketReconcileError, CredentialsSink | FileSystem> =>
   Effect.gen(function*() {
+    const dir = _sopsDir(config)
+    if (dir === undefined) return
     const fs = yield* FileSystem
-    const path = credentialsPath({ dir: config.secrets.dir, cluster: config.name })
+    const path = credentialsPath({ dir, cluster: config.name })
     if (yield* fs.exists(path)) return
     const creds = yield* provider.ensureCredentials(config.name)
     const buckets = yield* _bucketInfosFor({ provider, desired })
@@ -221,6 +234,9 @@ export const bucketStatus = (
     if (config.object_storage.module !== "ovh") return { buckets: [], credentialsExist: false }
     const fs = yield* FileSystem
     const file = yield* readOutputs({ dir: configDir, tag: config.name, format: config.outputs?.format })
-    const credentialsExist = yield* fs.exists(credentialsPath({ dir: config.secrets.dir, cluster: config.name }))
+    const dir = _sopsDir(config)
+    const credentialsExist = dir === undefined
+      ? false
+      : yield* fs.exists(credentialsPath({ dir, cluster: config.name }))
     return { buckets: file.buckets, credentialsExist }
   })

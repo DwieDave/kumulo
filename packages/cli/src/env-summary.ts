@@ -22,8 +22,7 @@ const _osVars = [...OS_ENV_KEYS, ...OS_SECRET_ENV_KEYS] as const
 const _dnsVars: Record<ClusterConfig["dns"]["module"], ReadonlyArray<string>> = {
   none: [],
   ovh: ["OVH_CLIENT_ID", "OVH_CLIENT_SECRET"],
-  hetzner: ["HETZNER_DNS_TOKEN"],
-  designate: _osVars
+  hetzner: ["HETZNER_DNS_TOKEN"]
 }
 
 const _volumesVars: Record<ClusterConfig["volumes"]["module"], ReadonlyArray<string>> = {

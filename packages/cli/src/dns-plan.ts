@@ -5,11 +5,13 @@ import type { DnsTarget } from "./dns.ts"
  * Structural slice of `ClusterConfig["dns"]` — same pattern as `MksPlanInput`,
  * so plan tests don't need a full config.
  */
-export interface DnsPlanInput {
-  readonly module: string
-  readonly zone: string
-  readonly records: ReadonlyArray<{ readonly name: string; readonly target: string }>
-}
+export type DnsPlanInput =
+  | { readonly module: "none" }
+  | {
+    readonly module: "ovh" | "hetzner"
+    readonly zone: string
+    readonly records: ReadonlyArray<{ readonly name: string; readonly target: string }>
+  }
 
 // Mirrors `recordKind` in the dns packages (dependency-cruiser forbids
 // importing it across sibling packages) — but at plan time the api_server

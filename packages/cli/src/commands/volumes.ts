@@ -44,8 +44,15 @@ export const volumesList = Command.make(
   })
 ).pipe(Command.withDescription("List recorded volumes for a cluster"))
 
+/** One `volumes.managed[]` entry — only the non-`none` variants of the union carry them. */
+type ManagedVolume = Exclude<ClusterConfig["volumes"], { readonly module: "none" }>["managed"][number]
+
+/** `volumes.managed` behind the union discriminant: empty for `module: none`. */
+export const managedVolumes = (config: ClusterConfig): ReadonlyArray<ManagedVolume> =>
+  config.volumes.module === "none" ? [] : config.volumes.managed
+
 const _retainedSpec = (config: ClusterConfig, name: string): VolumeSpec | undefined => {
-  const entry = config.volumes.managed.find((candidate) => candidate.name === name)
+  const entry = managedVolumes(config).find((candidate) => candidate.name === name)
   return entry === undefined ? undefined : { name: entry.name, sizeGb: entry.size_gb, type: entry.type, retain: entry.retain }
 }
 
@@ -68,7 +75,7 @@ export const volumesAdopt = Command.make(
         new ConfigInvalid({ issues: [{ path: ["volumes", "managed"], message: `no retained volume named "${name}"` }] })
       )
     }
-    const entry = config.volumes.managed.find((candidate) => candidate.name === name)
+    const entry = managedVolumes(config).find((candidate) => candidate.name === name)
     const dir = dirname(configPath)
     const file = yield* readOutputs({ dir, tag: config.name, format: config.outputs?.format })
     const pvc = entry?.pvc === undefined ? undefined : { namespace: entry.pvc.namespace, accessModes: entry.pvc.access_modes }
@@ -84,7 +91,7 @@ export const volumes = Command.make("volumes").pipe(
   Command.withDescription("Manage retained volumes across cluster rebuilds")
 )
 
-const _toManagedSpec = (entry: ClusterConfig["volumes"]["managed"][number]): VolumeSpec => ({
+const _toManagedSpec = (entry: ManagedVolume): VolumeSpec => ({
   name: entry.name,
   sizeGb: entry.size_gb,
   type: entry.type,

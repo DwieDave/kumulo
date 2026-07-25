@@ -70,8 +70,8 @@ const _encoded: K3sClusterConfigEncoded = {
     module: "cinder",
     managed: [{ name: "pg-data", size_gb: 10, type: "high-speed", retain: true }]
   },
-  object_storage: { module: "none", buckets: [] },
-  secrets: { sink: "none", dir: "." },
+  object_storage: { module: "none" },
+  secrets: { sink: "none" },
   addons: {
     cloud_controller_manager: false,
     cinder_csi: { enabled: false, default_volume_type: "high-speed" },

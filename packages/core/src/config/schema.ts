@@ -20,12 +20,6 @@ const NonNegativeInt = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanO
 const Provider = Schema.Literals(["ovh", "generic", "hetzner"])
 const PublicAccess = Schema.Literals(["bastionless", "nat"])
 const AuthMethod = Schema.Literals(["application_credential", "clouds_yaml", "env", "api_token"])
-const DnsModule = Schema.Literals(["ovh", "designate", "none", "hetzner"])
-// kumulo: only the k3s path wires the OpenStack-family DNS modules
-const ManagedDnsModule = Schema.Literals(["none", "hetzner"])
-const VolumesModule = Schema.Literals(["cinder", "hcloud", "none"])
-const ObjectStorageModule = Schema.Literals(["ovh", "none"])
-const SecretsSink = Schema.Literals(["sops", "none"])
 const Cni = Schema.Literals(["flannel", "cilium"])
 const AccessMode = Schema.Literals(["ReadWriteOnce", "ReadWriteMany", "ReadOnlyMany"])
 
@@ -130,13 +124,17 @@ const DnsRecord = Schema.Struct({
   target: Schema.NonEmptyString
 })
 
-const _makeDns = <M extends Schema.Top>(module: M) =>
+// kumulo: zone/ttl/records only mean something for a real dns module, so
+// `module: none` is its own variant instead of demanding dead fields.
+const Dns = Schema.Union([
+  Schema.Struct({ module: Schema.Literal("none") }),
   Schema.Struct({
-    module,
+    module: Schema.Literals(["ovh", "hetzner"]),
     zone: Schema.NonEmptyString,
     ttl: PositiveInt,
     records: Schema.Array(DnsRecord)
   })
+])
 
 const Pvc = Schema.Struct({
   namespace: Schema.NonEmptyString,
@@ -151,10 +149,18 @@ const ManagedVolume = Schema.Struct({
   pvc: Schema.optionalKey(Pvc)
 })
 
-const Volumes = Schema.Struct({
-  module: VolumesModule,
+const NoVolumes = Schema.Struct({ module: Schema.Literal("none") })
+const CinderVolumes = Schema.Struct({
+  module: Schema.Literal("cinder"),
   managed: Schema.Array(ManagedVolume)
 })
+const HcloudVolumes = Schema.Struct({
+  module: Schema.Literal("hcloud"),
+  managed: Schema.Array(ManagedVolume)
+})
+const Volumes = Schema.Union([NoVolumes, CinderVolumes, HcloudVolumes])
+// kumulo: the mks variant fixes provider to ovh, so hcloud is not expressible
+const OpenStackVolumes = Schema.Union([NoVolumes, CinderVolumes])
 
 // kumulo: S3 bucket naming rules — 3-63 chars, lowercase alphanumeric/dots/hyphens,
 // must start and end with an alphanumeric character
@@ -175,17 +181,13 @@ const Bucket = Schema.Struct({
   retain: Schema.Boolean
 })
 
-const isBucketsEmptyWhenModuleNone = Schema.makeFilter(
-  (objectStorage: { module: string; buckets: ReadonlyArray<unknown> }) =>
-    objectStorage.module === "none" && objectStorage.buckets.length > 0
-      ? "buckets must be empty when object_storage.module is none"
-      : undefined
-)
-
-const ObjectStorage = Schema.Struct({
-  module: ObjectStorageModule,
-  buckets: Schema.Array(Bucket)
-}).check(isBucketsEmptyWhenModuleNone)
+const ObjectStorage = Schema.Union([
+  Schema.Struct({ module: Schema.Literal("none") }),
+  Schema.Struct({
+    module: Schema.Literal("ovh"),
+    buckets: Schema.Array(Bucket)
+  })
+])
 
 const isAgeRecipient = Schema.isPattern(/^age1/, {
   message: "must be an age recipient key starting with age1"
@@ -195,17 +197,14 @@ const Sops = Schema.Struct({
   age_recipient: Schema.String.check(isAgeRecipient)
 })
 
-const isSopsConfiguredWhenSinkIsSops = Schema.makeFilter((secrets: { sink: string; sops?: unknown }) =>
-  secrets.sink === "sops" && secrets.sops === undefined
-    ? "sops config is required when secrets.sink is sops"
-    : undefined
-)
-
-const Secrets = Schema.Struct({
-  sink: SecretsSink,
-  dir: Schema.NonEmptyString,
-  sops: Schema.optionalKey(Sops)
-}).check(isSopsConfiguredWhenSinkIsSops)
+const Secrets = Schema.Union([
+  Schema.Struct({ sink: Schema.Literal("none") }),
+  Schema.Struct({
+    sink: Schema.Literal("sops"),
+    dir: Schema.NonEmptyString,
+    sops: Sops
+  })
+])
 
 const CinderCsi = Schema.Struct({
   enabled: Schema.Boolean,
@@ -255,7 +254,7 @@ export const K3sClusterConfig = Schema.Struct({
   provider: Provider,
   distro: Schema.Literal("k3s"),
   version: K3sVersion,
-  dns: _makeDns(DnsModule),
+  dns: Dns,
   // Required: the k3s path provisions its own control plane, network and nodes.
   network: Network,
   api_server: ApiServer,
@@ -272,19 +271,16 @@ export const K3sClusterConfig = Schema.Struct({
 
 // MKS's control plane, networking and node access are OVH-managed, so the
 // k3s-only blocks are absent and provider is fixed to ovh — which structurally
-// subsumes the addons-vs-provider gate (no addons block here); the auth and
-// volumes gates still bite, since `api_token`/`hcloud` stay expressible.
+// subsumes the addons and volumes gates (no addons block, cinder|none only);
+// the auth gate still bites, since `api_token` stays expressible.
 export const MksClusterConfig = Schema.Struct({
   ..._commonFields,
   provider: Schema.Literal("ovh"),
   distro: Schema.Literal("ovh-mks"),
   version: PlainK8sVersion,
-  dns: _makeDns(ManagedDnsModule)
-}).check(
-  isSecretsRequiredForObjectStorage,
-  isAuthMethodConsistentWithProvider,
-  isVolumesModuleConsistentWithProvider
-)
+  dns: Dns,
+  volumes: OpenStackVolumes
+}).check(isSecretsRequiredForObjectStorage, isAuthMethodConsistentWithProvider)
 
 export const ClusterConfig = Schema.Union([K3sClusterConfig, MksClusterConfig])
 

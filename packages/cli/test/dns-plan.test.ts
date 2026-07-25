@@ -41,7 +41,7 @@ it("mks plan output includes DNS rows", () => {
     config: {
       name: "prod-eu",
       worker_pools: [{ name: "workers" }],
-      volumes: { module: "none", managed: [] },
+      volumes: { module: "none" },
       dns: _dns
     },
     inventory: emptyMksInventory

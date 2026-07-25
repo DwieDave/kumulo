@@ -13,7 +13,7 @@ describe("providerSections", () => {
   it("ovh-mks config lists OVH vars plus each wired module", () => {
     const sections = providerSections(
       _mksConfig({
-        dns: { ...baseMksEncodedConfig.dns, module: "hetzner" },
+        dns: { module: "hetzner", zone: "example.com", ttl: 300, records: [] },
         object_storage: { module: "ovh", buckets: [] },
         secrets: {
           sink: "sops",

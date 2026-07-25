@@ -18,9 +18,6 @@ worker_pools:
       max: 1
 dns:
   module: none
-  zone: example.com
-  ttl: 300
-  records: []
 volumes:
   module: cinder
   managed:

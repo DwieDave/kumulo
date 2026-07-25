@@ -12,8 +12,10 @@ import { ClusterConfig } from "@kumulo/core"
 
 // Mirrors the cross-field `.check(...)` filters in core's schema.ts (the
 // Effect->JSON-Schema conversion cannot express them) — keep in sync. The
-// distro rules are derived from the union's variants, so they live here no
-// longer.
+// distro rules are derived from the union's variants, as are the per-module
+// field rules (dns zone/ttl/records, secrets sops block, object_storage
+// buckets, mks volumes), so those live here no longer. What is left spans two
+// independent unions: provider->auth/volumes/addons and object_storage->secrets.
 const crossFieldConstraints = [
   {
     if: { properties: { provider: { const: "hetzner" } }, required: ["provider"] },

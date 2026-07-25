@@ -4,7 +4,7 @@ import { buildMksPlan, emptyMksInventory, type MksInventory, type MksPlanInput }
 const _config: MksPlanInput = {
   name: "prod-eu",
   worker_pools: [{ name: "workers" }, { name: "gpu" }],
-  volumes: { module: "none", managed: [] }
+  volumes: { module: "none" }
 }
 
 it("one Create action per cluster plus one per worker pool on empty inventory", () => {
@@ -31,7 +31,10 @@ it("adds a Create action per managed volume when volumes.module is cinder", () =
 })
 
 it("shows no volume actions when volumes.module isn't cinder, even with managed entries present", () => {
-  const plan = buildMksPlan({ config: { ..._config, volumes: { module: "none", managed: [{ name: "data" }] } }, inventory: emptyMksInventory })
+  const plan = buildMksPlan({
+    config: { ..._config, volumes: { module: "hcloud", managed: [{ name: "data" }] } },
+    inventory: emptyMksInventory
+  })
   assert.deepStrictEqual(plan.actions, [
     { _tag: "Create", name: "mks-cluster/prod-eu" },
     { _tag: "Create", name: "mks-pool/prod-eu/workers" },

@@ -17,10 +17,10 @@ const _encoded: K3sClusterConfigEncoded = {
   worker_pools: [
     { name: "general", flavor: "b3-16", count: 2, labels: { workload: "general" } }
   ],
-  dns: { module: "none", zone: "example.com", ttl: 300, records: [] },
-  volumes: { module: "none", managed: [] },
-  object_storage: { module: "none", buckets: [] },
-  secrets: { sink: "none", dir: "." },
+  dns: { module: "none" },
+  volumes: { module: "none" },
+  object_storage: { module: "none" },
+  secrets: { sink: "none" },
   addons: {
     cloud_controller_manager: false,
     cinder_csi: { enabled: false, default_volume_type: "high-speed" },
