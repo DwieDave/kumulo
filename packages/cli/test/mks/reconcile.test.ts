@@ -5,7 +5,8 @@ import { assert, it } from "@effect/vitest"
 import { makeMksClient } from "@kumulo/distro-ovh-mks"
 import { loadConfig } from "../../src/config.ts"
 import { MksEnv } from "../../src/mks/env.ts"
-import { deleteMks, kubeconfigMks } from "../../src/mks/reconcile.ts"
+import { deleteMksEffect, kubeconfigMks } from "../../src/mks/reconcile.ts"
+import { dnsNoopLive } from "@kumulo/core"
 import { makeFakeMksServer } from "../e2e/fake-mks-server.ts"
 
 // kumulo: asserts "no cluster was ever created" by watching for the one POST
@@ -80,7 +81,7 @@ it.effect("delete against a nonexistent MKS cluster is a no-op, never creates on
     const spy = _withCreateSpy(server)
     const mksEnvLayer = Layer.succeed(MksEnv, { mks: makeMksClient(spy.httpClient), serviceName: "service-1" })
 
-    yield* deleteMks(config).pipe(Effect.provide(mksEnvLayer))
+    yield* deleteMksEffect(config).pipe(Effect.provide(mksEnvLayer), Effect.provide(dnsNoopLive))
 
     assert.strictEqual(spy.wasCreated(), false)
     assert.strictEqual(server.clusters.size, 0)

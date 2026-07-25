@@ -4,10 +4,11 @@ import { assert, it } from "@effect/vitest"
 import { loadConfig } from "../../src/config.ts"
 import { MksEnv } from "../../src/mks/env.ts"
 import { buildMksPlan } from "../../src/mks/plan.ts"
-import { applyMks, deleteMks, kubeconfigMks, lookupMksInventory } from "../../src/mks/reconcile.ts"
+import { applyMksEffect, deleteMksEffect, kubeconfigMks, lookupMksInventory } from "../../src/mks/reconcile.ts"
 import { decidePlanAction, renderPlan } from "../../src/present.ts"
 import { makeFakeMksServer } from "./fake-mks-server.ts"
 import { makeMksClient } from "@kumulo/distro-ovh-mks"
+import { dnsNoopLive } from "@kumulo/core"
 
 const _yaml = `
 name: prod-eu
@@ -87,7 +88,7 @@ it.effect("yaml → plan → apply → nodepool scale-update → kubeconfig → 
     assert.strictEqual(decision._tag, "Proceed")
     assert.match(renderPlan(plan), /Plan: 2 to create/)
 
-    const info = yield* applyMks(config).pipe(Effect.provide(mksEnvLayer))
+    const info = yield* applyMksEffect(config).pipe(Effect.provide(mksEnvLayer), Effect.provide(dnsNoopLive))
     assert.strictEqual(info.status, "READY")
 
     // Re-plan against the now-populated fake API: everything exists -> all NoOp.
@@ -98,12 +99,12 @@ it.effect("yaml → plan → apply → nodepool scale-update → kubeconfig → 
 
     // scale: re-run apply with a bumped worker count — same reconcile.
     const scaledConfig = { ...config, worker_pools: [{ ...config.worker_pools[0]!, count: 5 }] }
-    yield* applyMks(scaledConfig).pipe(Effect.provide(mksEnvLayer))
+    yield* applyMksEffect(scaledConfig).pipe(Effect.provide(mksEnvLayer), Effect.provide(dnsNoopLive))
     assert.strictEqual([...server.pools.get(info.id)!.values()][0]?.desiredNodes, 5)
 
     const kubeconfig = yield* kubeconfigMks(config).pipe(Effect.provide(mksEnvLayer))
     assert.match(kubeconfig.content, /kind: Config/)
 
-    yield* deleteMks(config).pipe(Effect.provide(mksEnvLayer))
+    yield* deleteMksEffect(config).pipe(Effect.provide(mksEnvLayer), Effect.provide(dnsNoopLive))
     assert.strictEqual(server.clusters.has(info.id), false)
   }).pipe(Effect.provide(_fsTestLayer)))
