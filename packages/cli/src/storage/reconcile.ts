@@ -27,7 +27,7 @@ const _bucketDiff = (
   { config, configDir }: { readonly config: ClusterConfig; readonly configDir: string }
 ): Effect.Effect<BucketDiff, OutputsInvalid | PlatformError, FileSystem> =>
   Effect.gen(function*() {
-    const file = yield* readOutputs({ dir: configDir, tag: config.name })
+    const file = yield* readOutputs({ dir: configDir, tag: config.name, format: config.outputs?.format })
     return diffBuckets({ desired: _desiredBuckets(config), existing: file.buckets })
   })
 
@@ -144,7 +144,7 @@ export const convergeBuckets = (
   Effect.gen(function*() {
     if (config.object_storage.module !== "ovh") return
     const provider = yield* ObjectStorageProvider
-    const file = yield* readOutputs({ dir: configDir, tag: config.name })
+    const file = yield* readOutputs({ dir: configDir, tag: config.name, format: config.outputs?.format })
     const desired = _desiredBuckets(config)
     const diff = diffBuckets({ desired, existing: file.buckets })
 
@@ -152,7 +152,11 @@ export const convergeBuckets = (
 
     const desiredNames = new Set(desired.map((bucket) => bucket.name))
     const retainedOrphans = file.buckets.filter((bucket) => !desiredNames.has(bucket.name) && bucket.retain)
-    yield* writeOutputs({ dir: configDir, file: { cluster: config.name, buckets: [...desired.map(toOutputsBucket), ...retainedOrphans] } })
+    yield* writeOutputs({
+      dir: configDir,
+      file: { cluster: config.name, buckets: [...desired.map(toOutputsBucket), ...retainedOrphans] },
+      format: config.outputs?.format
+    })
 
     yield* _ensureCredentialsIfMissing({ config, provider, desired })
   })
@@ -167,7 +171,7 @@ export const bucketDeletePlanActions = (
 ): Effect.Effect<ReadonlyArray<PlanAction>, OutputsInvalid | PlatformError, FileSystem> =>
   Effect.gen(function*() {
     if (config.object_storage.module !== "ovh") return []
-    const file = yield* readOutputs({ dir: configDir, tag: config.name })
+    const file = yield* readOutputs({ dir: configDir, tag: config.name, format: config.outputs?.format })
     const diff = diffBuckets({ desired: [], existing: file.buckets })
     return [
       ...diff.toDelete.map((ref) => ({ _tag: "Delete" as const, name: `bucket/${ref.name}` })),
@@ -194,14 +198,14 @@ export const reconcileBucketsOnDelete = (
   Effect.gen(function*() {
     if (config.object_storage.module !== "ovh") return { kept: [], deleted: [] }
     const provider = yield* ObjectStorageProvider
-    const file = yield* readOutputs({ dir: configDir, tag: config.name })
+    const file = yield* readOutputs({ dir: configDir, tag: config.name, format: config.outputs?.format })
     if (file.buckets.length === 0) return { kept: [], deleted: [] }
 
     const diff = diffBuckets({ desired: [], existing: file.buckets })
     yield* Effect.forEach(diff.toDelete, provider.deleteBucket, { discard: true, concurrency: 4 })
 
     const retained = file.buckets.filter((bucket) => bucket.retain)
-    yield* writeOutputs({ dir: configDir, file: { cluster: config.name, buckets: retained } })
+    yield* writeOutputs({ dir: configDir, file: { cluster: config.name, buckets: retained }, format: config.outputs?.format })
     return { kept: retained.map((bucket) => bucket.name), deleted: diff.toDelete.map((ref) => ref.name) }
   })
 
@@ -216,7 +220,7 @@ export const bucketStatus = (
   Effect.gen(function*() {
     if (config.object_storage.module !== "ovh") return { buckets: [], credentialsExist: false }
     const fs = yield* FileSystem
-    const file = yield* readOutputs({ dir: configDir, tag: config.name })
+    const file = yield* readOutputs({ dir: configDir, tag: config.name, format: config.outputs?.format })
     const credentialsExist = yield* fs.exists(credentialsPath({ dir: config.secrets.dir, cluster: config.name }))
     return { buckets: file.buckets, credentialsExist }
   })

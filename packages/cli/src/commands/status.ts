@@ -5,7 +5,7 @@ import type { ClusterConfig } from "@kumulo/core"
 import { loadConfig } from "../config.ts"
 import { distroFor, wantsObjectStorage } from "../distro/registry.ts"
 import { bucketStatus } from "../storage/reconcile.ts"
-import { kumulo } from "../root.ts"
+import { configArgument } from "../root.ts"
 
 // R11: buckets + credentials-file presence, ovh-mks only.
 const _statusBuckets = Effect.fn(function*(config: ClusterConfig, configDir: string) {
@@ -21,11 +21,10 @@ const _statusBuckets = Effect.fn(function*(config: ClusterConfig, configDir: str
 /** `status`: inventory + cluster health, for both distro kinds. */
 export const status = Command.make(
   "status",
-  {},
-  Effect.fn(function*() {
-    const root = yield* kumulo
-    const config = yield* loadConfig(root.config)
+  { config: configArgument() },
+  Effect.fn(function*({ config: configPath }) {
+    const config = yield* loadConfig(configPath)
     yield* distroFor(config).status(config)
-    yield* _statusBuckets(config, dirname(root.config))
+    yield* _statusBuckets(config, dirname(configPath))
   })
 ).pipe(Command.withDescription("Show cluster inventory + health"))

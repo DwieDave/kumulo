@@ -4,7 +4,7 @@ import type { PlatformError } from "effect/PlatformError"
 import type { ClusterConfig, ConfigInvalid } from "@kumulo/core"
 import { parseConfigYaml } from "@kumulo/core"
 
-/** `--config` loads and validates the YAML config. */
+/** Loads and validates the cluster config (yaml or json — YAML is a superset of JSON, one parser reads both). */
 export const loadConfig = (
   path: string
 ): Effect.Effect<ClusterConfig, ConfigInvalid | PlatformError, FileSystem> =>

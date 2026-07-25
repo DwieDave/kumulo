@@ -15,7 +15,7 @@ import { StorageEnv, storageLayers } from "./storage/env.ts"
 import { bucketDeletePlanActions, bucketPlanActions, convergeBuckets, reconcileBucketsOnDelete } from "./storage/reconcile.ts"
 import { decidePlanAction, dim, green, orderedActions, red, renderActionLine, renderPlan, yellow } from "./present.ts"
 import { logLine, withPlanView, withRowProgress, withSpinner } from "./spinner.ts"
-import { kumulo } from "./root.ts"
+import { configArgument, kumulo } from "./root.ts"
 
 export { kumulo }
 
@@ -116,11 +116,11 @@ const _convergeAll = Effect.fn(function*(
   return result
 })
 
-/** Config → plan → present → apply, shared by `create` and `scale`. */
-const _applyFlow = Effect.fn(function*() {
+/** Config → plan → present → apply, shared by `apply` and `scale`. */
+const _applyFlow = Effect.fn(function*({ config: configPath }: { readonly config: string }) {
   const root = yield* kumulo
-  const config = yield* loadConfig(root.config)
-  const configDir = dirname(root.config)
+  const config = yield* loadConfig(configPath)
+  const configDir = dirname(configPath)
   const entry = distroFor(config)
   if (root.showEnv) yield* Console.log(`${yield* envSummary(config)}\n`)
   const storageLayer = wantsObjectStorage(config) ? yield* storageLayers(config) : undefined
@@ -159,20 +159,19 @@ const _applyFlow = Effect.fn(function*() {
   yield* Console.log(result.summary)
 })
 
-export const create = Command.make("create", {}, _applyFlow).pipe(
-  Command.withDescription("Create or converge a cluster onto its config")
+export const apply = Command.make("apply", { config: configArgument() }, _applyFlow).pipe(
+  Command.withDescription("Create or converge a cluster onto its config (yaml or json)")
 )
 
-export const scale = Command.make("scale", {}, _applyFlow).pipe(
-  Command.withDescription("Converge worker pool sizes onto the config (same reconcile as create)")
+export const scale = Command.make("scale", { config: configArgument() }, _applyFlow).pipe(
+  Command.withDescription("Converge worker pool sizes onto the config (same reconcile as apply)")
 )
 
 export const kubeconfig = Command.make(
   "kubeconfig",
-  {},
-  Effect.fn(function*() {
-    const root = yield* kumulo
-    const config = yield* loadConfig(root.config)
+  { config: configArgument() },
+  Effect.fn(function*({ config: configPath }) {
+    const config = yield* loadConfig(configPath)
     const result = yield* distroFor(config).kubeconfig(config)
     yield* Console.log(result.content)
   })
@@ -200,14 +199,14 @@ const _deletePlan = Effect.fn(function*(config: ClusterConfig, configDir: string
 
 export const del = Command.make(
   "delete",
-  {},
-  Effect.fn(function*() {
+  { config: configArgument() },
+  Effect.fn(function*({ config: configPath }) {
     const root = yield* kumulo
-    const config = yield* loadConfig(root.config)
+    const config = yield* loadConfig(configPath)
     const entry = distroFor(config)
 
     if (root.showEnv) yield* Console.log(`${yield* envSummary(config)}\n`)
-    const plan = yield* withSpinner({ label: _planPhrases, effect: _deletePlan(config, dirname(root.config)) })
+    const plan = yield* withSpinner({ label: _planPhrases, effect: _deletePlan(config, dirname(configPath)) })
     yield* Console.log(`${renderPlan(plan)}\n`)
     if (root.dryRun) return
     if (!root.yes) {
@@ -245,7 +244,7 @@ export const del = Command.make(
       const providerLayer = ovhObjectStorageProviderLive(env)
       const buckets = yield* withRowProgress({
         match: (name) => name.startsWith("bucket/"),
-        effect: reconcileBucketsOnDelete({ config, configDir: dirname(root.config) }).pipe(Effect.provide(providerLayer))
+        effect: reconcileBucketsOnDelete({ config, configDir: dirname(configPath) }).pipe(Effect.provide(providerLayer))
       })
       yield* Effect.forEach(buckets.deleted, (name) => _ciLine(`${red("Deleted")} bucket/${name}`), { discard: true })
       if (buckets.kept.length > 0) yield* _ciLine(`${dim("Retained buckets (kept):")} ${buckets.kept.join(", ")}`)
@@ -261,5 +260,5 @@ export const del = Command.make(
 ).pipe(Command.withDescription("Delete a cluster"))
 
 export const kumuloCli = kumulo.pipe(
-  Command.withSubcommands([create, scale, status, kubeconfig, del, upgrade, volumes])
+  Command.withSubcommands([apply, scale, status, kubeconfig, del, upgrade, volumes])
 )

@@ -17,11 +17,8 @@ import {
 } from "@kumulo/volumes-cinder"
 import type { OutputsInvalid } from "@kumulo/volumes-cinder"
 import { loadConfig } from "../config.ts"
+import { configArgument } from "../root.ts"
 
-const configFlag = Flag.string("config").pipe(
-  Flag.withAlias("c"),
-  Flag.withDescription("Path to the cluster YAML config")
-)
 const nameFlag = Flag.string("name").pipe(
   Flag.withDescription("Name of the retained volume, matching an entry in the config's volumes.managed list")
 )
@@ -32,10 +29,10 @@ const volumeIdFlag = Flag.string("volume-id").pipe(
 /** `kumulo volumes list`: pure projection of `<cluster>.outputs.yaml`. */
 export const volumesList = Command.make(
   "list",
-  { config: configFlag },
+  { config: configArgument() },
   Effect.fn(function*({ config: configPath }) {
     const config = yield* loadConfig(configPath)
-    const outputs = yield* readOutputs({ dir: dirname(configPath), tag: config.name })
+    const outputs = yield* readOutputs({ dir: dirname(configPath), tag: config.name, format: config.outputs?.format })
     const volumes = listVolumes(outputs)
     if (volumes.length === 0) {
       yield* Console.log(`No recorded volumes for cluster "${config.name}".`)
@@ -62,7 +59,7 @@ const _retainedSpec = (config: ClusterConfig, name: string): VolumeSpec | undefi
  */
 export const volumesAdopt = Command.make(
   "adopt",
-  { config: configFlag, name: nameFlag, volumeId: volumeIdFlag },
+  { config: configArgument(), name: nameFlag, volumeId: volumeIdFlag },
   Effect.fn(function*({ config: configPath, name, volumeId }) {
     const config = yield* loadConfig(configPath)
     const spec = _retainedSpec(config, name)
@@ -73,10 +70,10 @@ export const volumesAdopt = Command.make(
     }
     const entry = config.volumes.managed.find((candidate) => candidate.name === name)
     const dir = dirname(configPath)
-    const file = yield* readOutputs({ dir, tag: config.name })
+    const file = yield* readOutputs({ dir, tag: config.name, format: config.outputs?.format })
     const pvc = entry?.pvc === undefined ? undefined : { namespace: entry.pvc.namespace, accessModes: entry.pvc.access_modes }
     const { outputs, manifests } = adoptVolume({ file, volumeId, spec, pvc })
-    yield* writeOutputs({ dir, file: outputs })
+    yield* writeOutputs({ dir, file: outputs, format: config.outputs?.format })
     yield* Console.log(manifests.map((manifest) => JSON.stringify(manifest, null, 2)).join("\n---\n"))
     yield* Console.log(`\nAdopted volume "${name}" (${volumeId}) into ${config.name}'s outputs.`)
   })
@@ -124,13 +121,13 @@ export const convergeManagedVolumes = (
   Effect.gen(function*() {
     if (config.volumes.module !== "cinder" || config.volumes.managed.length === 0) return
     const provider = yield* Effect.provide(VolumeProvider, VolumeProviderLive({ tag: config.name }))
-    const file = yield* readOutputs({ dir: configDir, tag: config.name })
+    const file = yield* readOutputs({ dir: configDir, tag: config.name, format: config.outputs?.format })
     const ensured = yield* Effect.forEach(config.volumes.managed, (entry) =>
       provider.ensureVolume(_toManagedSpec(entry)).pipe(
         Effect.map((info) => ({ name: entry.name, id: info.id, retain: entry.retain }))
       ), { concurrency: 4 })
     const outputs = ensured.reduce((acc, volume) => upsertVolume({ file: acc, volume }), file)
-    yield* writeOutputs({ dir: configDir, file: outputs })
+    yield* writeOutputs({ dir: configDir, file: outputs, format: config.outputs?.format })
   })
 
 /**
