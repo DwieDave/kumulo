@@ -40,6 +40,14 @@
     "outputPath": "../../packages/openstack/src/generated/cinder.ts"
   },
   {
+    "name": "Cinder",
+    "specPath": "../../packages/openstack/specs/cinder/v3.70.yaml",
+    "allowlistPath": "../../packages/volumes-cinder/allowlists/cinder.json",
+    "patchPaths": ["../../packages/volumes-cinder/patches/cinder.patch.json5"],
+    "format": "httpapi",
+    "outputPath": "../../packages/volumes-cinder/src/generated/cinder.ts"
+  },
+  {
     "name": "Octavia",
     "specPath": "../../packages/openstack/specs/octavia/v2.yaml",
     "allowlistPath": "../../packages/openstack/allowlists/octavia.json",

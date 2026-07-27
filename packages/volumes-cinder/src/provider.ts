@@ -3,9 +3,9 @@ import type { ClusterTag, VolumeInfo, VolumeRef, VolumeSpec } from "@kumulo/core
 import { Effect, Layer } from "effect"
 import type { HttpClient } from "effect/unstable/http"
 import type { CinderAuth } from "./auth.ts"
-import { cinderRequest } from "./rest.ts"
-import type { CinderError } from "./rest.ts"
-import { decodeVolumeSingle, decodeVolumesList, nextMarker, type VolumeRecord, type VolumesList } from "./schemas.ts"
+import { makeCinderClient, type CinderClient } from "./client/cinder.ts"
+import { mapCinderError, type CinderError } from "./errors.ts"
+import type { VolumeRecord, VolumesDetailResponse } from "./generated/cinder.ts"
 import { staticPvManifest } from "./manifests.ts"
 
 export interface VolumeProviderOptions {
@@ -20,6 +20,8 @@ type R<A> = Effect.Effect<A, CinderError, Deps>
 // ensure-by-tag+name scheme.
 const _tagMetadataKey = "kumulo_cluster"
 
+const _listRef = "volumes/detail"
+
 const _volumeInfo = (record: VolumeRecord): VolumeInfo => ({
   id: record.id,
   name: record.name ?? ""
@@ -32,30 +34,41 @@ const _metadataTag = (record: VolumeRecord): string => record.metadata?.kumulo_c
 // than round-trips are worth.
 const _pageSize = 100
 
-const _listPage = (marker: string | undefined): R<VolumesList> =>
-  cinderRequest({
-    path: marker === undefined
-      ? `volumes/detail?limit=${_pageSize}`
-      : `volumes/detail?limit=${_pageSize}&marker=${encodeURIComponent(marker)}`,
-    method: "GET",
-    ref: "volumes"
-  }).pipe(Effect.flatMap(decodeVolumesList))
+// kumulo: Cinder paginates `volumes/detail` — `volumes_links` carries a
+// rel:"next" href whose `marker` query param is the last seen volume id.
+export const nextMarker = (list: VolumesDetailResponse): string | undefined => {
+  const next = list.volumes_links?.find((link) => link.rel === "next")
+  if (next === undefined) return undefined
+  const marker = new URL(next.href, "http://cinder.invalid/").searchParams.get("marker")
+  return marker ?? list.volumes.at(-1)?.id
+}
+
+const _listPage = (
+  { client, marker }: { readonly client: CinderClient; readonly marker: string | undefined }
+): Effect.Effect<VolumesDetailResponse, CinderError> =>
+  mapCinderError({
+    self: client.volumes.volumesDetailGet({ query: { limit: _pageSize, ...(marker === undefined ? {} : { marker }) } }),
+    ref: _listRef
+  })
 
 const _listFrom = (
-  marker: string | undefined,
-  seen: ReadonlyArray<VolumeRecord>
-): R<ReadonlyArray<VolumeRecord>> =>
-  _listPage(marker).pipe(Effect.flatMap((page) => {
+  { client, marker, seen }: {
+    readonly client: CinderClient
+    readonly marker: string | undefined
+    readonly seen: ReadonlyArray<VolumeRecord>
+  }
+): Effect.Effect<ReadonlyArray<VolumeRecord>, CinderError> =>
+  _listPage({ client, marker }).pipe(Effect.flatMap((page) => {
     const acc = [...seen, ...page.volumes]
     const next = nextMarker(page)
     // kumulo: stop on no-next, on an empty page, and on a marker that does
     // not advance — a stuck marker would otherwise loop forever.
     return next === undefined || page.volumes.length === 0 || next === marker
       ? Effect.succeed(acc)
-      : _listFrom(next, acc)
+      : _listFrom({ client, marker: next, seen: acc })
   }))
 
-const _listAll = (): R<ReadonlyArray<VolumeRecord>> => _listFrom(undefined, [])
+const _listAll = (client: CinderClient) => _listFrom({ client, marker: undefined, seen: [] })
 
 // kumulo: list-then-create. Idempotent across whole-call retries (the
 // tag+name lookup finds the earlier volume), but Cinder offers no
@@ -65,34 +78,39 @@ export const ensureVolume = (
   { options, spec }: { readonly options: VolumeProviderOptions; readonly spec: VolumeSpec }
 ): R<VolumeInfo> =>
   Effect.gen(function*() {
-    const all = yield* _listAll()
+    const client = yield* makeCinderClient
+    const all = yield* _listAll(client)
     const existing = all.find((record) => (record.name ?? "") === spec.name && _metadataTag(record) === options.tag)
     if (existing !== undefined) return _volumeInfo(existing)
-    const created = yield* cinderRequest({
-      path: "volumes",
-      method: "POST",
-      ref: spec.name,
-      body: {
-        volume: {
-          name: spec.name,
-          size: spec.sizeGb,
-          volume_type: spec.type,
-          metadata: { [_tagMetadataKey]: options.tag }
+    const created = yield* mapCinderError({
+      self: client.volumes.volumesPost({
+        payload: {
+          volume: {
+            name: spec.name,
+            size: spec.sizeGb,
+            ...(spec.type === undefined ? {} : { volume_type: spec.type }),
+            metadata: { [_tagMetadataKey]: options.tag }
+          }
         }
-      }
-    }).pipe(Effect.flatMap(decodeVolumeSingle))
-    return _volumeInfo(created)
+      }),
+      ref: spec.name
+    })
+    return _volumeInfo(created.volume)
   })
 
 export const listClusterVolumes = (tag: ClusterTag): R<ReadonlyArray<VolumeInfo>> =>
-  _listAll().pipe(
-    Effect.map((all) => all.filter((record) => _metadataTag(record) === tag).map(_volumeInfo))
-  )
+  Effect.flatMap(makeCinderClient, (client) =>
+    Effect.map(_listAll(client), (all) => all.filter((record) => _metadataTag(record) === tag).map(_volumeInfo)))
 
 // kumulo: caller (core delete flow) never invokes this for retain: true
 // volumes — the retention policy is enforced one layer up, not here.
+// Deleting an already-gone volume is a success, not a failure.
 export const deleteVolume = (ref: VolumeRef): R<void> =>
-  cinderRequest({ path: `volumes/${ref.id}`, method: "DELETE", ref: ref.id, okStatuses: [404] }).pipe(Effect.asVoid)
+  Effect.flatMap(makeCinderClient, (client) =>
+    mapCinderError({ self: client.volumes.volumesIdDelete({ params: { id: ref.id } }), ref: ref.id }).pipe(
+      Effect.catchTag("ResourceNotFound", () => Effect.void),
+      Effect.asVoid
+    ))
 
 export const VolumeProviderLive = (options: VolumeProviderOptions): Layer.Layer<VolumeProvider, never, Deps> =>
   Layer.effect(

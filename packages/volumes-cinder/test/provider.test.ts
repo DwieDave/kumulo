@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
 import { AuthenticationFailed, ProviderApiError, ResponseDecodeError } from "@kumulo/core"
-import { deleteVolume, ensureVolume, listClusterVolumes, type VolumeProviderOptions } from "../src/provider.ts"
+import { deleteVolume, ensureVolume, listClusterVolumes, nextMarker, type VolumeProviderOptions } from "../src/provider.ts"
 import { makeFakeCinder } from "./fake-cinder.ts"
 
 const options: VolumeProviderOptions = { tag: "prod" }
@@ -120,5 +120,25 @@ describe("volumes-cinder VolumeProvider", () => {
       expect(failure).toBeInstanceOf(ProviderApiError)
       expect(failure).not.toBeInstanceOf(AuthenticationFailed)
     }).pipe(Effect.provide(fake.layer))
+  })
+
+  it("nextMarker reads the marker query param of the rel:next link", () => {
+    expect(nextMarker({
+      volumes: [{ id: "vol-1" }],
+      volumes_links: [{ rel: "next", href: "https://cinder/volumes/detail?limit=2&marker=vol-1" }]
+    })).toBe("vol-1")
+  })
+
+  // A rel:next without a usable marker falls back to the last seen id, so paging
+  // still advances instead of re-requesting page one forever.
+  it("nextMarker falls back to the last volume id", () => {
+    expect(nextMarker({
+      volumes: [{ id: "vol-1" }, { id: "vol-2" }],
+      volumes_links: [{ rel: "next", href: "https://cinder/volumes/detail?limit=2" }]
+    })).toBe("vol-2")
+  })
+
+  it("nextMarker is undefined without a rel:next link", () => {
+    expect(nextMarker({ volumes: [{ id: "vol-1" }] })).toBeUndefined()
   })
 })

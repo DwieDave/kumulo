@@ -3,6 +3,9 @@
 // the composition root's job) — these are the concrete building blocks it
 // composes.
 export { ensureCluster, findClusterByName } from "./ensure-cluster.ts"
+export type { MksClusterInfo } from "./ensure-cluster.ts"
+export { clusterDrift } from "./cluster-drift.ts"
+export type { MksClusterDrift, MksClusterState, MksDesiredCluster } from "./cluster-drift.ts"
 export { parseKubeVersion } from "./parse-kube-version.ts"
 export { ensureNodePools, listNodePools } from "./ensure-nodepools.ts"
 export { fetchKubeconfig } from "./kubeconfig.ts"

@@ -5,6 +5,7 @@ export { makeMksClient } from "./client/mks.ts"
 export type { Mks, MksError } from "./client/mks.ts"
 
 export {
+  clusterDrift,
   deleteCluster,
   diffNodePools,
   ensureCluster,
@@ -19,7 +20,11 @@ export {
 export type {
   ExistingNodePool,
   MksClusterConfig,
+  MksClusterDrift,
+  MksClusterInfo,
   MksClusterRef,
+  MksClusterState,
+  MksDesiredCluster,
   MksUpgradeStrategy,
   MksWorkerPoolConfig,
   NodePoolDiff

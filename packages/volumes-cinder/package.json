@@ -57,9 +57,11 @@
     "@effect/vitest": "catalog:",
     "fast-check": "catalog:",
     "vitest": "catalog:",
+    "codegen": "workspace:*",
     "effect": "catalog:"
   },
   "scripts": {
+    "generate": "bun run scripts/generate.ts",
     "build": "bash ../../scripts/build-package.sh",
     "prepack": "node ../../scripts/prepack-exports.mjs strip",
     "postpack": "node ../../scripts/prepack-exports.mjs restore",

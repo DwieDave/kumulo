@@ -1,0 +1,9 @@
+{
+  "service": "cinder",
+  "spec": "../openstack/specs/cinder/v3.70.yaml",
+  "operationIds": [
+    "volumes/detail:get",
+    "volumes:post",
+    "volumes/id:delete"
+  ]
+}

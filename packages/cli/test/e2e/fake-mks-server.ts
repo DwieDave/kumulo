@@ -10,9 +10,19 @@ interface FakeCluster {
   name: string
   status: string
 }
+/** Mirrors `Cloud_kube_NodePoolTemplate` in the generated client (metadata + spec, same casing). */
+interface FakeTemplate {
+  readonly metadata: {
+    readonly annotations: { readonly [key: string]: string }
+    readonly finalizers: ReadonlyArray<string>
+    readonly labels: { readonly [key: string]: string }
+  }
+  readonly spec: { readonly taints: ReadonlyArray<unknown>; readonly unschedulable: boolean }
+}
 interface FakeBody {
   readonly name?: string
   readonly flavorName?: string
+  readonly template?: FakeTemplate
   readonly desiredNodes?: number
   readonly minNodes?: number
   readonly maxNodes?: number
@@ -20,9 +30,12 @@ interface FakeBody {
   readonly antiAffinity?: boolean
   readonly monthlyBilled?: boolean
 }
+/** The node pool as OVH really reads it back (`Cloud_kube_NodePool`) — `template` included. */
 interface FakePool {
   id: string
+  projectId: string
   name: string
+  template?: FakeTemplate
   flavor: string
   desiredNodes: number
   minNodes: number
@@ -30,7 +43,23 @@ interface FakePool {
   autoscale: boolean
   antiAffinity: boolean
   monthlyBilled: boolean
+  status: string
+  sizeStatus: string
+  availableNodes: number
+  currentNodes: number
+  upToDateNodes: number
+  createdAt: string
+  updatedAt: string
 }
+
+const _timestamp = "2026-01-01T00:00:00Z"
+
+/**
+ * The live `apply` found two bugs every fake had missed — an empty request
+ * body and a null field — because fakes only ever asserted on responses. A
+ * write whose body never arrived is a 400 here, not a silent success.
+ */
+const _badRequest = (message: string): Response => new Response(JSON.stringify({ message }), { status: 400 })
 
 /**
  * Self-contained fixture-replay MKS server (no live network) — a smaller,
@@ -54,11 +83,12 @@ export const makeFakeMksServer = () => {
   // ponytail: fixture request bodies are one all-optional shape — whatever
   // `JSON.parse` hands back, read field by field with defaults, so a missing
   // field surfaces as a failed assertion in the test rather than a cast.
-  const _handle = (request: HttpClientRequest.HttpClientRequest, body: FakeBody): Response => {
+  const _handle = (request: HttpClientRequest.HttpClientRequest, body: FakeBody | undefined): Response => {
     const path = new URL(request.url).pathname
     const kubeMatch = path.match(/^\/cloud\/project\/[^/]+\/kube$/)
     if (kubeMatch && request.method === "GET") return _json([...clusters.keys()])
     if (kubeMatch && request.method === "POST") {
+      if (body === undefined) return _badRequest("cluster create sent an empty body")
       const name = body.name ?? ""
       const existing = [...clusters.values()].find((cluster) => cluster.name === name)
       return _json(existing ?? _create(name))
@@ -81,17 +111,29 @@ export const makeFakeMksServer = () => {
     const poolListMatch = path.match(/^\/cloud\/project\/[^/]+\/kube\/([^/]+)\/nodepool$/)
     if (poolListMatch && request.method === "GET") return _json([...(pools.get(poolListMatch[1] ?? "")?.values() ?? [])])
     if (poolListMatch && request.method === "POST") {
+      if (body === undefined) return _badRequest("nodepool create sent an empty body")
+      if (body.flavorName === undefined) return _badRequest("nodepool create is missing the required flavorName")
       const id = `pool-${nextId++}`
+      const desiredNodes = body.desiredNodes ?? 0
       const pool: FakePool = {
         id,
+        projectId: "service-1",
         name: body.name ?? "",
-        flavor: body.flavorName ?? "",
-        desiredNodes: body.desiredNodes ?? 0,
+        template: body.template,
+        flavor: body.flavorName,
+        desiredNodes,
         minNodes: body.minNodes ?? 0,
         maxNodes: body.maxNodes ?? 0,
         autoscale: body.autoscale ?? false,
         antiAffinity: body.antiAffinity ?? false,
-        monthlyBilled: body.monthlyBilled ?? false
+        monthlyBilled: body.monthlyBilled ?? false,
+        status: "READY",
+        sizeStatus: "CAPACITY_OK",
+        availableNodes: desiredNodes,
+        currentNodes: desiredNodes,
+        upToDateNodes: desiredNodes,
+        createdAt: _timestamp,
+        updatedAt: _timestamp
       }
       pools.get(poolListMatch[1] ?? "")?.set(id, pool)
       return _json(pool)
@@ -100,11 +142,17 @@ export const makeFakeMksServer = () => {
     const poolIdMatch = path.match(/^\/cloud\/project\/[^/]+\/kube\/([^/]+)\/nodepool\/([^/]+)$/)
     if (poolIdMatch && request.method === "PUT") {
       const [, kubeId, poolId] = poolIdMatch
+      if (body === undefined) return _badRequest("nodepool update sent an empty body")
       const pool = pools.get(kubeId ?? "")?.get(poolId ?? "")
       if (pool) {
         pool.desiredNodes = body.desiredNodes ?? pool.desiredNodes
         pool.minNodes = body.minNodes ?? pool.minNodes
         pool.maxNodes = body.maxNodes ?? pool.maxNodes
+        pool.autoscale = body.autoscale ?? pool.autoscale
+        pool.availableNodes = pool.desiredNodes
+        pool.currentNodes = pool.desiredNodes
+        pool.upToDateNodes = pool.desiredNodes
+        pool.updatedAt = _timestamp
       }
       return _json(pool)
     }
@@ -119,11 +167,11 @@ export const makeFakeMksServer = () => {
 
   return { clusters, pools, httpClient: _fixtureHttpClient(_handle) }
 
-  function _fixtureHttpClient(handle: (request: HttpClientRequest.HttpClientRequest, body: FakeBody) => Response) {
+  function _fixtureHttpClient(handle: (request: HttpClientRequest.HttpClientRequest, body: FakeBody | undefined) => Response) {
     return HttpClient.make((request) =>
       Effect.gen(function*() {
         const text = yield* _bodyText(request)
-        const body: FakeBody = text.length === 0 ? {} : JSON.parse(text)
+        const body: FakeBody | undefined = text.length === 0 ? undefined : JSON.parse(text)
         return HttpClientResponse.fromWeb(request, handle(request, body))
       })
     ).pipe(HttpClient.mapRequest(HttpClientRequest.prependUrl(_baseUrl)))

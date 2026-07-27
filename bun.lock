@@ -29,7 +29,7 @@
         "vitest": "catalog:",
       },
       "peerDependencies": {
-        "effect": "4.0.0-beta.101",
+        "effect": "catalog:",
       },
     },
     "packages/cli": {
@@ -59,8 +59,8 @@
         "vitest": "catalog:",
       },
       "peerDependencies": {
-        "@effect/platform-bun": "4.0.0-beta.101",
-        "effect": "4.0.0-beta.101",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
       },
     },
     "packages/core": {
@@ -76,7 +76,7 @@
         "vitest": "catalog:",
       },
       "peerDependencies": {
-        "effect": "4.0.0-beta.101",
+        "effect": "catalog:",
       },
     },
     "packages/distro-k3s": {
@@ -93,7 +93,7 @@
         "vitest": "catalog:",
       },
       "peerDependencies": {
-        "effect": "4.0.0-beta.101",
+        "effect": "catalog:",
       },
     },
     "packages/distro-ovh-mks": {
@@ -110,7 +110,7 @@
         "vitest": "catalog:",
       },
       "peerDependencies": {
-        "effect": "4.0.0-beta.101",
+        "effect": "catalog:",
       },
     },
     "packages/dns-hetzner": {
@@ -125,7 +125,7 @@
         "vitest": "catalog:",
       },
       "peerDependencies": {
-        "effect": "4.0.0-beta.101",
+        "effect": "catalog:",
       },
     },
     "packages/dns-ovh": {
@@ -142,7 +142,7 @@
         "vitest": "catalog:",
       },
       "peerDependencies": {
-        "effect": "4.0.0-beta.101",
+        "effect": "catalog:",
       },
     },
     "packages/hetzner": {
@@ -158,7 +158,7 @@
         "vitest": "catalog:",
       },
       "peerDependencies": {
-        "effect": "4.0.0-beta.101",
+        "effect": "catalog:",
       },
     },
     "packages/openstack": {
@@ -175,7 +175,7 @@
         "vitest": "catalog:",
       },
       "peerDependencies": {
-        "effect": "4.0.0-beta.101",
+        "effect": "catalog:",
       },
     },
     "packages/oxlint": {
@@ -198,7 +198,7 @@
         "vitest": "catalog:",
       },
       "peerDependencies": {
-        "effect": "4.0.0-beta.101",
+        "effect": "catalog:",
       },
     },
     "packages/secrets-sops": {
@@ -216,7 +216,7 @@
         "vitest": "catalog:",
       },
       "peerDependencies": {
-        "effect": "4.0.0-beta.101",
+        "effect": "catalog:",
       },
     },
     "packages/storage-ovh": {
@@ -235,7 +235,7 @@
         "vitest": "catalog:",
       },
       "peerDependencies": {
-        "effect": "4.0.0-beta.101",
+        "effect": "catalog:",
       },
     },
     "packages/volumes-cinder": {
@@ -247,12 +247,13 @@
       },
       "devDependencies": {
         "@effect/vitest": "catalog:",
+        "codegen": "workspace:*",
         "effect": "catalog:",
         "fast-check": "catalog:",
         "vitest": "catalog:",
       },
       "peerDependencies": {
-        "effect": "4.0.0-beta.101",
+        "effect": "catalog:",
       },
     },
     "tools/codegen": {

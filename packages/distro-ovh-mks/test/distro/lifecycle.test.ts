@@ -1,5 +1,7 @@
 import { Effect } from "effect"
 import { assert, it } from "@effect/vitest"
+import { CONFIG_HASH_KEY } from "@kumulo/core"
+import { mksPoolHash } from "../../src/distro/nodepool-diff.ts"
 import { makeMksClient } from "../../src/client/mks.ts"
 import { deleteCluster } from "../../src/distro/delete.ts"
 import { ensureCluster } from "../../src/distro/ensure-cluster.ts"
@@ -47,7 +49,11 @@ it.effect("full lifecycle: create → poll ready → converge pools → kubeconf
     // create a pool, then converge again with a scaled-up desired count —
     // proves update (not a spurious replace) for a mutable-only change.
     yield* ensureNodePools({ mks, ref, pools: [_pool()] })
-    assert.strictEqual([...(server.pools.get(info.id)?.values() ?? [])][0]?.desiredNodes, 3)
+    const created = [...(server.pools.get(info.id)?.values() ?? [])][0]
+    assert.strictEqual(created?.desiredNodes, 3)
+    // the drift stamp must actually reach the API (and round-trip back) —
+    // without it every re-plan reads as "no stamped hash" and silently NoOps.
+    assert.strictEqual(created?.template?.metadata?.annotations?.[CONFIG_HASH_KEY], mksPoolHash(_pool()))
 
     yield* ensureNodePools({ mks, ref, pools: [_pool({ desiredNodes: 5 })] })
     const poolsAfterUpdate = [...(server.pools.get(info.id)?.values() ?? [])]

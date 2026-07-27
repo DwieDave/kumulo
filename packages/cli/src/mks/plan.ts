@@ -1,5 +1,5 @@
 import type { Plan, PlanAction } from "@kumulo/core"
-import { mksPoolHash, type MksWorkerPoolConfig } from "@kumulo/distro-ovh-mks"
+import { clusterDrift, mksPoolHash, type MksClusterState, type MksWorkerPoolConfig } from "@kumulo/distro-ovh-mks"
 import { type DnsPlanInput, dnsPlanActions } from "../dns-plan.ts"
 
 /** Structural slice of a `ClusterConfig` worker pool — enough to build the MKS pool spec. */
@@ -22,6 +22,9 @@ export interface MksPlanInput {
   // Optional so existing plan fixtures stay minimal; a real `ClusterConfig`
   // always carries it.
   readonly dns?: DnsPlanInput
+  /** Cluster-level fields (same optionality rationale as `dns`). */
+  readonly version?: string
+  readonly auth?: { readonly region: string }
 }
 
 /** The one place a config worker pool becomes an MKS nodepool spec — plan and apply must hash the same value. */
@@ -53,6 +56,8 @@ export interface MksInventory {
    * use; this adds the drift view.
    */
   readonly poolHashes?: ReadonlyMap<string, string | undefined>
+  /** Cluster-scoped fields as read back from OVH; absent means "not looked up" → no drift claim. */
+  readonly clusterState?: MksClusterState
 }
 
 export const emptyMksInventory: MksInventory = {
@@ -87,11 +92,31 @@ const _poolAction = (
     : { _tag: "ReplaceNeedsConfirm", name, reason: "config-hash drifted from desired spec" }
 }
 
+/**
+ * The cluster row. Existence first (absent → `Create`), then cluster-level
+ * drift (`clusterDrift`): a supported version bump is an in-place `Update`, an
+ * immutable change is `ReplaceNeedsConfirm` — which the reconciler refuses
+ * outright rather than destroying a live cluster (see `_poolsToReplace`), so
+ * the operator sees the field named instead of a silent "converged".
+ */
+const _clusterAction = (
+  { config, inventory }: { readonly config: MksPlanInput; readonly inventory: MksInventory }
+): PlanAction => {
+  const name = mksClusterRow(config.name)
+  if (!inventory.clusterExists) return { _tag: "Create", name }
+  if (config.auth === undefined || inventory.clusterState === undefined) return { _tag: "NoOp", name }
+  const drift = clusterDrift({ desired: { region: config.auth.region, version: config.version }, actual: inventory.clusterState })
+  if (drift._tag === "None") return { _tag: "NoOp", name }
+  return drift._tag === "Upgrade"
+    ? { _tag: "Update", name, reason: `kubernetes version ${drift.from} → ${drift.to}` }
+    : { _tag: "ReplaceNeedsConfirm", name, reason: `${drift.field}: ${drift.reason}` }
+}
+
 export const buildMksPlan = (
   { config, inventory }: { readonly config: MksPlanInput; readonly inventory: MksInventory }
 ): Plan => ({
   actions: [
-    _createOrNoOp({ exists: inventory.clusterExists, name: mksClusterRow(config.name) }),
+    _clusterAction({ config, inventory }),
     ...config.worker_pools.map((pool) => _poolAction({ cluster: config.name, inventory, pool })),
     ...(config.volumes.module === "cinder"
       ? config.volumes.managed.map((v) => _createOrNoOp({ exists: inventory.volumeNames.has(v.name), name: `volume/${v.name}` }))

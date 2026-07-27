@@ -93,6 +93,9 @@ it.effect("yaml → plan → apply → nodepool scale-update → kubeconfig → 
 
     // Re-plan against the now-populated fake API: everything exists -> all NoOp.
     const after = yield* lookupMksInventory(config).pipe(Effect.provide(mksEnvLayer))
+    // Guards the NoOp assertion below against going vacuous again: it only
+    // means "converged" if the fake really replayed the stamped template.
+    assert.ok(after.poolHashes?.get("workers"), "fake must replay the pool template's config-hash annotation")
     const replan = buildMksPlan({ config, inventory: { ...after, volumeNames: new Set() } })
     assert.deepStrictEqual(replan.actions.map((a) => a._tag), ["NoOp", "NoOp"])
     assert.strictEqual([...(server.pools.get(info.id)?.values() ?? [])][0]?.desiredNodes, 3)

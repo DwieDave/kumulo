@@ -13,8 +13,17 @@ interface FakeCluster {
   pollsRemaining: number
 }
 
-type FakeTemplate = { readonly metadata?: { readonly annotations?: { readonly [key: string]: string } } }
+/** Mirrors `Cloud_kube_NodePoolTemplate` in the generated client (metadata + spec, same casing). */
+interface FakeTemplate {
+  readonly metadata: {
+    readonly annotations: { readonly [key: string]: string }
+    readonly finalizers: ReadonlyArray<string>
+    readonly labels: { readonly [key: string]: string }
+  }
+  readonly spec: { readonly taints: ReadonlyArray<unknown>; readonly unschedulable: boolean }
+}
 
+/** The node pool as OVH really reads it back (`Cloud_kube_NodePool`). */
 interface FakePool {
   id: string
   name: string
@@ -26,18 +35,30 @@ interface FakePool {
   autoscale: boolean
   antiAffinity: boolean
   monthlyBilled: boolean
+  // Every field on `Cloud_kube_NodePool` is optional, including these
+  // server-side ones — a pool created outside kumulo may carry none of them.
+  projectId?: string
+  status?: string
+  sizeStatus?: string
+  availableNodes?: number
+  currentNodes?: number
+  upToDateNodes?: number
+  createdAt?: string
+  updatedAt?: string
 }
+
+const _timestamp = "2026-01-01T00:00:00Z"
 
 interface CreateClusterBody {
   readonly name?: string
-  readonly region: string
+  readonly region?: string
   readonly version?: string
 }
 
 interface CreatePoolBody {
   readonly name?: string
   readonly template?: FakeTemplate
-  readonly flavorName: string
+  readonly flavorName?: string
   readonly desiredNodes?: number
   readonly minNodes?: number
   readonly maxNodes?: number
@@ -53,13 +74,21 @@ interface UpdatePoolBody {
   readonly autoscale?: boolean
 }
 
-const _bodyOf = <Body>(request: HttpClientRequest.HttpClientRequest, fallback: Body): Body => {
+/**
+ * `undefined` means the request carried no body at all. The live `apply`
+ * found an empty-request-body bug that every fake missed because they only
+ * asserted on responses — here that is a 400, not a silent success.
+ */
+const _bodyOf = <Body>(request: HttpClientRequest.HttpClientRequest): Body | undefined => {
   const body = request.body
-  if (body._tag !== "Uint8Array") return fallback
+  if (body._tag !== "Uint8Array") return undefined
   const text = new TextDecoder().decode(body.body)
+  if (text.length === 0) return undefined
   const parsed: Body = JSON.parse(text)
   return parsed
 }
+
+const _badRequest = (message: string): Response => new Response(JSON.stringify({ message }), { status: 400 })
 
 /**
  * Minimal in-memory fixture-replay stand-in for the OVH MKS API — enough
@@ -77,7 +106,9 @@ export const makeFakeMksServer = (options: { readonly readyAfterPolls?: number }
     if (parts.length !== 4) return undefined
     if (request.method === "GET") return new Response(JSON.stringify([...clusters.keys()]), { status: 200 })
     if (request.method === "POST") {
-      const payload = _bodyOf<CreateClusterBody>(request, { region: "" })
+      const payload = _bodyOf<CreateClusterBody>(request)
+      if (payload === undefined) return _badRequest("cluster create sent an empty body")
+      if (payload.region === undefined) return _badRequest("cluster create is missing the required region")
       const id = freshId("kube")
       clusters.set(id, {
         id,
@@ -118,28 +149,40 @@ export const makeFakeMksServer = (options: { readonly readyAfterPolls?: number }
       return new Response(JSON.stringify([...(pools.get(kubeId)?.values() ?? [])]), { status: 200 })
     }
     if (rest.length === 1 && request.method === "POST") {
-      const payload = _bodyOf<CreatePoolBody>(request, { flavorName: "" })
+      const payload = _bodyOf<CreatePoolBody>(request)
+      if (payload === undefined) return _badRequest("nodepool create sent an empty body")
+      if (payload.flavorName === undefined) return _badRequest("nodepool create is missing the required flavorName")
       const id = freshId("pool")
+      const desiredNodes = payload.desiredNodes ?? 0
       const pool: FakePool = {
         id,
+        projectId: "service-1",
         name: payload.name ?? "",
         template: payload.template,
         flavor: payload.flavorName,
-        desiredNodes: payload.desiredNodes ?? 0,
+        desiredNodes,
         minNodes: payload.minNodes ?? 0,
         maxNodes: payload.maxNodes ?? 0,
         autoscale: payload.autoscale ?? false,
         antiAffinity: payload.antiAffinity ?? false,
-        monthlyBilled: payload.monthlyBilled ?? false
+        monthlyBilled: payload.monthlyBilled ?? false,
+        status: "READY",
+        sizeStatus: "CAPACITY_OK",
+        availableNodes: desiredNodes,
+        currentNodes: desiredNodes,
+        upToDateNodes: desiredNodes,
+        createdAt: _timestamp,
+        updatedAt: _timestamp
       }
       pools.get(kubeId)?.set(id, pool)
       return new Response(JSON.stringify(pool), { status: 200 })
     }
     const poolId = rest[1]
     if (rest.length === 2 && poolId !== undefined && request.method === "PUT") {
-      const payload = _bodyOf<UpdatePoolBody>(request, {})
+      const payload = _bodyOf<UpdatePoolBody>(request)
+      if (payload === undefined) return _badRequest("nodepool update sent an empty body")
       const pool = pools.get(kubeId)?.get(poolId)
-      if (pool) Object.assign(pool, payload)
+      if (pool) Object.assign(pool, payload, { updatedAt: _timestamp })
       return new Response(null, { status: 200 })
     }
     if (rest.length === 2 && poolId !== undefined && request.method === "DELETE") {
@@ -147,6 +190,13 @@ export const makeFakeMksServer = (options: { readonly readyAfterPolls?: number }
       return new Response(null, { status: 200 })
     }
     return undefined
+  }
+
+  const _handleUpdate = (request: HttpClientRequest.HttpClientRequest): Response => {
+    const payload = _bodyOf<{ readonly strategy?: string }>(request)
+    if (payload === undefined) return _badRequest("cluster update sent an empty body")
+    if (payload.strategy === undefined) return _badRequest("cluster update is missing the required strategy")
+    return new Response(null, { status: 200 })
   }
 
   const _handle = (request: HttpClientRequest.HttpClientRequest): Response => {
@@ -162,7 +212,7 @@ export const makeFakeMksServer = (options: { readonly readyAfterPolls?: number }
       : rest[0] === "kubeconfig" && request.method === "POST"
       ? new Response(JSON.stringify({ content: `apiVersion: v1\nkind: Config\n# ${kubeId}\n` }), { status: 200 })
       : rest[0] === "update" && request.method === "POST"
-      ? new Response(null, { status: 200 })
+      ? _handleUpdate(request)
       : rest[0] === "nodepool"
       ? _handleNodepool(request, kubeId, rest)
       : undefined

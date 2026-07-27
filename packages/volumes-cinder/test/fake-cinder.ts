@@ -1,6 +1,5 @@
 import { Effect, Layer } from "effect"
-import { HttpClient, HttpClientResponse } from "effect/unstable/http"
-import type { HttpClientRequest } from "effect/unstable/http"
+import { HttpClient, HttpClientRequest, HttpClientResponse, UrlParams } from "effect/unstable/http"
 import { CinderAuth } from "../src/auth.ts"
 
 export type RouteHandler = (
@@ -15,11 +14,20 @@ export interface FakeCinder {
 // Fixture-replay fake: routes `${METHOD} ${pathname}` (query string
 // stripped) through a caller-supplied handler map — offline, no real
 // network, mirrors @kumulo/openstack's fake-openstack.ts test harness.
+// A real client appends `request.urlParams` at execution time; the fake has to
+// do the same or handlers would never see `?limit=…&marker=…`.
+const _fullUrl = (request: HttpClientRequest.HttpClientRequest): string => {
+  const query = UrlParams.toString(request.urlParams)
+  return query === "" ? request.url : `${request.url}?${query}`
+}
+
 export const makeFakeCinder = (routes: Record<string, RouteHandler>): FakeCinder => {
   const calls: Array<{ method: string; url: string }> = []
-  const client = HttpClient.make((request) => {
-    const url = new URL(request.url)
-    calls.push({ method: request.method, url: request.url })
+  const client = HttpClient.make((original) => {
+    const full = _fullUrl(original)
+    const request = HttpClientRequest.setUrl(original, full)
+    const url = new URL(full)
+    calls.push({ method: request.method, url: full })
     const key = `${request.method} ${url.pathname}`
     const handler = routes[key]
     if (handler === undefined) {

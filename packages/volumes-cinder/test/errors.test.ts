@@ -5,17 +5,19 @@ import {
   QuotaExceeded,
   RateLimited,
   ResourceConflict,
-  ResourceNotFound
+  ResourceNotFound,
+  ResponseDecodeError
 } from "@kumulo/core"
 import { Effect, Layer } from "effect"
 import { FastCheck as fc } from "effect/testing"
 import { CinderAuth } from "../src/auth.ts"
-import { cinderRequest } from "../src/rest.ts"
+import { deleteVolume, listClusterVolumes } from "../src/provider.ts"
 import { makeFakeCinder } from "./fake-cinder.ts"
 
+// `deleteVolume` is the shortest path to a raw status: one request, ref "vol-1".
 const _errorEffect = (status: number, body?: unknown, headers?: Record<string, string>) => {
-  const fake = makeFakeCinder({ "GET /v3/volumes/vol-1": () => ({ status, body, headers }) })
-  return Effect.provide(Effect.flip(cinderRequest({ path: "v3/volumes/vol-1", method: "GET", ref: "vol-1" })), fake.layer)
+  const fake = makeFakeCinder({ "DELETE /volumes/vol-1": () => ({ status, body, headers }) })
+  return Effect.provide(Effect.flip(deleteVolume({ id: "vol-1" })), fake.layer)
 }
 
 const _errorAt = (status: number, body?: unknown) => Effect.runPromise(_errorEffect(status, body))
@@ -24,7 +26,7 @@ const _errorAt = (status: number, body?: unknown) => Effect.runPromise(_errorEff
 // outage or rate limit was rewritten as "bad credentials" on the way through.
 const _withAuth = (failure: ProviderApiError | RateLimited) =>
   Effect.runPromise(Effect.provide(
-    Effect.flip(cinderRequest({ path: "v3/volumes/vol-1", method: "GET", ref: "vol-1" })),
+    Effect.flip(deleteVolume({ id: "vol-1" })),
     Layer.merge(
       makeFakeCinder({}).layer,
       Layer.succeed(CinderAuth, { token: Effect.fail(failure), endpoint: Effect.succeed("https://cinder.example.com/") })
@@ -44,12 +46,15 @@ describe("CinderAuth port keeps the real failure tag", () => {
   })
 })
 
-describe("cinderRequest status mapping", () => {
+describe("generated-client failures keep their Cinder meaning", () => {
   it("maps the statuses Cinder gives a distinct meaning", async () => {
-    expect(await _errorAt(404)).toBeInstanceOf(ResourceNotFound)
     expect(await _errorAt(409)).toBeInstanceOf(ResourceConflict)
     expect(await _errorAt(401)).toBeInstanceOf(AuthenticationFailed)
     expect(await _errorAt(403)).toBeInstanceOf(AuthenticationFailed)
+    // 404 is swallowed by `deleteVolume`, so it is checked on a listing instead.
+    const fake = makeFakeCinder({ "GET /volumes/detail": () => ({ status: 404 }) })
+    const missing = await Effect.runPromise(Effect.provide(Effect.flip(listClusterVolumes("prod")), fake.layer))
+    expect(missing).toBeInstanceOf(ResourceNotFound)
   })
 
   it("treats a 403 as quota only when the body says so, without fabricating a limit", async () => {
@@ -84,4 +89,41 @@ describe("cinderRequest status mapping", () => {
       expect(error).not.toBeInstanceOf(AuthenticationFailed)
       expect(error).toMatchObject({ status, operation: "volume vol-1" })
     }))
+})
+
+const _list = (body: unknown) =>
+  Effect.provide(
+    listClusterVolumes("prod"),
+    makeFakeCinder({ "GET /volumes/detail": () => ({ status: 200, body }) }).layer
+  )
+
+describe("list decoding never invents a volume", () => {
+  it.effect("an absent `volumes` key fails instead of reading as an empty list", () =>
+    Effect.gen(function*() {
+      const failure = yield* Effect.flip(_list({ notVolumes: [] }))
+      expect(failure).toBeInstanceOf(ResponseDecodeError)
+      expect(failure).not.toBeInstanceOf(AuthenticationFailed)
+    }))
+
+  it.effect("a volume without an id fails to decode", () =>
+    Effect.gen(function*() {
+      const failure = yield* Effect.flip(_list({ volumes: [{ name: "a" }] }))
+      expect(failure).toBeInstanceOf(ResponseDecodeError)
+    }))
+
+  it.effect("an empty-string id fails to decode", () =>
+    Effect.gen(function*() {
+      const failure = yield* Effect.flip(_list({ volumes: [{ id: "" }] }))
+      expect(failure).toBeInstanceOf(ResponseDecodeError)
+    }))
+
+  // Property: an arbitrary body either fails the effect or yields records with a
+  // real id — never a `VolumeInfo{id:""}` placeholder addressing nothing.
+  it.effect.prop("an arbitrary list body never yields id-less volumes", [fc.anything()], ([body]) =>
+    Effect.map(
+      Effect.result(_list({ volumes: [body] })),
+      (result) => {
+        expect(result._tag === "Failure" || result.success.every((info) => info.id.length > 0)).toBe(true)
+      }
+    ))
 })

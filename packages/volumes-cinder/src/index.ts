@@ -3,7 +3,9 @@ export const packageName = "@kumulo/volumes-cinder"
 
 export { CinderAuth } from "./auth.ts"
 export type { CinderAuthError } from "./auth.ts"
-export type { CinderError } from "./rest.ts"
+export type { CinderCause, CinderError } from "./errors.ts"
+export { makeCinderClient } from "./client/cinder.ts"
+export type { CinderClient } from "./client/cinder.ts"
 
 export {
   deleteVolume,

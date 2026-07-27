@@ -1,0 +1,167 @@
+// RFC 6902 patches applied AFTER the allowlist filter, BEFORE generation.
+// Run `bun run generate` in this package after editing.
+[
+  // The three operations are restated at version-less paths, because:
+  //
+  //  * the Cinder entry in the Keystone catalog already ends in `/v3/<project_id>`,
+  //    and HttpApiClient's baseUrl is *prepended* (plain concatenation, not URL
+  //    resolution) — the spec's absolute `/v3/...` paths would request
+  //    `/v3/<project>/v3/volumes`. (`move` is not one of the three JSON Patch ops
+  //    this pipeline implements, so this is a remove + add, not a rename.)
+  //  * `requestBody` lacks `required` upstream (OpenAPI defaults it to false), which
+  //    makes the generator emit `payload: [HttpApiSchema.NoContent, ...]` — an
+  //    encoder that sends an EMPTY BODY to `POST /volumes`.
+  //  * a declared error response decodes to a status-less `void`, erasing the very
+  //    code the taxonomy in `src/provider/errors.ts` keys off. With none declared,
+  //    every non-2xx surfaces as an `HttpClientError` carrying the real response.
+  //  * real Cinder answers a create with 200 or 202 and a delete with 202 or 204
+  //    depending on deployment and microversion; upstream declares one of each, and
+  //    an undeclared 2xx fails as a decode error.
+  //  * only `limit` and `marker` are kept of the eleven list query parameters.
+  { "op": "remove", "path": "/paths/~1v3~1volumes~1detail" },
+  { "op": "remove", "path": "/paths/~1v3~1volumes~1{id}" },
+  { "op": "remove", "path": "/paths/~1v3~1volumes" },
+  {
+    "op": "add",
+    "path": "/paths/~1volumes~1detail",
+    "value": {
+      "get": {
+        "operationId": "volumes/detail:get",
+        "description": "Returns a detailed list of volumes.",
+        "tags": ["volumes"],
+        "parameters": [
+          { "$ref": "#/components/parameters/limit" },
+          { "$ref": "#/components/parameters/marker" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ok",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/VolumesDetailResponse" } } }
+          }
+        }
+      }
+    }
+  },
+  {
+    "op": "add",
+    "path": "/paths/~1volumes",
+    "value": {
+      "post": {
+        "operationId": "volumes:post",
+        "description": "Creates a volume.",
+        "tags": ["volumes"],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/VolumesCreateRequest" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Ok",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/VolumesCreateResponse" } } }
+          },
+          "202": {
+            "description": "Accepted",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/VolumesCreateResponse" } } }
+          }
+        }
+      }
+    }
+  },
+  {
+    "op": "add",
+    "path": "/paths/~1volumes~1{id}",
+    "value": {
+      "parameters": [{ "$ref": "#/components/parameters/volumes_id" }],
+      "delete": {
+        "operationId": "volumes/id:delete",
+        "description": "Delete a volume.",
+        "tags": ["volumes"],
+        "responses": {
+          "202": { "description": "Accepted" },
+          "204": { "description": "Ok" }
+        }
+      }
+    }
+  },
+
+  // Only the fields this provider consumes. The upstream volume schema declares ~25
+  // more (attachments, links, migration_status, ...) with their own required-key
+  // constraints — decoding them would turn any upstream shape drift into a hard
+  // failure of an otherwise usable response. `id` is required and non-empty: an
+  // id-less record would flow downstream as `VolumeInfo{id:""}` and address the
+  // wrong (or no) billed resource.
+  {
+    "op": "add",
+    "path": "/components/schemas/VolumeRecord",
+    "value": {
+      "type": "object",
+      "description": "The subset of a Cinder volume kumulo consumes.",
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string" },
+        "metadata": { "type": "object", "properties": { "kumulo_cluster": { "type": "string" } } }
+      }
+    }
+  },
+
+  // `volumes` is REQUIRED: an absent key must fail the decode, never yield an empty
+  // list — that silently-empty list made `ensureVolume` create a duplicate billed
+  // volume. `volumes_links` is missing from the upstream spec entirely, but Cinder
+  // does send it, and it carries the marker this provider pages with.
+  {
+    "op": "replace",
+    "path": "/components/schemas/VolumesDetailResponse",
+    "value": {
+      "type": "object",
+      "required": ["volumes"],
+      "properties": {
+        "volumes": { "type": "array", "items": { "$ref": "#/components/schemas/VolumeRecord" } },
+        "volumes_links": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["rel", "href"],
+            "properties": { "rel": { "type": "string" }, "href": { "type": "string" } }
+          }
+        }
+      }
+    }
+  },
+  {
+    "op": "replace",
+    "path": "/components/schemas/VolumesCreateResponse",
+    "value": {
+      "type": "object",
+      "required": ["volume"],
+      "properties": { "volume": { "$ref": "#/components/schemas/VolumeRecord" } }
+    }
+  },
+
+  // Upstream models the request as a 4-way `oneOf` over microversions whose `size` is
+  // a *string* of digits — an encoder we cannot feed a number. One flat object instead.
+  {
+    "op": "replace",
+    "path": "/components/schemas/VolumesCreateRequest",
+    "value": {
+      "type": "object",
+      "required": ["volume"],
+      "properties": {
+        "volume": {
+          "type": "object",
+          "required": ["size"],
+          "properties": {
+            "name": { "type": "string" },
+            "size": { "type": "integer" },
+            "volume_type": { "type": "string" },
+            "metadata": { "type": "object", "additionalProperties": { "type": "string" } }
+          }
+        }
+      }
+    }
+  },
+  { "op": "remove", "path": "/components/schemas/VolumesCreate_30" },
+  { "op": "remove", "path": "/components/schemas/VolumesCreate_313" },
+  { "op": "remove", "path": "/components/schemas/VolumesCreate_347" },
+  { "op": "remove", "path": "/components/schemas/VolumesCreate_353" }
+]

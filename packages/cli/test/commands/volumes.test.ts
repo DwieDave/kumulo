@@ -192,9 +192,9 @@ it.effect("convergeManagedVolumes fails with AuthenticationFailed when OpenStack
       token: Effect.fail(new AuthenticationFailed({ hint: "missing required env var OS_AUTH_URL" })),
       endpoint: Effect.fail(new AuthenticationFailed({ hint: "missing required env var OS_AUTH_URL" }))
     })
-    // `cinderRequest` reads `HttpClient.HttpClient` from context before it
-    // reads `auth.endpoint` — a client must be present even though the auth
-    // failure means it's never actually used to send a request.
+    // The generated Cinder client reads `HttpClient.HttpClient` from context
+    // before it reads `auth.endpoint` — a client must be present even though the
+    // auth failure means it's never actually used to send a request.
     const deadHttpClient = Layer.succeed(HttpClient.HttpClient, HttpClient.make(() => Effect.die("unreachable")))
 
     const failure = yield* convergeManagedVolumes({ config, configDir: "." }).pipe(

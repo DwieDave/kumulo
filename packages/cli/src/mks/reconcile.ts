@@ -43,7 +43,8 @@ export const lookupMksInventory = (
     return {
       clusterExists: true,
       poolNames: new Set(pools.map((pool) => pool.name)),
-      poolHashes: new Map(pools.map((pool) => [pool.name, pool.configHash]))
+      poolHashes: new Map(pools.map((pool) => [pool.name, pool.configHash])),
+      clusterState: { version: info.version, region: info.region }
     }
   })
 
