@@ -30,9 +30,6 @@ jobs:
       - name: Build packages
         run: bun run build
 
-      - name: Build binary
-        run: bun run build:binary
-
       - name: Test
         run: bun run test
 

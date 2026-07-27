@@ -1,5 +1,6 @@
 /**
- * Subprocess smoke test (N4): runs the real `main.ts` under bun with a fake
+ * Subprocess smoke test (N4): runs the real `main.ts` under node (type
+ * stripping) with a fake
  * `sops` on PATH, proving `--secrets-file` is a real parser-known shared flag
  * (visible in `--help`) and that the sops `ConfigProvider` installed via
  * `Command.provide` actually feeds the credential layer builds. The success
@@ -33,7 +34,11 @@ const _run = (
   args: ReadonlyArray<string>,
   env: Record<string, string | undefined>
 ): string => {
-  const result = spawnSync("bun", [_mainTs, ...args], { env, encoding: "utf8", timeout: 30_000 })
+  const result = spawnSync(
+    process.execPath,
+    ["--experimental-strip-types", "--no-warnings", _mainTs, ...args],
+    { env, encoding: "utf8", timeout: 30_000 }
+  )
   return `${result.stdout}${result.stderr}`
 }
 

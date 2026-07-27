@@ -6,19 +6,18 @@ or Hetzner), or OVH's managed Kubernetes service (`ovh-mks`).
 
 ## Install
 
-Requires [Bun](https://bun.sh) >= 1.3.
+Requires [Node](https://nodejs.org) >= 22.
+
+```sh
+npm install -g @kumulo/cli
+kumulo --help
+```
+
+For development, [Bun](https://bun.sh) >= 1.3 is the workspace toolchain; run
+the CLI straight from source:
 
 ```sh
 bun install
-bun run build:binary   # -> dist/kumulo, a single-file executable
-```
-
-`dist/kumulo` has no runtime dependencies (Bun is compiled in) — copy it
-anywhere and run it.
-
-For development, run the CLI directly without compiling:
-
-```sh
 bun run packages/cli/src/main.ts <command> <config-path>
 ```
 

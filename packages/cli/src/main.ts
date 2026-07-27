@@ -59,8 +59,8 @@ const MainLive = Layer.mergeAll(
   _mksLive,
   _storageLive,
   CinderAuthLive.pipe(Layer.provideMerge(OpenStackEnvLive)),
-  NodeHttpClient.layerNodeHttp
-).pipe(Layer.provide(NodeHttpClient.layerNodeHttp))
+  NodeHttpClient.layerUndici
+).pipe(Layer.provide(NodeHttpClient.layerUndici))
 
 // `--secrets-file` is a real shared flag (visible in `--help`, see `root.ts`);
 // `KUMULO_SECRETS_FILE` is the flagless fallback (R2). The credential layers

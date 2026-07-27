@@ -3,13 +3,16 @@ import { existsSync } from "node:fs"
 import { join } from "node:path"
 import { describe, expect, it } from "vitest"
 
-// NFR-7 — the compiled `kumulo` binary (via `bun run build:binary`) actually
-// runs: `--help` and `apply <config> --dry-run` against the example configs.
+// The published CLI artifact (`packages/cli/dist/main.mjs`, the `kumulo` bin)
+// actually runs under plain node: `--help` and `apply <config> --dry-run`
+// against the example configs. This is the bundle npm ships, so it also proves
+// the tsdown externals and the node-platform layers resolve outside the
+// workspace-source resolution used by the rest of the suite.
 const _root = join(import.meta.dirname, "..")
-const _binary = join(_root, "dist", "kumulo")
+const _cli = join(_root, "packages", "cli", "dist", "main.mjs")
 
-if (!existsSync(_binary)) {
-  throw new Error(`${_binary} not found — run \`bun run build:binary\` before this smoke test.`)
+if (!existsSync(_cli)) {
+  throw new Error(`${_cli} not found — run \`bun run build\` before this smoke test.`)
 }
 
 const _fakeEnv = {
@@ -27,15 +30,15 @@ const _fakeEnv = {
 }
 
 const _dryRun = (example: string): string =>
-  execFileSync(_binary, ["apply", join(_root, "examples", example), "--dry-run"], {
+  execFileSync(process.execPath, [_cli, "apply", join(_root, "examples", example), "--dry-run"], {
     env: _fakeEnv,
     encoding: "utf8",
     stdio: "pipe"
   })
 
-describe("compiled kumulo binary", () => {
+describe("published kumulo CLI bundle", () => {
   it("--help lists the subcommands", () => {
-    const out = execFileSync(_binary, ["--help"], { env: _fakeEnv, encoding: "utf8" })
+    const out = execFileSync(process.execPath, [_cli, "--help"], { env: _fakeEnv, encoding: "utf8" })
     expect(out).toContain("kumulo")
     expect(out).toContain("apply")
     expect(out).toContain("kubeconfig")
@@ -46,7 +49,7 @@ describe("compiled kumulo binary", () => {
   // instead of printing a made-up plan.
   it("apply --dry-run against the ovh-mks example fails loudly on fake credentials", () => {
     expect(() =>
-      execFileSync(_binary, ["apply", join(_root, "examples", "ovh-mks.yaml"), "--dry-run"], {
+      execFileSync(process.execPath, [_cli, "apply", join(_root, "examples", "ovh-mks.yaml"), "--dry-run"], {
         env: _fakeEnv,
         encoding: "utf8",
         stdio: "pipe"
