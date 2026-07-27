@@ -1,6 +1,6 @@
 {
   "name": "@kumulo/distro-k3s",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "k3s distribution driver for kumulo.",
   "license": "MIT",
   "author": "David Stahl-Gruber",

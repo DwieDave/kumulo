@@ -1,6 +1,6 @@
 {
   "name": "@kumulo/core",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Core abstractions (config schema, plan, state) for kumulo.",
   "license": "MIT",
   "author": "David Stahl-Gruber",

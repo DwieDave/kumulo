@@ -1,6 +1,6 @@
 {
   "name": "@kumulo/provider-ovh",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "OVH cloud provider integration for kumulo.",
   "license": "MIT",
   "author": "David Stahl-Gruber",

@@ -1,6 +1,6 @@
 {
   "name": "@kumulo/dns-hetzner",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Hetzner DNS provider for kumulo.",
   "license": "MIT",
   "author": "David Stahl-Gruber",

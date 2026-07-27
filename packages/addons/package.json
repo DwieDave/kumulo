@@ -1,6 +1,6 @@
 {
   "name": "@kumulo/addons",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Cluster addon definitions (ingress, cert-manager, \u2026) for kumulo.",
   "license": "MIT",
   "author": "David Stahl-Gruber",
