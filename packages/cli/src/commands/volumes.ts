@@ -1,6 +1,6 @@
 import { dirname } from "node:path"
 import { Console, Effect } from "effect"
-import { FileSystem } from "effect/FileSystem"
+import type { FileSystem } from "effect/FileSystem"
 import type { PlatformError } from "effect/PlatformError"
 import type { HttpClient } from "effect/unstable/http"
 import { Command, Flag } from "effect/unstable/cli"
@@ -8,14 +8,14 @@ import type { ClusterConfig, VolumeError, VolumeSpec } from "@kumulo/core"
 import { ConfigInvalid, VolumeProvider } from "@kumulo/core"
 import {
   adoptVolume,
-  CinderAuth,
   listVolumes,
   readOutputs,
   upsertVolume,
   VolumeProviderLive,
   writeOutputs
 } from "@kumulo/volumes-cinder"
-import type { OutputsInvalid } from "@kumulo/volumes-cinder"
+import type { OutputsInvalid ,
+  CinderAuth} from "@kumulo/volumes-cinder"
 import { loadConfig } from "../config.ts"
 import { configArgument } from "../root.ts"
 

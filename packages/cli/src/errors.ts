@@ -73,7 +73,12 @@ export const cliErrorRegistry: RendererRegistry = {
       details: [_formatIssue(error.issue)]
     }),
   AuthenticationFailed: (error) => `Authentication failed: ${error.hint}`,
-  QuotaExceeded: (error) => `Quota exceeded for ${error.resource}: requested ${error.requested}, limit ${error.limit}`,
+  QuotaExceeded: (error) =>
+    `Quota exceeded for ${error.resource}: requested ${error.requested ?? "unknown"}, limit ${error.limit ?? "unknown"}`,
+  RateLimited: (error) =>
+    `Rate limited by the provider on ${error.kind} ${error.ref}${error.retryAfter === undefined ? "" : ` — retry after ${error.retryAfter}`}`,
+  ProviderApiError: (error) =>
+    `Provider API error during ${error.operation} (HTTP ${error.status})${error.body === "" ? "" : `: ${error.body}`}`,
   ResourceNotFound: (error) => `${error.kind} not found: ${error.ref}`,
   ResourceConflict: (error) => `${error.kind} conflict: ${error.ref}`,
   CapabilityMissing: (error) =>

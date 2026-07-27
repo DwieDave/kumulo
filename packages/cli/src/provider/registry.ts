@@ -1,10 +1,10 @@
 import { Config, Effect, Layer, Redacted } from "effect"
-import * as HttpClient from "effect/unstable/http/HttpClient"
+import type * as HttpClient from "effect/unstable/http/HttpClient"
 import { AuthenticationFailed } from "@kumulo/core"
-import type { ClusterConfig, CloudProvider, K3sClusterConfig } from "@kumulo/core"
-import { CloudProviderLive, KeystoneAuth } from "@kumulo/openstack"
+import type { ClusterConfig, CloudProvider, K3sClusterConfig, SecGroupSpec } from "@kumulo/core"
+import { buildFr57Rules, CloudProviderLive, KeystoneAuth, OpenStackHttpLive } from "@kumulo/openstack"
 import type { CloudProviderOptions } from "@kumulo/openstack"
-import { CloudProviderLive as HcloudCloudProviderLive, hcloudHttpClientLive } from "@kumulo/hetzner"
+import { buildHetznerSecGroupRules, CloudProviderLive as HcloudCloudProviderLive, hcloudHttpClientLive } from "@kumulo/hetzner"
 import { OpenStackEnv } from "../doctor-openstack/env.ts"
 import { requiredRedactedEnv } from "../env.ts"
 import type { CloudCredentialShape } from "../k3s/env.ts"
@@ -17,6 +17,8 @@ export interface ProviderEntry {
     config: K3sClusterConfig
   ) => Layer.Layer<CloudProvider, AuthenticationFailed, OpenStackEnv | HttpClient.HttpClient>
   readonly cloudCredential: (config: K3sClusterConfig) => Effect.Effect<CloudCredentialShape, AuthenticationFailed, OpenStackEnv>
+  /** Ingress rules for this cluster in core's neutral dialect — every adapter's `ensureSecurityGroups` translates them itself. */
+  readonly secGroupRules: (config: K3sClusterConfig) => SecGroupSpec["rules"]
   /** Env vars this provider's own wiring reads (empty when the distro's credentials cover it). */
   readonly requiredEnvVars: ReadonlyArray<string>
   /** True when the distro's credentials cover this provider — the env summary then titles the section from the distro entry. */
@@ -46,8 +48,13 @@ export const k3sCloudProviderLayer = (
       if (env.keystone === undefined || env.region === undefined) {
         return yield* Effect.fail(new AuthenticationFailed({ hint: env.unavailableReason ?? "OpenStack auth unavailable" }))
       }
+      // The token/retry/semaphore wrapper (`OpenStackHttpLive`) sits between
+      // the generated Nova/Neutron/Glance/Octavia clients and the ambient
+      // `HttpClient` — without it every call ships without `X-Auth-Token`.
+      const keystone = Layer.succeed(KeystoneAuth, env.keystone)
       return CloudProviderLive(_cloudProviderOptions(config, env.region)).pipe(
-        Layer.provide(Layer.succeed(KeystoneAuth, env.keystone))
+        Layer.provide(OpenStackHttpLive().pipe(Layer.provide(keystone))),
+        Layer.provide(keystone)
       )
     })
   )
@@ -93,11 +100,20 @@ const _openStackCredential = (): Effect.Effect<CloudCredentialShape, Authenticat
 const _hetznerCredential = (): Effect.Effect<CloudCredentialShape, AuthenticationFailed> =>
   Effect.map(requiredRedactedEnv("HCLOUD_TOKEN"), (token) => ({ provider: "hetzner" as const, token }))
 
+/** Shared inputs of both providers' rule builders — SSH/API CIDRs, the cluster network, the CNI's wireguard port. */
+const _ruleOptions = (config: K3sClusterConfig) => ({
+  allowedSshCidrs: config.ssh.allowed_cidrs,
+  allowedApiCidrs: config.api_server.allowed_cidrs,
+  networkCidr: config.network.cidr,
+  cni: config.addons.cni
+})
+
 /** `provider: "ovh"` and `"generic"` share one OpenStack wiring today. */
 const _openStackEntry = (kind: ProviderKind): ProviderEntry => ({
   kind,
   cloudProviderLayer: k3sCloudProviderLayer,
   cloudCredential: _openStackCredential,
+  secGroupRules: (config) => buildFr57Rules(_ruleOptions(config)),
   // Credentials come from the distro here (OVH API for mks, OS_* for k3s),
   // so the env summary titles this section from the distro entry instead.
   requiredEnvVars: [],
@@ -112,6 +128,7 @@ export const providerRegistry: Record<ProviderKind, ProviderEntry> = {
     kind: "hetzner",
     cloudProviderLayer: k3sHetznerCloudProviderLayer,
     cloudCredential: _hetznerCredential,
+    secGroupRules: (config) => buildHetznerSecGroupRules(_ruleOptions(config)),
     requiredEnvVars: ["HCLOUD_TOKEN"],
     credentialsFromDistro: false
   }

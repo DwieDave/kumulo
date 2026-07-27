@@ -25,8 +25,9 @@ export interface DistroEntry<C extends ClusterConfig = ClusterConfig> {
   readonly deletePlanActions: (
     config: C
   ) => Effect.Effect<Plan["actions"], DistroFailure, DistroServices>
+  /** `replace`: node names the operator confirmed for replacement (never inferred by the distro). */
   readonly apply: (
-    a: { readonly config: C; readonly configDir: string }
+    a: { readonly config: C; readonly configDir: string; readonly replace: ReadonlySet<string> }
   ) => Effect.Effect<DistroApplyResult, DistroFailure, DistroServices>
   readonly delete: (config: C) => Effect.Effect<void, DistroFailure, DistroServices>
   readonly kubeconfig: (config: C) => Effect.Effect<Kubeconfig, DistroFailure, DistroServices>

@@ -10,6 +10,16 @@ interface FakeCluster {
   name: string
   status: string
 }
+interface FakeBody {
+  readonly name?: string
+  readonly flavorName?: string
+  readonly desiredNodes?: number
+  readonly minNodes?: number
+  readonly maxNodes?: number
+  readonly autoscale?: boolean
+  readonly antiAffinity?: boolean
+  readonly monthlyBilled?: boolean
+}
 interface FakePool {
   id: string
   name: string
@@ -33,32 +43,32 @@ export const makeFakeMksServer = () => {
   const clusters = new Map<string, FakeCluster>()
   const pools = new Map<string, Map<string, FakePool>>()
 
-  const _create = (payload: { readonly name: string }) => {
+  const _create = (name: string) => {
     const id = `kube-${nextId++}`
-    clusters.set(id, { id, name: payload.name, status: "READY" })
+    const cluster: FakeCluster = { id, name, status: "READY" }
+    clusters.set(id, cluster)
     pools.set(id, new Map())
-    return clusters.get(id)!
+    return cluster
   }
 
-  // ponytail: fixture request bodies are typed via plain-annotated `any`
-  // (whatever `JSON.parse` returns) rather than an `as` cast — `any` is
-  // assignable to a narrower local type without an assertion, and this is a
-  // test-only fixture, not a decode boundary that needs real validation.
-  const _handle = (request: HttpClientRequest.HttpClientRequest, body: any): Response => {
+  // ponytail: fixture request bodies are one all-optional shape — whatever
+  // `JSON.parse` hands back, read field by field with defaults, so a missing
+  // field surfaces as a failed assertion in the test rather than a cast.
+  const _handle = (request: HttpClientRequest.HttpClientRequest, body: FakeBody): Response => {
     const path = new URL(request.url).pathname
     const kubeMatch = path.match(/^\/cloud\/project\/[^/]+\/kube$/)
     if (kubeMatch && request.method === "GET") return _json([...clusters.keys()])
     if (kubeMatch && request.method === "POST") {
-      const payload: { readonly name: string } = body
-      const existing = [...clusters.values()].find((cluster) => cluster.name === payload.name)
-      return _json(existing ?? _create(payload))
+      const name = body.name ?? ""
+      const existing = [...clusters.values()].find((cluster) => cluster.name === name)
+      return _json(existing ?? _create(name))
     }
 
     const idMatch = path.match(/^\/cloud\/project\/[^/]+\/kube\/([^/]+)$/)
-    if (idMatch && request.method === "GET") return _json(clusters.get(idMatch[1]!))
+    if (idMatch && request.method === "GET") return _json(clusters.get(idMatch[1] ?? ""))
     if (idMatch && request.method === "DELETE") {
-      clusters.delete(idMatch[1]!)
-      pools.delete(idMatch[1]!)
+      clusters.delete(idMatch[1] ?? "")
+      pools.delete(idMatch[1] ?? "")
       // kumulo: the generated client's delete op only matches HTTP 200 (OVH's
       // actual contract), not 204 — a real "no content" response would
       // otherwise get misread as an unexpected-status error.
@@ -69,46 +79,38 @@ export const makeFakeMksServer = () => {
     if (kubeconfigMatch && request.method === "POST") return _json({ content: "apiVersion: v1\nkind: Config\n" })
 
     const poolListMatch = path.match(/^\/cloud\/project\/[^/]+\/kube\/([^/]+)\/nodepool$/)
-    if (poolListMatch && request.method === "GET") return _json([...(pools.get(poolListMatch[1]!)?.values() ?? [])])
+    if (poolListMatch && request.method === "GET") return _json([...(pools.get(poolListMatch[1] ?? "")?.values() ?? [])])
     if (poolListMatch && request.method === "POST") {
-      const kubeId = poolListMatch[1]!
-      const payload: {
-        readonly name: string
-        readonly flavorName: string
-        readonly desiredNodes: number
-        readonly minNodes: number
-        readonly maxNodes: number
-        readonly autoscale: boolean
-        readonly antiAffinity: boolean
-        readonly monthlyBilled: boolean
-      } = body
       const id = `pool-${nextId++}`
       const pool: FakePool = {
         id,
-        name: payload.name,
-        flavor: payload.flavorName,
-        desiredNodes: payload.desiredNodes,
-        minNodes: payload.minNodes,
-        maxNodes: payload.maxNodes,
-        autoscale: payload.autoscale,
-        antiAffinity: payload.antiAffinity,
-        monthlyBilled: payload.monthlyBilled
+        name: body.name ?? "",
+        flavor: body.flavorName ?? "",
+        desiredNodes: body.desiredNodes ?? 0,
+        minNodes: body.minNodes ?? 0,
+        maxNodes: body.maxNodes ?? 0,
+        autoscale: body.autoscale ?? false,
+        antiAffinity: body.antiAffinity ?? false,
+        monthlyBilled: body.monthlyBilled ?? false
       }
-      pools.get(kubeId)?.set(id, pool)
+      pools.get(poolListMatch[1] ?? "")?.set(id, pool)
       return _json(pool)
     }
 
     const poolIdMatch = path.match(/^\/cloud\/project\/[^/]+\/kube\/([^/]+)\/nodepool\/([^/]+)$/)
     if (poolIdMatch && request.method === "PUT") {
       const [, kubeId, poolId] = poolIdMatch
-      const pool = pools.get(kubeId!)?.get(poolId!)
-      const payload: { readonly desiredNodes: number; readonly minNodes: number; readonly maxNodes: number } = body
-      if (pool) Object.assign(pool, payload)
+      const pool = pools.get(kubeId ?? "")?.get(poolId ?? "")
+      if (pool) {
+        pool.desiredNodes = body.desiredNodes ?? pool.desiredNodes
+        pool.minNodes = body.minNodes ?? pool.minNodes
+        pool.maxNodes = body.maxNodes ?? pool.maxNodes
+      }
       return _json(pool)
     }
     if (poolIdMatch && request.method === "DELETE") {
       const [, kubeId, poolId] = poolIdMatch
-      pools.get(kubeId!)?.delete(poolId!)
+      pools.get(kubeId ?? "")?.delete(poolId ?? "")
       return new Response(null, { status: 200 })
     }
 
@@ -117,11 +119,11 @@ export const makeFakeMksServer = () => {
 
   return { clusters, pools, httpClient: _fixtureHttpClient(_handle) }
 
-  function _fixtureHttpClient(handle: (request: HttpClientRequest.HttpClientRequest, body: unknown) => Response) {
+  function _fixtureHttpClient(handle: (request: HttpClientRequest.HttpClientRequest, body: FakeBody) => Response) {
     return HttpClient.make((request) =>
       Effect.gen(function*() {
         const text = yield* _bodyText(request)
-        const body = text.length === 0 ? undefined : JSON.parse(text)
+        const body: FakeBody = text.length === 0 ? {} : JSON.parse(text)
         return HttpClientResponse.fromWeb(request, handle(request, body))
       })
     ).pipe(HttpClient.mapRequest(HttpClientRequest.prependUrl(_baseUrl)))

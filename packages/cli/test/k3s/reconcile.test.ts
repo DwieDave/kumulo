@@ -214,8 +214,8 @@ describe("k3s CLI composition root", () => {
       // TLS SANs: every master IP + the LB VIP + the DNS api record FQDN.
       const masterScripts = log.executed.filter((e) => e.command.includes("--cluster-init") || e.command.includes("--server https://10.0.0."))
       for (const { command } of masterScripts) {
-        expect(command).toContain("--tls-san=10.0.0.100") // LB VIP
-        expect(command).toContain("--tls-san=api.test-k3s.example.com") // DNS api record
+        expect(command).toContain("--tls-san='10.0.0.100'") // LB VIP (shell-quoted)
+        expect(command).toContain("--tls-san='api.test-k3s.example.com'") // DNS api record (shell-quoted)
       }
 
       // DNS: the api_server target record was ensured against the LB VIP.

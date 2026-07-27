@@ -3,11 +3,10 @@ import * as HttpClient from "effect/unstable/http/HttpClient"
 import {
   BootstrapFailed,
   CloudProvider,
-  ConfigInvalid,
-  DnsProvider,
   K8sClient,
   makeK8sClient,
   parseKubeconfig,
+  PlanRejected,
   ResourceNotFound,
   VolumeProvider
 } from "@kumulo/core"
@@ -23,11 +22,15 @@ import type {
   K8sManifest,
   Kubeconfig,
   ServerInfo,
+  ServerSpec,
   VolumeError
-} from "@kumulo/core"
+,
+  ConfigInvalid,
+  DnsProvider} from "@kumulo/core"
 
 export type K3sError =
   | CloudError
+  | PlanRejected
   | BootstrapFailed
   | ConfigInvalid
   | AddonError
@@ -36,19 +39,20 @@ export type K3sError =
   | ResourceNotFound
   | AuthenticationFailed
   | HttpTransportError
+import type {
+  Ssh} from "@kumulo/distro-k3s";
 import {
   drainAndRemove,
   fetchKubeconfig,
   resolveServerUrl,
   runBootstrap,
-  Ssh,
   SshLive
 } from "@kumulo/distro-k3s"
 import type { SshHost } from "@kumulo/distro-k3s"
 import { installAddons, resolveAddons } from "@kumulo/addons"
-import { CinderAuth } from "@kumulo/volumes-cinder"
+import type { CinderAuth } from "@kumulo/volumes-cinder"
 import { providerFor } from "../provider/registry.ts"
-import { OpenStackEnv } from "../doctor-openstack/env.ts"
+import type { OpenStackEnv } from "../doctor-openstack/env.ts"
 import {
   CloudCredentialEnv,
   k3sCloudCredentialLayer,
@@ -104,8 +108,50 @@ interface Infra {
   readonly workerInfos: ReadonlyArray<ServerInfo>
 }
 
-/** Network → Security → LB → Nodes (ServerGroups is absorbed into `ensureServer`). */
-const _provisionInfra = (config: K3sClusterConfig): Effect.Effect<Infra, CloudError, CloudProvider> =>
+const NO_REPLACE: ReadonlySet<string> = new Set()
+
+/**
+ * Replacing every master at once wipes etcd quorum (and with it the cluster's
+ * state) — so a control-plane replace is refused outright rather than executed
+ * half-safely. Rebuild the cluster deliberately, or keep master config stable.
+ */
+const _refuseMasterReplace = (
+  specs: ReadonlyArray<ServerSpec>,
+  replace: ReadonlySet<string>
+): Effect.Effect<void, PlanRejected> => {
+  const masters = specs.filter((spec) => spec.role === "master" && replace.has(spec.name)).map((spec) => spec.name)
+  return masters.length === 0 ? Effect.void : Effect.fail(
+    new PlanRejected({
+      reason:
+        `control-plane nodes cannot be replaced in place (${masters.join(", ")}): it would destroy etcd quorum. ` +
+        `Delete and recreate the cluster, or revert the masters' config.`
+    })
+  )
+}
+
+/**
+ * A confirmed replace really replaces: the drifted server is deleted first
+ * (`deleteServer` waits until it is gone), so the `ensureServer` pass below —
+ * create-if-missing-by-name — recreates it and stamps the new config hash.
+ */
+const _deleteDrifted = (
+  { config, replace }: { readonly config: K3sClusterConfig; readonly replace: ReadonlySet<string> }
+): Effect.Effect<void, CloudError, CloudProvider> =>
+  Effect.gen(function*() {
+    const cloudProvider = yield* CloudProvider
+    const inventory = yield* cloudProvider.listClusterResources(config.name)
+    yield* Effect.forEach(
+      inventory.servers.filter((server) => replace.has(server.name)),
+      cloudProvider.deleteServer,
+      { concurrency: 5, discard: true }
+    )
+  })
+
+/** Network → Security → LB → Replace → Nodes (ServerGroups is absorbed into `ensureServer`). */
+const _provisionInfra = (
+  config: K3sClusterConfig,
+  replace: ReadonlySet<string>
+): Effect.Effect<Infra, CloudError | PlanRejected, CloudProvider> =>
   Effect.gen(function*() {
     const cloudProvider = yield* CloudProvider
     yield* cloudProvider.ensureNetwork({ cidr: config.network.cidr })
@@ -113,6 +159,8 @@ const _provisionInfra = (config: K3sClusterConfig): Effect.Effect<Infra, CloudEr
     const lb = yield* cloudProvider.ensureLoadBalancer({ members: [] })
 
     const specs = buildK3sServerSpecs(config)
+    yield* _refuseMasterReplace(specs, replace)
+    if (replace.size > 0) yield* _deleteDrifted({ config, replace })
     const masterSpecs = specs.filter((s) => s.role === "master")
     const workerSpecs = specs.filter((s) => s.role === "worker")
     const masterInfos = yield* Effect.forEach(masterSpecs, cloudProvider.ensureServer, { concurrency: masterSpecs.length })
@@ -267,16 +315,18 @@ const _volumeProviderLayerFor = (
 // identical; tests pass a fake `K8sClient` Layer to drive the Addons/drain
 // phases without a real kubeconfig/HTTP round-trip.
 export const applyK3sEffect = (
-  { config, configDir, k8sClientLayer = k8sClientLive }: {
+  { config, configDir, replace = NO_REPLACE, k8sClientLayer = k8sClientLive }: {
     readonly config: K3sClusterConfig
     readonly configDir: string
+    /** Nodes the operator confirmed for replacement (plan `ReplaceNeedsConfirm` rows). */
+    readonly replace?: ReadonlySet<string>
     readonly k8sClientLayer?: (
       args: { readonly config: K3sClusterConfig; readonly master1: SshHost }
     ) => Layer.Layer<K8sClient, BootstrapFailed | ConfigInvalid, Ssh>
   }
 ): Effect.Effect<K3sApplyResult, K3sError, CloudProvider | Ssh | DnsProvider | VolumeProvider | CloudCredentialEnv> =>
   Effect.gen(function*() {
-    const infra = yield* _provisionInfra(config)
+    const infra = yield* _provisionInfra(config, replace)
     const master1 = yield* _bootstrap(config, infra)
     yield* Effect.gen(function*() {
       yield* _installAddons(config)
@@ -290,7 +340,7 @@ export const applyK3sEffect = (
 
 /** `applyK3sEffect` wired to its live Layers, `config.provider`/`config.dns.module`/`config.volumes.module`-dispatched (R2/R6). */
 export const applyK3s = (
-  args: { readonly config: K3sClusterConfig; readonly configDir: string }
+  args: { readonly config: K3sClusterConfig; readonly configDir: string; readonly replace?: ReadonlySet<string> }
 ): Effect.Effect<K3sApplyResult, K3sError, OpenStackEnv | CinderAuth | HttpClient.HttpClient> =>
   applyK3sEffect(args).pipe(
     Effect.provide(SshLive),

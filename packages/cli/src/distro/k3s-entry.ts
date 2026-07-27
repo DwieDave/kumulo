@@ -1,12 +1,13 @@
 import { Console, Effect } from "effect"
 import * as HttpClient from "effect/unstable/http/HttpClient"
-import { AuthenticationFailed, K8sClient, makeK8sClient, parseKubeconfig, waitForDeploymentAvailable } from "@kumulo/core"
-import type { CloudProvider, K3sClusterConfig, ResourceRef } from "@kumulo/core"
+import { AuthenticationFailed, makeK8sClient, parseKubeconfig, waitForDeploymentAvailable } from "@kumulo/core"
+import type { CloudProvider, K3sClusterConfig, ResourceRef , K8sClient} from "@kumulo/core"
 import { refForPlan, renderMastersPlan, renderUpgradePlan, renderWorkersPlan } from "@kumulo/distro-k3s"
 import { refFor, systemUpgradeControllerManifests } from "@kumulo/addons"
-import { Ssh, SshLive } from "@kumulo/distro-k3s"
-import { buildK3sPlan } from "../k3s/plan.ts"
-import { k3sCloudProviderLayer } from "../provider/registry.ts"
+import type { Ssh} from "@kumulo/distro-k3s";
+import { SshLive } from "@kumulo/distro-k3s"
+import { k3sPlanEffect } from "../k3s/plan.ts"
+import { providerFor } from "../provider/registry.ts"
 import { k8sHttpClientLayer } from "../k3s/k8s-http-client.ts"
 import { applyK3s, deleteK3s, k3sStatus, kubeconfigK3s, kubeconfigK3sEffect } from "../k3s/reconcile.ts"
 import type { K3sError, K3sStatus } from "../k3s/reconcile.ts"
@@ -63,7 +64,7 @@ const _k8sClientForUpgrade = (
 ): Effect.Effect<K8sClient["Service"], K3sError, OpenStackEnv | CinderAuth | HttpClient.HttpClient> =>
   _k8sClientForUpgradeEffect(config).pipe(
     Effect.provide(SshLive),
-    Effect.provide(k3sCloudProviderLayer(config))
+    Effect.provide(providerFor(config).cloudProviderLayer(config))
   )
 
 // The Plan CRD is owned by the SUC controller — apply its manifests
@@ -156,7 +157,8 @@ export const k3sEntry: DistroEntry<K3sClusterConfig> = {
   kind: "k3s",
   // Object storage is only wired for the ovh-mks path (scope.md).
   supportsObjectStorage: false,
-  plan: (config: K3sClusterConfig) => Effect.succeed(buildK3sPlan(config)),
+  plan: (config: K3sClusterConfig) =>
+    k3sPlanEffect(config).pipe(Effect.provide(providerFor(config).cloudProviderLayer(config))),
   deletePlanActions: (config: K3sClusterConfig) =>
     Effect.succeed([{ _tag: "Delete" as const, name: `cluster/${config.name}` }]),
   apply: (a) =>

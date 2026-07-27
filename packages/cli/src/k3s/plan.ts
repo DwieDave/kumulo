@@ -1,47 +1,86 @@
-import { resourceName } from "@kumulo/core"
-import type { K3sClusterConfig, Plan, ServerSpec } from "@kumulo/core"
+import { CloudProvider, computePlan, resourceName } from "@kumulo/core"
+import type { CloudError, DesiredResource, K3sClusterConfig, Plan, ServerSpec, TaggedResource } from "@kumulo/core"
+import { Effect } from "effect"
 import { dnsPlanActions } from "../dns-plan.ts"
 
 const MASTER_POOL = "masters"
 
-/** One `ServerSpec` per master, per-index named. */
-const _masterSpecs = (config: K3sClusterConfig): ReadonlyArray<ServerSpec> =>
-  Array.from({ length: config.masters.count }, (_, i) => ({
-    name: resourceName({ cluster: config.name, role: "master", pool: MASTER_POOL, index: i + 1 }),
-    role: "master",
-    flavor: config.masters.flavor,
+/** Coordinates + the `ServerSpec` they name: one row per desired node. */
+type DesiredNode = DesiredResource & { readonly spec: ServerSpec }
+
+const _node = (
+  { config, index, pool, flavor, role }: {
+    readonly config: K3sClusterConfig
+    readonly role: ServerSpec["role"]
+    readonly pool: string
+    readonly flavor: string
+    readonly index: number
+  }
+): DesiredNode => ({
+  cluster: config.name,
+  role,
+  pool,
+  index,
+  spec: {
+    name: resourceName({ cluster: config.name, role, pool, index }),
+    role,
+    flavor,
     image: config.masters.image,
     tag: config.name
-  }))
+  }
+})
+
+const _masterNodes = (config: K3sClusterConfig): ReadonlyArray<DesiredNode> =>
+  Array.from({ length: config.masters.count }, (_, i) =>
+    _node({ config, role: "master", pool: MASTER_POOL, flavor: config.masters.flavor, index: i + 1 }))
 
 // kumulo: WHY worker pools carry no `image` field — every pool shares the
 // masters' image (one image per cluster, not per pool).
-const _workerSpecs = (config: K3sClusterConfig): ReadonlyArray<ServerSpec> =>
+const _workerNodes = (config: K3sClusterConfig): ReadonlyArray<DesiredNode> =>
   config.worker_pools.flatMap((pool) =>
-    Array.from({ length: pool.count }, (_, i) => ({
-      name: resourceName({ cluster: config.name, role: "worker", pool: pool.name, index: i + 1 }),
-      role: "worker" as const,
-      flavor: pool.flavor,
-      image: config.masters.image,
-      tag: config.name
-    }))
+    Array.from({ length: pool.count }, (_, i) => _node({ config, role: "worker", pool: pool.name, flavor: pool.flavor, index: i + 1 }))
   )
 
-/** Every desired node for the "Nodes" phase, masters first (bootstrap order needs them created first). */
-export const buildK3sServerSpecs = (config: K3sClusterConfig): ReadonlyArray<ServerSpec> => [
-  ..._masterSpecs(config),
-  ..._workerSpecs(config)
+/** Every desired node, masters first (bootstrap order needs them created first). */
+export const buildK3sNodes = (config: K3sClusterConfig): ReadonlyArray<DesiredNode> => [
+  ..._masterNodes(config),
+  ..._workerNodes(config)
 ]
 
-// ponytail: same simplification as `mks/plan.ts` — a real Create/NoOp/Delete
-// diff needs the CloudProvider's tagged inventory mapped back into `plan`'s
-// `TaggedResource` shape (config-hash per resource), which the port doesn't
-// carry yet. `ensureServer`/`ensureNetwork`/etc are genuinely idempotent, so
-// this only affects what the plan *prints*. Upgrade alongside mks/plan.ts.
-export const buildK3sPlan = (config: K3sClusterConfig): Plan => ({
+export const buildK3sServerSpecs = (config: K3sClusterConfig): ReadonlyArray<ServerSpec> =>
+  buildK3sNodes(config).map((node) => node.spec)
+
+/**
+ * Real Create/NoOp/Delete rows: `observed` is the cluster's current inventory
+ * (empty = nothing provisioned yet). Drift becomes `ReplaceNeedsConfirm` only
+ * for observed resources that carry a `configHash` (stamped by the provider on
+ * create); a server created before stamping carries none and plans as `NoOp`.
+ */
+export const k3sPlanFor = (
+  { config, observed }: {
+    readonly config: K3sClusterConfig
+    readonly observed: ReadonlyArray<TaggedResource>
+  }
+): Plan => ({
   actions: [
-    ...buildK3sServerSpecs(config).map((spec) => ({ _tag: "Create" as const, name: spec.name })),
-    // k3s points `api_server` at a master IP → A record (see `applyK3s`).
+    ...computePlan({ desired: buildK3sNodes(config), actual: observed }).actions,
+    // k3s points `api_server` at a master IP -> A record (see `applyK3s`).
     ...dnsPlanActions({ config: config.dns, targetKind: "ip" })
   ]
 })
+
+/** Plan with no observed state: every node is a Create. Prefer `k3sPlanEffect`. */
+export const buildK3sPlan = (config: K3sClusterConfig): Plan => k3sPlanFor({ config, observed: [] })
+
+/** `k3sPlanFor` against the live inventory - an absent cluster observes nothing. */
+export const k3sPlanEffect = (
+  config: K3sClusterConfig
+): Effect.Effect<Plan, CloudError, CloudProvider> =>
+  Effect.gen(function*() {
+    const cloudProvider = yield* CloudProvider
+    const inventory = yield* cloudProvider.listClusterResources(config.name)
+    return k3sPlanFor({
+      config,
+      observed: inventory.servers.map((server) => ({ name: server.name, configHash: server.configHash }))
+    })
+  })

@@ -91,7 +91,7 @@ export const mksEntry: DistroEntry = {
   plan: _mksPlanLive,
   deletePlanActions: _deletePlanActions,
   apply: (a) =>
-    applyMks(a.config).pipe(
+    applyMks({ config: a.config, replace: a.replace }).pipe(
       Effect.map((info) => ({ summary: `\nCluster "${a.config.name}" is ${info.status} (${info.apiEndpoint}).` }))
     ),
   delete: deleteMks,

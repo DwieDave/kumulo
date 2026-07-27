@@ -23,7 +23,9 @@ const _codeByTag: Record<KumuloErrorTag, number> = {
   HttpTransportError: 12,
   ResponseDecodeError: 13,
   BucketNotEmpty: 14,
-  SinkUnavailable: 15
+  SinkUnavailable: 15,
+  RateLimited: 16,
+  ProviderApiError: 17
 }
 
 const _distroNotWiredCode = 20

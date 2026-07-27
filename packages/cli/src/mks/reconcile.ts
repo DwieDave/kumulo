@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 import type * as HttpClient from "effect/unstable/http/HttpClient"
-import { ConfigInvalid, ResourceNotFound } from "@kumulo/core"
+import { ConfigInvalid, PlanRejected, ResourceNotFound } from "@kumulo/core"
 import type { ClusterConfig, DnsProvider, Kubeconfig, ManagedClusterInfo, MksError } from "@kumulo/core"
 import {
   deleteCluster,
@@ -11,23 +11,12 @@ import {
   listNodePools,
   parseKubeVersion,
   type MksClusterConfig,
-  type MksClusterRef,
-  type MksWorkerPoolConfig
+  type MksClusterRef
 } from "@kumulo/distro-ovh-mks"
 import { MksEnv } from "./env.ts"
 import type { MksInventory } from "./plan.ts"
+import { mksClusterRow, mksPoolRow, toMksPool } from "./plan.ts"
 import { dnsProviderLayerFor, reconcileDns, removeDns } from "../dns.ts"
-
-const _toPool = (pool: ClusterConfig["worker_pools"][number]): MksWorkerPoolConfig => ({
-  name: pool.name,
-  flavor: pool.flavor,
-  desiredNodes: pool.count,
-  minNodes: pool.autoscaling?.enabled ? pool.autoscaling.min : pool.count,
-  maxNodes: pool.autoscaling?.enabled ? pool.autoscaling.max : pool.count,
-  autoscale: pool.autoscaling?.enabled ?? false,
-  antiAffinity: true,
-  monthlyBilled: false
-})
 
 const _toMksConfig = (
   { config, serviceName }: { readonly config: ClusterConfig; readonly serviceName: string }
@@ -35,7 +24,7 @@ const _toMksConfig = (
   serviceName,
   name: config.name,
   region: config.auth.region,
-  worker_pools: config.worker_pools.map(_toPool)
+  worker_pools: config.worker_pools.map(toMksPool)
 })
 
 /**
@@ -49,9 +38,13 @@ export const lookupMksInventory = (
     const { mks, serviceName } = yield* MksEnv
     const mksConfig = _toMksConfig({ config, serviceName })
     const info = yield* findClusterByName({ mks, config: mksConfig })
-    if (info === undefined) return { clusterExists: false, poolNames: new Set<string>() }
+    if (info === undefined) return { clusterExists: false, poolNames: new Set<string>(), poolHashes: new Map() }
     const pools = yield* listNodePools({ mks, ref: { serviceName, kubeId: info.id } })
-    return { clusterExists: true, poolNames: new Set(pools.map((pool) => pool.name)) }
+    return {
+      clusterExists: true,
+      poolNames: new Set(pools.map((pool) => pool.name)),
+      poolHashes: new Map(pools.map((pool) => [pool.name, pool.configHash]))
+    }
   })
 
 const _endpointInvalid = (apiEndpoint: string) =>
@@ -79,26 +72,59 @@ export const reconcileMksDns = (
     yield* reconcileDns({ config, apiTarget: { kind: "hostname", value: hostname } })
   })
 
+const NO_REPLACE: ReadonlySet<string> = new Set()
+
+/**
+ * Confirmed plan rows → the pool names `ensureNodePools` may destroy.
+ *
+ * MKS runs the control plane itself, so there is no master analogue to
+ * replace: `mks-cluster/<name>` can only be "replaced" by deleting the
+ * cluster (and every workload on it). That is refused outright — the same
+ * stance `_refuseMasterReplace` takes for k3s etcd quorum. Rows this distro
+ * doesn't own (`bucket/`, `volume/`) belong to their own reconcilers and are
+ * ignored here, exactly as the k3s path ignores non-server rows.
+ */
+const _poolsToReplace = (
+  { config, replace }: { readonly config: ClusterConfig; readonly replace: ReadonlySet<string> }
+): Effect.Effect<ReadonlySet<string>, PlanRejected> => {
+  if (replace.has(mksClusterRow(config.name))) {
+    return Effect.fail(
+      new PlanRejected({
+        reason:
+          `the MKS control plane cannot be replaced in place (${mksClusterRow(config.name)}): OVH manages it, so replacing it means ` +
+          `deleting the cluster and everything on it. Delete and recreate it deliberately, or revert the change.`
+      })
+    )
+  }
+  const byRow = new Map(config.worker_pools.map((pool) => [mksPoolRow({ cluster: config.name, pool: pool.name }), pool.name]))
+  return Effect.succeed(new Set([...replace].flatMap((row) => byRow.get(row) ?? [])))
+}
+
 /** Converge control plane + nodepools onto the config, then its DNS records (create and scale share this). */
 export const applyMksEffect = (
-  config: ClusterConfig
-): Effect.Effect<ManagedClusterInfo, MksError | ConfigInvalid, MksEnv | DnsProvider> =>
+  { config, replace = NO_REPLACE }: {
+    readonly config: ClusterConfig
+    /** Node pools the operator confirmed for replacement (plan `ReplaceNeedsConfirm` rows). */
+    readonly replace?: ReadonlySet<string>
+  }
+): Effect.Effect<ManagedClusterInfo, MksError | ConfigInvalid | PlanRejected, MksEnv | DnsProvider> =>
   Effect.gen(function*() {
+    const pools = yield* _poolsToReplace({ config, replace })
     const { mks, serviceName } = yield* MksEnv
     const version = yield* parseKubeVersion(config.version)
     const mksConfig: MksClusterConfig = { ..._toMksConfig({ config, serviceName }), version }
     const info = yield* ensureCluster({ mks, config: mksConfig })
     const ref: MksClusterRef = { serviceName, kubeId: info.id }
-    yield* ensureNodePools({ mks, ref, pools: mksConfig.worker_pools })
+    yield* ensureNodePools({ mks, ref, pools: mksConfig.worker_pools, replace: pools })
     yield* reconcileMksDns({ config, apiEndpoint: info.apiEndpoint })
     return info
   })
 
 /** `applyMksEffect` wired to its live `DnsProvider`, `config.dns.module`-dispatched (R6). */
 export const applyMks = (
-  config: ClusterConfig
-): Effect.Effect<ManagedClusterInfo, MksError | ConfigInvalid, MksEnv | HttpClient.HttpClient> =>
-  applyMksEffect(config).pipe(Effect.provide(dnsProviderLayerFor(config)))
+  args: { readonly config: ClusterConfig; readonly replace?: ReadonlySet<string> }
+): Effect.Effect<ManagedClusterInfo, MksError | ConfigInvalid | PlanRejected, MksEnv | HttpClient.HttpClient> =>
+  applyMksEffect(args).pipe(Effect.provide(dnsProviderLayerFor(args.config)))
 
 /** Kubeconfig via the OVH API; resolves the cluster by name first (stateless), never creates one. */
 export const kubeconfigMks = (

@@ -40,7 +40,7 @@ it("mks plan output includes DNS rows", () => {
   const plan = buildMksPlan({
     config: {
       name: "prod-eu",
-      worker_pools: [{ name: "workers" }],
+      worker_pools: [{ name: "workers", flavor: "b2-7", count: 1 }],
       volumes: { module: "none" },
       dns: _dns
     },

@@ -1,6 +1,6 @@
 import { Context, Effect, Layer } from "effect"
 import * as HttpClient from "effect/unstable/http/HttpClient"
-import { AuthenticationFailed } from "@kumulo/core"
+import type { AuthenticationFailed } from "@kumulo/core"
 import { makeMksClient, type Mks } from "@kumulo/distro-ovh-mks"
 import { OvhAuthLive, ovhHttpClientLive } from "@kumulo/provider-ovh"
 import { requiredEnv, requiredRedactedEnv } from "../env.ts"

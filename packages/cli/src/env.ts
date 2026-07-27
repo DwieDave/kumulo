@@ -1,4 +1,5 @@
-import { Config, Effect, Redacted } from "effect"
+import type { Redacted } from "effect";
+import { Config, Effect } from "effect"
 import { AuthenticationFailed } from "@kumulo/core"
 
 /**

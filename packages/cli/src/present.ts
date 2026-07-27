@@ -1,27 +1,9 @@
 import type { Plan, PlanAction } from "@kumulo/core"
 
-/**
- * ponytail: `@kumulo/core`'s `present/decide.ts` + `present/render.ts` already
- * implement exactly this (pure, already unit-tested) — but they aren't
- * re-exported through `core/src/index.ts` yet, and that barrel is owned by
- * the integration step (out of scope here), so reaching them isn't possible
- * without a deep import (banned by dep-cruiser). Duplicated verbatim; delete
- * this file and import from `@kumulo/core` once the barrel picks them up.
- */
-export type PlanDecision =
-  | { readonly _tag: "DryRun" }
-  | { readonly _tag: "NothingToDo" }
-  | { readonly _tag: "Proceed" }
-  | { readonly _tag: "NeedsConfirm" }
-
-export const decidePlanAction = (
-  { plan, yes, dryRun }: { readonly plan: Plan; readonly yes: boolean; readonly dryRun: boolean }
-): PlanDecision => {
-  if (dryRun) return { _tag: "DryRun" }
-  if (plan.actions.every((action) => action._tag === "NoOp")) return { _tag: "NothingToDo" }
-  if (yes) return { _tag: "Proceed" }
-  return { _tag: "NeedsConfirm" }
-}
+// The decision (dry-run/nothing-to-do/confirm) is pure domain and lives in
+// core; only the ANSI rendering below is CLI-specific.
+export { decidePlanAction } from "@kumulo/core"
+export type { PlanDecision } from "@kumulo/core"
 
 // ANSI colors only when writing to a real terminal — piped/captured output
 // (tests, files) stays plain.

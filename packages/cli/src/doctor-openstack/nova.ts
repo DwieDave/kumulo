@@ -1,6 +1,7 @@
-import type { AuthenticationFailed, ResourceNotFound } from "@kumulo/core"
+import type { OpenStackError } from "@kumulo/openstack"
 import { Effect } from "effect"
-import { HttpClient, HttpClientRequest } from "effect/unstable/http"
+import type { HttpClient} from "effect/unstable/http";
+import { HttpClientRequest } from "effect/unstable/http"
 import type { DoctorCheck } from "../doctor/types.ts"
 
 // Pinned to the generated client's spec version (v2.96); sent explicitly on
@@ -18,7 +19,7 @@ export type MicroversionStatus = "accepted" | "rejected" | "unreachable"
 export interface OpenStackEndpointResolver {
   readonly endpoint: (
     options: { readonly service: string; readonly region: string }
-  ) => Effect.Effect<string, ResourceNotFound | AuthenticationFailed>
+  ) => Effect.Effect<string, OpenStackError>
 }
 
 /** Raw `GET /v2.1/` with the pinned microversion header — Nova answers 406 when it rejects the pin. */

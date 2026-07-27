@@ -2,8 +2,11 @@ import { dirname } from "node:path"
 import { Console, Effect } from "effect"
 import { Command, Prompt } from "effect/unstable/cli"
 import type { Layer } from "effect"
-import type { ClusterConfig, CredentialsSink, ObjectStorageProvider, Plan } from "@kumulo/core"
+import { genericProfileLive, namesToReplace, PlanRejected, ProviderProfile } from "@kumulo/core"
+import type { ClusterConfig, ClusterConfigShape, ConfigInvalid, CredentialsSink, ObjectStorageProvider, Plan } from "@kumulo/core"
 import { ovhObjectStorageProviderLive } from "@kumulo/storage-ovh"
+import { ovhProfileLive } from "@kumulo/provider-ovh"
+import { hetznerProfileLive } from "@kumulo/hetzner"
 import { loadConfig } from "./config.ts"
 import { envSummary } from "./env-summary.ts"
 import {
@@ -35,6 +38,40 @@ const _confirm = (
   process.stdout.isTTY
     ? Prompt.run(Prompt.confirm({ message })).pipe(Effect.catch(() => Effect.succeed(false)))
     : Console.log(fallback).pipe(Effect.as(false))
+
+/** The provider's `ProviderProfile` — OVH's capabilities are per-region, so it takes `auth.region`. */
+const _profileLayer = (config: ClusterConfig): Layer.Layer<ProviderProfile> =>
+  config.provider === "ovh"
+    ? ovhProfileLive(config.auth.region)
+    : config.provider === "hetzner"
+    ? hetznerProfileLive
+    : genericProfileLive
+
+/**
+ * `ClusterConfigShape` slice for `validate`: mks configs carry no
+ * `addons`/`api_server` block and `module: "none"` carries no `managed` list,
+ * so the optional parts are filled in explicitly instead of cast.
+ */
+const _profileShape = (config: ClusterConfig): ClusterConfigShape => ({
+  distro: config.distro,
+  worker_pools: config.worker_pools,
+  auth: { region: config.auth.region },
+  // OVH fixes MKS's CNI, so the cilium rule can only ever trip on k3s.
+  addons: config.distro === "k3s" ? config.addons : { cni: "flannel" },
+  ...(config.distro === "k3s" ? { api_server: { high_availability: config.api_server.high_availability } } : {}),
+  ...(config.volumes.module === "none" ? {} : { volumes: { managed: config.volumes.managed } })
+})
+
+/**
+ * Provider-specific config rules (HA in a region without Octavia, unknown
+ * hcloud location, unsupported volume type) — rejected before anything is
+ * planned or touched.
+ */
+const _validateForProvider = (config: ClusterConfig): Effect.Effect<void, ConfigInvalid> =>
+  Effect.gen(function*() {
+    const profile = yield* ProviderProfile
+    yield* profile.validate(_profileShape(config))
+  }).pipe(Effect.provide(_profileLayer(config)))
 
 const _planPhrases: ReadonlyArray<string> = [
   "Counting clouds...",
@@ -123,14 +160,27 @@ const _convergeAll = Effect.fn(function*(
   return result
 })
 
+/**
+ * Declining a plan (a non-TTY answers no, see `_confirm`) is a no-op for
+ * creates — but a plan that would replace nodes fails closed, so drift is
+ * never silently skipped in CI.
+ */
+export const rejectUnconfirmedReplace = (plan: Plan): Effect.Effect<void, PlanRejected> =>
+  namesToReplace(plan).size === 0
+    ? Effect.void
+    : Effect.fail(
+      new PlanRejected({
+        reason: `${namesToReplace(plan).size} node(s) need replacing and the change was not confirmed; re-run with --yes to apply`
+      })
+    )
+
 /** Config → plan → present → apply, shared by `apply` and `scale`. */
 const _applyFlow = Effect.fn(function*({ config: configPath }: { readonly config: string }) {
   const root = yield* kumulo
   const config = yield* loadConfig(configPath)
+  yield* _validateForProvider(config)
   const configDir = dirname(configPath)
   const { appliedPrefixes } = distroFor(config)
-  // The distro's config-taking members, bound to this config's variant once.
-  const applyStep = onDistro(config)(({ config: cfg, entry }) => entry.apply({ config: cfg, configDir }))
   if (root.showEnv) yield* Console.log(`${yield* envSummary(config)}\n`)
   const storageLayer = wantsObjectStorage(config) ? yield* storageLayers(config) : undefined
   const plan: Plan = yield* withSpinner({
@@ -149,8 +199,13 @@ const _applyFlow = Effect.fn(function*({ config: configPath }: { readonly config
   if (decision._tag === "DryRun" || decision._tag === "NothingToDo") return
   if (decision._tag === "NeedsConfirm") {
     const proceed = yield* _confirm({ message: "Apply these changes?", fallback: "Re-run with --yes to apply." })
-    if (!proceed) return
+    if (!proceed) return yield* rejectUnconfirmedReplace(plan)
   }
+  // Replaces only ever execute past the confirm gate above (`--yes` or an
+  // answered prompt); the distro never re-derives them from the inventory.
+  const replace = namesToReplace(plan)
+  // The distro's config-taking members, bound to this config's variant once.
+  const applyStep = onDistro(config)(({ config: cfg, entry }) => entry.apply({ config: cfg, configDir, replace }))
 
   // Trailing blank line, plus the confirm prompt's submitted line if we asked.
   const view = {

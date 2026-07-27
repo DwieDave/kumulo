@@ -218,7 +218,8 @@ it.effect("convergeBuckets creates missing buckets and issues credentials when n
     assert.deepStrictEqual(calls.ensureBucket.map((b) => b.name), ["staging-eu-backups"])
     assert.deepStrictEqual(calls.ensureCredentialsCalls, ["staging"])
     assert.strictEqual(writes.length, 1)
-    const keys = writes[0]!.map((e) => e.key)
+    const [firstWrite = []] = writes
+    const keys = firstWrite.map((e) => e.key)
     assert.include(keys, "s3.accessKey")
     assert.include(keys, "s3.buckets.0.name")
   }))

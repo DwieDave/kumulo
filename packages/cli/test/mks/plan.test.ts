@@ -3,7 +3,7 @@ import { buildMksPlan, emptyMksInventory, type MksInventory, type MksPlanInput }
 
 const _config: MksPlanInput = {
   name: "prod-eu",
-  worker_pools: [{ name: "workers" }, { name: "gpu" }],
+  worker_pools: [{ name: "workers", flavor: "b2-7", count: 3 }, { name: "gpu", flavor: "t1-45", count: 1 }],
   volumes: { module: "none" }
 }
 

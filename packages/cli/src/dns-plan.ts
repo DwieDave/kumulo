@@ -1,4 +1,5 @@
-import type { PlanAction } from "@kumulo/core"
+import { recordKind } from "@kumulo/core"
+import type { DnsRecordKind, PlanAction } from "@kumulo/core"
 import type { DnsTarget } from "./dns.ts"
 
 /**
@@ -13,14 +14,11 @@ export type DnsPlanInput =
     readonly records: ReadonlyArray<{ readonly name: string; readonly target: string }>
   }
 
-// Mirrors `recordKind` in the dns packages (dependency-cruiser forbids
-// importing it across sibling packages) — but at plan time the api_server
-// value isn't known yet, so its kind comes from the `DnsTarget` kind instead.
-const _isIp = (target: string): boolean =>
-  /^\d{1,3}(\.\d{1,3}){3}$/.test(target) || (target.includes(":") && /^[0-9a-fA-F:]+$/.test(target))
-
-const _kindOf = (target: string, apiTargetKind: DnsTarget["kind"]): "A" | "CNAME" =>
-  target === "api_server" ? (apiTargetKind === "ip" ? "A" : "CNAME") : _isIp(target) ? "A" : "CNAME"
+// `recordKind` (core, single source of truth) resolves a concrete target; at
+// plan time the `api_server` placeholder isn't resolved yet, so its kind comes
+// from the `DnsTarget` kind instead.
+const _kindOf = (target: string, apiTargetKind: DnsTarget["kind"]): DnsRecordKind =>
+  target === "api_server" ? (apiTargetKind === "ip" ? "A" : "CNAME") : recordKind(target)
 
 /**
  * DNS rows for the plan: one Create per desired record, none when

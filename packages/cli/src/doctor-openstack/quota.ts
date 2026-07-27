@@ -1,5 +1,6 @@
 import { Effect, Schema } from "effect"
-import { HttpClient, HttpClientRequest } from "effect/unstable/http"
+import type { HttpClient} from "effect/unstable/http";
+import { HttpClientRequest } from "effect/unstable/http"
 import type { DoctorCheck } from "../doctor/types.ts"
 import type { OpenStackEndpointResolver } from "./nova.ts"
 

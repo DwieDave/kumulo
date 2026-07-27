@@ -88,19 +88,21 @@ it.effect("yaml → plan → apply → nodepool scale-update → kubeconfig → 
     assert.strictEqual(decision._tag, "Proceed")
     assert.match(renderPlan(plan), /Plan: 2 to create/)
 
-    const info = yield* applyMksEffect(config).pipe(Effect.provide(mksEnvLayer), Effect.provide(dnsNoopLive))
+    const info = yield* applyMksEffect({ config }).pipe(Effect.provide(mksEnvLayer), Effect.provide(dnsNoopLive))
     assert.strictEqual(info.status, "READY")
 
     // Re-plan against the now-populated fake API: everything exists -> all NoOp.
     const after = yield* lookupMksInventory(config).pipe(Effect.provide(mksEnvLayer))
     const replan = buildMksPlan({ config, inventory: { ...after, volumeNames: new Set() } })
     assert.deepStrictEqual(replan.actions.map((a) => a._tag), ["NoOp", "NoOp"])
-    assert.strictEqual([...server.pools.get(info.id)!.values()][0]?.desiredNodes, 3)
+    assert.strictEqual([...(server.pools.get(info.id)?.values() ?? [])][0]?.desiredNodes, 3)
 
     // scale: re-run apply with a bumped worker count — same reconcile.
-    const scaledConfig = { ...config, worker_pools: [{ ...config.worker_pools[0]!, count: 5 }] }
-    yield* applyMksEffect(scaledConfig).pipe(Effect.provide(mksEnvLayer), Effect.provide(dnsNoopLive))
-    assert.strictEqual([...server.pools.get(info.id)!.values()][0]?.desiredNodes, 5)
+    const [firstPool] = config.worker_pools
+    assert.ok(firstPool, "fixture must define a worker pool")
+    const scaledConfig = { ...config, worker_pools: [{ ...firstPool, count: 5 }] }
+    yield* applyMksEffect({ config: scaledConfig }).pipe(Effect.provide(mksEnvLayer), Effect.provide(dnsNoopLive))
+    assert.strictEqual([...(server.pools.get(info.id)?.values() ?? [])][0]?.desiredNodes, 5)
 
     const kubeconfig = yield* kubeconfigMks(config).pipe(Effect.provide(mksEnvLayer))
     assert.match(kubeconfig.content, /kind: Config/)

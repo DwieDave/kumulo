@@ -4,11 +4,13 @@ import { join } from "node:path"
 import { describe, expect, it } from "vitest"
 
 // NFR-7 — the compiled `kumulo` binary (via `bun run build:binary`) actually
-// runs: `--help` and a `create --dry-run` against an example config. Only
-// runs when `dist/kumulo` already exists (built by `scripts/build-binary.sh`)
-// so a plain `bun run test` doesn't pay the ~60s compile cost every time.
+// runs: `--help` and `apply <config> --dry-run` against the example configs.
 const _root = join(import.meta.dirname, "..")
 const _binary = join(_root, "dist", "kumulo")
+
+if (!existsSync(_binary)) {
+  throw new Error(`${_binary} not found — run \`bun run build:binary\` before this smoke test.`)
+}
 
 const _fakeEnv = {
   ...process.env,
@@ -24,42 +26,44 @@ const _fakeEnv = {
   HETZNER_DNS_TOKEN: "x"
 }
 
-describe.skipIf(!existsSync(_binary))("compiled kumulo binary", () => {
-  it("--help prints usage", () => {
+const _dryRun = (example: string): string =>
+  execFileSync(_binary, ["apply", join(_root, "examples", example), "--dry-run"], {
+    env: _fakeEnv,
+    encoding: "utf8",
+    stdio: "pipe"
+  })
+
+describe("compiled kumulo binary", () => {
+  it("--help lists the subcommands", () => {
     const out = execFileSync(_binary, ["--help"], { env: _fakeEnv, encoding: "utf8" })
-    expect(out).toContain("kumulo <subcommand>")
+    expect(out).toContain("kumulo")
+    expect(out).toContain("apply")
+    expect(out).toContain("kubeconfig")
   })
 
   // The ovh-mks plan is a live diff (cluster/pool/volume/bucket existence is
   // looked up against OVH), so dry-run with fake credentials must fail loudly
   // instead of printing a made-up plan.
-  it("create --dry-run against the ovh-mks example fails loudly on fake credentials", () => {
+  it("apply --dry-run against the ovh-mks example fails loudly on fake credentials", () => {
     expect(() =>
-      execFileSync(
-        _binary,
-        ["create", "--config", join(_root, "examples", "ovh-mks.yaml"), "--dry-run"],
-        { env: _fakeEnv, encoding: "utf8", stdio: "pipe" }
-      )
+      execFileSync(_binary, ["apply", join(_root, "examples", "ovh-mks.yaml"), "--dry-run"], {
+        env: _fakeEnv,
+        encoding: "utf8",
+        stdio: "pipe"
+      })
     ).toThrow(/OAuth2 token request failed|Authentication failed/)
   })
 
-  it("create --dry-run prints a plan against the k3s example", () => {
-    const out = execFileSync(
-      _binary,
-      ["create", "--config", join(_root, "examples", "k3s.yaml"), "--dry-run"],
-      { env: _fakeEnv, encoding: "utf8" }
-    )
-    expect(out).toContain("to create")
+  // Same for the OpenStack-backed k3s example: the plan lists the live Nova
+  // inventory, so it authenticates against Keystone first and fails there.
+  it("apply --dry-run against the k3s example fails loudly on fake credentials", () => {
+    expect(() => _dryRun("k3s.yaml")).toThrow(/POST http:\/\/example\.invalid\/v3\/auth\/tokens/)
   })
 
-  // k3s plans are config-only (buildK3sPlan, R13) — provider: hetzner prints
-  // the same shape without ever touching HCLOUD_TOKEN/the hcloud API.
-  it("create --dry-run prints a plan against the k3s-hetzner example", () => {
-    const out = execFileSync(
-      _binary,
-      ["create", "--config", join(_root, "examples", "k3s-hetzner.yaml"), "--dry-run"],
-      { env: _fakeEnv, encoding: "utf8" }
-    )
-    expect(out).toContain("to create")
+  // k3s plans are live diffs too (R13 — `k3sPlanEffect` lists the cluster's
+  // hcloud inventory), so fake credentials must fail loudly, exactly like the
+  // ovh-mks path above, instead of printing a made-up plan.
+  it("apply --dry-run against the k3s-hetzner example fails loudly on fake credentials", () => {
+    expect(() => _dryRun("k3s-hetzner.yaml")).toThrow(/Authentication failed: \w[\w -]*prod-fsn: hcloud rejected the API token/)
   })
 })

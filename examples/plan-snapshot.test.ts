@@ -3,7 +3,7 @@ import { join } from "node:path"
 import { describe, expect, it } from "vitest"
 import { Effect } from "effect"
 import { computePlan, decidePlanAction, parseConfigYaml, renderPlan, toTaggedResource } from "@kumulo/core"
-import type { BucketSpec, ClusterConfig, DesiredResource, PlanAction, PlanInventory } from "@kumulo/core"
+import type { BucketSpec, ClusterConfig, DesiredResource, PlanAction, TaggedResource } from "@kumulo/core"
 import { diffBuckets } from "@kumulo/storage-ovh"
 import type { BucketDiff, ExistingBucket } from "@kumulo/storage-ovh"
 
@@ -81,7 +81,7 @@ for (const { file, label } of _cases) {
 
   // Combines worker-pool + bucket actions into one `Plan`, same shape as
   // `_applyFlow` in packages/cli/src/commands.ts (`[...basePlan.actions, ...bucketActions]`).
-  const _fullPlan = (nodes: PlanInventory, buckets: ReadonlyArray<ExistingBucket>) => ({
+  const _fullPlan = (nodes: ReadonlyArray<TaggedResource>, buckets: ReadonlyArray<ExistingBucket>) => ({
     actions: [
       ...computePlan({ desired: _desired, actual: nodes }).actions,
       ..._volumeActions(_config),
@@ -97,13 +97,13 @@ for (const { file, label } of _cases) {
     })
 
     it("partial inventory -> mix of no-op and create", () => {
-      const nodes: PlanInventory = _desired.slice(0, 1).map(toTaggedResource)
+      const nodes: ReadonlyArray<TaggedResource> = _desired.slice(0, 1).map(toTaggedResource)
       const buckets = _desiredBkts.slice(0, 1).map(_toExisting)
       expect(renderPlan(_fullPlan(nodes, buckets))).toMatchSnapshot()
     })
 
     it("complete matching inventory -> all no-ops, nothing to do (mks: except its always-Create volumes)", () => {
-      const nodes: PlanInventory = _desired.map(toTaggedResource)
+      const nodes: ReadonlyArray<TaggedResource> = _desired.map(toTaggedResource)
       const buckets = _desiredBkts.map(_toExisting)
       const plan = _fullPlan(nodes, buckets)
       // mks volume actions are always "Create" (no real diff yet, see
@@ -115,7 +115,7 @@ for (const { file, label } of _cases) {
     })
 
     it("drifted inventory -> replace-needs-confirm, never a silent apply", () => {
-      const nodes: PlanInventory = _desired.map((resource) => toTaggedResource({ ...resource, spec: { flavor: "drifted" } }))
+      const nodes: ReadonlyArray<TaggedResource> = _desired.map((resource) => toTaggedResource({ ...resource, spec: { flavor: "drifted" } }))
       const buckets = _desiredBkts.map((bucket) => _toExisting({ ...bucket, encryption: !bucket.encryption }))
       const plan = _fullPlan(nodes, buckets)
       expect(decidePlanAction({ plan, yes: false, dryRun: false })).toEqual({ _tag: "NeedsConfirm" })
