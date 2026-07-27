@@ -27,6 +27,9 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
+      - name: Build packages
+        run: bun run build
+
       - name: Build binary
         run: bun run build:binary
 
@@ -41,3 +44,6 @@ jobs:
 
       - name: Codegen check
         run: bun run codegen:check
+
+      - name: Schema check
+        run: bun run schema:check

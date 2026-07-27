@@ -14,12 +14,23 @@
     "kumulo/no-type-assertion": "error",
     "kumulo/no-yieldless-effect-gen": "error",
     "kumulo/private-function-prefix": "error",
-    "eslint/no-underscore-dangle": "off"
+    "typescript/no-non-null-assertion": "error",
+    "typescript/no-explicit-any": "error",
+    "typescript/consistent-type-imports": "error",
+    "eslint/no-underscore-dangle": "off",
+    "eslint/no-eval": "error",
+    "import/no-cycle": "error",
+    "promise/no-return-wrap": "error",
+    "unicorn/no-await-in-promise-methods": "error"
   },
   "overrides": [
     {
       "files": ["packages/oxlint/**"],
       "rules": { "kumulo/no-type-assertion": "off" }
+    },
+    {
+      "files": ["scripts/**"],
+      "rules": { "unicorn/no-thenable": "off" }
     },
     {
       "files": ["**/test/**"],

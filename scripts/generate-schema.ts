@@ -47,7 +47,8 @@ const document = Schema.toJsonSchemaDocument(ClusterConfig)
 // `additionalProperties: false` would otherwise reject the very `$schema` key
 // json configs use to reference this document — allow it in every variant.
 type Variant = { properties: Record<string, unknown> }
-const variants = (document.schema as { anyOf: ReadonlyArray<Variant> }).anyOf
+const anyOf = document.schema["anyOf"]
+const variants: ReadonlyArray<Variant> = Array.isArray(anyOf) ? anyOf : []
 const schema = {
   $schema: JsonSchema.META_SCHEMA_URI_DRAFT_2020_12,
   title: "kumulo cluster config",

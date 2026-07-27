@@ -1,6 +1,13 @@
 /** Hexagonal dependency-direction rules (design Appendix A). */
 module.exports = {
   options: {
+    // kumulo: dependency-cruiser 18 refuses typescript@7 (peer range <7.0.0) and prints
+    // `missing-typescript-transpiler`, so `tsPreCompilationDeps` is inert — the built-in
+    // TS-capable fallback parser does the extraction. Measured, that fallback is the BEST
+    // available option here, not a degraded one: it cruises 678 modules / 2342 deps vs
+    // `parser: "swc"` (@swc/core is in the catalog) at 674 / 2328, and both flag a
+    // deliberate `import type` sibling-import probe. So the no-sibling-import guarantee
+    // holds; do not "fix" the warning by switching to swc — that loses edges.
     tsPreCompilationDeps: true,
     doNotFollow: { path: "node_modules" },
     tsConfig: { fileName: "tsconfig.base.json" },

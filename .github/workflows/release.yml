@@ -68,6 +68,13 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
+      # Build ALL packages up front: prepublishOnly would otherwise only build
+      # each package as it is about to be published, so a build failure at
+      # package N leaves 1..N-1 immutably published — and the pack dry-run
+      # below would inspect tarballs containing no dist/.
+      - name: Build all packages
+        run: bun run build
+
       - name: Test
         run: bun run test
 
