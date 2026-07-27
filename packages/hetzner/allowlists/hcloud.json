@@ -9,7 +9,6 @@
     "delete_server",
     "list_images",
     "list_server_types",
-    "list_locations",
     "list_networks",
     "create_network",
     "delete_network",
@@ -17,8 +16,6 @@
     "create_firewall",
     "delete_firewall",
     "set_firewall_rules",
-    "list_ssh_keys",
-    "create_ssh_key",
     "list_volumes",
     "create_volume",
     "delete_volume",
@@ -28,8 +25,6 @@
     "delete_placement_group",
     "list_load_balancers",
     "create_load_balancer",
-    "delete_load_balancer",
-    "add_load_balancer_target",
-    "remove_load_balancer_target"
+    "delete_load_balancer"
   ]
 }

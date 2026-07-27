@@ -1,4 +1,1 @@
-// why: no known upstream spec corrections needed yet for the allowlisted
-// Glance operations. Empty overlay keeps the patch-apply step exercised;
-// populate as T5.2 fixture-replay tests surface real spec bugs.
 []

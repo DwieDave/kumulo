@@ -125,3 +125,45 @@ export const syntheticSpecWithFreeformAdditionalProperties: OpenAPISpec = {
     }
   }
 }
+
+/**
+ * Synthetic spec with a PURE free-form string map (no declared sibling properties) —
+ * the hcloud-`labels` / nova-`metadata` shape. No TS2411 conflict exists here, so it must
+ * survive as a real `Schema.Record` instead of collapsing to `Schema.Struct({})`.
+ * The `description`s exercise the annotation-stripping pass; the property literally named
+ * `description` must NOT be stripped (it is a field name, not prose).
+ */
+export const syntheticSpecWithFreeformMap: OpenAPISpec = {
+  openapi: "3.1.0",
+  info: { title: "Synthetic", version: "1.0.0" },
+  components: { schemas: {}, securitySchemes: {} },
+  security: [],
+  tags: [],
+  paths: {
+    "/widgets": {
+      get: {
+        operationId: "listWidgets",
+        description: "long prose that buys no validation",
+        parameters: [],
+        responses: {
+          "200": {
+            description: "ok",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    labels: { type: "object", additionalProperties: { type: "string" }, description: "prose" },
+                    description: { type: "string" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        tags: ["widgets"],
+        security: []
+      }
+    }
+  }
+}

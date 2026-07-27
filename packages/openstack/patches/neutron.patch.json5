@@ -1,4 +1,47 @@
-// why: no known upstream spec corrections needed yet for the allowlisted
-// Neutron operations. Empty overlay keeps the patch-apply step exercised;
-// populate as T5.2 fixture-replay tests surface real spec bugs.
-[]
+[
+  // kumulo: WHY required:true — see keystone.patch.json5. Spec omits `required`
+  // on the requestBody, so the generator emits an optional payload union and
+  // every create goes out with an empty body.
+  {
+    "op": "add",
+    "path": "/paths/~1v2.0~1security-groups/post/requestBody/required",
+    "value": true
+  },
+  {
+    "op": "add",
+    "path": "/paths/~1v2.0~1security-group-rules/post/requestBody/required",
+    "value": true
+  },
+  {
+    "op": "add",
+    "path": "/paths/~1v2.0~1networks/post/requestBody/required",
+    "value": true
+  },
+  {
+    "op": "add",
+    "path": "/paths/~1v2.0~1subnets/post/requestBody/required",
+    "value": true
+  },
+  {
+    "op": "remove",
+    "path": "/paths/~1v2.0~1security-groups/get/parameters/0"
+  },
+  {
+    "op": "add",
+    "path": "/paths/~1v2.0~1security-groups~1{id}/delete/parameters",
+    "value": [
+      {
+        "$ref": "#/components/parameters/security_groups_id"
+      }
+    ]
+  },
+  {
+    "op": "add",
+    "path": "/paths/~1v2.0~1networks~1{network_id}/delete/parameters",
+    "value": [
+      {
+        "$ref": "#/components/parameters/networks_network_id"
+      }
+    ]
+  }
+]

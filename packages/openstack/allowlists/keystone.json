@@ -2,7 +2,6 @@
   "service": "keystone",
   "spec": "specs/keystone/v3.14.yaml",
   "operationIds": [
-    "auth/tokens:post",
-    "auth/catalog:get"
+    "auth/tokens:post"
   ]
 }

@@ -1,4 +1,1 @@
-// why: no known corrections needed yet against the allowlisted OVH v1 DNS
-// zone record routes. Empty overlay keeps the patch-apply stage exercised
-// end-to-end; populate as fixture-replay tests surface real spec bugs.
 []

@@ -38,7 +38,8 @@ const _closeModels = (roots: ReadonlyArray<string>, models: Record<string, OvhMo
   const kept: Record<string, OvhModel> = {}
   const stack = [...roots]
   while (stack.length > 0) {
-    const key = stack.pop()!
+    const key = stack.pop()
+    if (key === undefined) break
     if (kept[key] || !models[key]) continue
     const model = models[key]
     kept[key] = model
@@ -54,7 +55,7 @@ const _trimSchema = (schema: OvhSchema, ops: ReadonlyArray<AllowlistOp>): OvhSch
   const byPath = new Map(ops.map((op) => [op.path, new Set(ops.filter((o) => o.path === op.path).map((o) => o.method))]))
   const apis = schema.apis
     .filter((api) => byPath.has(api.path))
-    .map((api) => ({ ...api, operations: api.operations.filter((op) => byPath.get(api.path)!.has(op.httpMethod)) }))
+    .map((api) => ({ ...api, operations: api.operations.filter((op) => byPath.get(api.path)?.has(op.httpMethod) === true) }))
     .filter((api) => api.operations.length > 0)
 
   const modelRoots = apis.flatMap((api) =>

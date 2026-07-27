@@ -1,5 +1,56 @@
-// why: no known upstream spec corrections needed yet for the allowlisted
-// Keystone operations (auth/tokens:post, auth/catalog:get). Empty overlay
-// keeps the patch-apply step exercised end-to-end (T5.2 regen-noop CI);
-// populate as fixture-replay tests in T5.2 surface real spec bugs.
-[]
+[
+  // kumulo: WHY required:true — the vendored spec omits `required` on the
+  // requestBody, which OpenAPI defaults to false. The generator then emits
+  // `payload: [HttpApiSchema.NoContent, ...Json]` and the encoder matches the
+  // empty branch first, so the token request went out with NO BODY and Keystone
+  // answered 400 "Expecting to find valid JSON in request body". Caught by the
+  // first live `apply`; no fixture can see it. The body is mandatory in reality.
+  {
+    "op": "add",
+    "path": "/paths/~1v3~1auth~1tokens/post/requestBody/required",
+    "value": true
+  },
+  // kumulo: WHY nullable — real Keystone (OVH DE1) returns
+  // `token.user.password_expires_at: null` for accounts with no expiry policy,
+  // but the spec declares a plain `string`, so decoding a genuine token response
+  // failed. Caught by live `apply`, invisible to fixtures written from the spec.
+  {
+    "op": "replace",
+    "path": "/components/schemas/AuthTokensPostResponse/properties/token/properties/user/properties/password_expires_at",
+    "value": {
+      "anyOf": [
+        { "type": "string", "format": "date-time" },
+        { "type": "null" }
+      ]
+    }
+  },
+  {
+    "op": "replace",
+    "path": "/components/schemas/AuthReceiptSchema/properties/receipt/properties/user/properties/password_expires_at",
+    "value": {
+      "anyOf": [
+        { "type": "string", "format": "date-time" },
+        { "type": "null" }
+      ]
+    }
+  },
+  {
+    "op": "add",
+    "path": "/paths/~1v3~1auth~1tokens/post/responses/201",
+    "value": {
+      "description": "Created",
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "#/components/schemas/AuthTokensPostResponse"
+          }
+        }
+      },
+      "headers": {
+        "X-Subject-Token": {
+          "$ref": "#/components/headers/X-Subject-Token"
+        }
+      }
+    }
+  }
+]

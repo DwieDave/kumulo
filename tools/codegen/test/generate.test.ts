@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
 import { generateSource } from "../src/generate.ts"
-import { syntheticSpec, syntheticSpecWithFreeformAdditionalProperties } from "./fixtures.ts"
+import { syntheticSpec, syntheticSpecWithFreeformAdditionalProperties, syntheticSpecWithFreeformMap } from "./fixtures.ts"
 
 describe("generateSource", () => {
   it.effect("invokes the openapi-generator and returns non-empty source", () =>
@@ -25,5 +25,32 @@ describe("generateSource", () => {
         options: { name: "Widgets", format: "httpapi" }
       })
       expect(source).not.toContain("[x: string]: string")
+    }))
+
+  // kumulo: the counterpart — a PURE free-form map has no TS2411 conflict, so closing it
+  // would be a correctness bug: `Schema.Struct({})` drops labels/metadata on encode unless
+  // Effect happens to preserve unknown keys (orphaned billable resources, broken drift
+  // detection). It must generate a real `Schema.Record`.
+  it.effect("keeps a pure free-form map open as a Schema.Record", () =>
+    Effect.gen(function* () {
+      const { source } = yield* generateSource({
+        spec: syntheticSpecWithFreeformMap,
+        options: { name: "Widgets", format: "httpapi" }
+      })
+      expect(source).toContain("Schema.Record(Schema.String, Schema.String)")
+      expect(source).not.toContain("Schema.Struct({  })")
+    }))
+
+  // Prose annotations are stripped (bytes, zero runtime value); a property NAMED
+  // "description" is a field, not prose, and must survive.
+  it.effect("strips description annotations but not a property named description", () =>
+    Effect.gen(function* () {
+      const { source } = yield* generateSource({
+        spec: syntheticSpecWithFreeformMap,
+        options: { name: "Widgets", format: "httpapi" }
+      })
+      expect(source).not.toContain("long prose that buys no validation")
+      expect(source).not.toContain('"description": "prose"')
+      expect(source).toContain('"description": Schema.optionalKey(Schema.String)')
     }))
 })

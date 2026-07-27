@@ -39,8 +39,8 @@ export type Cloud_kube_NodePoolSizeStatusEnum = "CAPACITY_OK" | "OVER_CAPACITY" 
 export const Cloud_kube_NodePoolSizeStatusEnum = Schema.Literals(["CAPACITY_OK", "OVER_CAPACITY", "UNDER_CAPACITY"])
 export type Cloud_kube_NodePoolStatusEnum = "DELETED" | "DELETING" | "DOWNSCALING" | "ERROR" | "INSTALLING" | "MAINTENANCE" | "READY" | "REDEPLOYING" | "REOPENING" | "RESETTING" | "SUSPENDED" | "SUSPENDING" | "UNKNOWN" | "UPDATING" | "UPSCALING" | "USER_ERROR" | "USER_NODE_NOT_FOUND_ERROR" | "USER_NODE_SUSPENDED_SERVICE" | "USER_QUOTA_ERROR" | "USER_WEBHOOK_PREVENTING_OPERATIONS_ERROR"
 export const Cloud_kube_NodePoolStatusEnum = Schema.Literals(["DELETED", "DELETING", "DOWNSCALING", "ERROR", "INSTALLING", "MAINTENANCE", "READY", "REDEPLOYING", "REOPENING", "RESETTING", "SUSPENDED", "SUSPENDING", "UNKNOWN", "UPDATING", "UPSCALING", "USER_ERROR", "USER_NODE_NOT_FOUND_ERROR", "USER_NODE_SUSPENDED_SERVICE", "USER_QUOTA_ERROR", "USER_WEBHOOK_PREVENTING_OPERATIONS_ERROR"])
-export type Cloud_kube_NodePoolTemplateMetadata = { readonly "annotations": {  }, readonly "finalizers": ReadonlyArray<string>, readonly "labels": {  } }
-export const Cloud_kube_NodePoolTemplateMetadata = Schema.Struct({ "annotations": Schema.Struct({  }), "finalizers": Schema.Array(Schema.String), "labels": Schema.Struct({  }) })
+export type Cloud_kube_NodePoolTemplateMetadata = { readonly "annotations": { readonly [x: string]: string }, readonly "finalizers": ReadonlyArray<string>, readonly "labels": { readonly [x: string]: string } }
+export const Cloud_kube_NodePoolTemplateMetadata = Schema.Struct({ "annotations": Schema.Record(Schema.String, Schema.String), "finalizers": Schema.Array(Schema.String), "labels": Schema.Record(Schema.String, Schema.String) })
 export type Cloud_kube_PrivateNetworkConfiguration = { readonly "defaultVrackGateway"?: string, readonly "privateNetworkRoutingAsDefault"?: boolean | null }
 export const Cloud_kube_PrivateNetworkConfiguration = Schema.Struct({ "defaultVrackGateway": Schema.optionalKey(Schema.String), "privateNetworkRoutingAsDefault": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])) })
 export type Cloud_kube_TaintEffectEnum = "NoExecute" | "NoSchedule" | "PreferNoSchedule"
@@ -286,58 +286,19 @@ export const make = (
 
 export interface Mks {
   readonly httpClient: HttpClient.HttpClient
-  /**
-* List your managed Kubernetes clusters
-*/
-readonly "getCloudProjectServiceNameKube": <Config extends OperationConfig>(serviceName: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<typeof GetCloudProjectServiceNameKube200.Type, Config>, HttpClientError.HttpClientError | SchemaError>
-  /**
-* Create a new managed Kubernetes cluster
-*/
-readonly "postCloudProjectServiceNameKube": <Config extends OperationConfig>(serviceName: string, options: { readonly payload: typeof PostCloudProjectServiceNameKubeRequestJson.Encoded; readonly config?: Config | undefined }) => Effect.Effect<WithOptionalResponse<typeof PostCloudProjectServiceNameKube200.Type, Config>, HttpClientError.HttpClientError | SchemaError>
-  /**
-* Get information about your managed Kubernetes cluster
-*/
-readonly "getCloudProjectServiceNameKubeKubeId": <Config extends OperationConfig>(serviceName: string, kubeId: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<typeof GetCloudProjectServiceNameKubeKubeId200.Type, Config>, HttpClientError.HttpClientError | SchemaError>
-  /**
-* Update information about your managed Kubernetes cluster
-*/
-readonly "putCloudProjectServiceNameKubeKubeId": <Config extends OperationConfig>(serviceName: string, kubeId: string, options: { readonly payload: typeof PutCloudProjectServiceNameKubeKubeIdRequestJson.Encoded; readonly config?: Config | undefined }) => Effect.Effect<WithOptionalResponse<void, Config>, HttpClientError.HttpClientError | SchemaError>
-  /**
-* Delete your managed Kubernetes cluster
-*/
-readonly "deleteCloudProjectServiceNameKubeKubeId": <Config extends OperationConfig>(serviceName: string, kubeId: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<void, Config>, HttpClientError.HttpClientError | SchemaError>
-  /**
-* Generate kubeconfig file
-*/
-readonly "postCloudProjectServiceNameKubeKubeIdKubeconfig": <Config extends OperationConfig>(serviceName: string, kubeId: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<typeof PostCloudProjectServiceNameKubeKubeIdKubeconfig200.Type, Config>, HttpClientError.HttpClientError | SchemaError>
-  /**
-* Reset kubeconfig: Certificates will be regenerated, nodes will be reinstalled
-*/
-readonly "postCloudProjectServiceNameKubeKubeIdKubeconfigReset": <Config extends OperationConfig>(serviceName: string, kubeId: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<void, Config>, HttpClientError.HttpClientError | SchemaError>
-  /**
-* List your nodepools
-*/
-readonly "getCloudProjectServiceNameKubeKubeIdNodepool": <Config extends OperationConfig>(serviceName: string, kubeId: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<typeof GetCloudProjectServiceNameKubeKubeIdNodepool200.Type, Config>, HttpClientError.HttpClientError | SchemaError>
-  /**
-* Create a nodepool on your cluster
-*/
-readonly "postCloudProjectServiceNameKubeKubeIdNodepool": <Config extends OperationConfig>(serviceName: string, kubeId: string, options: { readonly payload: typeof PostCloudProjectServiceNameKubeKubeIdNodepoolRequestJson.Encoded; readonly config?: Config | undefined }) => Effect.Effect<WithOptionalResponse<typeof PostCloudProjectServiceNameKubeKubeIdNodepool200.Type, Config>, HttpClientError.HttpClientError | SchemaError>
-  /**
-* Get information on a specific nodepool on your cluster
-*/
-readonly "getCloudProjectServiceNameKubeKubeIdNodepoolNodePoolId": <Config extends OperationConfig>(serviceName: string, kubeId: string, nodePoolId: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<typeof GetCloudProjectServiceNameKubeKubeIdNodepoolNodePoolId200.Type, Config>, HttpClientError.HttpClientError | SchemaError>
-  /**
-* Update your nodepool information
-*/
-readonly "putCloudProjectServiceNameKubeKubeIdNodepoolNodePoolId": <Config extends OperationConfig>(serviceName: string, kubeId: string, nodePoolId: string, options: { readonly payload: typeof PutCloudProjectServiceNameKubeKubeIdNodepoolNodePoolIdRequestJson.Encoded; readonly config?: Config | undefined }) => Effect.Effect<WithOptionalResponse<void, Config>, HttpClientError.HttpClientError | SchemaError>
-  /**
-* Delete a nodepool from your cluster
-*/
-readonly "deleteCloudProjectServiceNameKubeKubeIdNodepoolNodePoolId": <Config extends OperationConfig>(serviceName: string, kubeId: string, nodePoolId: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<void, Config>, HttpClientError.HttpClientError | SchemaError>
-  /**
-* Force cluster and node update to the latest patch within minor version or next minor version
-*/
-readonly "postCloudProjectServiceNameKubeKubeIdUpdate": <Config extends OperationConfig>(serviceName: string, kubeId: string, options: { readonly payload: typeof PostCloudProjectServiceNameKubeKubeIdUpdateRequestJson.Encoded; readonly config?: Config | undefined }) => Effect.Effect<WithOptionalResponse<void, Config>, HttpClientError.HttpClientError | SchemaError>
+  readonly "getCloudProjectServiceNameKube": <Config extends OperationConfig>(serviceName: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<typeof GetCloudProjectServiceNameKube200.Type, Config>, HttpClientError.HttpClientError | SchemaError>
+  readonly "postCloudProjectServiceNameKube": <Config extends OperationConfig>(serviceName: string, options: { readonly payload: typeof PostCloudProjectServiceNameKubeRequestJson.Encoded; readonly config?: Config | undefined }) => Effect.Effect<WithOptionalResponse<typeof PostCloudProjectServiceNameKube200.Type, Config>, HttpClientError.HttpClientError | SchemaError>
+  readonly "getCloudProjectServiceNameKubeKubeId": <Config extends OperationConfig>(serviceName: string, kubeId: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<typeof GetCloudProjectServiceNameKubeKubeId200.Type, Config>, HttpClientError.HttpClientError | SchemaError>
+  readonly "putCloudProjectServiceNameKubeKubeId": <Config extends OperationConfig>(serviceName: string, kubeId: string, options: { readonly payload: typeof PutCloudProjectServiceNameKubeKubeIdRequestJson.Encoded; readonly config?: Config | undefined }) => Effect.Effect<WithOptionalResponse<void, Config>, HttpClientError.HttpClientError | SchemaError>
+  readonly "deleteCloudProjectServiceNameKubeKubeId": <Config extends OperationConfig>(serviceName: string, kubeId: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<void, Config>, HttpClientError.HttpClientError | SchemaError>
+  readonly "postCloudProjectServiceNameKubeKubeIdKubeconfig": <Config extends OperationConfig>(serviceName: string, kubeId: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<typeof PostCloudProjectServiceNameKubeKubeIdKubeconfig200.Type, Config>, HttpClientError.HttpClientError | SchemaError>
+  readonly "postCloudProjectServiceNameKubeKubeIdKubeconfigReset": <Config extends OperationConfig>(serviceName: string, kubeId: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<void, Config>, HttpClientError.HttpClientError | SchemaError>
+  readonly "getCloudProjectServiceNameKubeKubeIdNodepool": <Config extends OperationConfig>(serviceName: string, kubeId: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<typeof GetCloudProjectServiceNameKubeKubeIdNodepool200.Type, Config>, HttpClientError.HttpClientError | SchemaError>
+  readonly "postCloudProjectServiceNameKubeKubeIdNodepool": <Config extends OperationConfig>(serviceName: string, kubeId: string, options: { readonly payload: typeof PostCloudProjectServiceNameKubeKubeIdNodepoolRequestJson.Encoded; readonly config?: Config | undefined }) => Effect.Effect<WithOptionalResponse<typeof PostCloudProjectServiceNameKubeKubeIdNodepool200.Type, Config>, HttpClientError.HttpClientError | SchemaError>
+  readonly "getCloudProjectServiceNameKubeKubeIdNodepoolNodePoolId": <Config extends OperationConfig>(serviceName: string, kubeId: string, nodePoolId: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<typeof GetCloudProjectServiceNameKubeKubeIdNodepoolNodePoolId200.Type, Config>, HttpClientError.HttpClientError | SchemaError>
+  readonly "putCloudProjectServiceNameKubeKubeIdNodepoolNodePoolId": <Config extends OperationConfig>(serviceName: string, kubeId: string, nodePoolId: string, options: { readonly payload: typeof PutCloudProjectServiceNameKubeKubeIdNodepoolNodePoolIdRequestJson.Encoded; readonly config?: Config | undefined }) => Effect.Effect<WithOptionalResponse<void, Config>, HttpClientError.HttpClientError | SchemaError>
+  readonly "deleteCloudProjectServiceNameKubeKubeIdNodepoolNodePoolId": <Config extends OperationConfig>(serviceName: string, kubeId: string, nodePoolId: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<void, Config>, HttpClientError.HttpClientError | SchemaError>
+  readonly "postCloudProjectServiceNameKubeKubeIdUpdate": <Config extends OperationConfig>(serviceName: string, kubeId: string, options: { readonly payload: typeof PostCloudProjectServiceNameKubeKubeIdUpdateRequestJson.Encoded; readonly config?: Config | undefined }) => Effect.Effect<WithOptionalResponse<void, Config>, HttpClientError.HttpClientError | SchemaError>
 }
 
 export interface MksError<Tag extends string, E> {

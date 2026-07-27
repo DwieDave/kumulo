@@ -1,6 +1,55 @@
-// why: pin all requests to microversion 2.79 (§4.3 decision, see
-// memories.md) rather than the vendored spec's 2.96 snapshot; the header
-// is added via the generator's global-parameter hook, not per-operation,
-// so no per-path patch is needed yet. Real corrections land here once
-// T5.2 fixture-replay tests find spec/microversion mismatches.
-[]
+[
+  // kumulo: WHY required:true — see keystone.patch.json5. Spec omits `required`
+  // on the requestBody, so the generator emits an optional payload union and
+  // every create goes out with an empty body.
+  {
+    "op": "add",
+    "path": "/paths/~1v2.1~1servers/post/requestBody/required",
+    "value": true
+  },
+  {
+    "op": "add",
+    "path": "/paths/~1v2.1~1os-server-groups/post/requestBody/required",
+    "value": true
+  },
+  {
+    "op": "replace",
+    "path": "/components/schemas/ServersCreateRequest/oneOf",
+    "value": [
+      {
+        "$ref": "#/components/schemas/ServersCreate_274"
+      }
+    ]
+  },
+  {
+    "op": "remove",
+    "path": "/components/schemas/ServersCreateResponse/oneOf/1"
+  },
+  {
+    "op": "add",
+    "path": "/paths/~1v2.1~1servers~1{id}/get/parameters",
+    "value": [
+      {
+        "$ref": "#/components/parameters/servers_id"
+      }
+    ]
+  },
+  {
+    "op": "add",
+    "path": "/paths/~1v2.1~1servers~1{id}/delete/parameters",
+    "value": [
+      {
+        "$ref": "#/components/parameters/servers_id"
+      }
+    ]
+  },
+  {
+    "op": "add",
+    "path": "/paths/~1v2.1~1os-server-groups~1{id}/delete/parameters",
+    "value": [
+      {
+        "$ref": "#/components/parameters/os_server_groups_id"
+      }
+    ]
+  }
+]

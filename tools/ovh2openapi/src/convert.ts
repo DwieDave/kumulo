@@ -33,9 +33,9 @@ export function typeToSchema(args: {
   }
   // kumulo: OVH's `map[K]V` fullType syntax denotes a string-keyed dictionary
   // (K is always "string" in practice) — model as an open object.
-  const mapMatch = /^map\[[^\]]+\](.+)$/.exec(fullType)
-  if (mapMatch) {
-    return typeToSchema({ fullType: mapMatch[1]!, models }).pipe(
+  const [, mapValueType] = /^map\[[^\]]+\](.+)$/.exec(fullType) ?? []
+  if (mapValueType !== undefined) {
+    return typeToSchema({ fullType: mapValueType, models }).pipe(
       Effect.map((additionalProperties): OpenApiSchema => ({ type: "object", additionalProperties }))
     )
   }
@@ -59,11 +59,11 @@ function _objectModelSchema(
   properties: Record<string, { readonly fullType: string; readonly required?: boolean; readonly canBeNull?: boolean }>,
   models: Record<string, OvhModel>
 ): Effect.Effect<OpenApiSchema, ConversionUnsupported> {
-  const keys = Object.keys(properties).toSorted()
-  const required = keys.filter((key) => properties[key]?.required === true)
-  return Effect.reduce(keys, (): Record<string, OpenApiSchema> => ({}), (acc, key) =>
-    typeToSchema({ fullType: properties[key]!.fullType, models }).pipe(
-      Effect.map((schema) => ({ ...acc, [key]: _nullable(schema, properties[key]!.canBeNull) }))
+  const entries = Object.entries(properties).toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+  const required = entries.filter(([, property]) => property.required === true).map(([key]) => key)
+  return Effect.reduce(entries, (): Record<string, OpenApiSchema> => ({}), (acc, [key, property]) =>
+    typeToSchema({ fullType: property.fullType, models }).pipe(
+      Effect.map((schema) => ({ ...acc, [key]: _nullable(schema, property.canBeNull) }))
     )
   ).pipe(Effect.map((props): OpenApiSchema => ({ type: "object", properties: props, required })))
 }
@@ -81,9 +81,9 @@ export function modelToSchema(args: {
 export function convertModels(
   models: Record<string, OvhModel>
 ): Effect.Effect<Record<string, OpenApiSchema>, ConversionUnsupported> {
-  const keys = Object.keys(models).toSorted()
-  return Effect.reduce(keys, (): Record<string, OpenApiSchema> => ({}), (acc, key) =>
-    modelToSchema({ model: models[key]!, models }).pipe(Effect.map((schema) => ({ ...acc, [key]: schema })))
+  const entries = Object.entries(models).toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+  return Effect.reduce(entries, (): Record<string, OpenApiSchema> => ({}), (acc, [key, model]) =>
+    modelToSchema({ model, models }).pipe(Effect.map((schema) => ({ ...acc, [key]: schema })))
   )
 }
 

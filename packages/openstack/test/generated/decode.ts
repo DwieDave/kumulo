@@ -7,3 +7,7 @@ export const decodeFixture = <T, E>(args: { readonly schema: Schema.Codec<T, E>;
 /** Asserts a fixture fails to decode (the schema's error-mapping guard: malformed data never silently passes). */
 export const decodeFixtureFails = <T, E>(args: { readonly schema: Schema.Codec<T, E>; readonly fixture: unknown }): unknown =>
   Effect.runSync(Effect.flip(Schema.decodeUnknownEffect(args.schema)(args.fixture)))
+
+/** Encode counterpart, for round-trip properties (encode -> decode must be lossless). */
+export const encodeFixture = <T, E>(args: { readonly schema: Schema.Codec<T, E>; readonly value: unknown }): E =>
+  Effect.runSync(Schema.encodeUnknownEffect(args.schema)(args.value))

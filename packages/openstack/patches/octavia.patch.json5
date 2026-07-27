@@ -1,4 +1,28 @@
-// why: no known upstream spec corrections needed yet for the allowlisted
-// Octavia operations. Empty overlay keeps the patch-apply step exercised;
-// populate as T5.2 fixture-replay tests surface real spec bugs.
-[]
+[
+  // kumulo: WHY required:true — see keystone.patch.json5. Spec omits `required`
+  // on the requestBody, so the generator emits an optional payload union and
+  // every create goes out with an empty body.
+  {
+    "op": "add",
+    "path": "/paths/~1v2~1lbaas~1loadbalancers/post/requestBody/required",
+    "value": true
+  },
+  {
+    "op": "add",
+    "path": "/paths/~1v2~1lbaas~1loadbalancers~1{loadbalancer_id}/delete/parameters",
+    "value": [
+      {
+        "$ref": "#/components/parameters/lbaas_loadbalancers_loadbalancer_id"
+      },
+      {
+        "name": "cascade",
+        "in": "query",
+        "required": false,
+        "description": "Delete all child objects of the load balancer.",
+        "schema": {
+          "type": "boolean"
+        }
+      }
+    ]
+  }
+]

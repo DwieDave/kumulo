@@ -147,30 +147,12 @@ export const make = (
 
 export interface Dns {
   readonly httpClient: HttpClient.HttpClient
-  /**
-* List record
-*/
-readonly "getRecords": <Config extends OperationConfig>(zoneName: string, options: { readonly params?: typeof GetRecordsParams.Encoded | undefined; readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<typeof GetRecords200.Type, Config>, HttpClientError.HttpClientError | SchemaError>
-  /**
-* Create a new record (Don't forget to refresh the zone)
-*/
-readonly "createRecord": <Config extends OperationConfig>(zoneName: string, options: { readonly payload: typeof CreateRecordRequestJson.Encoded; readonly config?: Config | undefined }) => Effect.Effect<WithOptionalResponse<typeof CreateRecord200.Type, Config>, HttpClientError.HttpClientError | SchemaError>
-  /**
-* Get record object properties
-*/
-readonly "getRecord": <Config extends OperationConfig>(zoneName: string, id: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<typeof GetRecord200.Type, Config>, HttpClientError.HttpClientError | SchemaError>
-  /**
-* Alter record object properties (Don't forget to refresh the zone)
-*/
-readonly "editRecord": <Config extends OperationConfig>(zoneName: string, id: string, options: { readonly payload: typeof EditRecordRequestJson.Encoded; readonly config?: Config | undefined }) => Effect.Effect<WithOptionalResponse<void, Config>, HttpClientError.HttpClientError | SchemaError>
-  /**
-* Delete record object (Don't forget to refresh the zone)
-*/
-readonly "deleteRecord": <Config extends OperationConfig>(zoneName: string, id: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<void, Config>, HttpClientError.HttpClientError | SchemaError>
-  /**
-* Refresh a DNS zone
-*/
-readonly "refreshZone": <Config extends OperationConfig>(zoneName: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<void, Config>, HttpClientError.HttpClientError | SchemaError>
+  readonly "getRecords": <Config extends OperationConfig>(zoneName: string, options: { readonly params?: typeof GetRecordsParams.Encoded | undefined; readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<typeof GetRecords200.Type, Config>, HttpClientError.HttpClientError | SchemaError>
+  readonly "createRecord": <Config extends OperationConfig>(zoneName: string, options: { readonly payload: typeof CreateRecordRequestJson.Encoded; readonly config?: Config | undefined }) => Effect.Effect<WithOptionalResponse<typeof CreateRecord200.Type, Config>, HttpClientError.HttpClientError | SchemaError>
+  readonly "getRecord": <Config extends OperationConfig>(zoneName: string, id: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<typeof GetRecord200.Type, Config>, HttpClientError.HttpClientError | SchemaError>
+  readonly "editRecord": <Config extends OperationConfig>(zoneName: string, id: string, options: { readonly payload: typeof EditRecordRequestJson.Encoded; readonly config?: Config | undefined }) => Effect.Effect<WithOptionalResponse<void, Config>, HttpClientError.HttpClientError | SchemaError>
+  readonly "deleteRecord": <Config extends OperationConfig>(zoneName: string, id: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<void, Config>, HttpClientError.HttpClientError | SchemaError>
+  readonly "refreshZone": <Config extends OperationConfig>(zoneName: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<void, Config>, HttpClientError.HttpClientError | SchemaError>
 }
 
 export interface DnsError<Tag extends string, E> {

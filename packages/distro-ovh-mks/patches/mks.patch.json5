@@ -1,5 +1,1 @@
-// why: no known corrections needed yet against the allowlisted OVH v1 MKS
-// routes (kube/nodepool CRUD, kubeconfig, update). Empty overlay keeps the
-// patch-apply stage exercised end-to-end; populate as fixture-replay tests
-// surface real spec bugs (T4.1+).
 []
