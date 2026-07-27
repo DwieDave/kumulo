@@ -14,10 +14,30 @@ export class AuthenticationFailed extends Data.TaggedError("AuthenticationFailed
   readonly hint: string
 }> {}
 
+// Only raised when the provider genuinely says "quota". `limit`/`requested`
+// are optional because most providers do not report them — an absent number
+// must stay absent rather than be faked as `0`.
 export class QuotaExceeded extends Data.TaggedError("QuotaExceeded")<{
   readonly resource: string
-  readonly limit: number
-  readonly requested: number
+  readonly limit?: number | undefined
+  readonly requested?: number | undefined
+}> {}
+
+// HTTP 429 (or a provider-specific rate-limit signal). `retryAfter` is the
+// `Retry-After` header verbatim when the server sent one.
+export class RateLimited extends Data.TaggedError("RateLimited")<{
+  readonly kind: string
+  readonly ref: string
+  readonly retryAfter?: string | undefined
+}> {}
+
+// Any provider-side failure that is not one of the classified cases above —
+// notably 5xx. Carries the observed status and (truncated) body so an on-call
+// operator sees the outage instead of a fabricated credential problem.
+export class ProviderApiError extends Data.TaggedError("ProviderApiError")<{
+  readonly operation: string
+  readonly status: number
+  readonly body: string
 }> {}
 
 export class ResourceNotFound extends Data.TaggedError("ResourceNotFound")<{
@@ -82,6 +102,8 @@ export type KumuloError =
   | ResponseDecodeError
   | AuthenticationFailed
   | QuotaExceeded
+  | RateLimited
+  | ProviderApiError
   | ResourceNotFound
   | ResourceConflict
   | CapabilityMissing

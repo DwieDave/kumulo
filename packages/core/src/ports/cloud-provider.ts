@@ -1,11 +1,16 @@
-import { Context, Effect } from "effect"
+import type { Effect } from "effect";
+import { Context } from "effect"
 import type {
   AuthenticationFailed,
   CapabilityMissing,
+  HttpTransportError,
+  ProviderApiError,
   ProvisioningTimeout,
   QuotaExceeded,
+  RateLimited,
   ResourceConflict,
-  ResourceNotFound
+  ResourceNotFound,
+  ResponseDecodeError
 } from "../errors/tagged.ts"
 import type {
   ClusterTag,
@@ -31,6 +36,10 @@ export type CloudError =
   | ResourceConflict
   | CapabilityMissing
   | ProvisioningTimeout
+  | RateLimited
+  | ProviderApiError
+  | ResponseDecodeError
+  | HttpTransportError
 
 // The only interface the reconciler talks to for infrastructure.
 export class CloudProvider extends Context.Service<CloudProvider, {

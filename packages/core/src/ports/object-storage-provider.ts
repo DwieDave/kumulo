@@ -1,9 +1,12 @@
-import { Context, Effect } from "effect"
+import type { Effect } from "effect";
+import { Context } from "effect"
 import type {
   AuthenticationFailed,
   BucketNotEmpty,
   HttpTransportError,
+  ProviderApiError,
   QuotaExceeded,
+  RateLimited,
   ResourceConflict,
   ResourceNotFound,
   ResponseDecodeError
@@ -18,6 +21,8 @@ export type ObjectStorageError =
   | BucketNotEmpty
   | HttpTransportError
   | ResponseDecodeError
+  | RateLimited
+  | ProviderApiError
 
 // `deleteBucket` refuses (BucketNotEmpty) when the bucket still holds
 // objects; no force_destroy in v1 — that policy lives here, not the caller.

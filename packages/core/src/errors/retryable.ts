@@ -5,6 +5,8 @@ const retryableByTag: Record<KumuloErrorTag, boolean> = {
   ResponseDecodeError: false,
   AuthenticationFailed: false,
   QuotaExceeded: false,
+  RateLimited: true,
+  ProviderApiError: true,
   ResourceNotFound: false,
   ResourceConflict: true,
   CapabilityMissing: false,

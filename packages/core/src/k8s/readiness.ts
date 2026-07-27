@@ -1,5 +1,5 @@
-import { Effect, Schema } from "effect"
-import type { Duration } from "effect"
+import { Schema } from "effect"
+import type { Duration , Effect} from "effect"
 import { pollUntil } from "../reconcile/poll.ts"
 import type { HttpTransportError, ProvisioningTimeout, ResourceNotFound } from "../errors/tagged.ts"
 import type { K8sManifest } from "../domain/types.ts"

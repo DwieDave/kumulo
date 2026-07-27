@@ -1,4 +1,5 @@
-import { Context, Effect } from "effect"
+import type { Effect } from "effect";
+import { Context } from "effect"
 import type { CredentialsSinkError } from "../errors/tagged.ts"
 import type { CredentialEntry } from "../domain/types.ts"
 

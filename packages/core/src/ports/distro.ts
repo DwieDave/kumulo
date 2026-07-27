@@ -1,11 +1,14 @@
-import { Context, Effect } from "effect"
+import type { Effect } from "effect";
+import { Context } from "effect"
 import type {
   AuthenticationFailed,
   BootstrapFailed,
   ConfigInvalid,
   HttpTransportError,
+  ProviderApiError,
   ProvisioningTimeout,
   QuotaExceeded,
+  RateLimited,
   ResourceConflict,
   ResourceNotFound,
   ResponseDecodeError
@@ -51,6 +54,8 @@ export type MksError =
   | ResourceConflict
   | ProvisioningTimeout
   | QuotaExceeded
+  | RateLimited
+  | ProviderApiError
   | HttpTransportError
   | ResponseDecodeError
 

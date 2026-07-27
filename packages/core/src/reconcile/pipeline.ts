@@ -1,23 +1,17 @@
 import { Effect } from "effect"
-import type { PhaseName } from "./phases.ts"
 
-// Named, orderable unit of the reconcile pipeline. `run` is provided by the
-// caller; this module only owns sequencing.
-export interface Phase<E = never, R = never> {
-  readonly name: PhaseName
+export interface Phase<Name extends string, E, R> {
+  readonly name: Name
   readonly run: Effect.Effect<void, E, R>
 }
 
-// Runs phases strictly in the given dependency order, short-
-// circuiting on the first failure. Phases the caller didn't supply for this
-// order are silently skipped.
-export const runPhases = <E, R>(
-  { order, phases }: { readonly order: ReadonlyArray<PhaseName>; readonly phases: ReadonlyArray<Phase<E, R>> }
-): Effect.Effect<void, E, R> => {
-  const byName = new Map(phases.map((phase) => [phase.name, phase]))
-  const ordered = order.flatMap((name) => {
-    const phase = byName.get(name)
-    return phase === undefined ? [] : [phase]
-  })
-  return Effect.forEach(ordered, (phase) => phase.run, { discard: true })
-}
+// The order is the dependency graph; phases nobody supplied are simply
+// absent (a managed cluster has no "Network" step) and never fabricated.
+export const runPhases = <Name extends string, E, R>(
+  { order, phases }: { readonly order: ReadonlyArray<Name>; readonly phases: ReadonlyArray<Phase<Name, E, R>> }
+): Effect.Effect<void, E, R> =>
+  Effect.forEach(
+    order.flatMap((name) => phases.filter((phase) => phase.name === name)),
+    (phase) => phase.run,
+    { discard: true }
+  )

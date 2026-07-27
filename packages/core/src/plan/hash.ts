@@ -1,30 +1,26 @@
-// kumulo.config-hash tags a resource with a hash of "the relevant
-// spec" so drift/no-op/replace can be decided without a state file. Stability
-// (same spec, any key order -> same hash) matters more than cryptographic
-// strength here, so a small FNV-1a over a recursively key-sorted JSON
-// stringification is enough — no extra dependency needed.
-const _isPlainObject = (value: unknown): value is Record<string, unknown> =>
-  value !== null && typeof value === "object" && !Array.isArray(value)
+// Key order must not affect the hash: two specs that differ only in
+// property order describe the same resource.
+const _canonical = (value: unknown): unknown =>
+  Array.isArray(value)
+    ? value.map(_canonical)
+    : value !== null && typeof value === "object"
+    ? Object.fromEntries(
+      Object.entries(value)
+        .toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([key, entry]) => [key, _canonical(entry)])
+    )
+    : value
 
-const _sortKeysDeep = (value: unknown): unknown => {
-  if (Array.isArray(value)) return value.map(_sortKeysDeep)
-  if (_isPlainObject(value)) {
-    const sorted: Record<string, unknown> = {}
-    for (const key of Object.keys(value).toSorted()) {
-      sorted[key] = _sortKeysDeep(value[key])
-    }
-    return sorted
-  }
-  return value
-}
+// ponytail: FNV-1a 64-bit, not sha256 — core may only import 'effect', so no
+// node:crypto, and this hash only detects drift (never authenticates anything).
+const _fnv1a = (text: string): bigint =>
+  [...text].reduce(
+    (hash, char) => BigInt.asUintN(64, (hash ^ BigInt(char.codePointAt(0) ?? 0)) * 1099511628211n),
+    14695981039346656037n
+  )
 
-const _fnv1a = (input: string): string => {
-  let hash = 0x811c9dc5
-  for (let i = 0; i < input.length; i++) {
-    hash ^= input.charCodeAt(i)
-    hash = Math.imul(hash, 0x01000193)
-  }
-  return (hash >>> 0).toString(16).padStart(8, "0")
-}
+// The one key providers stamp the hash under (hcloud label, Nova metadata).
+export const CONFIG_HASH_KEY = "kumulo-config-hash"
 
-export const configHash = (spec: unknown): string => _fnv1a(JSON.stringify(_sortKeysDeep(spec)))
+export const configHash = (spec: unknown): string =>
+  _fnv1a(JSON.stringify(_canonical(spec)) ?? "undefined").toString(16).padStart(16, "0")

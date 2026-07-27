@@ -42,6 +42,12 @@ describe("computePlan", () => {
     expect(plan.actions.every((a) => a._tag === "NoOp")).toBe(true)
   })
 
+  it("observed resource without a config hash -> no-op, not a phantom replace", () => {
+    const desired = _desiredResource()
+    const plan = computePlan({ desired: [desired], actual: [{ name: "kumulo-prod-worker-default-0" }] })
+    expect(plan.actions).toEqual([{ _tag: "NoOp", name: "kumulo-prod-worker-default-0" }])
+  })
+
   it("drifted spec -> replace-needs-confirm, never a silent apply", () => {
     const original = _desiredResource()
     const actual = [toTaggedResource(original)]

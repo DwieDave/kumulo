@@ -1,5 +1,6 @@
 import { Context, Effect, Option, Schema } from "effect"
-import { HttpClient, HttpClientRequest } from "effect/unstable/http"
+import type { HttpClient} from "effect/unstable/http";
+import { HttpClientRequest } from "effect/unstable/http"
 import { HttpTransportError, ResourceConflict, ResourceNotFound } from "../errors/tagged.ts"
 import type { K8sManifest } from "../domain/types.ts"
 

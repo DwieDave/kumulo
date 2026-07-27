@@ -1,5 +1,6 @@
 import { Effect } from "effect"
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import type { HttpClientRequest} from "effect/unstable/http";
+import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 
 // kumulo: recorded-response fixture fake — same shape as
 // packages/openstack/test/transport/http-client.test.ts's `_fakeBase`,

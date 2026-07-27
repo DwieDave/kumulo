@@ -18,8 +18,27 @@ export interface NetworkInfo {
   readonly cidr: string
 }
 
+/**
+ * Provider-neutral ingress rule — the intersection of what Neutron
+ * security-group-rules and Hetzner firewall rules actually need. Egress is
+ * not modelled (both providers default to allow-all out).
+ */
+export interface SecGroupRule {
+  readonly protocol: "tcp" | "udp" | "icmp" | "any"
+  /** Omitted port range means "all ports" for tcp/udp. */
+  readonly portMin?: number
+  readonly portMax?: number
+  /** Ingress source; omitted when `remoteGroupSelf` is set. */
+  readonly remoteCidr?: string
+  /**
+   * Source is the cluster's own members. Providers without a self-reference
+   * concept (Hetzner) resolve this to the cluster network CIDR.
+   */
+  readonly remoteGroupSelf?: boolean
+}
+
 export interface SecGroupSpec {
-  readonly rules: ReadonlyArray<unknown>
+  readonly rules: ReadonlyArray<SecGroupRule>
 }
 export interface SecGroupInfo {
   readonly id: string
@@ -44,6 +63,10 @@ export interface ServerInfo {
   readonly id: string
   readonly name: string
   readonly ip: string
+  // Hash of the `ServerSpec` the server was created from, read back from the
+  // provider (hcloud label / Nova metadata). `undefined` = the provider records
+  // none (server predates the stamping) — unknown drift, not drift.
+  readonly configHash?: string | undefined
 }
 
 export type ImageRef = string

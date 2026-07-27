@@ -1,13 +1,26 @@
-import { Context, Effect } from "effect"
+import type { Effect } from "effect";
+import { Context } from "effect"
 import type {
   AuthenticationFailed,
+  HttpTransportError,
+  ProviderApiError,
   QuotaExceeded,
+  RateLimited,
   ResourceConflict,
-  ResourceNotFound
+  ResourceNotFound,
+  ResponseDecodeError
 } from "../errors/tagged.ts"
 import type { ClusterTag, K8sManifest, VolumeInfo, VolumeRef, VolumeSpec } from "../domain/types.ts"
 
-export type VolumeError = ResourceNotFound | ResourceConflict | AuthenticationFailed | QuotaExceeded
+export type VolumeError =
+  | ResourceNotFound
+  | ResourceConflict
+  | AuthenticationFailed
+  | QuotaExceeded
+  | RateLimited
+  | ProviderApiError
+  | ResponseDecodeError
+  | HttpTransportError
 
 // Retained volumes with stable IDs; `deleteVolume` is never
 // called for `retain: true` volumes (that policy lives at the reconciler,

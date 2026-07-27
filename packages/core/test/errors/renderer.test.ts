@@ -17,7 +17,9 @@ const fullRegistry: RendererRegistry = {
   BootstrapFailed: (e) => `bootstrap failed on ${e.node} at ${e.phase}`,
   AddonInstallFailed: (e) => `addon ${e.addon} failed: ${e.cause}`,
   BucketNotEmpty: (e) => `bucket ${e.bucket} not empty: ${e.objectCount} object(s)`,
-  SinkUnavailable: (e) => `sink unavailable: ${e.hint}`
+  SinkUnavailable: (e) => `sink unavailable: ${e.hint}`,
+  RateLimited: (e) => `rate limited on ${e.kind} ${e.ref}`,
+  ProviderApiError: (e) => `provider error during ${e.operation}: HTTP ${e.status}`
 }
 
 describe("renderError", () => {

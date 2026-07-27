@@ -1,8 +1,26 @@
-import { Context, Effect } from "effect"
-import type { AuthenticationFailed, ResourceConflict, ResourceNotFound } from "../errors/tagged.ts"
+import type { Effect } from "effect";
+import { Context } from "effect"
+import type {
+  AuthenticationFailed,
+  HttpTransportError,
+  ProviderApiError,
+  RateLimited,
+  ResourceConflict,
+  ResourceNotFound,
+  ResponseDecodeError
+} from "../errors/tagged.ts"
 import type { ClusterTag, DesiredRecord } from "../domain/types.ts"
 
-export type DnsError = ResourceNotFound | ResourceConflict | AuthenticationFailed
+// A DNS API outage, a rate limit and a malformed body are distinct failures —
+// none of them is a "conflict", so the union carries a tag for each.
+export type DnsError =
+  | ResourceNotFound
+  | ResourceConflict
+  | AuthenticationFailed
+  | RateLimited
+  | ProviderApiError
+  | ResponseDecodeError
+  | HttpTransportError
 
 // TXT-ownership contract binds every implementation: reconcile
 // and delete only ever touch records this module created.

@@ -1,28 +1,18 @@
-import type { NodeRole } from "../domain/types.ts"
+import type { ResourceCoordinates } from "./naming.ts"
 
-// A resource kumulo wants to exist, keyed by the name-convention coordinates.
-// `spec` is whatever the owning phase/provider needs
-// to create it — only its hash matters to the plan/diff domain.
-export interface DesiredResource<S = unknown> {
-  readonly cluster: string
-  readonly role: NodeRole
-  readonly pool: string
-  readonly index: number
-  readonly spec: S
+// What the config asks for: where the resource lives plus the opaque
+// provider spec that gets hashed for drift detection.
+export interface DesiredResource extends ResourceCoordinates {
+  readonly spec: unknown
 }
 
-// A resource discovered by tag — provider-
-// agnostic: any tagged/named resource collapses to this shape for diffing.
+// What the inventory reports back: identity plus the hash of the spec
+// it was created from. `configHash` is optional because not every provider
+// stores it on the resource — unknown means "can't tell drift", not "drifted".
 export interface TaggedResource {
   readonly name: string
-  readonly cluster: string
-  readonly role: NodeRole
-  readonly pool: string
-  readonly index: number
-  readonly configHash: string
+  readonly configHash?: string | undefined
 }
-
-export type Inventory = ReadonlyArray<TaggedResource>
 
 export type PlanAction =
   | { readonly _tag: "Create"; readonly name: string }

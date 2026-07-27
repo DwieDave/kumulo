@@ -1,4 +1,5 @@
-import { Context, Effect } from "effect"
+import type { Effect } from "effect";
+import { Context } from "effect"
 import type { AddonInstallFailed } from "../errors/tagged.ts"
 import type { AddonContext, Capability, K8sManifest } from "../domain/types.ts"
 

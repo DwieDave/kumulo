@@ -1,49 +1,44 @@
 import { configHash } from "./hash.ts"
 import { resourceName } from "./naming.ts"
-import type { DesiredResource, Inventory, Plan, PlanAction, TaggedResource } from "./types.ts"
+import type { DesiredResource, Plan, PlanAction, TaggedResource } from "./types.ts"
 
-// One desired resource vs. its matching tagged inventory entry (if any) —
-// create (missing), no-op (hash matches), or replace-with-
-// confirmation (flavor/image/etc. changed, i.e. config-hash drifted).
-const _planForDesired = (
-  { actual, desired }: { readonly desired: DesiredResource; readonly actual: TaggedResource | undefined }
-): PlanAction => {
+export const toTaggedResource = (desired: DesiredResource): TaggedResource => ({
+  name: resourceName(desired),
+  configHash: configHash(desired.spec)
+})
+
+// Drift is never silently applied: a changed spec needs an explicit
+// confirmation because converging it means replacing the resource.
+const _actionFor = (desired: DesiredResource, actual: TaggedResource | undefined): PlanAction => {
   const name = resourceName(desired)
   if (actual === undefined) return { _tag: "Create", name }
-  const desiredHash = configHash(desired.spec)
-  return desiredHash === actual.configHash
+  // No hash on the observed resource → the provider doesn't record one; the
+  // resource exists, so it is converged as far as we can honestly tell.
+  if (actual.configHash === undefined) return { _tag: "NoOp", name }
+  return actual.configHash === configHash(desired.spec)
     ? { _tag: "NoOp", name }
     : { _tag: "ReplaceNeedsConfirm", name, reason: "config-hash drifted from desired spec" }
 }
 
-// Tagged resources with no corresponding desired entry get deleted.
-const _planForOrphaned = (
-  { actual, desiredNames }: { readonly actual: Inventory; readonly desiredNames: ReadonlySet<string> }
-): ReadonlyArray<PlanAction> =>
-  actual.filter((resource) => !desiredNames.has(resource.name)).map((resource) => ({
-    _tag: "Delete",
-    name: resource.name
-  }))
-
-// Turns a desired resource into what its tagged inventory entry would look
-// like once created — used to prove plan-after-apply converges to all
-// no-ops.
-export const toTaggedResource = (desired: DesiredResource): TaggedResource => ({
-  name: resourceName(desired),
-  cluster: desired.cluster,
-  role: desired.role,
-  pool: desired.pool,
-  index: desired.index,
-  configHash: configHash(desired.spec)
-})
+/**
+ * The names the plan says must be replaced. Callers hand this to the
+ * reconciler *only* once the operator confirmed, so execution never
+ * re-derives replace intent from names or inventory.
+ */
+export const namesToReplace = (plan: Plan): ReadonlySet<string> =>
+  new Set(plan.actions.filter((action) => action._tag === "ReplaceNeedsConfirm").map((action) => action.name))
 
 export const computePlan = (
-  { desired, actual }: { readonly desired: ReadonlyArray<DesiredResource>; readonly actual: Inventory }
+  { actual, desired }: { readonly desired: ReadonlyArray<DesiredResource>; readonly actual: ReadonlyArray<TaggedResource> }
 ): Plan => {
   const byName = new Map(actual.map((resource) => [resource.name, resource]))
-  const desiredNames = new Set(desired.map((resource) => resourceName(resource)))
-  const forDesired = desired.map((resource) =>
-    _planForDesired({ desired: resource, actual: byName.get(resourceName(resource)) })
-  )
-  return { actions: [...forDesired, ..._planForOrphaned({ actual, desiredNames })] }
+  const desiredNames = new Set(desired.map(resourceName))
+  return {
+    actions: [
+      ...desired.map((resource) => _actionFor(resource, byName.get(resourceName(resource)))),
+      ...actual
+        .filter((resource) => !desiredNames.has(resource.name))
+        .map((resource): PlanAction => ({ _tag: "Delete", name: resource.name }))
+    ]
+  }
 }

@@ -9,8 +9,10 @@ export {
   ConfigInvalid,
   HttpTransportError,
   PlanRejected,
+  ProviderApiError,
   ProvisioningTimeout,
   QuotaExceeded,
+  RateLimited,
   ResourceConflict,
   ResourceNotFound,
   ResponseDecodeError,
@@ -57,18 +59,23 @@ export type { DistroCapabilities } from "./domain/capabilities.ts"
 export { VolumeProvider } from "./ports/volume-provider.ts"
 export type { VolumeError } from "./ports/volume-provider.ts"
 
-export { computePlan, configHash, resourceName, toTaggedResource } from "./plan/index.ts"
-export type { DesiredResource, Inventory as PlanInventory, Plan, PlanAction, TaggedResource } from "./plan/index.ts"
+export { computePlan, CONFIG_HASH_KEY, configHash, namesToReplace, resourceName, toTaggedResource } from "./plan/index.ts"
+export type { DesiredResource, Plan, PlanAction, TaggedResource } from "./plan/index.ts"
 
-export { applyServers, MANAGED_PHASES, phasesForKind, pollUntil, runPhases, SELF_MANAGED_PHASES } from "./reconcile/index.ts"
-export type { PhaseName, Phase, PollOptions } from "./reconcile/index.ts"
+export { applyServers, pollUntil } from "./reconcile/index.ts"
+export type { PollOptions } from "./reconcile/index.ts"
 
+// The CLI's colored `present.ts` is what users see; core's plain `renderPlan`
+// is the uncolored one used for snapshot tests (examples/plan-snapshot.test.ts).
 export { decidePlanAction, renderPlan } from "./present/index.ts"
 export type { PlanDecision } from "./present/index.ts"
 
 export { genericProfile, genericProfileLive } from "./profiles/index.ts"
 
 export { dnsNoop, dnsNoopLive } from "./dns-noop/index.ts"
+
+export { OWNERSHIP_PREFIX, ownershipTarget, ownerTagOf, recordKind } from "./dns/index.ts"
+export type { DnsRecordKind } from "./dns/index.ts"
 
 export { cordonNode, deleteNode, drainNode, K8sClient, makeK8sClient, parseKubeconfig, waitForDeploymentAvailable, waitForNodeReady } from "./k8s/index.ts"
 export type {
@@ -113,6 +120,7 @@ export type {
   ResolvedVersion,
   S3Credentials,
   SecGroupInfo,
+  SecGroupRule,
   SecGroupSpec,
   ServerInfo,
   ServerSpec,
