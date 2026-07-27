@@ -38,7 +38,7 @@
     "LICENSE"
   ],
   "engines": {
-    "bun": ">=1.3"
+    "node": ">=22"
   },
   "publishConfig": {
     "access": "public",
@@ -65,13 +65,13 @@
   },
   "peerDependencies": {
     "effect": "catalog:",
-    "@effect/platform-bun": "catalog:"
+    "@effect/platform-node": "catalog:"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "vitest": "catalog:",
     "effect": "catalog:",
-    "@effect/platform-bun": "catalog:"
+    "@effect/platform-node": "catalog:"
   },
   "scripts": {
     "build": "bash ../../scripts/build-package.sh src/main.ts",

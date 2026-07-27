@@ -1,7 +1,7 @@
-#!/usr/bin/env bun
-import { BunRuntime } from "@effect/platform-bun"
-import * as BunHttpClient from "@effect/platform-bun/BunHttpClient"
-import * as BunServices from "@effect/platform-bun/BunServices"
+#!/usr/bin/env node
+import { NodeRuntime } from "@effect/platform-node"
+import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient"
+import * as NodeServices from "@effect/platform-node/NodeServices"
 import { ConfigProvider, Console, Effect, Layer, Option } from "effect"
 import { CliError, Command } from "effect/unstable/cli"
 import * as HttpClient from "effect/unstable/http/HttpClient"
@@ -59,8 +59,8 @@ const MainLive = Layer.mergeAll(
   _mksLive,
   _storageLive,
   CinderAuthLive.pipe(Layer.provideMerge(OpenStackEnvLive)),
-  BunHttpClient.layer
-).pipe(Layer.provide(BunHttpClient.layer))
+  NodeHttpClient.layerNodeHttp
+).pipe(Layer.provide(NodeHttpClient.layerNodeHttp))
 
 // `--secrets-file` is a real shared flag (visible in `--help`, see `root.ts`);
 // `KUMULO_SECRETS_FILE` is the flagless fallback (R2). The credential layers
@@ -70,7 +70,7 @@ const MainLive = Layer.mergeAll(
 // `ConfigProvider` exposed for handler-time `Config` reads too (`--show-env`,
 // per-cluster storage layers). With no path configured the provider layer is
 // empty and the default env provider stays in charge, byte-identical to
-// before. The spawner is resolved from Bun services here and only here (N2) —
+// before. The spawner is resolved from Node services here and only here (N2) —
 // `@kumulo/secrets-sops` stays runtime-agnostic.
 const _liveFor = (secretsFile: string | undefined) => {
   const secretsProvider = secretsFile === undefined ? Layer.empty : ConfigProvider.layer(
@@ -78,7 +78,7 @@ const _liveFor = (secretsFile: string | undefined) => {
       Effect.service(ChildProcessSpawnerNS.ChildProcessSpawner),
       (spawner) => secretsConfigProvider({ file: secretsFile, spawner })
     )
-  ).pipe(Layer.provide(BunServices.layer))
+  ).pipe(Layer.provide(NodeServices.layer))
   return MainLive.pipe(Layer.provideMerge(secretsProvider))
 }
 
@@ -86,7 +86,7 @@ const cli = Command.provide(kumuloCli, ({ secretsFile }) =>
   _liveFor(resolveSecretsFile({ flag: Option.getOrUndefined(secretsFile), env: process.env })))
 
 const program = Command.run(cli, { version: packageJson.version }).pipe(
-  Effect.provide(BunServices.layer),
+  Effect.provide(NodeServices.layer),
   Effect.matchEffect({
     onFailure: (error) =>
       Effect.gen(function*() {
@@ -98,4 +98,4 @@ const program = Command.run(cli, { version: packageJson.version }).pipe(
   })
 )
 
-BunRuntime.runMain(program)
+NodeRuntime.runMain(program)

@@ -34,7 +34,7 @@
     "LICENSE"
   ],
   "engines": {
-    "bun": ">=1.3"
+    "node": ">=22"
   },
   "publishConfig": {
     "access": "public",
