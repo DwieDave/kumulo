@@ -1,10 +1,11 @@
 import { VolumeProvider } from "@kumulo/core"
-import type { ClusterTag, VolumeError, VolumeInfo, VolumeRef, VolumeSpec } from "@kumulo/core"
+import type { ClusterTag, VolumeInfo, VolumeRef, VolumeSpec } from "@kumulo/core"
 import { Effect, Layer } from "effect"
 import type { HttpClient } from "effect/unstable/http"
-import { CinderAuth } from "./auth.ts"
+import type { CinderAuth } from "./auth.ts"
 import { cinderRequest } from "./rest.ts"
-import { decodeVolumeSingle, decodeVolumesList, type VolumeRecord } from "./schemas.ts"
+import type { CinderError } from "./rest.ts"
+import { decodeVolumeSingle, decodeVolumesList, nextMarker, type VolumeRecord, type VolumesList } from "./schemas.ts"
 import { staticPvManifest } from "./manifests.ts"
 
 export interface VolumeProviderOptions {
@@ -12,7 +13,7 @@ export interface VolumeProviderOptions {
 }
 
 type Deps = CinderAuth | HttpClient.HttpClient
-type R<A> = Effect.Effect<A, VolumeError, Deps>
+type R<A> = Effect.Effect<A, CinderError, Deps>
 
 // kumulo: Cinder volume metadata carries no first-class "cluster" concept —
 // this key is our own tagging convention, mirroring the CloudProvider's
@@ -20,15 +21,46 @@ type R<A> = Effect.Effect<A, VolumeError, Deps>
 const _tagMetadataKey = "kumulo_cluster"
 
 const _volumeInfo = (record: VolumeRecord): VolumeInfo => ({
-  id: record.id ?? "",
+  id: record.id,
   name: record.name ?? ""
 })
 
 const _metadataTag = (record: VolumeRecord): string => record.metadata?.kumulo_cluster ?? ""
 
-const _listAll = (): R<ReadonlyArray<VolumeRecord>> =>
-  cinderRequest({ path: "volumes/detail", method: "GET", ref: "volumes" }).pipe(Effect.flatMap(decodeVolumesList))
+// ponytail: fixed page size, marker-paged. Cinder caps the page at its own
+// `osapi_max_limit` anyway; raise only if a cluster ever holds more volumes
+// than round-trips are worth.
+const _pageSize = 100
 
+const _listPage = (marker: string | undefined): R<VolumesList> =>
+  cinderRequest({
+    path: marker === undefined
+      ? `volumes/detail?limit=${_pageSize}`
+      : `volumes/detail?limit=${_pageSize}&marker=${encodeURIComponent(marker)}`,
+    method: "GET",
+    ref: "volumes"
+  }).pipe(Effect.flatMap(decodeVolumesList))
+
+const _listFrom = (
+  marker: string | undefined,
+  seen: ReadonlyArray<VolumeRecord>
+): R<ReadonlyArray<VolumeRecord>> =>
+  _listPage(marker).pipe(Effect.flatMap((page) => {
+    const acc = [...seen, ...page.volumes]
+    const next = nextMarker(page)
+    // kumulo: stop on no-next, on an empty page, and on a marker that does
+    // not advance — a stuck marker would otherwise loop forever.
+    return next === undefined || page.volumes.length === 0 || next === marker
+      ? Effect.succeed(acc)
+      : _listFrom(next, acc)
+  }))
+
+const _listAll = (): R<ReadonlyArray<VolumeRecord>> => _listFrom(undefined, [])
+
+// kumulo: list-then-create. Idempotent across whole-call retries (the
+// tag+name lookup finds the earlier volume), but Cinder offers no
+// idempotency key, so a retry of the POST itself would duplicate — never
+// wrap only the create in a retry policy.
 export const ensureVolume = (
   { options, spec }: { readonly options: VolumeProviderOptions; readonly spec: VolumeSpec }
 ): R<VolumeInfo> =>

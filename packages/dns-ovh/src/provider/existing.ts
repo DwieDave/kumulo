@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 import type { SchemaError } from "effect/Schema"
-import * as HttpClientError from "effect/unstable/http/HttpClientError"
+import type * as HttpClientError from "effect/unstable/http/HttpClientError"
 import type { DnsError } from "@kumulo/core"
 import type { Dns } from "../generated/client.ts"
 import { toDnsError } from "./errors.ts"

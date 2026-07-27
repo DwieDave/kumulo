@@ -1,4 +1,4 @@
-import { CloudProvider, pollUntil, ResourceNotFound } from "@kumulo/core"
+import { CloudProvider, CONFIG_HASH_KEY, configHash, pollUntil, ResourceNotFound } from "@kumulo/core"
 import type { CloudError } from "@kumulo/core"
 import type {
   ClusterTag,
@@ -8,19 +8,19 @@ import type {
   NetworkInfo,
   NetworkSpec,
   SecGroupInfo,
+  SecGroupRule,
   SecGroupSpec,
   ServerInfo,
   ServerSpec
 } from "@kumulo/core"
 import { Effect, Layer } from "effect"
 import type { HttpClient } from "effect/unstable/http"
-import * as Schema from "effect/Schema"
+import { makeHcloudClient, type HcloudClient } from "../client/hcloud.ts"
 import { networkZoneForLocation } from "../profile/locations.ts"
-import { HcloudFirewallRuleInput } from "./firewall-rules.ts"
 import { waitForAction } from "./actions.ts"
-import { decodeHcloud, decodeListField, decodeSingleField } from "./decode.ts"
-import { hcloudRequest } from "./rest.ts"
-import { HcloudLoadBalancerRecord, HcloudNamedResource, HcloudServerRecord, serverIp } from "./schemas.ts"
+import { ignoreMissing, mapHcloudError, required, type ErrorContext, type HcloudError } from "./errors.ts"
+import type { HcloudFirewallRuleInput } from "./firewall-rules.ts"
+import { listAll } from "./paginate.ts"
 
 export interface CloudProviderOptions {
   readonly tag: ClusterTag
@@ -39,105 +39,138 @@ const _name = (options: CloudProviderOptions, suffix?: string): string =>
 const _clusterLabel = (options: CloudProviderOptions): Record<string, string> => ({ "kumulo-cluster": options.tag })
 const _labelSelector = (options: CloudProviderOptions): string => `kumulo-cluster=${options.tag}`
 
-const _findByName = <A>(
-  { itemSchema, listField, name, path }: {
-    readonly path: string
-    readonly listField: string
-    readonly itemSchema: Schema.Codec<A, unknown>
-    readonly name: string
-  }
-): R<A | undefined> =>
-  hcloudRequest({ path: `${path}?name=${encodeURIComponent(name)}`, method: "GET", kind: path }).pipe(
-    Effect.flatMap(decodeListField({ itemSchema, listField, kind: path })),
-    Effect.map((records) => records[0])
-  )
+const _ctx = (kind: string, ref: string): ErrorContext => ({ kind, ref })
 
 // ---- Network ----------------------------------------------------------
 
+const _findNetwork = (client: HcloudClient, name: string) =>
+  mapHcloudError({ self: client.Networks.listNetworks({ query: { name } }), ctx: _ctx("network", name) }).pipe(
+    Effect.map((response) => response.networks[0])
+  )
+
 export const ensureNetwork = ({ options, spec }: { readonly options: CloudProviderOptions; readonly spec: NetworkSpec }): R<NetworkInfo> =>
   Effect.gen(function*() {
+    const client = yield* makeHcloudClient
     const name = _name(options)
-    const existing = yield* _findByName({ itemSchema: HcloudNamedResource, listField: "networks", path: "networks", name })
+    const existing = yield* _findNetwork(client, name)
     if (existing !== undefined) return { id: String(existing.id), cidr: spec.cidr }
     // kumulo: network zone derived from the location internally (D2) — no
     // `NetworkSpec` change for one provider's constraint.
-    const zone = networkZoneForLocation(options.location) ?? ""
-    const created = yield* hcloudRequest({
-      path: "networks",
-      method: "POST",
-      kind: "networks",
-      body: { name, ip_range: spec.cidr, labels: _clusterLabel(options), subnets: [{ type: "cloud", ip_range: spec.cidr, network_zone: zone }] }
-    }).pipe(Effect.flatMap(decodeSingleField({ itemSchema: HcloudNamedResource, field: "network", kind: "networks" })))
-    return { id: String(created.id), cidr: spec.cidr }
+    const network_zone = networkZoneForLocation(options.location) ?? ""
+    const created = yield* mapHcloudError({
+      self: client.Networks.createNetwork({
+        payload: {
+          name,
+          ip_range: spec.cidr,
+          labels: _clusterLabel(options),
+          subnets: [{ type: "cloud", ip_range: spec.cidr, network_zone }]
+        }
+      }),
+      ctx: _ctx("network", name)
+    })
+    const decoded = yield* required({ value: created.network, kind: "network", ref: name })
+    return { id: String(decoded.id), cidr: spec.cidr }
   })
 
 // ---- Security groups (Hetzner Firewalls) --------------------------------
 
-const _decodeFirewallRule = (rule: unknown): Effect.Effect<HcloudFirewallRuleInput, CloudError> =>
-  Schema.decodeUnknownEffect(HcloudFirewallRuleInput)(rule).pipe(
-    Effect.mapError(() => new ResourceNotFound({ kind: "firewall-rule", ref: JSON.stringify(rule) }))
-  )
+// kumulo: hcloud Firewalls speak `direction`/`port`/`source_ips` and know no
+// `any` protocol nor a security-group self-reference, so core's neutral
+// `SecGroupRule` is translated here (the two shapes it cannot express are
+// rejected rather than silently widened).
+const _portRange = (rule: SecGroupRule): string | undefined => {
+  if (rule.protocol === "icmp" || rule.portMin === undefined) return undefined
+  const max = rule.portMax ?? rule.portMin
+  return max === rule.portMin ? `${rule.portMin}` : `${rule.portMin}-${max}`
+}
 
-const _toHcloudRule = (rule: HcloudFirewallRuleInput) => ({
-  direction: rule.direction,
-  protocol: rule.protocol,
-  port: rule.port,
-  source_ips: rule.sourceCidrs
+const _hcloudRule = (
+  { cidr, port, protocol }: { readonly protocol: "tcp" | "udp" | "icmp"; readonly port: string | undefined; readonly cidr: string }
+): HcloudFirewallRuleInput => ({
+  direction: "in",
+  protocol,
+  ...(port === undefined ? {} : { port }),
+  sourceCidrs: [cidr]
 })
 
-const _ensureFirewallId = ({ hcloudRules, options }: { readonly options: CloudProviderOptions; readonly hcloudRules: ReadonlyArray<unknown> }): R<number> =>
+const _toHcloudRule = (rule: SecGroupRule): Effect.Effect<HcloudFirewallRuleInput, CloudError> =>
+  rule.protocol === "any" || rule.remoteCidr === undefined
+    ? Effect.fail(new ResourceNotFound({ kind: "firewall-rule", ref: JSON.stringify(rule) }))
+    : Effect.succeed(_hcloudRule({ protocol: rule.protocol, port: _portRange(rule), cidr: rule.remoteCidr }))
+
+type FirewallRuleWire = { readonly direction: "in" | "out"; readonly protocol: "tcp" | "udp" | "icmp"; readonly source_ips: ReadonlyArray<string>; readonly port?: string }
+
+const _toHcloudWire = (rule: HcloudFirewallRuleInput): FirewallRuleWire => ({
+  direction: rule.direction,
+  protocol: rule.protocol,
+  source_ips: rule.sourceCidrs,
+  ...(rule.port === undefined ? {} : { port: rule.port })
+})
+
+const _ensureFirewallId = (
+  { client, options, rules }: { readonly client: HcloudClient; readonly options: CloudProviderOptions; readonly rules: ReadonlyArray<FirewallRuleWire> }
+): R<number> =>
   Effect.gen(function*() {
     const name = _name(options)
-    const existing = yield* _findByName({ itemSchema: HcloudNamedResource, listField: "firewalls", path: "firewalls", name })
+    const found = yield* mapHcloudError({ self: client.Firewalls.listFirewalls({ query: { name } }), ctx: _ctx("firewall", name) })
+    const existing = found.firewalls[0]
     if (existing !== undefined) return existing.id
-    const created = yield* hcloudRequest({
-      path: "firewalls",
-      method: "POST",
-      kind: "firewalls",
-      body: { name, labels: _clusterLabel(options), rules: hcloudRules }
-    }).pipe(Effect.flatMap(decodeSingleField({ itemSchema: HcloudNamedResource, field: "firewall", kind: "firewalls" })))
-    return created.id
+    const created = yield* mapHcloudError({
+      self: client.Firewalls.createFirewall({ payload: { name, labels: _clusterLabel(options), rules } }),
+      ctx: _ctx("firewall", name)
+    })
+    return (yield* required({ value: created.firewall, kind: "firewall", ref: name })).id
   })
 
 export const ensureSecurityGroups = (
   { options, spec }: { readonly options: CloudProviderOptions; readonly spec: SecGroupSpec }
 ): R<SecGroupInfo> =>
   Effect.gen(function*() {
-    const rules = yield* Effect.forEach(spec.rules, _decodeFirewallRule)
-    const hcloudRules = rules.map(_toHcloudRule)
-    const id = yield* _ensureFirewallId({ options, hcloudRules })
+    const client = yield* makeHcloudClient
+    const translated = yield* Effect.forEach(spec.rules, _toHcloudRule)
+    const rules = translated.map(_toHcloudWire)
+    const id = yield* _ensureFirewallId({ client, options, rules })
     // kumulo: heal drifted rules on every re-run (N1) — hcloud's set_rules
     // action is a full replace, no per-rule diff endpoint to reuse instead.
-    yield* hcloudRequest({ path: `firewalls/${id}/actions/set_rules`, method: "POST", kind: "firewalls", body: { rules: hcloudRules } })
+    yield* mapHcloudError({
+      self: client["Firewall Actions"].setFirewallRules({ params: { id }, payload: { rules } }),
+      ctx: _ctx("firewall", String(id))
+    })
     return { id: String(id) }
   })
 
 // ---- Load balancer (native Hetzner product) -----------------------------
 
+const _findLoadBalancer = (client: HcloudClient, name: string) =>
+  mapHcloudError({ self: client["Load Balancers"].listLoadBalancers({ query: { name } }), ctx: _ctx("load-balancer", name) }).pipe(
+    Effect.map((response) => response.load_balancers[0])
+  )
+
 export const ensureLoadBalancer = (
   { options, spec: _spec }: { readonly options: CloudProviderOptions; readonly spec: LbSpec }
 ): R<LbInfo> =>
   Effect.gen(function*() {
+    const client = yield* makeHcloudClient
     const name = _name(options)
-    const existing = yield* _findByName({ itemSchema: HcloudLoadBalancerRecord, listField: "load_balancers", path: "load_balancers", name })
+    const existing = yield* _findLoadBalancer(client, name)
     if (existing !== undefined) return { id: String(existing.id), vip: existing.public_net.ipv4.ip ?? "" }
-    const created = yield* hcloudRequest({
-      path: "load_balancers",
-      method: "POST",
-      kind: "load_balancers",
-      body: {
-        name,
-        load_balancer_type: "lb11",
-        location: options.location,
-        labels: _clusterLabel(options),
-        // kumulo: target-by-label (R7's uniform label_selector) instead of
-        // `spec.members` — every server labeled `kumulo-cluster=<tag>` is
-        // added/removed automatically as it comes and goes, no explicit
-        // add/remove-target call needed (unlike OpenStack's Octavia members).
-        targets: [{ type: "label_selector", label_selector: { selector: _labelSelector(options) } }]
-      }
-    }).pipe(Effect.flatMap(decodeSingleField({ itemSchema: HcloudLoadBalancerRecord, field: "load_balancer", kind: "load_balancers" })))
-    return { id: String(created.id), vip: created.public_net.ipv4.ip ?? "" }
+    const created = yield* mapHcloudError({
+      self: client["Load Balancers"].createLoadBalancer({
+        payload: {
+          name,
+          load_balancer_type: "lb11",
+          location: options.location,
+          labels: _clusterLabel(options),
+          // kumulo: target-by-label (R7's uniform label_selector) instead of
+          // `spec.members` — every server labeled `kumulo-cluster=<tag>` is
+          // added/removed automatically as it comes and goes, no explicit
+          // add/remove-target call needed (unlike OpenStack's Octavia members).
+          targets: [{ type: "label_selector", label_selector: { selector: _labelSelector(options) } }]
+        }
+      }),
+      ctx: _ctx("load-balancer", name)
+    })
+    return { id: String(created.load_balancer.id), vip: created.load_balancer.public_net.ipv4.ip ?? "" }
   })
 
 // ---- Servers -------------------------------------------------------------
@@ -151,48 +184,50 @@ export const ensurePlacementGroup = (
   { options, role }: { readonly options: CloudProviderOptions; readonly role: ServerGroupRole }
 ): R<number> =>
   Effect.gen(function*() {
+    const client = yield* makeHcloudClient
     const name = _name(options, `${role}s`)
-    const existing = yield* _findByName({ itemSchema: HcloudNamedResource, listField: "placement_groups", path: "placement_groups", name })
+    const found = yield* mapHcloudError({
+      self: client["Placement Groups"].listPlacementGroups({ query: { name } }),
+      ctx: _ctx("placement-group", name)
+    })
+    const existing = found.placement_groups[0]
     if (existing !== undefined) return existing.id
     // ponytail: the 10-server-per-group hard cap (R9/D7) isn't enforced here —
     // D7 is an OPEN design choice (hard-fail vs auto-split) out of this task's
     // scope; add the pre-flight check once that's decided.
-    const created = yield* hcloudRequest({
-      path: "placement_groups",
-      method: "POST",
-      kind: "placement_groups",
-      body: { name, type: "spread", labels: _clusterLabel(options) }
-    }).pipe(Effect.flatMap(decodeSingleField({ itemSchema: HcloudNamedResource, field: "placement_group", kind: "placement_groups" })))
-    return created.id
+    const created = yield* mapHcloudError({
+      self: client["Placement Groups"].createPlacementGroup({ payload: { name, type: "spread", labels: _clusterLabel(options) } }),
+      ctx: _ctx("placement-group", name)
+    })
+    return created.placement_group.id
   })
 
-const CreateServerResponse = Schema.Struct({ server: HcloudServerRecord, action: Schema.Struct({ id: Schema.Number }) })
+interface ServerRecord {
+  readonly id: number
+  readonly name: string
+  readonly status: string
+  readonly public_net: { readonly ipv4: { readonly ip: string } | null }
+  readonly labels?: { readonly [key: string]: string | undefined } | undefined
+}
 
-const _createServer = (
-  { groupId, options, spec }: { readonly options: CloudProviderOptions; readonly spec: ServerSpec; readonly groupId: number }
-): R<typeof CreateServerResponse.Type> =>
-  hcloudRequest({
-    path: "servers",
-    method: "POST",
-    kind: "servers",
-    body: {
-      name: spec.name,
-      server_type: spec.flavor,
-      image: spec.image,
-      location: options.location,
-      placement_group: groupId,
-      labels: { ..._clusterLabel(options), "kumulo-role": spec.role }
-    }
-  }).pipe(Effect.flatMap(decodeHcloud({ schema: CreateServerResponse, kind: "servers" })))
+// Servers created before hash stamping carry no label -> `undefined` (unknown), not "".
+const _hashOf = (server: ServerRecord): string | undefined => server.labels?.[CONFIG_HASH_KEY]
 
-const _getServerRecord = (id: number): R<typeof HcloudServerRecord.Type> =>
-  hcloudRequest({ path: `servers/${id}`, method: "GET", kind: "servers" }).pipe(
-    Effect.flatMap(decodeSingleField({ itemSchema: HcloudServerRecord, field: "server", kind: "servers" }))
+const _serverIp = (server: ServerRecord): string => server.public_net.ipv4?.ip ?? ""
+
+const _findServer = (client: HcloudClient, name: string): R<ServerRecord | undefined> =>
+  mapHcloudError({ self: client.Servers.listServers({ query: { name } }), ctx: _ctx("server", name) }).pipe(
+    Effect.map((response) => response.servers[0])
   )
 
-const _waitServerRunning = (id: number): R<typeof HcloudServerRecord.Type> =>
+const _getServer = ({ client, id }: { readonly client: HcloudClient; readonly id: number }): R<ServerRecord> =>
+  mapHcloudError({ self: client.Servers.getServer({ params: { id } }), ctx: _ctx("server", String(id)) }).pipe(
+    Effect.flatMap((response) => required({ value: response.server, kind: "server", ref: String(id) }))
+  )
+
+const _waitServerRunning = ({ client, id }: { readonly client: HcloudClient; readonly id: number }): R<ServerRecord> =>
   pollUntil({
-    check: _getServerRecord(id),
+    check: _getServer({ client, id }),
     isDone: (server) => server.status === "running",
     interval: "2 seconds",
     timeout: "5 minutes",
@@ -200,123 +235,197 @@ const _waitServerRunning = (id: number): R<typeof HcloudServerRecord.Type> =>
     ref: String(id)
   })
 
-export const ensureServer = ({ options, spec }: { readonly options: CloudProviderOptions; readonly spec: ServerSpec }): R<ServerInfo> =>
-  Effect.gen(function*() {
-    const existing = yield* _findByName({ itemSchema: HcloudServerRecord, listField: "servers", path: "servers", name: spec.name })
-    if (existing !== undefined) {
-      const settled = yield* _waitServerRunning(existing.id)
-      return { id: String(settled.id), name: spec.name, ip: serverIp(settled) }
-    }
-    const groupId = yield* ensurePlacementGroup({ options, role: spec.role })
-    const created = yield* _createServer({ options, spec, groupId })
-    yield* waitForAction(created.action.id)
-    return { id: String(created.server.id), name: spec.name, ip: serverIp(created.server) }
+const _createServer = (
+  { client, groupId, options, spec }: {
+    readonly client: HcloudClient
+    readonly options: CloudProviderOptions
+    readonly spec: ServerSpec
+    readonly groupId: number
+  }
+) =>
+  mapHcloudError({
+    self: client.Servers.createServer({
+      payload: {
+        name: spec.name,
+        server_type: spec.flavor,
+        image: spec.image,
+        location: options.location,
+        placement_group: groupId,
+        labels: { ..._clusterLabel(options), "kumulo-role": spec.role, [CONFIG_HASH_KEY]: configHash(spec) }
+      }
+    }),
+    ctx: _ctx("server", spec.name)
   })
 
-const DeleteServerResponse = Schema.Struct({ action: Schema.optionalKey(Schema.Struct({ id: Schema.Number })) })
+export const ensureServer = ({ options, spec }: { readonly options: CloudProviderOptions; readonly spec: ServerSpec }): R<ServerInfo> =>
+  Effect.gen(function*() {
+    const client = yield* makeHcloudClient
+    const existing = yield* _findServer(client, spec.name)
+    if (existing !== undefined) {
+      const settled = yield* _waitServerRunning({ client, id: existing.id })
+      return { id: String(settled.id), name: spec.name, ip: _serverIp(settled) }
+    }
+    const groupId = yield* ensurePlacementGroup({ options, role: spec.role })
+    const created = yield* _createServer({ client, options, spec, groupId })
+    yield* waitForAction({ client, actionId: created.action.id })
+    return { id: String(created.server.id), name: spec.name, ip: _serverIp(created.server) }
+  })
 
 // kumulo: deletes a single server and waits until its (async) delete Action
 // completes, for scale-down's per-worker teardown — whole-cluster
 // `deleteByTag` doesn't wait per-server (bulk teardown, see `_deleteServersByTag`).
 export const deleteServer = (ref: ServerInfo): R<void> =>
-  hcloudRequest({ path: `servers/${ref.id}`, method: "DELETE", kind: "servers", okStatuses: [404] }).pipe(
-    Effect.flatMap((body) =>
-      Schema.decodeUnknownEffect(DeleteServerResponse)(body ?? {}).pipe(
-        Effect.orElseSucceed(() => ({ action: undefined })),
-        Effect.flatMap((decoded) => decoded.action === undefined ? Effect.void : waitForAction(decoded.action.id))
-      )
+  Effect.gen(function*() {
+    const client = yield* makeHcloudClient
+    const id = Number(ref.id)
+    const deleted = yield* mapHcloudError({ self: client.Servers.deleteServer({ params: { id } }), ctx: _ctx("server", ref.id) }).pipe(
+      Effect.catchTag("ResourceNotFound", () => Effect.succeed(undefined))
     )
-  )
+    if (deleted?.action !== undefined) yield* waitForAction({ client, actionId: deleted.action.id })
+  })
 
 // ---- Inventory + delete --------------------------------------------------
 
-const _labeled = <A>(
-  { itemSchema, listField, options, path }: { readonly path: string; readonly listField: string; readonly itemSchema: Schema.Codec<A, unknown>; readonly options: CloudProviderOptions }
-): R<ReadonlyArray<A>> =>
-  hcloudRequest({ path: `${path}?label_selector=${encodeURIComponent(_labelSelector(options))}`, method: "GET", kind: path }).pipe(
-    Effect.flatMap(decodeListField({ itemSchema, listField, kind: path }))
+const _labeledServers = ({ client, options }: { readonly client: HcloudClient; readonly options: CloudProviderOptions }): R<ReadonlyArray<ServerRecord>> =>
+  listAll((query) =>
+    mapHcloudError({
+      self: client.Servers.listServers({ query: { ...query, label_selector: _labelSelector(options) } }),
+      ctx: _ctx("server", options.tag)
+    }).pipe(Effect.map((response) => ({ items: response.servers, meta: response.meta })))
   )
 
 export const listClusterResources = ({ options }: { readonly options: CloudProviderOptions }): R<Inventory> =>
   Effect.gen(function*() {
+    const client = yield* makeHcloudClient
+    const label_selector = _labelSelector(options)
     const [servers, networks, firewalls, lbs] = yield* Effect.all([
-      _labeled({ itemSchema: HcloudServerRecord, listField: "servers", path: "servers", options }),
-      _labeled({ itemSchema: HcloudNamedResource, listField: "networks", path: "networks", options }),
-      _labeled({ itemSchema: HcloudNamedResource, listField: "firewalls", path: "firewalls", options }),
-      _labeled({ itemSchema: HcloudLoadBalancerRecord, listField: "load_balancers", path: "load_balancers", options })
+      _labeledServers({ client, options }),
+      listAll((query) =>
+        mapHcloudError({ self: client.Networks.listNetworks({ query: { ...query, label_selector } }), ctx: _ctx("network", options.tag) })
+          .pipe(Effect.map((r) => ({ items: r.networks, meta: r.meta })))
+      ),
+      listAll((query) =>
+        mapHcloudError({ self: client.Firewalls.listFirewalls({ query: { ...query, label_selector } }), ctx: _ctx("firewall", options.tag) })
+          .pipe(Effect.map((r) => ({ items: r.firewalls, meta: r.meta })))
+      ),
+      listAll((query) =>
+        mapHcloudError({
+          self: client["Load Balancers"].listLoadBalancers({ query: { ...query, label_selector } }),
+          ctx: _ctx("load-balancer", options.tag)
+        }).pipe(Effect.map((r) => ({ items: r.load_balancers, meta: r.meta })))
+      )
     ], { concurrency: 4 })
     return {
-      servers: servers.map((s) => ({ id: String(s.id), name: s.name, ip: serverIp(s) })),
+      servers: servers.map((s) => ({ id: String(s.id), name: s.name, ip: _serverIp(s), configHash: _hashOf(s) })),
       networks: networks.map((n) => ({ id: String(n.id), cidr: "" })),
       securityGroups: firewalls.map((f) => ({ id: String(f.id) })),
       loadBalancers: lbs.map((l) => ({ id: String(l.id), vip: l.public_net.ipv4.ip ?? "" }))
     }
   })
 
-const _deleteServersByTag = (options: CloudProviderOptions): R<void> =>
-  _labeled({ itemSchema: HcloudNamedResource, listField: "servers", path: "servers", options }).pipe(
+const _deleteServersByTag = ({ client, options }: { readonly client: HcloudClient; readonly options: CloudProviderOptions }): R<void> =>
+  _labeledServers({ client, options }).pipe(
     Effect.flatMap((servers) =>
       Effect.forEach(servers, (s) => deleteServer({ id: String(s.id), name: s.name, ip: "" }), { discard: true })
     )
   )
 
 const _deleteIfExists = (
-  { options, path, suffix }: { readonly path: string; readonly options: CloudProviderOptions; readonly suffix?: string }
+  { find, remove }: {
+    readonly find: R<{ readonly id: number } | undefined>
+    readonly remove: (id: number) => Effect.Effect<unknown, HcloudError, Deps>
+  }
 ): R<void> =>
-  _findByName({ itemSchema: HcloudNamedResource, listField: path, path, name: _name(options, suffix) }).pipe(
-    Effect.flatMap((found) =>
-      found === undefined ? Effect.void : hcloudRequest({ path: `${path}/${found.id}`, method: "DELETE", kind: path, okStatuses: [404] }).pipe(Effect.asVoid)
-    )
-  )
+  find.pipe(Effect.flatMap((found) => found === undefined ? Effect.void : ignoreMissing(remove(found.id))))
 
 const _placementGroupRoles: ReadonlyArray<ServerGroupRole> = ["master", "worker"]
+
+const _findPlacementGroup = (client: HcloudClient, name: string) =>
+  mapHcloudError({ self: client["Placement Groups"].listPlacementGroups({ query: { name } }), ctx: _ctx("placement-group", name) }).pipe(
+    Effect.map((response) => response.placement_groups[0])
+  )
+
+const _findFirewall = (client: HcloudClient, name: string) =>
+  mapHcloudError({ self: client.Firewalls.listFirewalls({ query: { name } }), ctx: _ctx("firewall", name) }).pipe(
+    Effect.map((response) => response.firewalls[0])
+  )
 
 // kumulo: reverse dependency order — LB, servers, placement groups, firewall, network.
 export const deleteByTag = ({ options }: { readonly options: CloudProviderOptions }): R<void> =>
   Effect.gen(function*() {
-    yield* _deleteIfExists({ path: "load_balancers", options })
-    yield* _deleteServersByTag(options)
-    yield* Effect.forEach(_placementGroupRoles, (role) => _deleteIfExists({ path: "placement_groups", options, suffix: `${role}s` }), { discard: true })
-    yield* _deleteIfExists({ path: "firewalls", options })
-    yield* _deleteIfExists({ path: "networks", options })
+    const client = yield* makeHcloudClient
+    const name = _name(options)
+    yield* _deleteIfExists({
+      find: _findLoadBalancer(client, name),
+      remove: (id) => mapHcloudError({ self: client["Load Balancers"].deleteLoadBalancer({ params: { id } }), ctx: _ctx("load-balancer", name) })
+    })
+    yield* _deleteServersByTag({ client, options })
+    yield* Effect.forEach(_placementGroupRoles, (role) => {
+      const groupName = _name(options, `${role}s`)
+      return _deleteIfExists({
+        find: _findPlacementGroup(client, groupName),
+        remove: (id) =>
+          mapHcloudError({ self: client["Placement Groups"].deletePlacementGroup({ params: { id } }), ctx: _ctx("placement-group", groupName) })
+      })
+    }, { discard: true })
+    yield* _deleteIfExists({
+      find: _findFirewall(client, name),
+      remove: (id) => mapHcloudError({ self: client.Firewalls.deleteFirewall({ params: { id } }), ctx: _ctx("firewall", name) })
+    })
+    yield* _deleteIfExists({
+      find: _findNetwork(client, name),
+      remove: (id) => mapHcloudError({ self: client.Networks.deleteNetwork({ params: { id } }), ctx: _ctx("network", name) })
+    })
   })
 
 // ---- Image / flavor resolution: exact name -> fuzzy (+warn) -------------
 
-const _fuzzyMatch = (entries: ReadonlyArray<HcloudNamedResource>, ref: string): HcloudNamedResource | undefined =>
-  entries.find((entry) => entry.name.toLowerCase().includes(ref.toLowerCase()))
+interface NamedRecord {
+  readonly id: number
+  readonly name: string | null
+}
+
+const _fuzzyMatch = (entries: ReadonlyArray<NamedRecord>, ref: string): NamedRecord | undefined =>
+  entries.find((entry) => entry.name?.toLowerCase().includes(ref.toLowerCase()) === true)
+
+const _resolved = <A extends NamedRecord>(
+  { entries, kind, ref }: { readonly entries: ReadonlyArray<A>; readonly kind: string; readonly ref: string }
+): R<string> => {
+  const fuzzy = _fuzzyMatch(entries, ref)
+  if (fuzzy === undefined) return Effect.fail(new ResourceNotFound({ kind, ref }))
+  return Effect.logWarning(`${kind} "${ref}" matched by fuzzy lookup: "${fuzzy.name}"`).pipe(Effect.as(String(fuzzy.id)))
+}
 
 // kumulo: restricted to `type=system` — the only image kind this port
 // resolves (OS base images for cluster nodes), and the only kind whose
-// `name` is always non-null (snapshots/backups can have a null `name`,
-// which `HcloudNamedResource` doesn't accept).
+// `name` is reliably non-null (snapshots/backups can have a null `name`).
 export const resolveImage = ({ ref }: { readonly ref: string }): R<string> =>
   Effect.gen(function*() {
-    const exact = yield* hcloudRequest({ path: `images?type=system&name=${encodeURIComponent(ref)}`, method: "GET", kind: "images" }).pipe(
-      Effect.flatMap(decodeListField({ itemSchema: HcloudNamedResource, listField: "images", kind: "images" })),
-      Effect.map((records) => records[0])
-    )
+    const client = yield* makeHcloudClient
+    const listImages = (query: { readonly page?: number; readonly per_page?: number }) =>
+      mapHcloudError({ self: client.Images.listImages({ query: { ...query, type: ["system"], name: ref } }), ctx: _ctx("image", ref) })
+    const exact = yield* listImages({}).pipe(Effect.map((response) => response.images[0]))
     if (exact !== undefined) return String(exact.id)
-    const all = yield* hcloudRequest({ path: "images?type=system", method: "GET", kind: "images" }).pipe(
-      Effect.flatMap(decodeListField({ itemSchema: HcloudNamedResource, listField: "images", kind: "images" }))
+    const all = yield* listAll((query) =>
+      mapHcloudError({ self: client.Images.listImages({ query: { ...query, type: ["system"] } }), ctx: _ctx("image", ref) })
+        .pipe(Effect.map((r) => ({ items: r.images, meta: r.meta })))
     )
-    const fuzzy = _fuzzyMatch(all, ref)
-    if (fuzzy === undefined) return yield* Effect.fail(new ResourceNotFound({ kind: "image", ref }))
-    yield* Effect.logWarning(`image "${ref}" matched by fuzzy lookup: "${fuzzy.name}"`)
-    return String(fuzzy.id)
+    return yield* _resolved({ entries: all, kind: "image", ref })
   })
 
 export const resolveFlavor = ({ ref }: { readonly ref: string }): R<string> =>
   Effect.gen(function*() {
-    const exact = yield* _findByName({ itemSchema: HcloudNamedResource, listField: "server_types", path: "server_types", name: ref })
+    const client = yield* makeHcloudClient
+    const exact = yield* mapHcloudError({
+      self: client["Server Types"].listServerTypes({ query: { name: ref } }),
+      ctx: _ctx("flavor", ref)
+    }).pipe(Effect.map((response) => response.server_types[0]))
     if (exact !== undefined) return String(exact.id)
-    const all = yield* hcloudRequest({ path: "server_types", method: "GET", kind: "server_types" }).pipe(
-      Effect.flatMap(decodeListField({ itemSchema: HcloudNamedResource, listField: "server_types", kind: "server_types" }))
+    const all = yield* listAll((query) =>
+      mapHcloudError({ self: client["Server Types"].listServerTypes({ query }), ctx: _ctx("flavor", ref) })
+        .pipe(Effect.map((r) => ({ items: r.server_types, meta: r.meta })))
     )
-    const fuzzy = _fuzzyMatch(all, ref)
-    if (fuzzy === undefined) return yield* Effect.fail(new ResourceNotFound({ kind: "flavor", ref }))
-    yield* Effect.logWarning(`flavor "${ref}" matched by fuzzy lookup: "${fuzzy.name}"`)
-    return String(fuzzy.id)
+    return yield* _resolved({ entries: all, kind: "flavor", ref })
   })
 
 // ---- Layer ---------------------------------------------------------------

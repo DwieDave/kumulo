@@ -54,7 +54,7 @@ describe("runBootstrap", () => {
       expect(byHost.get("10.0.0.1")).toContain("--cluster-init")
       expect(byHost.get("10.0.0.2")).toContain(`--server https://${masters[0].ip}:6443`)
       expect(byHost.get("10.0.0.4")).toContain("agent")
-      expect(byHost.get("10.0.0.4")).toContain(`K3S_TOKEN="${result.token}"`)
+      expect(byHost.get("10.0.0.4")).toContain(`K3S_TOKEN='${result.token}'`)
 
       // controlPlaneReady only gates master 1.
       expect(clusterInfoCalls).toEqual(["10.0.0.1"])

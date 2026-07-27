@@ -47,16 +47,20 @@ it.effect("full lifecycle: create → poll ready → converge pools → kubeconf
     // create a pool, then converge again with a scaled-up desired count —
     // proves update (not a spurious replace) for a mutable-only change.
     yield* ensureNodePools({ mks, ref, pools: [_pool()] })
-    assert.strictEqual([...server.pools.get(info.id)!.values()][0]?.desiredNodes, 3)
+    assert.strictEqual([...(server.pools.get(info.id)?.values() ?? [])][0]?.desiredNodes, 3)
 
     yield* ensureNodePools({ mks, ref, pools: [_pool({ desiredNodes: 5 })] })
-    const poolsAfterUpdate = [...server.pools.get(info.id)!.values()]
+    const poolsAfterUpdate = [...(server.pools.get(info.id)?.values() ?? [])]
     assert.strictEqual(poolsAfterUpdate.length, 1)
     assert.strictEqual(poolsAfterUpdate[0]?.desiredNodes, 5)
 
-    // flavor change is immutable → replace (delete+recreate), not update.
+    // flavor change is immutable → replace (delete+recreate), not update —
+    // and only once the operator confirmed that pool by name.
     yield* ensureNodePools({ mks, ref, pools: [_pool({ flavor: "b2-15", desiredNodes: 5 })] })
-    const poolsAfterReplace = [...server.pools.get(info.id)!.values()]
+    assert.strictEqual([...(server.pools.get(info.id)?.values() ?? [])][0]?.flavor, "b2-7")
+
+    yield* ensureNodePools({ mks, ref, pools: [_pool({ flavor: "b2-15", desiredNodes: 5 })], replace: new Set(["workers"]) })
+    const poolsAfterReplace = [...(server.pools.get(info.id)?.values() ?? [])]
     assert.strictEqual(poolsAfterReplace.length, 1)
     assert.strictEqual(poolsAfterReplace[0]?.flavor, "b2-15")
 

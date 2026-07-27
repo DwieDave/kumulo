@@ -14,5 +14,7 @@ export type { CloudProviderOptions } from "./provider/cloud-provider.ts"
 // needs the rule builder to assemble `SecGroupSpec`; dep-lint's
 // no-deep-package-imports rule only allows reaching another package's
 // declared barrel, not `provider/security-group-rules.ts` directly.
+export { OpenStackHttpLive } from "./transport/http-client.ts"
+export type { OpenStackError } from "./provider/errors.ts"
 export { buildFr57Rules } from "./provider/security-group-rules.ts"
 export type { SecurityGroupRuleInput } from "./provider/security-group-rules.ts"

@@ -48,7 +48,35 @@ const _fakeKeystone = (handler: (request: HttpClientRequest.HttpClientRequest, c
 const _layerFor = (fake: FakeClient, skewMs?: number) =>
   Layer.provide(KeystoneAuthLive({ credentials, skewMs }), Layer.succeed(HttpClient.HttpClient, fake.client))
 
+const _jsonBody = (request: HttpClientRequest.HttpClientRequest): unknown =>
+  request.body._tag === "Uint8Array" ? JSON.parse(new TextDecoder().decode(request.body.body)) : undefined
+
 describe("KeystoneAuthLive", () => {
+  // kumulo: WHY this test — the spec omits `required` on the token requestBody,
+  // so the generator emitted `payload: [NoContent, ...Json]` and the encoder
+  // matched the empty branch: the token request went out with NO BODY and real
+  // Keystone answered 400. Every fake here only ever checked the response, so
+  // nothing caught it until the first live `apply`. Assert the wire body.
+  it.effect("sends the application-credential body, not an empty request", () => {
+    const farFuture = new Date(Date.now() + 3_600_000).toISOString()
+    let sent: unknown = undefined
+    const fake = _fakeKeystone((request) => {
+      sent = _jsonBody(request)
+      return _okResponse(farFuture)
+    })
+    return Effect.gen(function*() {
+      yield* (yield* KeystoneAuth).token
+      expect(sent).toEqual({
+        auth: {
+          identity: {
+            methods: ["application_credential"],
+            application_credential: { id: "app-id", secret: "app-secret" }
+          }
+        }
+      })
+    }).pipe(Effect.provide(_layerFor(fake)))
+  })
+
   it.effect("issues a token once and reuses it while valid", () => {
     const farFuture = new Date(Date.now() + 3_600_000).toISOString()
     const fake = _fakeKeystone(() => _okResponse(farFuture))

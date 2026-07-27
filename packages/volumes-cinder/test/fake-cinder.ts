@@ -5,7 +5,7 @@ import { CinderAuth } from "../src/auth.ts"
 
 export type RouteHandler = (
   request: HttpClientRequest.HttpClientRequest
-) => { readonly status: number; readonly body?: unknown }
+) => { readonly status: number; readonly body?: unknown; readonly headers?: Record<string, string> }
 
 export interface FakeCinder {
   readonly layer: Layer.Layer<CinderAuth | HttpClient.HttpClient>
@@ -28,7 +28,9 @@ export const makeFakeCinder = (routes: Record<string, RouteHandler>): FakeCinder
     const result = handler(request)
     const nullBodyStatus = result.status === 204 || result.status === 304
     const responseBody = nullBodyStatus || result.body === undefined ? null : JSON.stringify(result.body)
-    return Effect.succeed(HttpClientResponse.fromWeb(request, new Response(responseBody, { status: result.status })))
+    return Effect.succeed(
+      HttpClientResponse.fromWeb(request, new Response(responseBody, { status: result.status, headers: result.headers }))
+    )
   })
   const auth = Layer.succeed(CinderAuth, {
     token: Effect.succeed("tok"),

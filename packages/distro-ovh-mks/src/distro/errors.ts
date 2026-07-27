@@ -4,7 +4,9 @@ import * as HttpClientError from "effect/unstable/http/HttpClientError"
 import {
   AuthenticationFailed,
   HttpTransportError,
+  ProviderApiError,
   QuotaExceeded,
+  RateLimited,
   ResourceConflict,
   ResourceNotFound,
   ResponseDecodeError
@@ -16,45 +18,44 @@ interface ErrorContext {
   readonly ref: string
 }
 
-// Status → tagged-error constructor, keyed by code (no switch, per
-// project lint rule). Anything not listed here falls through to the
-// `_fallback` case below.
-const _authFailed = (ctx: ErrorContext): MksError =>
-  new AuthenticationFailed({ hint: `${ctx.kind} ${ctx.ref}: OVH rejected the request credentials` })
+// OVH signals over-quota with a 402/403 whose message names the quota; the
+// numeric limit/requested pair is not recoverable from that body, so those
+// fields stay absent rather than being fabricated as `0`.
+const _quotaMessage = /quota|over ?limit/i
 
-// kumulo: OVH's error body doesn't reliably carry the numeric quota
-// limit/requested pair for a generic 402/429 — `0`/`0` is a placeholder;
-// tighten if a caller needs real numbers here too.
-const _quotaExceeded = (ctx: ErrorContext): MksError => new QuotaExceeded({ resource: ctx.kind, limit: 0, requested: 0 })
+const _retryAfter = (cause: HttpClientError.HttpClientError): string | undefined => cause.response?.headers["retry-after"]
 
-const _byStatus: Record<number, (ctx: ErrorContext) => MksError> = {
-  401: _authFailed,
-  403: _authFailed,
-  404: (ctx) => new ResourceNotFound(ctx),
-  409: (ctx) => new ResourceConflict(ctx),
-  402: _quotaExceeded,
-  429: _quotaExceeded
+// One tag per observed status — nothing is reclassified: 401/403 → auth,
+// 404 → not-found, 409 → genuine conflict, 402/403 naming a quota → quota,
+// 413/429 → rate-limited, everything else (notably 5xx) → ProviderApiError
+// carrying the real status and body.
+const _byStatus = (
+  { cause, ctx, status }: {
+    readonly cause: HttpClientError.HttpClientError
+    readonly ctx: ErrorContext
+    readonly status: number
+  }
+): MksError => {
+  if (status === 404) return new ResourceNotFound(ctx)
+  if (status === 409) return new ResourceConflict(ctx)
+  if ((status === 402 || status === 403) && _quotaMessage.test(cause.message)) {
+    return new QuotaExceeded({ resource: ctx.kind })
+  }
+  if (status === 401 || status === 403) return new AuthenticationFailed({ hint: `${ctx.kind} ${ctx.ref}: ${cause.message}` })
+  if (status === 413 || status === 429) return new RateLimited({ ...ctx, retryAfter: _retryAfter(cause) })
+  return new ProviderApiError({ operation: `${ctx.kind} ${ctx.ref}`, status, body: cause.message })
 }
-
-// Anything without a mapped status keeps its full cause: decode failures
-// carry the schema issue tree, everything else (unexpected statuses,
-// network/TLS) the raw HttpClientError — no more collapsing into a fake
-// "conflict".
-const _fallback = (cause: HttpClientError.HttpClientError | SchemaError, ctx: ErrorContext): MksError =>
-  HttpClientError.isHttpClientError(cause)
-    ? new HttpTransportError({ cause })
-    : new ResponseDecodeError({ endpoint: `${ctx.kind}/${ctx.ref}`, issue: cause.issue })
-
-const _statusOf = (cause: HttpClientError.HttpClientError | SchemaError): number | undefined =>
-  HttpClientError.isHttpClientError(cause) ? cause.response?.status : undefined
 
 /** Maps a generated-client failure (`HttpClientError | SchemaError`) onto the `MksError` union. */
 export const toMksError = (
   { cause, ctx }: { readonly cause: HttpClientError.HttpClientError | SchemaError; readonly ctx: ErrorContext }
 ): MksError => {
-  const status = _statusOf(cause)
-  const mapped = status === undefined ? undefined : _byStatus[status]
-  return mapped ? mapped(ctx) : _fallback(cause, ctx)
+  if (!HttpClientError.isHttpClientError(cause)) {
+    return new ResponseDecodeError({ endpoint: `${ctx.kind}/${ctx.ref}`, issue: cause.issue })
+  }
+  const status = cause.response?.status
+  // No response at all: network/TLS/encode failure — keep the raw cause.
+  return status === undefined ? new HttpTransportError({ cause }) : _byStatus({ cause, ctx, status })
 }
 
 export const mapMksError = <A, R>(

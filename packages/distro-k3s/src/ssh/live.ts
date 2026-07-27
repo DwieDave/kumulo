@@ -5,6 +5,7 @@ import { Client } from "ssh2"
 import { SshCommandError } from "./errors.ts"
 import { Ssh } from "./port.ts"
 import type { SshHost } from "./port.ts"
+import { shellQuote } from "./shell.ts"
 
 // kumulo: WHY root@key-only — user "root", pubkey-auth only, no password
 // fallback.
@@ -27,12 +28,35 @@ const _withSession = <A>(
 ): Effect.Effect<A, SshCommandError> =>
   Effect.gen(function*() {
     const privateKeyPath = yield* _privateKeyPath
+    // Read the key *outside* the callback: a throw inside `Effect.callback`
+    // is a defect that bypasses the CLI's error rendering, so a missing key
+    // has to surface as a typed failure like every other SSH failure.
+    const privateKey = yield* Effect.try({
+      try: () => readFileSync(privateKeyPath),
+      catch: (cause) =>
+        new SshCommandError({
+          host: host.ip,
+          command,
+          cause: `ssh key not found at ${privateKeyPath} (set KUMULO_SSH_PRIVATE_KEY_PATH): ${String(cause)}`
+        })
+    })
     return yield* Effect.callback<A, SshCommandError>((resume) => {
       const client = new Client()
       client
         .on("ready", () => onReady(client, (value) => resume(Effect.succeed(value)), (error) => resume(Effect.fail(error))))
         .on("error", (cause) => resume(Effect.fail(new SshCommandError({ host: host.ip, command, cause }))))
-        .connect({ host: host.ip, port: host.port, username: SSH_USER, privateKey: readFileSync(privateKeyPath) })
+        .connect({
+          host: host.ip,
+          port: host.port,
+          username: SSH_USER,
+          privateKey,
+          // ponytail: trust-on-first-use — nodes are created seconds earlier by
+          // this same run and no known_hosts store exists yet, so there is
+          // nothing to verify against. Made explicit rather than relying on
+          // ssh2's silent accept-all default. Upgrade path: pin the host key
+          // reported by the provider's console output / cloud-init and compare.
+          hostVerifier: () => true
+        })
       return Effect.sync(() => client.end())
     })
   })
@@ -59,6 +83,6 @@ const _exec = (host: SshHost, command: string): Effect.Effect<string, SshCommand
 
 export const SshLive: Layer.Layer<Ssh> = Layer.succeed(Ssh, {
   exec: _exec,
-  readFile: (host, path) => _exec(host, `cat -- '${path}'`),
+  readFile: (host, path) => _exec(host, `cat -- ${shellQuote(path)}`),
   waitReady: (host) => _exec(host, "true").pipe(Effect.asVoid)
 })

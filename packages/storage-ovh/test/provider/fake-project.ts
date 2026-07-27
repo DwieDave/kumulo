@@ -28,7 +28,14 @@ interface StoredCredential {
 
 const _fixtureBaseUrl = "https://fixture.invalid"
 
-const _bodyOf = (request: HttpClientRequest.HttpClientRequest): any => {
+interface FakeBody {
+  readonly name?: string
+  readonly description?: string
+  readonly versioning?: { readonly status?: "enabled" | "disabled" }
+  readonly encryption?: { readonly sseAlgorithm?: "AES256" | "plaintext" }
+}
+
+const _bodyOf = (request: HttpClientRequest.HttpClientRequest): FakeBody => {
   const body = request.body
   return body._tag === "Uint8Array" ? JSON.parse(new TextDecoder().decode(body.body)) : {}
 }
@@ -67,7 +74,7 @@ export const makeFakeProject = (serviceName: string) => {
     if (request.method === "POST") {
       const body = _bodyOf(request)
       const container: StoredContainer = {
-        name: body.name,
+        name: body.name ?? "",
         region,
         versioning: body.versioning?.status ?? "disabled",
         encryption: body.encryption?.sseAlgorithm ?? "plaintext",
@@ -140,13 +147,13 @@ export const makeFakeProject = (serviceName: string) => {
     const path = url.pathname
 
     const regionStorage = path.match(new RegExp(`^${_basePath}/region/([^/]+)/storage$`))
-    if (regionStorage) return _handleContainers(request, regionStorage[1]!)
+    if (regionStorage) return _handleContainers(request, regionStorage[1] ?? "")
 
     const regionStorageName = path.match(new RegExp(`^${_basePath}/region/([^/]+)/storage/([^/]+)$`))
-    if (regionStorageName) return _handleContainer(request, regionStorageName[1]!, regionStorageName[2]!)
+    if (regionStorageName) return _handleContainer(request, regionStorageName[1] ?? "", regionStorageName[2] ?? "")
 
     const regionStorageObjects = path.match(new RegExp(`^${_basePath}/region/([^/]+)/storage/([^/]+)/object$`))
-    if (regionStorageObjects) return _handleObjects(regionStorageObjects[1]!, regionStorageObjects[2]!)
+    if (regionStorageObjects) return _handleObjects(regionStorageObjects[1] ?? "", regionStorageObjects[2] ?? "")
 
     if (path === `${_basePath}/user`) return _handleUsers(request)
 

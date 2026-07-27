@@ -79,18 +79,17 @@ describe("diffBuckets", () => {
   })
 
   it("replaces on immutable drift (region/encryption), updates on mutable drift (versioning)", () => {
-    const existing: ReadonlyArray<ExistingBucket> = [
-      { name: "staging-eu-backups", region: "DE1", versioning: false, encryption: false, retain: true }
-    ]
+    const bucket: ExistingBucket = { name: "staging-eu-backups", region: "DE1", versioning: false, encryption: false, retain: true }
+    const existing: ReadonlyArray<ExistingBucket> = [bucket]
     const replaced = diffBuckets({
-      desired: [{ ...existing[0]!, encryption: true }],
+      desired: [{ ...bucket, encryption: true }],
       existing
     })
     expect(replaced.toReplace).toHaveLength(1)
     expect(replaced.toUpdate).toEqual([])
 
     const updated = diffBuckets({
-      desired: [{ ...existing[0]!, versioning: true }],
+      desired: [{ ...bucket, versioning: true }],
       existing
     })
     expect(updated.toUpdate).toHaveLength(1)

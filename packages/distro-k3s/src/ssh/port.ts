@@ -1,4 +1,5 @@
-import { Context, Effect } from "effect"
+import type { Effect } from "effect";
+import { Context } from "effect"
 import type { SshCommandError } from "./errors.ts"
 
 // A node to reach over SSH — bootstrap always targets IPs directly (no

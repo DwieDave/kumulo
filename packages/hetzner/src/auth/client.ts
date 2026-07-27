@@ -58,8 +58,8 @@ const _addAuth = (token: Redacted.Redacted<string>) =>
 
 /**
  * Wraps a base `HttpClient` with Bearer-token injection and a bounded 429/5xx
- * retry (R5). `provider/rest.ts`'s `hcloudRequest` already builds absolute
- * URLs itself, so no `prependUrl` step is needed here — transforms the
+ * retry (R5). `client/hcloud.ts` bakes the base URL into the generated
+ * client, so no `prependUrl` step is needed here — transforms the
  * *base* client (via `mapRequest`/`transformResponse`) rather than rebuilding
  * one from scratch with `HttpClient.make`, which would re-validate
  * `request.url` at the wrong point in the pipeline.

@@ -3,6 +3,7 @@ import { Effect } from "effect"
 import { ResourceConflict } from "@kumulo/core"
 import { deleteVolume, ensureVolume, listClusterVolumes, type VolumeProviderOptions } from "../../src/volume/provider.ts"
 import { makeFakeHcloud } from "../provider/fake-hcloud.ts"
+import * as fixture from "../provider/fixtures.ts"
 
 const options: VolumeProviderOptions = { tag: "prod", location: "fsn1" }
 const spec = { name: "postgres-data", sizeGb: 20, type: "hcloud-volumes", retain: true }
@@ -10,14 +11,12 @@ const spec = { name: "postgres-data", sizeGb: 20, type: "hcloud-volumes", retain
 describe("hetzner VolumeProvider", () => {
   it.effect("ensureVolume creates then reuses by name", () => {
     let created = false
+    const volume = fixture.volume({ id: 1, name: "postgres-data", size: 20 })
     const fake = makeFakeHcloud({
-      "GET /volumes": () =>
-        created
-          ? { status: 200, body: { volumes: [{ id: 1, name: "postgres-data", size: 20 }] } }
-          : { status: 200, body: { volumes: [] } },
+      "GET /volumes": () => ({ status: 200, body: { volumes: created ? [volume] : [], meta: fixture.meta() } }),
       "POST /volumes": () => {
         created = true
-        return { status: 201, body: { volume: { id: 1, name: "postgres-data", size: 20 } } }
+        return { status: 201, body: { volume, action: fixture.action({ id: 9 }), next_actions: [] } }
       }
     })
     return Effect.gen(function*() {
@@ -31,8 +30,11 @@ describe("hetzner VolumeProvider", () => {
 
   it.effect("ensureVolume rounds a below-minimum request up to 10Gi on create", () => {
     const fake = makeFakeHcloud({
-      "GET /volumes": () => ({ status: 200, body: { volumes: [] } }),
-      "POST /volumes": () => ({ status: 201, body: { volume: { id: 2, name: "small", size: 10 } } })
+      "GET /volumes": () => ({ status: 200, body: { volumes: [], meta: fixture.meta() } }),
+      "POST /volumes": () => ({
+        status: 201,
+        body: { volume: fixture.volume({ id: 2, name: "small", size: 10 }), action: fixture.action({ id: 9 }), next_actions: [] }
+      })
     })
     return Effect.gen(function*() {
       const info = yield* ensureVolume({ options, spec: { name: "small", sizeGb: 3, type: "hcloud-volumes", retain: false } })
@@ -46,11 +48,11 @@ describe("hetzner VolumeProvider", () => {
     const fake = makeFakeHcloud({
       "GET /volumes": () => ({
         status: 200,
-        body: { volumes: [{ id: 1, name: "postgres-data", size: resized ? 50 : 20 }] }
+        body: { volumes: [fixture.volume({ id: 1, name: "postgres-data", size: resized ? 50 : 20 })], meta: fixture.meta() }
       }),
       "POST /volumes/1/actions/resize": () => {
         resized = true
-        return { status: 201, body: { action: { id: 9 } } }
+        return { status: 201, body: { action: fixture.action({ id: 9 }) } }
       }
     })
     return Effect.gen(function*() {
@@ -62,7 +64,7 @@ describe("hetzner VolumeProvider", () => {
 
   it.effect("ensureVolume refuses a shrink with a tagged ResourceConflict naming old/new size", () => {
     const fake = makeFakeHcloud({
-      "GET /volumes": () => ({ status: 200, body: { volumes: [{ id: 1, name: "postgres-data", size: 50 }] } })
+      "GET /volumes": () => ({ status: 200, body: { volumes: [fixture.volume({ id: 1, name: "postgres-data", size: 50 })], meta: fixture.meta() } })
     })
     return Effect.gen(function*() {
       const failure = yield* Effect.flip(ensureVolume({ options, spec: { ...spec, sizeGb: 20 } }))
@@ -73,7 +75,7 @@ describe("hetzner VolumeProvider", () => {
 
   it.effect("listClusterVolumes queries by the cluster label selector", () => {
     const fake = makeFakeHcloud({
-      "GET /volumes": () => ({ status: 200, body: { volumes: [{ id: 1, name: "a", size: 20 }] } })
+      "GET /volumes": () => ({ status: 200, body: { volumes: [fixture.volume({ id: 1, name: "a", size: 20 })], meta: fixture.meta() } })
     })
     return Effect.gen(function*() {
       const volumes = yield* listClusterVolumes({ options })

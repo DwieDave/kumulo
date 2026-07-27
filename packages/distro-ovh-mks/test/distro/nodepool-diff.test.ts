@@ -55,28 +55,35 @@ describe("diffNodePools", () => {
   })
 
   it("replaces on immutable drift (flavor), updates on mutable drift (desiredNodes)", () => {
-    const existing: ReadonlyArray<ExistingNodePool> = [
-      {
-        id: "pool-1",
-        name: "workers",
-        flavor: "b2-7",
-        desiredNodes: 3,
-        minNodes: 1,
-        maxNodes: 5,
-        autoscale: true,
-        antiAffinity: true,
-        monthlyBilled: false
-      }
-    ]
+    const pool: ExistingNodePool = {
+      id: "pool-1",
+      name: "workers",
+      flavor: "b2-7",
+      desiredNodes: 3,
+      minNodes: 1,
+      maxNodes: 5,
+      autoscale: true,
+      antiAffinity: true,
+      monthlyBilled: false
+    }
+    const existing: ReadonlyArray<ExistingNodePool> = [pool]
     const replaced = diffNodePools({
-      desired: [{ ...existing[0]!, flavor: "b2-15" }],
-      existing
+      desired: [{ ...pool, flavor: "b2-15" }],
+      existing,
+      replace: new Set(["workers"])
     })
     expect(replaced.toReplace).toHaveLength(1)
     expect(replaced.toUpdate).toEqual([])
 
+    // Unconfirmed immutable drift must not mutate anything at all.
+    const unconfirmed = diffNodePools({ desired: [{ ...pool, flavor: "b2-15" }], existing })
+    expect(unconfirmed.toReplace).toEqual([])
+    expect(unconfirmed.toUpdate).toEqual([])
+    expect(unconfirmed.toCreate).toEqual([])
+    expect(unconfirmed.toDelete).toEqual([])
+
     const updated = diffNodePools({
-      desired: [{ ...existing[0]!, desiredNodes: 4 }],
+      desired: [{ ...pool, desiredNodes: 4 }],
       existing
     })
     expect(updated.toUpdate).toHaveLength(1)

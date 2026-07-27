@@ -1,5 +1,8 @@
 // k3s install-over-SSH scripts, plain string interpolation — no template
-// engine dependency needed for a handful of substitutions.
+// engine dependency needed for a handful of substitutions. Every
+// config-derived value goes through `shellQuote`; only `extra*Args` stay raw,
+// because those are deliberately verbatim k3s flags.
+import { shellQuote } from "../ssh/shell.ts"
 
 export interface AddonDisableFlags {
   readonly cloudControllerManager: boolean
@@ -30,15 +33,15 @@ export interface AgentInstallArgs {
 }
 
 const _tlsSanArgs = (sans: ReadonlyArray<string>): string =>
-  Array.from(new Set(["127.0.0.1", ...sans])).map((san) => `--tls-san=${san}`).join(" ")
+  Array.from(new Set(["127.0.0.1", ...sans])).map((san) => `--tls-san=${shellQuote(san)}`).join(" ")
 
 const _cniDisableArgs = (cni: "flannel" | "cilium"): string =>
   cni === "cilium" ? "--flannel-backend=none --disable-network-policy" : ""
 
 const _labelArgs = (labels: Readonly<Record<string, string>>): string =>
-  Object.entries(labels).map(([key, value]) => `--node-label "${key}=${value}"`).join(" ")
+  Object.entries(labels).map(([key, value]) => `--node-label ${shellQuote(`${key}=${value}`)}`).join(" ")
 
-const _taintArgs = (taints: ReadonlyArray<string>): string => taints.map((taint) => `--node-taint "${taint}"`).join(" ")
+const _taintArgs = (taints: ReadonlyArray<string>): string => taints.map((taint) => `--node-taint ${shellQuote(taint)}`).join(" ")
 
 /** Render the k3s server-node install script (`--cluster-init` or `--server` join). */
 export const renderServerInstallScript = (args: ServerInstallArgs): string => {
@@ -49,8 +52,8 @@ export const renderServerInstallScript = (args: ServerInstallArgs): string => {
 set -euo pipefail
 
 curl -sfL https://get.k3s.io | \\
-  INSTALL_K3S_VERSION="${args.k3sVersion}" \\
-  K3S_TOKEN="${args.token}" \\
+  INSTALL_K3S_VERSION=${shellQuote(args.k3sVersion)} \\
+  K3S_TOKEN=${shellQuote(args.token)} \\
   INSTALL_K3S_EXEC="server" \\
   sh -s - \\
     ${server} \\
@@ -71,8 +74,8 @@ export const renderAgentInstallScript = (args: AgentInstallArgs): string =>
 set -euo pipefail
 
 curl -sfL https://get.k3s.io | \\
-  INSTALL_K3S_VERSION="${args.k3sVersion}" \\
-  K3S_TOKEN="${args.token}" \\
+  INSTALL_K3S_VERSION=${shellQuote(args.k3sVersion)} \\
+  K3S_TOKEN=${shellQuote(args.token)} \\
   K3S_URL="https://${args.firstMasterIp}:6443" \\
   INSTALL_K3S_EXEC="agent" \\
   sh -s - \\

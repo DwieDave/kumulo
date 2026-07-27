@@ -2,11 +2,15 @@ export const packageName = "@kumulo/hetzner"
 
 export { HCLOUD_API_BASE_URL, hcloudHttpClientLive } from "./auth/client.ts"
 
+export { makeHcloudClient } from "./client/hcloud.ts"
+export type { HcloudClient } from "./client/hcloud.ts"
+export type { HcloudError } from "./provider/errors.ts"
+
 export { hetznerLocationZones, hetznerLocations, isHetznerLocation, networkZoneForLocation } from "./profile/locations.ts"
 export { hetznerProfileLive, makeHetznerProfile } from "./profile/hetzner.ts"
 export { validateHetznerConfig } from "./profile/validation.ts"
 
-export { buildHcloudFirewallRules, HcloudFirewallRuleInput } from "./provider/firewall-rules.ts"
+export { buildHetznerSecGroupRules, HcloudFirewallRuleInput } from "./provider/firewall-rules.ts"
 export {
   CloudProviderLive,
   deleteByTag,

@@ -13,9 +13,12 @@ interface FakeCluster {
   pollsRemaining: number
 }
 
+type FakeTemplate = { readonly metadata?: { readonly annotations?: { readonly [key: string]: string } } }
+
 interface FakePool {
   id: string
   name: string
+  template?: FakeTemplate
   flavor: string
   desiredNodes: number
   minNodes: number
@@ -33,6 +36,7 @@ interface CreateClusterBody {
 
 interface CreatePoolBody {
   readonly name?: string
+  readonly template?: FakeTemplate
   readonly flavorName: string
   readonly desiredNodes?: number
   readonly minNodes?: number
@@ -119,6 +123,7 @@ export const makeFakeMksServer = (options: { readonly readyAfterPolls?: number }
       const pool: FakePool = {
         id,
         name: payload.name ?? "",
+        template: payload.template,
         flavor: payload.flavorName,
         desiredNodes: payload.desiredNodes ?? 0,
         minNodes: payload.minNodes ?? 0,

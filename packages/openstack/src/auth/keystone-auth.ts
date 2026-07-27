@@ -1,9 +1,13 @@
-import { AuthenticationFailed, type ResourceNotFound } from "@kumulo/core"
+import { AuthenticationFailed } from "@kumulo/core"
 import { Context, Effect, Layer, Option, Ref } from "effect"
-import { Headers, HttpClient, HttpClientRequest } from "effect/unstable/http"
-import * as Schema from "effect/Schema"
+import { Headers } from "effect/unstable/http"
+import type { HttpClient } from "effect/unstable/http"
+import { makeKeystoneClient } from "../client/keystone.ts"
+import type { AuthTokensPostRequest } from "../generated/keystone.ts"
+import { toOpenStackError } from "../provider/errors.ts"
+import type { OpenStackError } from "../provider/errors.ts"
 import type { OpenStackCredentials } from "./credentials.ts"
-import { parseCatalog, resolveEndpoint, type ServiceCatalog } from "./service-catalog.ts"
+import { catalogOf, resolveEndpoint, type ServiceCatalog } from "./service-catalog.ts"
 
 export interface EndpointOptions {
   readonly service: string
@@ -11,9 +15,9 @@ export interface EndpointOptions {
 }
 
 export class KeystoneAuth extends Context.Service<KeystoneAuth, {
-  readonly token: Effect.Effect<string, AuthenticationFailed>
+  readonly token: Effect.Effect<string, OpenStackError>
   readonly invalidate: Effect.Effect<void>
-  readonly endpoint: (options: EndpointOptions) => Effect.Effect<string, ResourceNotFound | AuthenticationFailed>
+  readonly endpoint: (options: EndpointOptions) => Effect.Effect<string, OpenStackError>
 }>()("@kumulo/openstack/KeystoneAuth") {}
 
 interface CachedToken {
@@ -22,18 +26,9 @@ interface CachedToken {
   readonly catalog: ServiceCatalog
 }
 
-// kumulo: only the one field this layer reads out of the token envelope —
-// a missing/malformed `expires_at` is not a hard failure, it just
-// falls back to "expires now" (see `_expiresAtMs` below), same as before.
-const _ExpiresAt = Schema.Struct({
-  token: Schema.Struct({
-    expires_at: Schema.optionalKey(Schema.String)
-  })
-})
-
 // kumulo: Keystone's identity/scope request shape per credential method —
 // mechanical translation only, no judgment calls.
-const _authBody = (credentials: OpenStackCredentials): unknown =>
+const _authBody = (credentials: OpenStackCredentials): AuthTokensPostRequest =>
   credentials.method === "application_credential"
     ? {
       auth: {
@@ -67,38 +62,37 @@ const _authBody = (credentials: OpenStackCredentials): unknown =>
       }
     }
 
-const _authFailed = (hint: string) => new AuthenticationFailed({ hint })
-
-const _expiresAtMs = (body: unknown): number => {
-  const decoded = Schema.decodeUnknownOption(_ExpiresAt)(body)
-  const raw = Option.isSome(decoded) ? decoded.value.token.expires_at : undefined
+// A missing/malformed `expires_at` is not a hard failure — it falls back to
+// "expires now", so the next caller simply re-issues.
+const _expiresAtMs = (raw: string | undefined): number => {
   const parsed = raw === undefined ? NaN : Date.parse(raw)
   return Number.isNaN(parsed) ? Date.now() : parsed
 }
 
+// kumulo: THE on-call bug lived here — every non-2xx used to become
+// `AuthenticationFailed`, so a Keystone 429 or 503 paged the operator as "bad
+// credentials". The shared status taxonomy now owns that decision.
+const _tokenRef = { kind: "keystone-token", ref: "/v3/auth/tokens" }
+
 const _issueToken = (options: {
-  readonly client: HttpClient.HttpClient
   readonly credentials: OpenStackCredentials
   readonly skewMs: number
-}): Effect.Effect<CachedToken, AuthenticationFailed> =>
+}): Effect.Effect<CachedToken, OpenStackError, HttpClient.HttpClient> =>
   Effect.gen(function*() {
-    const url = new URL("v3/auth/tokens", options.credentials.authUrl)
-    const request = HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(url), _authBody(options.credentials))
-    const response = yield* options.client.execute(request).pipe(
-      Effect.mapError(() => _authFailed("keystone token request failed to send"))
-    )
-    if (response.status < 200 || response.status >= 300) {
-      return yield* Effect.fail(_authFailed(`keystone token issue failed with status ${response.status}`))
-    }
+    const client = yield* makeKeystoneClient(options.credentials.authUrl)
+    const [body, response] = yield* client.auth.authTokensPost({
+      payload: _authBody(options.credentials),
+      responseMode: "decoded-and-response"
+    }).pipe(Effect.mapError(toOpenStackError(_tokenRef)))
     const token = Option.getOrUndefined(Headers.get(response.headers, "x-subject-token"))
     if (token === undefined) {
-      return yield* Effect.fail(_authFailed("keystone response missing X-Subject-Token header"))
+      return yield* Effect.fail(new AuthenticationFailed({ hint: "keystone response missing X-Subject-Token header" }))
     }
-    const body = yield* response.json.pipe(Effect.mapError(() => _authFailed("keystone response body was not JSON")))
-    const catalog = yield* parseCatalog(body).pipe(
-      Effect.mapError(() => _authFailed("keystone response catalog was malformed"))
-    )
-    return { token, expiresAtMs: _expiresAtMs(body) - options.skewMs, catalog }
+    return {
+      token,
+      expiresAtMs: _expiresAtMs(body.token?.expires_at) - options.skewMs,
+      catalog: catalogOf(body)
+    }
   })
 
 export interface KeystoneAuthLiveOptions {
@@ -114,15 +108,16 @@ export const KeystoneAuthLive = (
   Layer.effect(
     KeystoneAuth,
     Effect.gen(function*() {
-      const client = yield* HttpClient.HttpClient
+      const context = yield* Effect.context<HttpClient.HttpClient>()
       const skewMs = options.skewMs ?? 60_000
       const cache = yield* Ref.make<Option.Option<CachedToken>>(Option.none())
 
-      const refresh = _issueToken({ client, credentials: options.credentials, skewMs }).pipe(
+      const refresh = _issueToken({ credentials: options.credentials, skewMs }).pipe(
+        Effect.provide(context),
         Effect.tap((cached) => Ref.set(cache, Option.some(cached)))
       )
 
-      const current: Effect.Effect<CachedToken, AuthenticationFailed> = Effect.gen(function*() {
+      const current: Effect.Effect<CachedToken, OpenStackError> = Effect.gen(function*() {
         // kumulo: real wall-clock time — token expiry is a real-world concept
         // that must not be virtualized by Effect's TestClock in tests.
         const now = Date.now()

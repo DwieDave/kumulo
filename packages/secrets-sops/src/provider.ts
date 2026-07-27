@@ -11,8 +11,10 @@
  *
  * Canonical source: .docs/workflows/sops-provider-secrets/requirements.md.
  */
-import { ConfigProvider, Effect, Exit, Schema, Semaphore, Stream } from "effect"
-import { ChildProcess, ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/unstable/process"
+import type { Exit} from "effect";
+import { ConfigProvider, Effect, Schema, Semaphore, Stream } from "effect"
+import type { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/unstable/process";
+import { ChildProcess } from "effect/unstable/process"
 
 // kumulo: same nested-tag caveat as `sink.ts` — only the `Service` shape is
 // needed here, callers pass an already-resolved instance.

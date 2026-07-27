@@ -1,5 +1,5 @@
-import { Addon, AddonInstallFailed } from "@kumulo/core"
-import type { AddonContext, AddonError, K8sClient } from "@kumulo/core"
+import { AddonInstallFailed } from "@kumulo/core"
+import type { AddonContext, AddonError, K8sClient , Addon} from "@kumulo/core"
 import { Effect } from "effect"
 import { refFor } from "./resource-ref.ts"
 

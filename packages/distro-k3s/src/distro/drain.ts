@@ -1,6 +1,6 @@
 import { Effect } from "effect"
-import { BootstrapFailed, cordonNode, deleteNode, drainNode, K8sClient } from "@kumulo/core"
-import type { NodeRef, ResourceRef } from "@kumulo/core"
+import { BootstrapFailed, cordonNode, deleteNode, drainNode } from "@kumulo/core"
+import type { NodeRef, ResourceRef , K8sClient } from "@kumulo/core"
 
 const _podsOnNode = (name: string): ResourceRef => ({
   path: `/api/v1/pods?fieldSelector=spec.nodeName=${name}`,

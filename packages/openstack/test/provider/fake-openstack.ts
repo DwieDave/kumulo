@@ -1,6 +1,5 @@
 import { Effect, Layer } from "effect"
-import { HttpClient, HttpClientResponse } from "effect/unstable/http"
-import type { HttpClientRequest } from "effect/unstable/http"
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { KeystoneAuth } from "../../src/auth/keystone-auth.ts"
 
 export type RouteHandler = (
@@ -19,14 +18,17 @@ export const makeFakeOpenStack = (
 ): FakeOpenStack => {
   const calls: Array<{ method: string; url: string }> = []
   const client = HttpClient.make((request) => {
+    // kumulo: `HttpClientRequest` keeps the query in `urlParams`, not in `.url` —
+    // a real HttpClient merges them when it sends, so the fake must too.
     const url = new URL(request.url)
-    calls.push({ method: request.method, url: request.url })
+    for (const [key, value] of request.urlParams) url.searchParams.append(key, value)
+    calls.push({ method: request.method, url: url.toString() })
     const key = `${request.method} ${url.pathname}`
     const handler = routes[key]
     if (handler === undefined) {
       return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("not found", { status: 404 })))
     }
-    const result = handler(request)
+    const result = handler(HttpClientRequest.setUrl(request, url.toString()))
     // kumulo: the WHATWG `Response` constructor rejects any body (even "")
     // on null-body statuses.
     const nullBodyStatus = result.status === 204 || result.status === 304

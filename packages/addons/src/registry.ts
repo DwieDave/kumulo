@@ -1,4 +1,4 @@
-import { Addon } from "@kumulo/core"
+import type { Addon } from "@kumulo/core"
 import type { Capability, DistroKind, K8sManifest } from "@kumulo/core"
 import { Effect } from "effect"
 import type { CloudConf } from "./cloud-conf.ts"

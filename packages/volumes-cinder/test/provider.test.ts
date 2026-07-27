@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
-import { AuthenticationFailed } from "@kumulo/core"
+import { AuthenticationFailed, ProviderApiError, ResponseDecodeError } from "@kumulo/core"
 import { deleteVolume, ensureVolume, listClusterVolumes, type VolumeProviderOptions } from "../src/provider.ts"
 import { makeFakeCinder } from "./fake-cinder.ts"
 
@@ -61,6 +61,51 @@ describe("volumes-cinder VolumeProvider", () => {
     }).pipe(Effect.provide(fake.layer))
   })
 
+  it.effect("listClusterVolumes follows pagination markers", () => {
+    const fake = makeFakeCinder({
+      "GET /volumes/detail": (request) => {
+        const marker = new URL(request.url).searchParams.get("marker")
+        return marker === null
+          ? {
+            status: 200,
+            body: {
+              volumes: [{ id: "vol-1", name: "a", metadata: { kumulo_cluster: "prod" } }],
+              volumes_links: [{ rel: "next", href: "https://cinder.example.com/volumes/detail?marker=vol-1" }]
+            }
+          }
+          : { status: 200, body: { volumes: [{ id: "vol-2", name: "b", metadata: { kumulo_cluster: "prod" } }] } }
+      }
+    })
+    return Effect.gen(function*() {
+      const volumes = yield* listClusterVolumes("prod")
+      expect(volumes).toEqual([{ id: "vol-1", name: "a" }, { id: "vol-2", name: "b" }])
+    }).pipe(Effect.provide(fake.layer))
+  })
+
+  it.effect("a malformed list body fails instead of creating a duplicate volume", () => {
+    const fake = makeFakeCinder({
+      "GET /volumes/detail": () => ({ status: 200, body: { garbage: true } }),
+      "POST /volumes": () => ({ status: 202, body: { volume: { id: "vol-1" } } })
+    })
+    return Effect.gen(function*() {
+      const failure = yield* Effect.flip(ensureVolume({ options, spec }))
+      expect(failure).toBeInstanceOf(ResponseDecodeError)
+      expect(failure).not.toBeInstanceOf(AuthenticationFailed)
+      expect(fake.calls().filter((call) => call.method === "POST").length).toBe(0)
+    }).pipe(Effect.provide(fake.layer))
+  })
+
+  it.effect("a malformed create response fails instead of yielding an empty volume id", () => {
+    const fake = makeFakeCinder({
+      "GET /volumes/detail": () => ({ status: 200, body: { volumes: [] } }),
+      "POST /volumes": () => ({ status: 202, body: { volume: { name: "postgres-data" } } })
+    })
+    return Effect.gen(function*() {
+      const failure = yield* Effect.flip(ensureVolume({ options, spec }))
+      expect(failure).toBeInstanceOf(ResponseDecodeError)
+    }).pipe(Effect.provide(fake.layer))
+  })
+
   it.effect("deleteVolume tolerates an already-gone volume (404)", () => {
     const fake = makeFakeCinder({ "DELETE /volumes/vol-1": () => ({ status: 404 }) })
     return Effect.gen(function*() {
@@ -72,7 +117,8 @@ describe("volumes-cinder VolumeProvider", () => {
     const fake = makeFakeCinder({ "DELETE /volumes/vol-1": () => ({ status: 500 }) })
     return Effect.gen(function*() {
       const failure = yield* Effect.flip(deleteVolume({ id: "vol-1" }))
-      expect(failure).toBeInstanceOf(AuthenticationFailed)
+      expect(failure).toBeInstanceOf(ProviderApiError)
+      expect(failure).not.toBeInstanceOf(AuthenticationFailed)
     }).pipe(Effect.provide(fake.layer))
   })
 })

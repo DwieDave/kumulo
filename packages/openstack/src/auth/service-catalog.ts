@@ -1,25 +1,6 @@
-import { ResourceNotFound, ResponseDecodeError } from "@kumulo/core"
+import { ResourceNotFound } from "@kumulo/core"
 import { Effect } from "effect"
-import * as Schema from "effect/Schema"
-
-const CatalogEndpointSchema = Schema.Struct({
-  interface: Schema.optionalKey(Schema.String),
-  region: Schema.optionalKey(Schema.String),
-  url: Schema.optionalKey(Schema.String)
-})
-
-const CatalogEntrySchema = Schema.Struct({
-  type: Schema.optionalKey(Schema.String),
-  endpoints: Schema.optionalKey(Schema.Array(CatalogEndpointSchema))
-})
-
-// kumulo: only the fields the auth layer consumes — everything else
-// Keystone's token response carries is left undeclared and ignored.
-const TokenResponse = Schema.Struct({
-  token: Schema.Struct({
-    catalog: Schema.Array(CatalogEntrySchema)
-  })
-})
+import type { AuthTokensPostResponse } from "../generated/keystone.ts"
 
 export interface CatalogEndpoint {
   readonly interface: string
@@ -34,20 +15,18 @@ export interface CatalogEntry {
 
 export type ServiceCatalog = ReadonlyArray<CatalogEntry>
 
-export const parseCatalog = (body: unknown): Effect.Effect<ServiceCatalog, ResponseDecodeError> =>
-  Schema.decodeUnknownEffect(TokenResponse)(body).pipe(
-    Effect.mapError((error) => new ResponseDecodeError({ endpoint: "/v3/auth/tokens", issue: error.issue })),
-    Effect.map((decoded) =>
-      decoded.token.catalog.map((entry) => ({
-        type: entry.type ?? "",
-        endpoints: (entry.endpoints ?? []).map((endpoint) => ({
-          interface: endpoint.interface ?? "",
-          region: endpoint.region ?? "",
-          url: endpoint.url ?? ""
-        }))
-      }))
-    )
-  )
+// kumulo: no hand-written response schema any more — the generated Keystone
+// client already decoded the token envelope. This only fills in the defaults
+// for the fields the catalog leaves optional.
+export const catalogOf = (response: AuthTokensPostResponse): ServiceCatalog =>
+  (response.token?.catalog ?? []).map((entry) => ({
+    type: entry.type ?? "",
+    endpoints: (entry.endpoints ?? []).map((endpoint) => ({
+      interface: endpoint.interface ?? "",
+      region: endpoint.region ?? "",
+      url: endpoint.url ?? ""
+    }))
+  }))
 
 export interface ResolveEndpointOptions {
   readonly catalog: ServiceCatalog

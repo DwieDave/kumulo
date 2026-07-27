@@ -1,10 +1,11 @@
+import type { SecGroupRule } from "@kumulo/core"
 import * as Schema from "effect/Schema"
 
 // kumulo: one rule descriptor per Hetzner Firewall rule (direction/protocol/
-// port/source_ips shape — no `esp`/`gre` support needed for this port).
-// Hetzner has no security-group self-reference concept (unlike OpenStack's
-// `remoteGroupSelf`) — intra-cluster rules use the network CIDR as their
-// source instead.
+// port/source_ips shape). This is the *wire-adjacent* shape produced by
+// `cloud-provider.ts`'s translation step — the builder below stays in core's
+// neutral `SecGroupRule` dialect, which is what every `CloudProvider` adapter
+// is handed.
 export const HcloudFirewallRuleInput = Schema.Struct({
   direction: Schema.Literal("in"),
   protocol: Schema.Literals(["tcp", "udp", "icmp"]),
@@ -14,28 +15,33 @@ export const HcloudFirewallRuleInput = Schema.Struct({
 })
 export type HcloudFirewallRuleInput = typeof HcloudFirewallRuleInput.Type
 
+const _port = (port: number): { readonly portMin: number; readonly portMax: number } => ({ portMin: port, portMax: port })
+
 const _forEachCidr = (
   cidrs: ReadonlyArray<string>,
-  rule: (cidr: string) => HcloudFirewallRuleInput
-): ReadonlyArray<HcloudFirewallRuleInput> => cidrs.map(rule)
+  rule: (cidr: string) => SecGroupRule
+): ReadonlyArray<SecGroupRule> => cidrs.map(rule)
 
 // mirrors `buildFr57Rules`'s inputs (SSH/API CIDRs, intra-network allow, etcd,
-// CNI-specific wireguard port) — Hetzner Firewall's rule shape instead of
-// Neutron security-group-rules (R7).
-export const buildHcloudFirewallRules = (options: {
+// CNI-specific wireguard port) in core's neutral dialect, with the two shapes
+// Hetzner Firewalls cannot express already resolved here (R7):
+//   - `protocol: "any"` expanded to tcp/udp/icmp,
+//   - `remoteGroupSelf` resolved to the cluster network CIDR.
+export const buildHetznerSecGroupRules = (options: {
   readonly allowedSshCidrs: ReadonlyArray<string>
   readonly allowedApiCidrs: ReadonlyArray<string>
   readonly networkCidr: string
   readonly cni: "flannel" | "cilium"
-}): ReadonlyArray<HcloudFirewallRuleInput> => {
+}): ReadonlyArray<SecGroupRule> => {
   const wireguardPort = options.cni === "flannel" ? 51820 : 51871
+  const remoteCidr = options.networkCidr
   return [
-    ..._forEachCidr(options.allowedSshCidrs, (cidr) => ({ direction: "in", protocol: "tcp", port: "22", sourceCidrs: [cidr] })),
-    ..._forEachCidr(options.allowedApiCidrs, (cidr) => ({ direction: "in", protocol: "tcp", port: "6443", sourceCidrs: [cidr] })),
-    { direction: "in", protocol: "tcp", sourceCidrs: [options.networkCidr] },
-    { direction: "in", protocol: "udp", sourceCidrs: [options.networkCidr] },
-    { direction: "in", protocol: "tcp", port: "2379-2380", sourceCidrs: [options.networkCidr] },
-    { direction: "in", protocol: "udp", port: `${wireguardPort}`, sourceCidrs: [options.networkCidr] },
-    { direction: "in", protocol: "icmp", sourceCidrs: [options.networkCidr] }
+    ..._forEachCidr(options.allowedSshCidrs, (cidr) => ({ protocol: "tcp", ..._port(22), remoteCidr: cidr })),
+    ..._forEachCidr(options.allowedApiCidrs, (cidr) => ({ protocol: "tcp", ..._port(6443), remoteCidr: cidr })),
+    { protocol: "tcp", remoteCidr },
+    { protocol: "udp", remoteCidr },
+    { protocol: "tcp", portMin: 2379, portMax: 2380, remoteCidr },
+    { protocol: "udp", ..._port(wireguardPort), remoteCidr },
+    { protocol: "icmp", remoteCidr }
   ]
 }

@@ -1,12 +1,11 @@
 import { Effect, Layer } from "effect"
 import type { SchemaError } from "effect/Schema"
-import * as HttpClientError from "effect/unstable/http/HttpClientError"
-import { DnsProvider, ResourceConflict } from "@kumulo/core"
+import type * as HttpClientError from "effect/unstable/http/HttpClientError"
+import { DnsProvider, ownerTagOf, recordKind, ResourceConflict } from "@kumulo/core"
 import type { ClusterTag, DesiredRecord, DnsError } from "@kumulo/core"
 import type { Dns, Domain_zone_RecordTypeEnum } from "../generated/client.ts"
 import { toDnsError } from "./errors.ts"
 import { recordsAt } from "./existing.ts"
-import { ownerTagOf, recordKind } from "./ownership.ts"
 
 const _wrap = (
   zone: string,

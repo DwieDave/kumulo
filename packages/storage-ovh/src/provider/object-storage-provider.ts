@@ -1,5 +1,5 @@
 import { Effect, Layer, Redacted, Schedule } from "effect"
-import { BucketNotEmpty, ObjectStorageProvider, ResourceNotFound } from "@kumulo/core"
+import { BucketNotEmpty, ObjectStorageProvider, ProviderApiError, ResourceNotFound } from "@kumulo/core"
 import type { BucketInfo, BucketRef, BucketSpec, ClusterTag, ObjectStorageError, S3Credentials } from "@kumulo/core"
 import type { Cloud_StorageContainer, Cloud_storage_VersioningStatusEnum, Cloud_user_User, Storage } from "../generated/client.ts"
 import { mapStorageError } from "./errors.ts"
@@ -177,8 +177,14 @@ export const deleteBucket = (
         self: storage.getStorageContainerOnRegion(serviceName, ref.region, ref.name, { params: { noObjects: true } }),
         ctx
       })
-      const objectCount = container.objectsCount ?? 0
-      if (objectCount > 0) return yield* Effect.fail(new BucketNotEmpty({ bucket: ref.name, objectCount }))
+      // An absent `objectsCount` means "unknown", not "empty" — refuse rather
+      // than delete a bucket whose contents we could not verify.
+      if (container.objectsCount === undefined) {
+        return yield* Effect.fail(
+          new ProviderApiError({ operation: `bucket ${ctx.ref}`, status: 200, body: "response omitted objectsCount; refusing to delete" })
+        )
+      }
+      if (container.objectsCount > 0) return yield* Effect.fail(new BucketNotEmpty({ bucket: ref.name, objectCount: container.objectsCount }))
       yield* mapStorageError({ self: storage.deteteStorageContainerOnRegion(serviceName, ref.region, ref.name, undefined), ctx })
     })
 

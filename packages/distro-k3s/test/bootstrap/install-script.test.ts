@@ -52,9 +52,9 @@ describe("renderServerInstallScript", () => {
       addons: { cloudControllerManager: false, cni: "flannel" },
       extraServerArgs: []
     })
-    expect(script).toContain("--tls-san=127.0.0.1")
-    expect(script).toContain("--tls-san=10.0.0.2")
-    expect(script).toContain("--tls-san=api.example.com")
+    expect(script).toContain("--tls-san='127.0.0.1'")
+    expect(script).toContain("--tls-san='10.0.0.2'")
+    expect(script).toContain("--tls-san='api.example.com'")
     expect(script).toContain("--disable-cloud-controller")
   })
 
@@ -88,8 +88,8 @@ describe("renderAgentInstallScript", () => {
       extraAgentArgs: ["--kubelet-arg=foo=bar"]
     })
     expect(script).toContain('K3S_URL="https://10.0.0.1:6443"')
-    expect(script).toContain('--node-label "pool=workers"')
-    expect(script).toContain('--node-taint "dedicated=gpu:NoSchedule"')
+    expect(script).toContain("--node-label 'pool=workers'")
+    expect(script).toContain("--node-taint 'dedicated=gpu:NoSchedule'")
     expect(script).toContain("--kubelet-arg=foo=bar")
   })
 })

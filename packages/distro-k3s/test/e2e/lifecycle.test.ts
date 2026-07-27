@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Layer, Ref } from "effect"
-import { applyServers, CloudProvider, phasesForKind, runPhases } from "@kumulo/core"
+import { applyServers, CloudProvider } from "@kumulo/core"
 import type { K8sClient, K8sManifest, ResourceRef, ServerInfo, ServerSpec } from "@kumulo/core"
 import { renderAgentInstallScript, renderServerInstallScript } from "../../src/bootstrap/install-script.ts"
 import { installMasters, installWorkers } from "../../src/bootstrap/orchestrate.ts"
@@ -12,8 +12,8 @@ import type { SshHost } from "../../src/ssh/port.ts"
 import { FakeSshLive } from "../ssh/fake-ssh.ts"
 
 // Full create lifecycle for `distro: k3s`: HA 3-master control plane
-// + 2 worker pools, provisioned through the real `applyServers`/`runPhases`
-// reconcile pipeline (core) against an in-memory `CloudProvider` fake,
+// + 2 worker pools, provisioned through the real `applyServers` reconcile
+// step (core) against an in-memory `CloudProvider` fake,
 // bootstrapped via the real token/orchestration/install-script logic over a
 // fake `Ssh`, and a kubeconfig fetched + rewritten via the real k3s distro
 // assembly.
@@ -105,11 +105,8 @@ describe("k3s full lifecycle", () => {
         _workerSpec("pool-b", 1)
       ]
 
-      // 1. Nodes phase, through the real reconcile pipeline.
-      const runNodesPhase = runPhases({
-        order: phasesForKind("self-managed"),
-        phases: [{ name: "Nodes", run: applyServers({ specs, concurrency: 6 }) }]
-      })
+      // 1. Nodes phase, through the real reconcile apply.
+      const runNodesPhase = applyServers({ specs, concurrency: 6 })
       yield* runNodesPhase
       // Re-running must stay idempotent (create-if-missing by tag+name).
       yield* runNodesPhase
@@ -182,7 +179,7 @@ describe("k3s full lifecycle", () => {
           })
       })
       expect(renderedWorkerScripts).toHaveLength(2)
-      for (const script of renderedWorkerScripts) expect(script).toContain(`K3S_TOKEN="${token}"`)
+      for (const script of renderedWorkerScripts) expect(script).toContain(`K3S_TOKEN='${token}'`)
 
       // 3. Kubeconfig: fetch via SSH from master1 + rewrite (LB VIP precedence).
       const lb = yield* cloudProvider.ensureLoadBalancer({ members: [] })

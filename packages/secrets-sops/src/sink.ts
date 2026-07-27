@@ -24,7 +24,8 @@
 import { Effect, Layer, Stream } from "effect"
 import type { FileSystem } from "effect/FileSystem"
 import type { PlatformError } from "effect/PlatformError"
-import { ChildProcess, ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/unstable/process"
+import type { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/unstable/process";
+import { ChildProcess } from "effect/unstable/process"
 import { stringify } from "yaml"
 import { CredentialsSink, SinkUnavailable } from "@kumulo/core"
 import type { CredentialEntry } from "@kumulo/core"

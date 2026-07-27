@@ -1,4 +1,5 @@
-import { Context, Effect } from "effect"
+import type { Effect } from "effect";
+import { Context } from "effect"
 import type { AuthenticationFailed } from "@kumulo/core"
 
 // kumulo: design's preferred placement was `packages/core/src/ports` (effect-only
