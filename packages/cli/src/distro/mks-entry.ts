@@ -6,9 +6,10 @@ import type { OutputsIngress } from "@kumulo/volumes-cinder"
 import { lookupManagedVolumeNames } from "../commands/volumes.ts"
 import { authValidityCheck, planVsQuotaCheck, projectAccessCheck, regionVersionCapabilityCheck } from "../doctor/ovh/index.ts"
 import { MksEnv } from "../mks/env.ts"
+import { mksCloudProviderLayer } from "../provider/registry.ts"
 import type { DistroUpgradeArgs } from "./types.ts"
 import { buildMksPlan } from "../mks/plan.ts"
-import { applyMks, deleteMks, kubeconfigMks, lookupMksInventory } from "../mks/reconcile.ts"
+import { applyMks, deleteMks, kubeconfigMks, lookupMksInventory, resolveMksNetwork } from "../mks/reconcile.ts"
 import type { DistroEntry } from "./types.ts"
 
 // Live plan for the ovh-mks path: cluster/pool existence via the OVH API,
@@ -18,8 +19,14 @@ const _mksPlanLive = (config: ClusterConfig) =>
   Effect.gen(function*() {
     const mks = yield* lookupMksInventory(config)
     const volumeNames = yield* lookupManagedVolumeNames(config)
-    return buildMksPlan({ config, inventory: { ...mks, volumeNames } })
-  })
+    // Read-only network resolution (R8) belongs to the apply plan alone: the
+    // delete plan must never reach OpenStack.
+    const resolvedNetwork = yield* resolveMksNetwork(config)
+    return buildMksPlan({
+      config,
+      inventory: { ...mks, volumeNames, ...(resolvedNetwork === undefined ? {} : { resolvedNetwork }) }
+    })
+  }).pipe(Effect.provide(mksCloudProviderLayer(config)))
 
 /**
  * The OpenStack resources teardown removes, in the order it removes them
@@ -63,7 +70,7 @@ const _deletePlanActions = (config: ClusterConfig) =>
     }))
     const infraActions = _infraDeleteRows(config).map((name) => ({ _tag: "Delete" as const, name }))
     return [clusterAction, ...poolActions, ...infraActions]
-  })
+  }).pipe(Effect.provide(mksCloudProviderLayer(config)))
 
 const _statusMks = Effect.fn(function*(config: ClusterConfig) {
   const { mks, serviceName } = yield* MksEnv

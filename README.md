@@ -35,7 +35,7 @@ Credentials are read from the environment, not the config file:
 | Var | Used for |
 |---|---|
 | `OVH_CLIENT_ID`, `OVH_CLIENT_SECRET`, `OVH_SERVICE_NAME` | `ovh-mks` cluster API calls |
-| `OS_AUTH_URL`, `OS_USERNAME`, `OS_PASSWORD`, `OS_PROJECT_NAME`, `OS_REGION_NAME` (or `OS_CLOUD` + `clouds.yaml`) | Cinder volumes (both distros) |
+| `OS_AUTH_URL`, `OS_USERNAME`, `OS_PASSWORD`, `OS_PROJECT_NAME`, `OS_REGION_NAME` (or `OS_CLOUD` + `clouds.yaml`) | Cinder volumes (both distros); the `ovh-mks` `network`/`ingress` blocks |
 | `HCLOUD_TOKEN`, `HETZNER_DNS_TOKEN` | `k3s` clusters with `provider: hetzner` |
 
 They can also come from a sops-encrypted file — see
@@ -86,6 +86,56 @@ The full schema lives in [`packages/core/src/config/schema.ts`](packages/core/sr
 (source of truth) and is described in [`.docs/design/kumulo-design.md`](.docs/design/kumulo-design.md)
 §5. The two files under [`examples/`](examples/) are decoded against that
 schema in CI (`examples/decode.test.ts`), so they never drift out of date.
+
+### Private network and ingress (`ovh-mks`)
+
+An MKS cluster can own the private network it runs on and a public load
+balancer in front of its workloads. Both blocks are optional; omitting them is
+the previous behaviour — OVH's default public addressing and no load balancer.
+
+```yaml
+network:
+  cidr: 10.0.0.0/16
+  nodes_subnet: 10.0.1.0/24            # must sit inside cidr
+  load_balancers_subnet: 10.0.2.0/24   # must sit inside cidr
+ingress: {}                            # optional flavor_id: <octavia-uuid>
+```
+
+`network` requires a vRack on the project — kumulo checks for one and fails
+with the remedy rather than creating a network the cluster cannot use. MKS
+takes networking at cluster creation and never again, so changing or adding
+these blocks on a live cluster is refused with a message that says *recreate*.
+`ingress` is only valid alongside `network`: the load balancer's VIP has to sit
+on `load_balancers_subnet`.
+
+kumulo creates the load balancer **empty** and allocates its floating IP.
+An in-cluster Service adopts it by id via
+`loadbalancer.openstack.org/load-balancer-id`, and the
+cloud-controller-manager owns the listeners, pools and members from then on —
+kumulo neither creates, prunes nor reports them as drift. That split is what
+lets DNS be written in the same `apply` that creates the cluster: a record with
+`target: ingress` resolves to the floating IP kumulo allocated, with no polling
+for in-cluster state. (`target: ingress` on a config without an `ingress` block
+still passes through literally, as any unrecognised target does.)
+
+The ids a consumer needs are written to `<cluster>.outputs.yaml` beside the
+volume ids:
+
+```yaml
+cluster: staging-eu
+volumes:
+  - name: staging-eu-data
+    id: 6f1c…
+    retain: false
+ingress:
+  load_balancer_id: 2b7e…   # annotate a Service with this
+  floating_ip: 51.0.0.10    # what `target: ingress` records point at
+```
+
+That file is not encrypted and carries ids and addresses only, never
+credentials. `delete` tears down the load balancer, the floating IP and the
+network in that order; unlike volumes and buckets a network is never retained,
+since it is fully reproducible from the config.
 
 ## Development
 

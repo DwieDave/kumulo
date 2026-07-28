@@ -113,6 +113,7 @@ const _unused = Effect.die("not part of the plan path")
 const _inventoryOf = (servers: Inventory["servers"]): Layer.Layer<CloudProvider> =>
   Layer.succeed(CloudProvider, {
     ensureNetwork: () => _unused,
+    findNetwork: () => _unused,
     ensureSecurityGroups: () => _unused,
     ensureLoadBalancer: () => _unused,
     ensureServer: () => _unused,

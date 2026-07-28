@@ -44,6 +44,15 @@ export type CloudError =
 // The only interface the reconciler talks to for infrastructure.
 export class CloudProvider extends Context.Service<CloudProvider, {
   readonly ensureNetwork: (spec: NetworkSpec) => Effect.Effect<NetworkInfo, CloudError>
+  /**
+   * Read-only counterpart of `ensureNetwork`: resolves the same network and
+   * subnets, creating nothing. `undefined` means no such network yet.
+   *
+   * Exists so `plan` can compare a config's subnet CIDRs against the ids the
+   * cluster was actually created on without writing (R8) — a mismatch is
+   * unappliable on MKS, and the operator must see that before apply, not after.
+   */
+  readonly findNetwork: (spec: NetworkSpec) => Effect.Effect<NetworkInfo | undefined, CloudError>
   readonly ensureSecurityGroups: (spec: SecGroupSpec) => Effect.Effect<SecGroupInfo, CloudError>
   readonly ensureLoadBalancer: (spec: LbSpec) => Effect.Effect<LbInfo, CloudError>
   readonly ensureServer: (spec: ServerSpec) => Effect.Effect<ServerInfo, CloudError>

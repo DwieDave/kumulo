@@ -27,6 +27,8 @@ export const FakeCloudProviderLive: Layer.Layer<CloudProvider> = Layer.effect(
     const freshId = (prefix: string) => Ref.updateAndGet(nextId, (n) => n + 1).pipe(Effect.map((n) => `${prefix}-${n}`))
 
     return {
+      findNetwork: (_spec) => Ref.get(network),
+
       ensureNetwork: (spec) =>
         Ref.get(network).pipe(
           Effect.flatMap((existing) => {

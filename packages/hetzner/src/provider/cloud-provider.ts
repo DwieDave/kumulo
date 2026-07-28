@@ -48,6 +48,20 @@ const _findNetwork = (client: HcloudClient, name: string) =>
     Effect.map((response) => response.networks[0])
   )
 
+/**
+ * Read-only counterpart of `ensureNetwork` (R8). hcloud subnets carry no id of
+ * their own, so — exactly as `ensureNetwork` does — the result reports the
+ * network only and leaves the subnet-id slots absent.
+ */
+export const findNetwork = (
+  { options, spec }: { readonly options: CloudProviderOptions; readonly spec: NetworkSpec }
+): R<NetworkInfo | undefined> =>
+  Effect.gen(function*() {
+    const client = yield* makeHcloudClient
+    const existing = yield* _findNetwork(client, _name(options))
+    return existing === undefined ? undefined : { id: String(existing.id), cidr: spec.cidr }
+  })
+
 export const ensureNetwork = ({ options, spec }: { readonly options: CloudProviderOptions; readonly spec: NetworkSpec }): R<NetworkInfo> =>
   Effect.gen(function*() {
     const client = yield* makeHcloudClient
@@ -438,6 +452,7 @@ export const CloudProviderLive = (options: CloudProviderOptions): Layer.Layer<Cl
       const run = <A>(effect: R<A>) => Effect.provide(effect, context)
       return {
         ensureNetwork: (spec: NetworkSpec) => run(ensureNetwork({ options, spec })),
+        findNetwork: (spec: NetworkSpec) => run(findNetwork({ options, spec })),
         ensureSecurityGroups: (spec: SecGroupSpec) => run(ensureSecurityGroups({ options, spec })),
         ensureLoadBalancer: (spec: LbSpec) => run(ensureLoadBalancer({ options, spec })),
         ensureServer: (spec: ServerSpec) => run(ensureServer({ options, spec })),

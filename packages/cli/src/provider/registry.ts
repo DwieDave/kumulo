@@ -39,6 +39,7 @@ const _unavailableCloudProvider = (hint: string): Layer.Layer<CloudProvider> => 
   const reject = () => Effect.fail(new AuthenticationFailed({ hint }))
   return Layer.succeed(CloudProvider, {
     ensureNetwork: reject,
+    findNetwork: reject,
     ensureSecurityGroups: reject,
     ensureLoadBalancer: reject,
     ensureServer: reject,

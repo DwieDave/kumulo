@@ -1,4 +1,4 @@
-import type { Plan, PlanAction } from "@kumulo/core"
+import type { NetworkInfo, Plan, PlanAction } from "@kumulo/core"
 import { clusterDrift, mksPoolHash, type MksClusterState, type MksWorkerPoolConfig } from "@kumulo/distro-ovh-mks"
 import { type DnsPlanInput, dnsPlanActions, type DnsPlanTargets } from "../dns-plan.ts"
 
@@ -62,6 +62,13 @@ export interface MksInventory {
   readonly poolHashes?: ReadonlyMap<string, string | undefined>
   /** Cluster-scoped fields as read back from OVH; absent means "not looked up" → no drift claim. */
   readonly clusterState?: MksClusterState
+  /**
+   * The live network the config's CIDRs resolve to, read (never created) by
+   * `CloudProvider.findNetwork`. Absent means it was not looked up or does not
+   * exist yet — either way no identity claim is made. This is what lets R8
+   * refuse a changed subnet CIDR at plan time instead of at apply.
+   */
+  readonly resolvedNetwork?: NetworkInfo
 }
 
 export const emptyMksInventory: MksInventory = {
@@ -110,7 +117,13 @@ const _clusterAction = (
   if (!inventory.clusterExists) return { _tag: "Create", name }
   if (config.auth === undefined || inventory.clusterState === undefined) return { _tag: "NoOp", name }
   const drift = clusterDrift({
-    desired: { region: config.auth.region, version: config.version, privateNetwork: config.network !== undefined },
+    desired: {
+      region: config.auth.region,
+      version: config.version,
+      privateNetwork: config.network !== undefined,
+      nodesSubnetId: inventory.resolvedNetwork?.nodesSubnetId,
+      loadBalancersSubnetId: inventory.resolvedNetwork?.loadBalancersSubnetId
+    },
     actual: inventory.clusterState
   })
   if (drift._tag === "None") return { _tag: "NoOp", name }

@@ -4,6 +4,7 @@
   "operationIds": [
     "lbaas/loadbalancers:get",
     "lbaas/loadbalancers:post",
-    "lbaas/loadbalancers/loadbalancer_id:delete"
+    "lbaas/loadbalancers/loadbalancer_id:delete",
+    "lbaas/flavors:get"
   ]
 }

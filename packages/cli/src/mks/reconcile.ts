@@ -48,6 +48,20 @@ const _toMksConfig = (
  * Live cluster/nodepool existence for the plan. `volumeNames` is filled in by
  * the caller (a Cinder lookup lives in `commands/volumes.ts`, not here).
  */
+/**
+ * The live network the config asks for, read never created (R8). Gated on the
+ * `network` block: a config without one must keep planning with no OS_*
+ * credentials at all, which is what `_unavailableCloudProvider` would otherwise
+ * refuse on first use.
+ */
+export const resolveMksNetwork = (config: ClusterConfig): Effect.Effect<NetworkInfo | undefined, MksError, CloudProvider> =>
+  Effect.gen(function*() {
+    const network = config.distro === "ovh-mks" ? config.network : undefined
+    if (network === undefined) return undefined
+    const cloud = yield* CloudProvider
+    return yield* cloud.findNetwork(mksNetworkSpec(network))
+  })
+
 export const lookupMksInventory = (
   config: ClusterConfig
 ): Effect.Effect<Omit<MksInventory, "volumeNames">, MksError, MksEnv> =>
@@ -61,7 +75,13 @@ export const lookupMksInventory = (
       clusterExists: true,
       poolNames: new Set(pools.map((pool) => pool.name)),
       poolHashes: new Map(pools.map((pool) => [pool.name, pool.configHash])),
-      clusterState: { version: info.version, region: info.region, privateNetworkId: info.privateNetworkId }
+      clusterState: {
+        version: info.version,
+        region: info.region,
+        privateNetworkId: info.privateNetworkId,
+        nodesSubnetId: info.nodesSubnetId,
+        loadBalancersSubnetId: info.loadBalancersSubnetId
+      }
     }
   })
 
@@ -183,13 +203,17 @@ const _ensureMksNetwork = (
     yield* _refuseClusterDrift({ config, mks, serviceName })
     yield* requireVrack({ mks, region: config.auth.region, serviceName })
     const cloud = yield* CloudProvider
-    const spec: NetworkSpec = {
-      cidr: network.cidr,
-      nodesSubnet: network.nodes_subnet,
-      loadBalancersSubnet: network.load_balancers_subnet
-    }
-    return yield* _networkIds({ info: yield* cloud.ensureNetwork(spec), spec })
+    return yield* _networkIds({ info: yield* cloud.ensureNetwork(mksNetworkSpec(network)), spec: mksNetworkSpec(network) })
   })
+
+/** The config's network block as a `NetworkSpec` — one translation, both the read and the write path. */
+export const mksNetworkSpec = (
+  network: { readonly cidr: string; readonly nodes_subnet: string; readonly load_balancers_subnet: string }
+): NetworkSpec => ({
+  cidr: network.cidr,
+  nodesSubnet: network.nodes_subnet,
+  loadBalancersSubnet: network.load_balancers_subnet
+})
 
 /**
  * The ingress load balancer, converged after the cluster (so a cluster that
@@ -215,7 +239,8 @@ const _ensureMksIngress = (
       floatingIp: true,
       ...(network.privateNetworkId === undefined ? {} : { vipNetworkId: network.privateNetworkId }),
       ...(network.loadBalancersSubnetId === undefined ? {} : { vipSubnetId: network.loadBalancersSubnetId }),
-      ...(ingress.flavor_id === undefined ? {} : { flavorId: ingress.flavor_id })
+      ...(ingress.flavor_id === undefined ? {} : { flavorId: ingress.flavor_id }),
+      ...(ingress.flavor === undefined ? {} : { flavorName: ingress.flavor })
     })
   })
 

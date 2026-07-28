@@ -1312,6 +1312,14 @@
                   "minLength": 1
                 }
               ]
+            },
+            "flavor": {
+              "type": "string",
+              "allOf": [
+                {
+                  "minLength": 1
+                }
+              ]
             }
           },
           "additionalProperties": false

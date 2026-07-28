@@ -17,6 +17,9 @@ interface RawCluster {
   readonly region?: string
   /** `null` is OVH's "no private network"; distinct from a field it never sent. */
   readonly privateNetworkId?: string | null
+  /** Subnet ids OVH stamped at creation — the identity R8 compares against. */
+  readonly nodesSubnetId?: string | null
+  readonly loadBalancersSubnetId?: string | null
 }
 
 /** `ManagedClusterInfo` plus the cluster-scoped fields drift detection compares (§`cluster-drift.ts`). */
@@ -28,7 +31,9 @@ const _toInfo = (cluster: RawCluster): MksClusterInfo => ({
   status: cluster.status ?? "UNKNOWN",
   version: cluster.version,
   region: cluster.region,
-  privateNetworkId: cluster.privateNetworkId
+  privateNetworkId: cluster.privateNetworkId,
+  nodesSubnetId: cluster.nodesSubnetId,
+  loadBalancersSubnetId: cluster.loadBalancersSubnetId
 })
 
 /** Resolves the cluster by name only — never creates one: a missing cluster is a no-op, not a provisioning trigger. */

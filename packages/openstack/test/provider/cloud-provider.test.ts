@@ -252,6 +252,10 @@ describe("openstack CloudProvider", () => {
           }
         },
         "GET /v2.0/networks": () => ({ status: 200, body: { networks: [{ id: "ext-net", name: "Ext-Net" }] } }),
+        "GET /v2/lbaas/flavors": () => ({
+          status: 200,
+          body: { flavors: [{ id: "flav-small", name: "small" }, { id: "flav-large", name: "large" }] }
+        }),
         "GET /v2.0/floatingips": () => ({ status: 200, body: { floatingips: [] } }),
         "POST /v2.0/floatingips": (request) => {
           const body = _postedFloatingIp(requestJson(request))
@@ -286,6 +290,37 @@ describe("openstack CloudProvider", () => {
       expect(fake.postedFips).toEqual([
         { floating_network_id: "ext-net", port_id: "port-vip", description: "kumulo-prod" }
       ])
+    }).pipe(Effect.provide(fake.layer))
+  })
+
+  // Q1: MKS Standard names an Octavia flavor by UUID, MKS Free by size name
+  // (`small`/`medium`/`large`). Only the UUID was expressible, so a Free-plan
+  // cluster could not ask for a flavor at all. A name is resolved against
+  // Octavia's own flavor list, so both vocabularies reach the same `flavor_id`.
+  it.effect("ensureLoadBalancer resolves a flavor name to its Octavia id", () => {
+    const posted: Array<unknown> = []
+    const fake = _lbFake({ loadbalancers: [], posted })
+    return Effect.gen(function*() {
+      yield* ensureLoadBalancer({ options, spec: { members: [], vipSubnetId: "sub-lb", flavorName: "large" } })
+      expect(posted).toEqual([{
+        loadbalancer: { name: "kumulo-prod", vip_subnet_id: "sub-lb", flavor_id: "flav-large" }
+      }])
+    }).pipe(Effect.provide(fake.layer))
+  })
+
+  // A name Octavia does not offer must not silently fall through to "no flavor":
+  // the operator asked for a size and would get the default without being told.
+  it.effect("ensureLoadBalancer fails, listing what exists, when a flavor name is unknown", () => {
+    const posted: Array<unknown> = []
+    const fake = _lbFake({ loadbalancers: [], posted })
+    return Effect.gen(function*() {
+      const exit = yield* Effect.exit(
+        ensureLoadBalancer({ options, spec: { members: [], vipSubnetId: "sub-lb", flavorName: "enormous" } })
+      )
+      expect(exit._tag).toBe("Failure")
+      expect(JSON.stringify(exit)).toContain("enormous")
+      expect(JSON.stringify(exit)).toContain("small")
+      expect(posted).toEqual([])
     }).pipe(Effect.provide(fake.layer))
   })
 

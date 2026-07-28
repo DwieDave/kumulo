@@ -156,16 +156,28 @@ const _networkInfo = (
   ...(ids[1] === undefined ? {} : { loadBalancersSubnetId: ids[1] })
 })
 
+const _NETWORKS = "v2.0/networks"
+
+/** Network id by tag name, or `undefined` — the read half both paths share. */
+const _findNetworkId = (
+  { client, name }: { readonly client: NeutronClient; readonly name: string }
+): R<string | undefined> =>
+  client.networks.networksGet({ query: { name } }).pipe(
+    Effect.mapError(_at("network", _NETWORKS)),
+    Effect.map((listed) => {
+      const existing = _first(listed.networks)
+      return existing === undefined ? undefined : _idOf(existing)
+    })
+  )
+
 const _ensureNetworkId = (
   { client, name }: { readonly client: NeutronClient; readonly name: string }
 ): R<{ readonly id: string; readonly created: boolean }> =>
   Effect.gen(function*() {
-    const ref = "v2.0/networks"
-    const listed = yield* client.networks.networksGet({ query: { name } }).pipe(Effect.mapError(_at("network", ref)))
-    const existing = _first(listed.networks)
-    if (existing !== undefined) return { id: _idOf(existing), created: false }
+    const existing = yield* _findNetworkId({ client, name })
+    if (existing !== undefined) return { id: existing, created: false }
     const created = yield* client.networks.networksPost({ payload: { network: { name } } }).pipe(
-      Effect.mapError(_at("network", ref))
+      Effect.mapError(_at("network", _NETWORKS))
     )
     return { id: _idOf(created.network), created: true }
   })
@@ -188,6 +200,22 @@ export const ensureNetwork = ({ options, spec }: { readonly options: CloudProvid
     if (created) yield* Effect.forEach(cidrs, (cidr) => _createSubnet({ client, networkId: id, cidr }), { discard: true })
     const subnets = yield* _listSubnets({ client, networkId: id })
     return _networkInfo({ id, spec, ids: cidrs.map((cidr) => _subnetIdOf(subnets, cidr)) })
+  })
+
+/**
+ * Read-only resolution (R8): the same network and the same CIDR→id read-back
+ * `ensureNetwork` performs, minus every write. Absent network → `undefined`,
+ * which is "not created yet", not an error.
+ */
+export const findNetwork = (
+  { options, spec }: { readonly options: CloudProviderOptions; readonly spec: NetworkSpec }
+): R<NetworkInfo | undefined> =>
+  Effect.gen(function*() {
+    const client = yield* neutronClient(options.region)
+    const id = yield* _findNetworkId({ client, name: _name(options) })
+    if (id === undefined) return undefined
+    const subnets = yield* _listSubnets({ client, networkId: id })
+    return _networkInfo({ id, spec, ids: _subnetCidrs(spec).map((cidr) => _subnetIdOf(subnets, cidr)) })
   })
 
 // ---- Floating IPs (R9) -------------------------------------------------
@@ -371,6 +399,9 @@ export const ensureServerGroups = (
 // ---- Load balancer (Octavia, capability-gated) --------------------------
 
 const _LOAD_BALANCERS = "v2/lbaas/loadbalancers"
+const _LB_FLAVORS = "v2/lbaas/flavors"
+
+type OctaviaClient = Effect.Success<ReturnType<typeof octaviaClient>>
 
 interface Vip extends Named {
   readonly vip_address?: string | undefined
@@ -380,14 +411,44 @@ interface Vip extends Named {
 
 // Optional keys are omitted, never `undefined` — the generated schemas use
 // `optionalKey`. `spec.members` is absent by design, see `LbSpec`'s contract.
-const _lbPayload = (name: string, spec: LbSpec) => ({
+const _lbPayload = (
+  { flavorId, name, spec }: { readonly name: string; readonly spec: LbSpec; readonly flavorId: string | undefined }
+) => ({
   loadbalancer: {
     name,
     ...(spec.vipSubnetId === undefined ? {} : { vip_subnet_id: spec.vipSubnetId }),
     ...(spec.vipNetworkId === undefined ? {} : { vip_network_id: spec.vipNetworkId }),
-    ...(spec.flavorId === undefined ? {} : { flavor_id: spec.flavorId })
+    ...(flavorId === undefined ? {} : { flavor_id: flavorId })
   }
 })
+
+/**
+ * `flavorName` → Octavia flavor id (Q1). An unknown name fails naming what the
+ * region does offer: falling through to "no flavor" would silently hand the
+ * operator Octavia's default after they asked for a specific size.
+ */
+const _resolveFlavorId = (
+  { client, spec }: { readonly client: OctaviaClient; readonly spec: LbSpec }
+): R<string | undefined> => {
+  if (spec.flavorName === undefined) return Effect.succeed(spec.flavorId)
+  return client.flavors.lbaasFlavorsGet({}).pipe(
+    Effect.mapError(_at("load-balancer-flavor", _LB_FLAVORS)),
+    Effect.flatMap((listed) => {
+      const flavors = listed.flavors ?? []
+      const match = _named(flavors, spec.flavorName ?? "")
+      return match === undefined
+        ? Effect.fail(
+          new ResourceNotFound({
+            kind: "load-balancer-flavor",
+            ref: `no Octavia flavor named "${spec.flavorName}" in this region; available: ${
+              flavors.map((flavor) => flavor.name).filter((n) => n !== undefined).join(", ") || "(none)"
+            }`
+          })
+        )
+        : Effect.succeed(_idOf(match))
+    })
+  )
+}
 
 const _lbInfo = (
   { lb, options, spec }: { readonly options: CloudProviderOptions; readonly spec: LbSpec; readonly lb: Vip | undefined }
@@ -423,8 +484,9 @@ export const ensureLoadBalancer = (
     const listed = yield* client["load-balancers"].lbaasLoadbalancersGet({}).pipe(Effect.mapError(fail))
     const existing = _named(listed.loadbalancers, name)
     if (existing !== undefined) return yield* _lbInfo({ options, spec, lb: existing })
+    const flavorId = yield* _resolveFlavorId({ client, spec })
     const created = yield* client["load-balancers"].lbaasLoadbalancersPost({
-      payload: _lbPayload(name, spec)
+      payload: _lbPayload({ name, spec, flavorId })
     }).pipe(Effect.mapError(fail))
     return yield* _lbInfo({ options, spec, lb: created.loadbalancer })
   })
@@ -814,6 +876,7 @@ export const CloudProviderLive = (options: CloudProviderOptions): Layer.Layer<Cl
       const run = <A>(effect: R<A>) => Effect.provide(effect, context)
       return {
         ensureNetwork: (spec: NetworkSpec) => run(ensureNetwork({ options, spec })),
+        findNetwork: (spec: NetworkSpec) => run(findNetwork({ options, spec })),
         ensureSecurityGroups: (spec: SecGroupSpec) => run(ensureSecurityGroups({ options, spec })),
         ensureLoadBalancer: (spec: LbSpec) => run(ensureLoadBalancer({ options, spec })),
         ensureServer: (spec: ServerSpec) => run(ensureServer({ options, spec })),

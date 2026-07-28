@@ -27,6 +27,9 @@ export interface MksClusterState {
   readonly region?: string | undefined
   /** `null`/`""` mean OVH reported no private network; `undefined` means it was never read. */
   readonly privateNetworkId?: string | null | undefined
+  /** Subnet ids OVH stamped on the cluster at creation; `undefined` means never read. */
+  readonly nodesSubnetId?: string | null | undefined
+  readonly loadBalancersSubnetId?: string | null | undefined
 }
 
 /** The cluster-level slice of the desired config (`MksClusterConfig` satisfies it structurally). */
@@ -39,6 +42,13 @@ export interface MksDesiredCluster {
    * `network` block never start reading as drifted.
    */
   readonly privateNetwork?: boolean | undefined
+  /**
+   * Subnet ids the config's CIDRs resolve to in the live network, as read by
+   * `CloudProvider.findNetwork`. Absent means unresolved — the network may not
+   * exist yet — which is "can't tell", never drift.
+   */
+  readonly nodesSubnetId?: string | undefined
+  readonly loadBalancersSubnetId?: string | undefined
 }
 
 export type MksClusterDrift =
@@ -111,6 +121,45 @@ const _networkDrift = (
 }
 
 /**
+ * One subnet slot. Either side unknown is "can't tell", never drift: an
+ * unresolved desired id means the network does not exist yet, and an unread
+ * actual one means OVH was never asked.
+ */
+const _subnetSlotDrift = (
+  { actual, desired, slot }: {
+    readonly actual: string | null | undefined
+    readonly desired: string | undefined
+    readonly slot: string
+  }
+): MksClusterDrift =>
+  desired === undefined || actual === undefined || actual === null || actual === "" || actual === desired
+    ? _NONE
+    : _blocked(
+      "network",
+      `the config's ${slot} resolves to subnet "${desired}" but the cluster was created on "${actual}"; ${_NETWORK_REMEDY}`
+    )
+
+/**
+ * Subnet-level identity (R8). Presence drift only catches adding or dropping the
+ * whole block — editing a subnet CIDR keeps the same tag-named network, so only
+ * the resolved subnet ids move. MKS fixes both at creation, so this is `Blocked`.
+ */
+const _subnetDrift = (
+  { actual, desired }: { readonly desired: MksDesiredCluster; readonly actual: MksClusterState }
+): MksClusterDrift => {
+  const nodes = _subnetSlotDrift({
+    actual: actual.nodesSubnetId,
+    desired: desired.nodesSubnetId,
+    slot: "nodes_subnet"
+  })
+  return nodes._tag !== "None" ? nodes : _subnetSlotDrift({
+    actual: actual.loadBalancersSubnetId,
+    desired: desired.loadBalancersSubnetId,
+    slot: "load_balancers_subnet"
+  })
+}
+
+/**
  * A `Blocked` verdict as the failure every writer refuses with — one wording
  * whether the refusal happens at the cluster write or ahead of the network one.
  */
@@ -128,6 +177,8 @@ export const clusterDrift = (
 ): MksClusterDrift => {
   const network = _networkDrift({ actual: actual.privateNetworkId, desired: desired.privateNetwork })
   if (network._tag !== "None") return network
+  const subnets = _subnetDrift({ actual, desired })
+  if (subnets._tag !== "None") return subnets
   const region = _regionDrift({ actual: actual.region, desired: desired.region })
   if (region._tag !== "None") return region
   return desired.version === undefined || actual.version === undefined

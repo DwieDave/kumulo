@@ -460,3 +460,99 @@ contract only. Nothing here has been observed against a live MKS cluster.
   `_deleteMksInfra` gates on `network` alone and `deleteByTag` then finds the LB
   and the floating IP BY NAME, so gating the plan's rows on `config.ingress`
   under-reported any config that dropped its `ingress:` block after applying it.
+
+## M6 — Release preparation (T6.1/T6.2 landed; T6.3 NOT done)
+
+### CI is green, and this is what green means
+
+`bun run ci` (2026-07-28, clean tree): typecheck → build → 776 tests in 170
+files → dep-cruise 715 modules/2622 deps, no violations → oxlint clean →
+codegen:check "11 service pipeline(s) clean" → schema:check no diff. The only
+noise is dependency-cruiser warning that it wants `typescript@<7` while the
+catalog pins `7.0.2`; it is a warning, exit 0, and predates this work.
+
+`bun run ci` runs `build` before `test` on purpose — `examples/cli-smoke.test.ts`
+and `secrets-smoke.test.ts` execute `packages/cli/dist/main.mjs`. Running
+`vitest` alone against a stale build fails confusingly. This bit M2, M3 and M5.
+
+### Carried forward from M2–M5 — the short list
+
+The per-milestone sections above are the detail. If only five things survive:
+
+1. **D2 is unverified.** M0 was never run, through five milestones. kumulo
+   creating an empty Octavia LB and OVH's CCM adopting it via
+   `loadbalancer.openstack.org/load-balancer-id` is documented by upstream and
+   by OVH and has never been observed on a live MKS cluster. Every test pins
+   *kumulo's* half of the contract. A negative result invalidates D2 and most
+   of R9–R16. Q1 (flavor vocabulary — `flavor_id` follows MKS Standard's UUID,
+   MKS Free's S/M/L is not expressible), Q2 (proxy protocol — no field exists,
+   and per D4 it must be decided at creation) and Q3 (Octavia tag support) are
+   open with it.
+2. **Plan-time reads are the standing ceiling.** `_networkActions`,
+   `_ingressActions` and R8's identity check all infer existence from the live
+   cluster rather than reading Neutron/Octavia, because reading them would make
+   `kumulo plan` demand OS_* credentials. Consequences: adding `network:` or
+   `ingress:` to a live cluster plans NoOp then fails/creates at apply, and a
+   changed subnet CIDR fails at apply with "recreate", not at plan. All three
+   want the same fix: a read-only network/LB lookup on the `CloudProvider`
+   port. That is a port change — the Hetzner adapter and
+   `_unavailableCloudProvider`'s verb list move with it.
+3. **N1 held.** k3s shares `NetworkSpec`/`NetworkInfo`, `ensureNetwork`,
+   `ensureLoadBalancer` and `deleteByTag`. Every widening is optional-keyed and
+   the k3s wire payloads are pinned byte-for-byte by tests. k3s's
+   `octaviaEnabled` source is deliberately untouched (it gates apply,
+   kubeconfig *and* status). The one behavioural change k3s sees is a single
+   extra `GET /v2.0/floatingips?description=kumulo-<tag>` on delete, which
+   returns empty.
+4. **Async deletes are the recurring production defect.** Both the MKS cluster
+   and the Octavia LB return ACCEPTED and keep their ports for seconds to
+   minutes; the next delete in the chain 409s. `_waitClusterGone` and
+   `_deleteLoadBalancer`'s `provisioning_status` poll exist for exactly that.
+   A fake that answers DELETE with 204 and keeps listing the resource unchanged
+   cannot tell a synchronous delete from an async one — that is what hid the LB
+   defect from the whole M5 suite. Nothing yet waits on Nova ports before the
+   network delete; that 409 is retried by the transport and then fails loudly
+   with the remedy.
+5. **The two generated-artifact gates.** `kumulo.schema.json` is generated from
+   `packages/core/src/config/schema.ts` (`bun run schema:generate`, commit the
+   result) and `scripts/generate-schema.ts` carries a hand-maintained
+   `crossFieldConstraints` array that must mirror any cross-field filter JSON
+   Schema *can* express (`ingress ⇒ network` is mirrored; CIDR containment is
+   not, because JSON Schema cannot say it). Generated clients under
+   `packages/*/src/generated/` are never hand-edited — change
+   `allowlists/*.json` + its patches and run the package's `generate`.
+
+### Test-harness lore that cost the most time
+
+- `it.effect` runs on the TestClock, so real sleeps never elapse and a
+  transport-level backoff hangs the test forever. `TestClock` from
+  `effect/testing` *does* work under `it.effect` via `Effect.forkChild` +
+  `TestClock.adjust` + `Fiber.join`; `it.live` is only needed when the sleep is
+  inside the transport's retry, which the fiber cannot observe.
+- Assert POST bodies, not that a POST happened. `expect(post).toBeDefined()`
+  passed with `port_id` missing from a floating-IP create and with the LB's id
+  associated instead of its `vip_port_id`.
+- Test the seam, not the two halves. `recordIngressOutputs` and
+  `applyMksEffect(...).ingress` were each covered alone, so the join between
+  them could have been deleted with CI green.
+- oxlint bans `as` in tests too (`kumulo(no-type-assertion)`), and
+  `assert.strictEqual` does not narrow a tagged union — use
+  `expect(x).toMatchObject({ _tag, kind, ref })`.
+- `examples/ovh-mks.json` and `.yaml` are asserted deep-equal by
+  `examples/decode.test.ts`; always edit both, and patch the JSON as text (a
+  parse/stringify round-trip reformats unrelated arrays).
+
+### What is deliberately NOT done
+
+- **T6.3 — version bump and publish.** No `package.json` version was touched,
+  nothing was published, no tag, no push. The whole workspace is still at
+  0.1.1 and the CHANGELOG entries sit under `[Unreleased]`. A human does the
+  release.
+- **R9 vs the OVH ProviderProfile.** `packages/provider-ovh/src/profile/ovh.ts`
+  still declares `capabilities.floatingIps: false` ("Ext-Net model (no floating
+  IPs)") while M3/M5 allocate, associate and release floating IPs on OVH.
+  Nothing in `src/` reads the flag — only tests do — so it is a dormant
+  contradiction, not a bug. It was flagged before M5 and is still unsettled.
+- **`target: ingress` with no `ingress:` block** decodes clean and writes a
+  CNAME to the literal hostname `ingress`. Pinned by a test, not fixed: R15
+  requires an unrecognised target to pass through literally.

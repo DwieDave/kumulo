@@ -29,6 +29,7 @@ const FakeCloudProviderLive: Layer.Layer<CloudProvider> = Layer.effect(
     const lb = yield* Ref.make<{ readonly id: string; readonly vip: string } | undefined>(undefined)
     return {
       ensureNetwork: (spec) => Effect.succeed({ id: "net-1", cidr: spec.cidr }),
+      findNetwork: (spec) => Effect.succeed({ id: "net-1", cidr: spec.cidr }),
       ensureSecurityGroups: (_spec) => Effect.succeed({ id: "sg-1" }),
       ensureLoadBalancer: (_spec) =>
         Ref.get(lb).pipe(

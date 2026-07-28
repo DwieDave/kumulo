@@ -127,12 +127,28 @@ const MksNetwork = Schema.Struct({
 // block means the cluster gets one public Octavia load balancer, absent means
 // it gets none. Everything that shapes the LB is set at creation (D4): OVH
 // ignores the feature annotations once a Service adopts an LB by id.
-// ponytail: `flavor_id` only — proxy-protocol and timeouts are unanswered
-// questions (Q2), and a field for an undecided default is worse than none.
+// ponytail: no proxy-protocol or timeout fields. Those are pool settings, and
+// the pool belongs to the cloud-controller-manager once a Service adopts the LB
+// (D2/R14) — a field kumulo cannot honour is worse than none. Q2 stays open.
 const MksIngress = Schema.Struct({
-  /** Octavia flavor id (a UUID on MKS Standard). Absent = Octavia's default. */
-  flavor_id: Schema.optionalKey(Schema.NonEmptyString)
+  /** Octavia flavor id — MKS Standard's vocabulary. Absent = Octavia's default. */
+  flavor_id: Schema.optionalKey(Schema.NonEmptyString),
+  /**
+   * Octavia flavor *name* — MKS Free sizes load balancers `small`/`medium`/
+   * `large` rather than by UUID (Q1). Resolved against the region's own flavor
+   * list, so an unknown name fails naming what exists instead of silently
+   * handing back Octavia's default.
+   */
+  flavor: Schema.optionalKey(Schema.NonEmptyString)
 })
+
+// Both name the same Octavia field; honouring one and dropping the other would
+// be a silent choice, so the config has to pick.
+const isFlavorUnambiguous = Schema.makeFilter((config: { ingress?: { flavor?: unknown; flavor_id?: unknown } }) =>
+  config.ingress?.flavor !== undefined && config.ingress?.flavor_id !== undefined
+    ? "ingress.flavor and ingress.flavor_id both set: use the name (MKS Free) or the id (MKS Standard), not both"
+    : undefined
+)
 
 // An LB Octavia places wherever it likes is unreachable from the cluster, so
 // `ingress` is only meaningful alongside the `network` block that supplies the
@@ -342,7 +358,7 @@ export const MksClusterConfig = Schema.Struct({
   network: Schema.optionalKey(MksNetwork),
   // Optional: absent means no ingress load balancer, which is today's behaviour.
   ingress: Schema.optionalKey(MksIngress)
-}).check(isSecretsRequiredForObjectStorage, isAuthMethodConsistentWithProvider, isIngressPlaceable)
+}).check(isSecretsRequiredForObjectStorage, isAuthMethodConsistentWithProvider, isIngressPlaceable, isFlavorUnambiguous)
 
 export const ClusterConfig = Schema.Union([K3sClusterConfig, MksClusterConfig])
 

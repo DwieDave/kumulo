@@ -151,3 +151,51 @@ it("every ingress row matches an mksEntry appliedPrefix", () => {
   const rows = buildMksPlan({ config: _ingress, inventory: emptyMksInventory }).actions.map((a) => a.name)
   assert.deepStrictEqual(rows.filter((name) => !mksEntry.appliedPrefixes.some((prefix) => name.startsWith(prefix))), [])
 })
+
+// R8 at plan time. The gap this closes: editing a subnet CIDR on a live cluster
+// keeps the same tag-named network, so `privateNetworkId` is unchanged and
+// presence-only drift saw nothing — the plan read NoOp and the apply then failed
+// with a Neutron-flavoured "no subnet ids". `findNetwork` resolves the config's
+// CIDRs read-only, so the mismatch is now visible before anything is written.
+const _liveOn = (
+  { desired, live }: {
+    readonly live: { readonly nodes: string; readonly lbs: string }
+    readonly desired: { readonly nodes: string; readonly lbs: string }
+  }
+): MksInventory => ({
+  ...emptyMksInventory,
+  clusterExists: true,
+  clusterState: {
+    region: "GRA5",
+    privateNetworkId: "net-1",
+    nodesSubnetId: live.nodes,
+    loadBalancersSubnetId: live.lbs
+  },
+  resolvedNetwork: { id: "net-1", cidr: "10.0.0.0/16", nodesSubnetId: desired.nodes, loadBalancersSubnetId: desired.lbs }
+})
+
+const _clusterRow = (inventory: MksInventory) =>
+  buildMksPlan({ config: { ..._networked, auth: { region: "GRA5" } }, inventory })
+    .actions.find((a) => a.name === "mks-cluster/prod-eu")
+
+it("refuses at plan time when a subnet CIDR resolves elsewhere than the cluster's own", () => {
+  const row = _clusterRow(_liveOn({ live: { nodes: "sub-a", lbs: "sub-x" }, desired: { nodes: "sub-b", lbs: "sub-x" } }))
+  assert.strictEqual(row?._tag, "ReplaceNeedsConfirm")
+  assert.include(row?._tag === "ReplaceNeedsConfirm" ? row.reason : "", "recreate")
+})
+
+it("plans no cluster change when both subnets resolve to the cluster's own", () => {
+  const row = _clusterRow(_liveOn({ live: { nodes: "sub-a", lbs: "sub-x" }, desired: { nodes: "sub-a", lbs: "sub-x" } }))
+  assert.strictEqual(row?._tag, "NoOp")
+})
+
+// An unresolved network is "not created yet", not drift — otherwise the very
+// first apply of a networked config would refuse itself.
+it("claims no drift when the network does not exist yet", () => {
+  const row = _clusterRow({
+    ...emptyMksInventory,
+    clusterExists: true,
+    clusterState: { region: "GRA5", privateNetworkId: "net-1", nodesSubnetId: "sub-a", loadBalancersSubnetId: "sub-x" }
+  })
+  assert.strictEqual(row?._tag, "NoOp")
+})

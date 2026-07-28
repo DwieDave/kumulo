@@ -67,6 +67,7 @@ interface Store {
 const _recordingCloudProvider = (store: Store): Layer.Layer<CloudProvider> =>
   Layer.succeed(CloudProvider, {
     ensureNetwork: (spec) => Effect.succeed({ id: "net-1", cidr: spec.cidr }),
+    findNetwork: (spec) => Effect.succeed({ id: "net-1", cidr: spec.cidr }),
     ensureSecurityGroups: () => Effect.succeed({ id: "sg-1" }),
     ensureLoadBalancer: () => Effect.succeed({ id: "lb-1", vip: "10.0.0.100" }),
     ensureServer: (spec: ServerSpec) =>

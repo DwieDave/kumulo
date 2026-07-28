@@ -68,8 +68,14 @@ export interface LbSpec {
   /** VIP placement. Required for MKS — cluster and LB must share a network. */
   readonly vipSubnetId?: string
   readonly vipNetworkId?: string
-  /** Octavia flavor id. */
+  /** Octavia flavor id — MKS Standard's vocabulary. */
   readonly flavorId?: string
+  /**
+   * Octavia flavor *name* — MKS Free sizes its load balancers `small`/`medium`/
+   * `large` rather than by UUID. Resolved against Octavia's own flavor list, so
+   * both plans reach the same `flavor_id`. Mutually exclusive with `flavorId`.
+   */
+  readonly flavorName?: string
   /** Allocate a floating IP and associate it with the LB's VIP port. */
   readonly floatingIp?: boolean
 }

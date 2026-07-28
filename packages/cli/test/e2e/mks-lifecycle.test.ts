@@ -79,7 +79,7 @@ it.effect("yaml → plan → apply → nodepool scale-update → kubeconfig → 
     const config = yield* loadConfig(_configPath)
     assert.strictEqual(config.distro, "ovh-mks")
 
-    const inventory = yield* lookupMksInventory(config).pipe(Effect.provide(mksEnvLayer))
+    const inventory = yield* lookupMksInventory(config).pipe(Effect.provide(mksEnvLayer), Effect.provide(cloudProviderNever))
     const plan = buildMksPlan({ config, inventory: { ...inventory, volumeNames: new Set() } })
     assert.strictEqual(plan.actions.length, 2)
     const decision = decidePlanAction({ plan, yes: true, dryRun: false })
@@ -90,7 +90,7 @@ it.effect("yaml → plan → apply → nodepool scale-update → kubeconfig → 
     assert.strictEqual(info.status, "READY")
 
     // Re-plan against the now-populated fake API: everything exists -> all NoOp.
-    const after = yield* lookupMksInventory(config).pipe(Effect.provide(mksEnvLayer))
+    const after = yield* lookupMksInventory(config).pipe(Effect.provide(mksEnvLayer), Effect.provide(cloudProviderNever))
     // Guards the NoOp assertion below against going vacuous again: it only
     // means "converged" if the fake really replayed the stamped template.
     assert.ok(after.poolHashes?.get("workers"), "fake must replay the pool template's config-hash annotation")

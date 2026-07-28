@@ -77,3 +77,34 @@ describe("MksClusterConfig — network (R5, D1)", () => {
       )
   )
 })
+
+// Q1: MKS Standard names an Octavia flavor by UUID, MKS Free by size name.
+// Before this, only the UUID was expressible, so a Free-plan cluster could not
+// ask for a load-balancer size at all.
+describe("MksIngress — flavor vocabulary (Q1)", () => {
+  const _withIngress = (ingress: Record<string, string>) => ({
+    ...validMksConfig,
+    network: validMksNetwork,
+    ingress
+  })
+
+  it.effect("accepts a flavor name, for MKS Free's small/medium/large", () =>
+    Effect.gen(function*() {
+      const decoded = yield* decodeConfig(_withIngress({ flavor: "small" }))
+      expect(decoded.distro === "ovh-mks" && decoded.ingress?.flavor).toBe("small")
+    }))
+
+  it.effect("accepts a flavor id, for MKS Standard's UUID", () =>
+    Effect.gen(function*() {
+      const decoded = yield* decodeConfig(_withIngress({ flavor_id: "0b1e-uuid" }))
+      expect(decoded.distro === "ovh-mks" && decoded.ingress?.flavor_id).toBe("0b1e-uuid")
+    }))
+
+  // Both name the same Octavia field. Honouring one and dropping the other
+  // would be a silent choice, so the config has to pick.
+  it.effect("refuses both at once rather than silently preferring one", () =>
+    Effect.gen(function*() {
+      const failure = yield* Effect.flip(decodeConfig(_withIngress({ flavor: "small", flavor_id: "0b1e-uuid" })))
+      expect(JSON.stringify(failure)).toContain("not both")
+    }))
+})
