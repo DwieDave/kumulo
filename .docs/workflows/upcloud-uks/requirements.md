@@ -48,6 +48,16 @@ Phase 1 decisions D1–D6 live in `scope.md` and are not repeated here.
   `CONFIG_HASH_KEY` is `kumulo-config-hash` — both fit those rules with room
   to spare, so no encoding layer is needed.
 
+- **D15 — `no-sibling-package-imports` gains one exception.** D2's layering
+  (`distro-upcloud-uks` imports `@kumulo/upcloud`) is an error under
+  `.dependency-cruiser.cjs`'s sibling rule as written. The rule is relaxed to
+  allow that edge rather than folding the client into the distro package.
+  The exception is narrow and conditional: `@kumulo/upcloud` must stay a
+  **leaf** — it may import `@kumulo/core` and nothing else — so the rule
+  treats it like core for *incoming* edges only, and its own outgoing edges
+  stay governed by the original rule. Enforced by keeping `upcloud` in the
+  rule's `from` pattern.
+
 ## Acceptance criteria
 
 - **AC1** — A config with `provider: upcloud`, `distro: upcloud-uks` and one
