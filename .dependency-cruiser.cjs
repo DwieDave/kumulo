@@ -36,11 +36,15 @@ module.exports = {
     {
       name: "no-sibling-package-imports",
       comment:
-        "non-core, non-cli @kumulo/* packages may depend on core only, never on each other",
+        "non-core, non-cli @kumulo/* packages may depend on core only, never on each other " +
+        "(D15: @kumulo/upcloud is exempted from this rule's 'to' side only — it is treated " +
+        "like core for INCOMING edges, so distro-upcloud-uks may import it — but it keeps " +
+        "'upcloud' in the 'from' pattern below, so its own OUTGOING edges stay governed by " +
+        "this same rule and it may still only import @kumulo/core)",
       severity: "error",
       from: { path: "^packages/(?!core/|cli/)([^/]+)/" },
       to: {
-        path: "^packages/(?!core/)[^/]+/",
+        path: "^packages/(?!core/|upcloud/)[^/]+/",
         pathNot: "^packages/$1/",
       },
     },

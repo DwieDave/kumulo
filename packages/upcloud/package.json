@@ -1,0 +1,66 @@
+{
+  "name": "@kumulo/upcloud",
+  "version": "0.1.0",
+  "description": "Hand-written UpCloud API client (UKS, network, router) for kumulo.",
+  "license": "MIT",
+  "author": "David Stahl-Gruber",
+  "homepage": "https://github.com/DwieDave/kumulo#readme",
+  "bugs": "https://github.com/DwieDave/kumulo/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DwieDave/kumulo.git",
+    "directory": "packages/upcloud"
+  },
+  "keywords": [
+    "upcloud",
+    "uks",
+    "kubernetes",
+    "effect",
+    "typescript"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.mjs"
+      }
+    }
+  },
+  "dependencies": {
+    "@kumulo/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "vitest": "catalog:",
+    "effect": "catalog:"
+  },
+  "scripts": {
+    "build": "bash ../../scripts/build-package.sh",
+    "prepack": "node ../../scripts/prepack-exports.mjs strip",
+    "postpack": "node ../../scripts/prepack-exports.mjs restore",
+    "prepublishOnly": "bun run build"
+  }
+}

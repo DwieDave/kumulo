@@ -45,6 +45,7 @@
         "@kumulo/core": "workspace:*",
         "@kumulo/distro-k3s": "workspace:*",
         "@kumulo/distro-ovh-mks": "workspace:*",
+        "@kumulo/distro-upcloud-uks": "workspace:*",
         "@kumulo/dns-hetzner": "workspace:*",
         "@kumulo/dns-ovh": "workspace:*",
         "@kumulo/hetzner": "workspace:*",
@@ -52,6 +53,7 @@
         "@kumulo/provider-ovh": "workspace:*",
         "@kumulo/secrets-sops": "workspace:*",
         "@kumulo/storage-ovh": "workspace:*",
+        "@kumulo/upcloud": "workspace:*",
         "@kumulo/volumes-cinder": "workspace:*",
       },
       "devDependencies": {
@@ -110,6 +112,22 @@
         "codegen": "workspace:*",
         "effect": "catalog:",
         "ovh2openapi": "workspace:*",
+        "vitest": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
+      },
+    },
+    "packages/distro-upcloud-uks": {
+      "name": "@kumulo/distro-upcloud-uks",
+      "version": "0.1.1",
+      "dependencies": {
+        "@kumulo/core": "workspace:*",
+        "@kumulo/upcloud": "workspace:*",
+      },
+      "devDependencies": {
+        "@effect/vitest": "catalog:",
+        "effect": "catalog:",
         "vitest": "catalog:",
       },
       "peerDependencies": {
@@ -241,6 +259,21 @@
         "effect": "catalog:",
       },
     },
+    "packages/upcloud": {
+      "name": "@kumulo/upcloud",
+      "version": "0.1.0",
+      "dependencies": {
+        "@kumulo/core": "workspace:*",
+      },
+      "devDependencies": {
+        "@effect/vitest": "catalog:",
+        "effect": "catalog:",
+        "vitest": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
+      },
+    },
     "packages/volumes-cinder": {
       "name": "@kumulo/volumes-cinder",
       "version": "0.1.1",
@@ -349,6 +382,8 @@
 
     "@kumulo/distro-ovh-mks": ["@kumulo/distro-ovh-mks@workspace:packages/distro-ovh-mks"],
 
+    "@kumulo/distro-upcloud-uks": ["@kumulo/distro-upcloud-uks@workspace:packages/distro-upcloud-uks"],
+
     "@kumulo/dns-hetzner": ["@kumulo/dns-hetzner@workspace:packages/dns-hetzner"],
 
     "@kumulo/dns-ovh": ["@kumulo/dns-ovh@workspace:packages/dns-ovh"],
@@ -364,6 +399,8 @@
     "@kumulo/secrets-sops": ["@kumulo/secrets-sops@workspace:packages/secrets-sops"],
 
     "@kumulo/storage-ovh": ["@kumulo/storage-ovh@workspace:packages/storage-ovh"],
+
+    "@kumulo/upcloud": ["@kumulo/upcloud@workspace:packages/upcloud"],
 
     "@kumulo/volumes-cinder": ["@kumulo/volumes-cinder@workspace:packages/volumes-cinder"],
 
