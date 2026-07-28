@@ -78,8 +78,21 @@ assumption* for each, flagged with a `kumulo:` comment naming the question:
   Assumed: no explicit drain step is added before D9's delete-the-old-
   generation step; core's `drainNode`/`cordonNode` exist if this turns out to
   be wrong.
-- **Q8** — Exact 4xx error body shape. Assumed: status-code-only mapping
-  (R5) is precise enough; no body-shape parsing was attempted.
+- **Q8 — CLOSED, and the guess was wrong.** The first live `apply` failed with
+  `Expected object, got []`. UpCloud's API is not internally consistent, so no
+  single envelope rule covers it:
+  - **UKS** (`/1.3/kubernetes*`) returns everything **bare** — lists are JSON
+    arrays, a cluster or node group is a JSON object. The only exception is
+    `kubeconfig`, wrapped as `{"kubeconfig": "..."}`, plus
+    `available-upgrades` as `{"versions": [...]}`.
+  - **Networking** (`/1.3/network`, `/1.3/router`) wraps **twice** on lists:
+    `{"networks": {"network": [...]}}`, `{"routers": {"router": [...]}}`.
+    Single reads wrap once: `{"network": {...}}`. `ip_networks` is itself
+    `{"ip_network": [...]}`, and booleans there are the strings `"yes"`/`"no"`.
+    `attached_networks` is `{"network": [...]}`.
+  - **Zones** wrap twice too: `{"zones": {"zone": [...]}}`.
+  Never model one half on the other. The 4xx error *body* shape is still
+  unprobed; the status-code-only mapping (R5) stands.
 - **Q9** — Which control plane plans exist beyond `dev-md`/`prod-md`.
   Assumed: config validates `plan` as a free `NonEmptyString`, not a literal
   union — `GET /kubernetes/plans` is the live source of truth, checked by
@@ -92,6 +105,15 @@ assumption* for each, flagged with a `kumulo:` comment naming the question:
 
 Whoever runs T7.2 should treat a contradiction on any of these as a required
 follow-up task against the file(s) named above, not a live-only footnote.
+
+**How Q8 got through CI:** the client guessed an envelope, and the fake server
+and the client tests were then written to match the guess. Three artefacts
+agreed with each other and none agreed with UpCloud. The fixtures are now
+copied from developers.upcloud.com's own response samples shape-for-shape, and
+`packages/upcloud/test/client/network.test.ts` carries an explicit test that a
+singly-wrapped list is a *decode failure* rather than an empty list. When you
+close Q7 or Q10, fix the fixture from the observed payload first, watch it
+fail, then fix the client.
 
 ## T7.1 state (examples, schema, snapshot)
 

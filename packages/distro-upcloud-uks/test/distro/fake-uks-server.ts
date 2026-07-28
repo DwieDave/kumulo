@@ -43,14 +43,14 @@ interface FakeNetwork {
   name: string
   zone: string
   router?: string
-  ip_networks: ReadonlyArray<{ readonly address: string; readonly dhcp: boolean; readonly family: string }>
+  ip_networks: { readonly ip_network: ReadonlyArray<{ readonly address: string; readonly dhcp: string; readonly family: string }> }
 }
 
 interface FakeRouter {
   uuid: string
   name: string
   type?: string
-  attached_networks?: ReadonlyArray<string>
+  attached_networks?: { readonly network: ReadonlyArray<unknown> }
 }
 
 interface CreateClusterBody {
@@ -92,7 +92,7 @@ interface CreateNetworkBody {
     readonly name?: string
     readonly zone?: string
     readonly router?: string
-    readonly ip_networks?: ReadonlyArray<{ readonly address: string; readonly dhcp: boolean; readonly family: string }>
+    readonly ip_networks?: { readonly ip_network: ReadonlyArray<{ readonly address: string; readonly dhcp: string; readonly family: string }> }
   }
 }
 
@@ -139,7 +139,7 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number }
   const _clusterByName = (name: string) => [...clusters.values()].find((cluster) => cluster.name === name)
 
   const _handleClusters = (request: HttpClientRequest.HttpClientRequest): Response => {
-    if (request.method === "GET") return _ok({ clusters: [...clusters.values()] })
+    if (request.method === "GET") return _ok([...clusters.values()])
     if (request.method === "POST") {
       const payload = _bodyOf<CreateClusterBody>(request)
       if (payload === undefined) return _badRequest("cluster create sent an empty body")
@@ -203,7 +203,7 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number }
   ): Response => {
     const groups = nodeGroups.get(uuid)
     if (!groups) return _notFound("cluster not found")
-    if (request.method === "GET") return _ok({ node_groups: [...groups.values()] })
+    if (request.method === "GET") return _ok([...groups.values()])
     if (request.method === "POST") {
       const payload = _bodyOf<CreateNodeGroupBody>(request)
       if (payload === undefined) return _badRequest("node group create sent an empty body")
@@ -257,7 +257,7 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number }
   }
 
   const _handleNetworks = (request: HttpClientRequest.HttpClientRequest): Response => {
-    if (request.method === "GET") return _ok({ networks: [...networks.values()] })
+    if (request.method === "GET") return _ok({ networks: { network: [...networks.values()] } })
     if (request.method === "POST") {
       const payload = _bodyOf<CreateNetworkBody>(request)
       const body = payload?.network
@@ -269,7 +269,7 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number }
         name: body.name ?? "",
         zone: body.zone,
         router: body.router,
-        ip_networks: body.ip_networks ?? []
+        ip_networks: body.ip_networks ?? { ip_network: [] }
       }
       networks.set(uuid, network)
       return _ok({ network })
@@ -292,13 +292,13 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number }
   }
 
   const _handleRouters = (request: HttpClientRequest.HttpClientRequest): Response => {
-    if (request.method === "GET") return _ok({ routers: [...routers.values()] })
+    if (request.method === "GET") return _ok({ routers: { router: [...routers.values()] } })
     if (request.method === "POST") {
       const payload = _bodyOf<CreateRouterBody>(request)
       const body = payload?.router
       if (body === undefined) return _badRequest("router create sent an empty body")
       const uuid = freshUuid("rtr")
-      const router: FakeRouter = { uuid, name: body.name ?? "", attached_networks: [] }
+      const router: FakeRouter = { uuid, name: body.name ?? "", attached_networks: { network: [] } }
       routers.set(uuid, router)
       return _ok({ router })
     }
@@ -347,7 +347,7 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number }
     if (resource === "kubernetes") {
       if (rest.length === 0) return _handleClusters(request)
       if (rest[0] === "plans" && request.method === "GET") {
-        return _ok({ plans: [{ name: "dev-md" }, { name: "prod-md" }] })
+        return _ok([{ name: "dev-md" }, { name: "prod-md" }])
       }
       const uuid = rest[0]
       if (uuid === undefined) return _badRequest("unhandled fixture route")

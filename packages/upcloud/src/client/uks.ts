@@ -4,12 +4,14 @@
  * a `SchemaError` that `mapUpcloudError` turns into `ResponseDecodeError`,
  * never a silent `undefined`.
  *
- * kumulo: the exact response envelope (bare object vs `{"cluster": {...}}`)
- * is undocumented (plan.md Q8 — no live probe run yet); this transcribes
- * `upcloud-go-api`'s `kubernetes.go`, which returns clusters bare and lists
- * enveloped under a plural key. Node group and cluster `state` share one
- * literal union per the requirements doc; UpCloud's docs do not confirm the
- * cluster enum is identical to the node group one.
+ * Response shapes here are the observed ones (Q8, closed): everything is bare
+ * — a list is a JSON array, a single cluster is a JSON object — and only
+ * `kubeconfig` uses a named key. Do NOT model these on `network.ts`: the
+ * networking endpoints wrap twice, and assuming UKS did the same is what made
+ * every `list()` fail with "Expected object, got []".
+ *
+ * Node group and cluster `state` share one literal union per the requirements
+ * doc; UpCloud's docs do not confirm the cluster enum is identical.
  */
 import { Effect } from "effect"
 import * as Schema from "effect/Schema"
@@ -40,8 +42,14 @@ export type UksCluster = typeof UksCluster.Type
 export const UksPlan = Schema.Struct({ name: Schema.String, description: Schema.optionalKey(Schema.String) })
 export type UksPlan = typeof UksPlan.Type
 
-const _ClustersResponse = Schema.Struct({ clusters: Schema.Array(UksCluster) })
-const _PlansResponse = Schema.Struct({ plans: Schema.Array(UksPlan) })
+// kumulo: UKS returns BARE arrays and objects — no named envelope anywhere
+// except `kubeconfig`. This contradicts the rest of UpCloud's 1.3 API (network
+// and router wrap, and wrap twice), which is why the first hand-written guess
+// modelled it on the wrong sibling and every list call failed with
+// "Expected object, got []" against the real API. Confirmed against
+// developers.upcloud.com's own response samples (Q8).
+const _ClustersResponse = Schema.Array(UksCluster)
+const _PlansResponse = Schema.Array(UksPlan)
 const _UpgradesResponse = Schema.Struct({ versions: Schema.Array(Schema.String) })
 const _KubeconfigResponse = Schema.Struct({ kubeconfig: Schema.String })
 
@@ -89,7 +97,7 @@ const _base = "/1.3/kubernetes"
 
 /** Hand-written client (D1) over `/1.3/kubernetes*`. */
 export const makeUksClient = (httpClient: HttpClient.HttpClient): UksClient => ({
-  list: () => httpClient.execute(HttpClientRequest.get(_base)).pipe(Effect.flatMap(_decodeClusters), Effect.map((r) => r.clusters)),
+  list: () => httpClient.execute(HttpClientRequest.get(_base)).pipe(Effect.flatMap(_decodeClusters)),
   get: (uuid) => httpClient.execute(HttpClientRequest.get(`${_base}/${uuid}`)).pipe(Effect.flatMap(_decodeCluster)),
   create: (body) =>
     httpClient.execute(HttpClientRequest.post(_base).pipe(HttpClientRequest.bodyJsonUnsafe(body))).pipe(Effect.flatMap(_decodeCluster)),
@@ -112,5 +120,5 @@ export const makeUksClient = (httpClient: HttpClient.HttpClient): UksClient => (
       Effect.flatMap(_decodeKubeconfig),
       Effect.map((r) => r.kubeconfig)
     ),
-  plans: () => httpClient.execute(HttpClientRequest.get(`${_base}/plans`)).pipe(Effect.flatMap(_decodePlans), Effect.map((r) => r.plans))
+  plans: () => httpClient.execute(HttpClientRequest.get(`${_base}/plans`)).pipe(Effect.flatMap(_decodePlans))
 })

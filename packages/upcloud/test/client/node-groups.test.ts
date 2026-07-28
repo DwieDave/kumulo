@@ -17,9 +17,9 @@ const _fixtureHttpClient = (status: number, body: unknown) => _rawHttpClient(() 
 
 const _group = { name: "workers-ab12cd34", count: 3, plan: "2xCPU-4GB", state: "running" as const }
 
-it.effect("decodes GET .../node-groups as {node_groups: [...]}", () =>
+it.effect("decodes GET .../node-groups as a bare array", () =>
   Effect.gen(function*() {
-    const client = makeNodeGroupsClient(_fixtureHttpClient(200, { node_groups: [_group] }))
+    const client = makeNodeGroupsClient(_fixtureHttpClient(200, [_group]))
     const groups = yield* client.list("c1")
     assert.deepStrictEqual(groups, [_group])
   }))

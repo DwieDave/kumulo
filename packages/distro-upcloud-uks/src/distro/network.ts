@@ -68,7 +68,9 @@ const _ensureUksNetwork = (
         name,
         zone,
         router: routerUuid,
-        ip_networks: [{ address: cidr, dhcp: true, family: "IPv4" }]
+        // Double-wrapped, and `dhcp` is the string "yes" — UpCloud's SDN
+        // endpoints spell booleans that way (see `network.ts` in @kumulo/upcloud).
+        ip_networks: { ip_network: [{ address: cidr, dhcp: "yes", family: "IPv4" }] }
       }),
       ctx: { kind: "network", ref: name }
     })

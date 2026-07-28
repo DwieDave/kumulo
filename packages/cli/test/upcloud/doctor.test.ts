@@ -51,13 +51,13 @@ it.effect("auth check reports a 401 as a token problem, not a reachability one",
 
 it.effect("auth check passes when the API answers", () =>
   Effect.gen(function*() {
-    const result = yield* authValidityCheck({ uks: makeUksClient(_json(200, { clusters: [] })) }).run
+    const result = yield* authValidityCheck({ uks: makeUksClient(_json(200, [])) }).run
     assert.strictEqual(result.status, "pass")
   }))
 
 it.effect("control plane plan check fails on a plan UpCloud does not offer", () =>
   Effect.gen(function*() {
-    const uks = makeUksClient(_json(200, { plans: [{ name: "dev-md" }, { name: "prod-md" }] }))
+    const uks = makeUksClient(_json(200, [{ name: "dev-md" }, { name: "prod-md" }]))
     const result = yield* controlPlanePlanCheck({ uks, plan: "enormous-md" }).run
     assert.strictEqual(result.status, "fail")
     assert.include(result.message, "dev-md")
@@ -65,7 +65,7 @@ it.effect("control plane plan check fails on a plan UpCloud does not offer", () 
 
 it.effect("control plane plan check passes when the plan is offered, and when none is set", () =>
   Effect.gen(function*() {
-    const uks = makeUksClient(_json(200, { plans: [{ name: "dev-md" }] }))
+    const uks = makeUksClient(_json(200, [{ name: "dev-md" }]))
     assert.strictEqual((yield* controlPlanePlanCheck({ uks, plan: "dev-md" }).run).status, "pass")
     assert.strictEqual((yield* controlPlanePlanCheck({ uks, plan: undefined }).run).status, "pass")
   }))

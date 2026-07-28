@@ -44,7 +44,8 @@ export const NodeGroup = Schema.Struct({
 })
 export type NodeGroup = typeof NodeGroup.Type
 
-const _NodeGroupsResponse = Schema.Struct({ node_groups: Schema.Array(NodeGroup) })
+// Bare array, like every other UKS list (see uks.ts's note on Q8).
+const _NodeGroupsResponse = Schema.Array(NodeGroup)
 const _decodeNodeGroup = decodeOn2xx(NodeGroup)
 const _decodeNodeGroups = decodeOn2xx(_NodeGroupsResponse)
 
@@ -84,8 +85,7 @@ const _one = (clusterUuid: string, name: string): string => `${_base(clusterUuid
 export const makeNodeGroupsClient = (httpClient: HttpClient.HttpClient): NodeGroupsClient => ({
   list: (clusterUuid) =>
     httpClient.execute(HttpClientRequest.get(_base(clusterUuid))).pipe(
-      Effect.flatMap(_decodeNodeGroups),
-      Effect.map((r) => r.node_groups)
+      Effect.flatMap(_decodeNodeGroups)
     ),
   get: (clusterUuid, name) => httpClient.execute(HttpClientRequest.get(_one(clusterUuid, name))).pipe(Effect.flatMap(_decodeNodeGroup)),
   create: (clusterUuid, body) =>

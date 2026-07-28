@@ -1,8 +1,13 @@
 /**
  * Hand-written client (D1) over `/1.3/network` and `/1.3/router` (R3, D10).
- * kumulo creates and owns the SDN network/router a UKS cluster requires —
- * response envelope (`{"network": {...}}` / `{"networks": [...]}`) mirrors
- * `upcloud-go-api`'s network resource; unconfirmed against a live probe.
+ * kumulo creates and owns the SDN network/router a UKS cluster requires.
+ *
+ * Envelopes here are the observed ones (Q8, closed) and they are DOUBLE on
+ * lists: `{"networks": {"network": [...]}}`, `{"routers": {"router": [...]}}`,
+ * and `ip_networks` is itself `{"ip_network": [...]}` rather than an array.
+ * Booleans are the strings `"yes"`/`"no"` on the wire. Nothing about this
+ * matches the UKS endpoints in `uks.ts`, which are bare — the two halves of
+ * UpCloud's API genuinely disagree, so neither can be modelled on the other.
  */
 import { Effect } from "effect"
 import * as Schema from "effect/Schema"
@@ -11,9 +16,15 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
 import { decodeOn2xx, decodeVoid } from "./common.ts"
 import type { UpcloudRawError } from "./common.ts"
 
+/** `"yes"`/`"no"` — UpCloud's wire spelling for a boolean on these endpoints. */
+export const UpcloudBool = Schema.Literals(["yes", "no"])
+export type UpcloudBool = typeof UpcloudBool.Type
+
 export const IpNetwork = Schema.Struct({
   address: Schema.String,
-  dhcp: Schema.Boolean,
+  dhcp: UpcloudBool,
+  dhcp_default_route: Schema.optionalKey(UpcloudBool),
+  dhcp_dns: Schema.optionalKey(Schema.Array(Schema.String)),
   family: Schema.Literals(["IPv4", "IPv6"]),
   gateway: Schema.optionalKey(Schema.String)
 })
@@ -23,8 +34,9 @@ export const Network = Schema.Struct({
   uuid: Schema.String,
   name: Schema.String,
   zone: Schema.String,
+  type: Schema.optionalKey(Schema.String),
   router: Schema.optionalKey(Schema.String),
-  ip_networks: Schema.Array(IpNetwork)
+  ip_networks: Schema.Struct({ ip_network: Schema.Array(IpNetwork) })
 })
 export type Network = typeof Network.Type
 
@@ -32,14 +44,14 @@ export const Router = Schema.Struct({
   uuid: Schema.String,
   name: Schema.String,
   type: Schema.optionalKey(Schema.String),
-  attached_networks: Schema.optionalKey(Schema.Array(Schema.String))
+  attached_networks: Schema.optionalKey(Schema.Struct({ network: Schema.Array(Schema.Unknown) }))
 })
 export type Router = typeof Router.Type
 
 const _NetworkResponse = Schema.Struct({ network: Network })
-const _NetworksResponse = Schema.Struct({ networks: Schema.Array(Network) })
+const _NetworksResponse = Schema.Struct({ networks: Schema.Struct({ network: Schema.Array(Network) }) })
 const _RouterResponse = Schema.Struct({ router: Router })
-const _RoutersResponse = Schema.Struct({ routers: Schema.Array(Router) })
+const _RoutersResponse = Schema.Struct({ routers: Schema.Struct({ router: Schema.Array(Router) }) })
 
 const _decodeNetwork = decodeOn2xx(_NetworkResponse)
 const _decodeNetworks = decodeOn2xx(_NetworksResponse)
@@ -50,7 +62,7 @@ const _decodeRouters = decodeOn2xx(_RoutersResponse)
 export interface NetworkCreateInput {
   readonly name: string
   readonly zone: string
-  readonly ip_networks: ReadonlyArray<IpNetwork>
+  readonly ip_networks: { readonly ip_network: ReadonlyArray<IpNetwork> }
   readonly router?: string
 }
 
@@ -70,7 +82,7 @@ export interface RouterClient {
 
 /** Hand-written client (D1) over `/1.3/network*`. */
 export const makeNetworkClient = (httpClient: HttpClient.HttpClient): NetworkClient => ({
-  list: () => httpClient.execute(HttpClientRequest.get("/1.3/network")).pipe(Effect.flatMap(_decodeNetworks), Effect.map((r) => r.networks)),
+  list: () => httpClient.execute(HttpClientRequest.get("/1.3/network")).pipe(Effect.flatMap(_decodeNetworks), Effect.map((r) => r.networks.network)),
   get: (uuid) =>
     httpClient.execute(HttpClientRequest.get(`/1.3/network/${uuid}`)).pipe(Effect.flatMap(_decodeNetwork), Effect.map((r) => r.network)),
   create: (body) =>
@@ -83,7 +95,7 @@ export const makeNetworkClient = (httpClient: HttpClient.HttpClient): NetworkCli
 
 /** Hand-written client (D1) over `/1.3/router*`. */
 export const makeRouterClient = (httpClient: HttpClient.HttpClient): RouterClient => ({
-  list: () => httpClient.execute(HttpClientRequest.get("/1.3/router")).pipe(Effect.flatMap(_decodeRouters), Effect.map((r) => r.routers)),
+  list: () => httpClient.execute(HttpClientRequest.get("/1.3/router")).pipe(Effect.flatMap(_decodeRouters), Effect.map((r) => r.routers.router)),
   get: (uuid) =>
     httpClient.execute(HttpClientRequest.get(`/1.3/router/${uuid}`)).pipe(Effect.flatMap(_decodeRouter), Effect.map((r) => r.router)),
   create: (body) =>

@@ -33,9 +33,11 @@ it.effect("decodes GET /1.3/kubernetes/{uuid} against the documented cluster sha
     assert.deepStrictEqual(cluster, _cluster)
   }))
 
-it.effect("decodes GET /1.3/kubernetes as {clusters: [...]}", () =>
+// UKS lists are BARE arrays (Q8, observed) — the enveloped fixture this
+// replaced is exactly what let the client ship a schema the API never matches.
+it.effect("decodes GET /1.3/kubernetes as a bare array", () =>
   Effect.gen(function*() {
-    const client = makeUksClient(_fixtureHttpClient(200, { clusters: [_cluster] }))
+    const client = makeUksClient(_fixtureHttpClient(200, [_cluster]))
     const clusters = yield* client.list()
     assert.strictEqual(clusters.length, 1)
     assert.strictEqual(clusters[0]?.uuid, "c1")
