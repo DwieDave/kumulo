@@ -186,8 +186,22 @@ const _ensureNetworkId = (
     return { id: _idOf(created.network), created: true }
   })
 
+/** POST every subnet, then read the ids back — an id is only ever taken from the read. */
+const _completeSubnets = (
+  { cidrs, client, networkId }: {
+    readonly client: NeutronClient
+    readonly networkId: string
+    readonly cidrs: ReadonlyArray<string>
+  }
+): R<ReadonlyArray<Subnet>> =>
+  Effect.gen(function*() {
+    yield* Effect.forEach(cidrs, (cidr) => _createSubnet({ client, networkId, cidr }), { discard: true })
+    return yield* _listSubnets({ client, networkId })
+  })
+
 /**
- * Subnets are POSTed only into a network this call just created. A network that
+ * Subnets are POSTed only into a network this call just created, or one that has
+ * no subnets at all (see `_isIncomplete`). A network that
  * already existed is read, never written: `ensureNetwork` is shared with the
  * k3s distro, and on a live cluster whose `network.cidr` an operator has edited
  * a subnet POST is not a convergence — it either strands a second subnet on a
@@ -201,8 +215,8 @@ export const ensureNetwork = ({ options, spec }: { readonly options: CloudProvid
     const client = yield* neutronClient(options.region)
     const cidrs = _subnetCidrs(spec)
     const { created, id } = yield* _ensureNetworkId({ client, name: _name(options) })
-    if (created) yield* Effect.forEach(cidrs, (cidr) => _createSubnet({ client, networkId: id, cidr }), { discard: true })
-    const subnets = yield* _listSubnets({ client, networkId: id })
+    const existing = created ? [] : yield* _listSubnets({ client, networkId: id })
+    const subnets = existing.length > 0 ? existing : yield* _completeSubnets({ client, networkId: id, cidrs })
     return _networkInfo({ id, spec, ids: cidrs.map((cidr) => _subnetIdOf(subnets, cidr)) })
   })
 

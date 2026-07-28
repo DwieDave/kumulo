@@ -133,6 +133,69 @@ describe("openstack CloudProvider", () => {
     }).pipe(Effect.provide(fake.layer))
   })
 
+  // An apply that dies between the network POST and its subnet POSTs leaves a
+  // network with no subnets, and every re-apply used to skip subnet creation
+  // (subnets were POSTed only into a network the call had just created), report
+  // no ids, and fail with "delete and recreate". A network carrying ZERO subnets
+  // is unambiguously half-created, so completing it is the only way it can
+  // converge — and is exactly what the operator meant the first time.
+  const _halfCreated = () => {
+    const subnets: Array<{ readonly id: string; readonly cidr: string }> = []
+    const posted: Array<string> = []
+    return {
+      posted,
+      ...makeFakeOpenStack({
+        "GET /v2.0/networks": () => ({ status: 200, body: { networks: [{ id: "net-1", name: "kumulo-prod" }] } }),
+        "GET /v2.0/subnets": () => ({ status: 200, body: { subnets } }),
+        "POST /v2.0/subnets": (request) => {
+          const cidr = _postedCidr(requestJson(request))
+          const subnet = { id: `sub-${cidr}`, cidr }
+          subnets.push(subnet)
+          posted.push(cidr)
+          return { status: 201, body: { subnet } }
+        }
+      })
+    }
+  }
+
+  it.effect("ensureNetwork completes a network that exists with no subnets", () => {
+    const fake = _halfCreated()
+    return Effect.gen(function*() {
+      const info = yield* ensureNetwork({
+        options,
+        spec: { cidr: "10.0.0.0/16", nodesSubnet: "10.0.1.0/24", loadBalancersSubnet: "10.0.2.0/24" }
+      })
+      expect(fake.posted).toEqual(["10.0.1.0/24", "10.0.2.0/24"])
+      expect(info.nodesSubnetId).toBe("sub-10.0.1.0/24")
+      expect(info.loadBalancersSubnetId).toBe("sub-10.0.2.0/24")
+    }).pipe(Effect.provide(fake.layer))
+  })
+
+  // The case the original guard exists for, and it must keep holding: a live
+  // network whose subnets simply do not match the config is an EDIT, which MKS
+  // cannot apply. Writing here would strand a second subnet on a running
+  // network, so nothing is posted and the caller refuses with "recreate".
+  it.effect("ensureNetwork writes nothing to a network whose subnets do not match", () => {
+    const posted: Array<string> = []
+    const fake = makeFakeOpenStack({
+      "GET /v2.0/networks": () => ({ status: 200, body: { networks: [{ id: "net-1", name: "kumulo-prod" }] } }),
+      "GET /v2.0/subnets": () => ({ status: 200, body: { subnets: [{ id: "sub-old", cidr: "192.168.0.0/24" }] } }),
+      "POST /v2.0/subnets": (request) => {
+        posted.push(_postedCidr(requestJson(request)))
+        return { status: 201, body: { subnet: { id: "x", cidr: "x" } } }
+      }
+    })
+    return Effect.gen(function*() {
+      const info = yield* ensureNetwork({
+        options,
+        spec: { cidr: "10.0.0.0/16", nodesSubnet: "10.0.1.0/24", loadBalancersSubnet: "10.0.2.0/24" }
+      })
+      expect(posted).toEqual([])
+      expect(info.nodesSubnetId).toBeUndefined()
+      expect(info.loadBalancersSubnetId).toBeUndefined()
+    }).pipe(Effect.provide(fake.layer))
+  })
+
   it.effect("ensureNetwork creates a nodes subnet and a load-balancers subnet and returns both ids", () => {
     const fake = _fakeNeutron()
     return Effect.gen(function*() {
