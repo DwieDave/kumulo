@@ -51,7 +51,10 @@ const _at = (kind: string, ref: string) => toOpenStackError({ kind, ref })
 
 interface Named {
   readonly id?: string | undefined
-  readonly name?: string | undefined
+  // Null, not just absent: Glance reports an unnamed image as `name: null`.
+  // `_named` compares with `===` against a real name, so a null one simply
+  // never matches — which is the correct answer for an unnamed resource.
+  readonly name?: string | null | undefined
 }
 
 // kumulo: only for endpoints that accept `?name=` — the server already

@@ -52,4 +52,23 @@
       }
     ]
   }
+  ,
+  // kumulo: escape the `/` in these patterns. `RegExp` escapes an unescaped
+  // slash outside a character class when it normalises `source`, and
+  // effect's `isPattern` payload check requires the payload to already match
+  // that normalised form — so the raw spec value fails to import with
+  // "Invalid representation payload for effect/schema/isPattern". Escaping
+  // here is equivalent to the regex the spec means. Slashes INSIDE a
+  // character class (keystone's `^[^,/]*$`) need no escaping and are left
+  // alone. Remove once effect accepts non-canonical payloads.
+  {
+    "op": "replace",
+    "path": "/components/schemas/ServersCreate_274/properties/os:scheduler_hints/properties/cidr/pattern",
+    "value": "^\\/[0-9a-f.:]+$"
+  },
+  {
+    "op": "replace",
+    "path": "/components/schemas/ServersCreate_274/properties/OS-SCH-HNT:scheduler_hints/properties/cidr/pattern",
+    "value": "^\\/[0-9a-f.:]+$"
+  }
 ]

@@ -17,231 +17,21 @@
           ]
         },
         "outputs": {
-          "type": "object",
-          "properties": {
-            "format": {
-              "type": "string",
-              "enum": [
-                "yaml",
-                "json"
-              ]
-            }
-          },
-          "required": [
-            "format"
-          ],
-          "additionalProperties": false
+          "$ref": "#/$defs/Objects_"
         },
         "auth": {
-          "type": "object",
-          "properties": {
-            "method": {
-              "type": "string",
-              "enum": [
-                "application_credential",
-                "clouds_yaml",
-                "env",
-                "api_token"
-              ]
-            },
-            "region": {
-              "type": "string",
-              "allOf": [
-                {
-                  "minLength": 1
-                }
-              ]
-            }
-          },
-          "required": [
-            "method",
-            "region"
-          ],
-          "additionalProperties": false
+          "$ref": "#/$defs/Objects_1"
         },
         "worker_pools": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string",
-                "allOf": [
-                  {
-                    "minLength": 1
-                  }
-                ]
-              },
-              "flavor": {
-                "type": "string",
-                "allOf": [
-                  {
-                    "minLength": 1
-                  }
-                ]
-              },
-              "count": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 0
-                  }
-                ]
-              },
-              "labels": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
-              },
-              "taints": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "autoscaling": {
-                "type": "object",
-                "properties": {
-                  "enabled": {
-                    "type": "boolean"
-                  },
-                  "min": {
-                    "type": "integer",
-                    "allOf": [
-                      {
-                        "minimum": 0
-                      }
-                    ]
-                  },
-                  "max": {
-                    "type": "integer",
-                    "allOf": [
-                      {
-                        "exclusiveMinimum": 0
-                      }
-                    ]
-                  }
-                },
-                "required": [
-                  "enabled",
-                  "min",
-                  "max"
-                ],
-                "additionalProperties": false
-              }
-            },
-            "required": [
-              "name",
-              "flavor",
-              "count"
-            ],
-            "additionalProperties": false
-          }
+          "$ref": "#/$defs/Arrays_"
         },
         "volumes": {
           "anyOf": [
             {
-              "type": "object",
-              "properties": {
-                "module": {
-                  "type": "string",
-                  "enum": [
-                    "none"
-                  ]
-                }
-              },
-              "required": [
-                "module"
-              ],
-              "additionalProperties": false
+              "$ref": "#/$defs/Objects_2"
             },
             {
-              "type": "object",
-              "properties": {
-                "module": {
-                  "type": "string",
-                  "enum": [
-                    "cinder"
-                  ]
-                },
-                "managed": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "name": {
-                        "type": "string",
-                        "allOf": [
-                          {
-                            "minLength": 1
-                          }
-                        ]
-                      },
-                      "size_gb": {
-                        "type": "integer",
-                        "allOf": [
-                          {
-                            "exclusiveMinimum": 0
-                          }
-                        ]
-                      },
-                      "type": {
-                        "type": "string",
-                        "allOf": [
-                          {
-                            "minLength": 1
-                          }
-                        ]
-                      },
-                      "retain": {
-                        "type": "boolean"
-                      },
-                      "pvc": {
-                        "type": "object",
-                        "properties": {
-                          "namespace": {
-                            "type": "string",
-                            "allOf": [
-                              {
-                                "minLength": 1
-                              }
-                            ]
-                          },
-                          "access_modes": {
-                            "type": "array",
-                            "items": {
-                              "type": "string",
-                              "enum": [
-                                "ReadWriteOnce",
-                                "ReadWriteMany",
-                                "ReadOnlyMany"
-                              ]
-                            }
-                          }
-                        },
-                        "required": [
-                          "namespace",
-                          "access_modes"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "required": [
-                      "name",
-                      "size_gb",
-                      "type",
-                      "retain"
-                    ],
-                    "additionalProperties": false
-                  }
-                }
-              },
-              "required": [
-                "module",
-                "managed"
-              ],
-              "additionalProperties": false
+              "$ref": "#/$defs/Objects_3"
             },
             {
               "type": "object",
@@ -255,72 +45,7 @@
                 "managed": {
                   "type": "array",
                   "items": {
-                    "type": "object",
-                    "properties": {
-                      "name": {
-                        "type": "string",
-                        "allOf": [
-                          {
-                            "minLength": 1
-                          }
-                        ]
-                      },
-                      "size_gb": {
-                        "type": "integer",
-                        "allOf": [
-                          {
-                            "exclusiveMinimum": 0
-                          }
-                        ]
-                      },
-                      "type": {
-                        "type": "string",
-                        "allOf": [
-                          {
-                            "minLength": 1
-                          }
-                        ]
-                      },
-                      "retain": {
-                        "type": "boolean"
-                      },
-                      "pvc": {
-                        "type": "object",
-                        "properties": {
-                          "namespace": {
-                            "type": "string",
-                            "allOf": [
-                              {
-                                "minLength": 1
-                              }
-                            ]
-                          },
-                          "access_modes": {
-                            "type": "array",
-                            "items": {
-                              "type": "string",
-                              "enum": [
-                                "ReadWriteOnce",
-                                "ReadWriteMany",
-                                "ReadOnlyMany"
-                              ]
-                            }
-                          }
-                        },
-                        "required": [
-                          "namespace",
-                          "access_modes"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "required": [
-                      "name",
-                      "size_gb",
-                      "type",
-                      "retain"
-                    ],
-                    "additionalProperties": false
+                    "$ref": "#/$defs/Objects_4"
                   }
                 }
               },
@@ -333,141 +58,10 @@
           ]
         },
         "object_storage": {
-          "anyOf": [
-            {
-              "type": "object",
-              "properties": {
-                "module": {
-                  "type": "string",
-                  "enum": [
-                    "none"
-                  ]
-                }
-              },
-              "required": [
-                "module"
-              ],
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "properties": {
-                "module": {
-                  "type": "string",
-                  "enum": [
-                    "ovh"
-                  ]
-                },
-                "buckets": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "name": {
-                        "type": "string",
-                        "allOf": [
-                          {
-                            "pattern": "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
-                          }
-                        ]
-                      },
-                      "region": {
-                        "type": "string",
-                        "allOf": [
-                          {
-                            "minLength": 1
-                          }
-                        ]
-                      },
-                      "versioning": {
-                        "type": "boolean"
-                      },
-                      "encryption": {
-                        "type": "boolean"
-                      },
-                      "retain": {
-                        "type": "boolean"
-                      }
-                    },
-                    "required": [
-                      "name",
-                      "region",
-                      "versioning",
-                      "encryption",
-                      "retain"
-                    ],
-                    "additionalProperties": false
-                  }
-                }
-              },
-              "required": [
-                "module",
-                "buckets"
-              ],
-              "additionalProperties": false
-            }
-          ]
+          "$ref": "#/$defs/Union_"
         },
         "secrets": {
-          "anyOf": [
-            {
-              "type": "object",
-              "properties": {
-                "sink": {
-                  "type": "string",
-                  "enum": [
-                    "none"
-                  ]
-                }
-              },
-              "required": [
-                "sink"
-              ],
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "properties": {
-                "sink": {
-                  "type": "string",
-                  "enum": [
-                    "sops"
-                  ]
-                },
-                "dir": {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "minLength": 1
-                    }
-                  ]
-                },
-                "sops": {
-                  "type": "object",
-                  "properties": {
-                    "age_recipient": {
-                      "type": "string",
-                      "allOf": [
-                        {
-                          "pattern": "^age1"
-                        }
-                      ]
-                    }
-                  },
-                  "required": [
-                    "age_recipient"
-                  ],
-                  "additionalProperties": false
-                }
-              },
-              "required": [
-                "sink",
-                "dir",
-                "sops"
-              ],
-              "additionalProperties": false
-            }
-          ]
+          "$ref": "#/$defs/Union_1"
         },
         "provider": {
           "type": "string",
@@ -492,87 +86,7 @@
           ]
         },
         "dns": {
-          "anyOf": [
-            {
-              "type": "object",
-              "properties": {
-                "module": {
-                  "type": "string",
-                  "enum": [
-                    "none"
-                  ]
-                }
-              },
-              "required": [
-                "module"
-              ],
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "properties": {
-                "module": {
-                  "type": "string",
-                  "enum": [
-                    "ovh",
-                    "hetzner"
-                  ]
-                },
-                "zone": {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "minLength": 1
-                    }
-                  ]
-                },
-                "ttl": {
-                  "type": "integer",
-                  "allOf": [
-                    {
-                      "exclusiveMinimum": 0
-                    }
-                  ]
-                },
-                "records": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "name": {
-                        "type": "string",
-                        "allOf": [
-                          {
-                            "minLength": 1
-                          }
-                        ]
-                      },
-                      "target": {
-                        "type": "string",
-                        "allOf": [
-                          {
-                            "minLength": 1
-                          }
-                        ]
-                      }
-                    },
-                    "required": [
-                      "name",
-                      "target"
-                    ],
-                    "additionalProperties": false
-                  }
-                }
-              },
-              "required": [
-                "module",
-                "zone",
-                "ttl",
-                "records"
-              ],
-              "additionalProperties": false
-            }
-          ]
+          "$ref": "#/$defs/Union_2"
         },
         "network": {
           "type": "object",
@@ -799,370 +313,29 @@
           ]
         },
         "outputs": {
-          "type": "object",
-          "properties": {
-            "format": {
-              "type": "string",
-              "enum": [
-                "yaml",
-                "json"
-              ]
-            }
-          },
-          "required": [
-            "format"
-          ],
-          "additionalProperties": false
+          "$ref": "#/$defs/Objects_"
         },
         "auth": {
-          "type": "object",
-          "properties": {
-            "method": {
-              "type": "string",
-              "enum": [
-                "application_credential",
-                "clouds_yaml",
-                "env",
-                "api_token"
-              ]
-            },
-            "region": {
-              "type": "string",
-              "allOf": [
-                {
-                  "minLength": 1
-                }
-              ]
-            }
-          },
-          "required": [
-            "method",
-            "region"
-          ],
-          "additionalProperties": false
+          "$ref": "#/$defs/Objects_1"
         },
         "worker_pools": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string",
-                "allOf": [
-                  {
-                    "minLength": 1
-                  }
-                ]
-              },
-              "flavor": {
-                "type": "string",
-                "allOf": [
-                  {
-                    "minLength": 1
-                  }
-                ]
-              },
-              "count": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 0
-                  }
-                ]
-              },
-              "labels": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
-              },
-              "taints": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "autoscaling": {
-                "type": "object",
-                "properties": {
-                  "enabled": {
-                    "type": "boolean"
-                  },
-                  "min": {
-                    "type": "integer",
-                    "allOf": [
-                      {
-                        "minimum": 0
-                      }
-                    ]
-                  },
-                  "max": {
-                    "type": "integer",
-                    "allOf": [
-                      {
-                        "exclusiveMinimum": 0
-                      }
-                    ]
-                  }
-                },
-                "required": [
-                  "enabled",
-                  "min",
-                  "max"
-                ],
-                "additionalProperties": false
-              }
-            },
-            "required": [
-              "name",
-              "flavor",
-              "count"
-            ],
-            "additionalProperties": false
-          }
+          "$ref": "#/$defs/Arrays_"
         },
         "volumes": {
           "anyOf": [
             {
-              "type": "object",
-              "properties": {
-                "module": {
-                  "type": "string",
-                  "enum": [
-                    "none"
-                  ]
-                }
-              },
-              "required": [
-                "module"
-              ],
-              "additionalProperties": false
+              "$ref": "#/$defs/Objects_2"
             },
             {
-              "type": "object",
-              "properties": {
-                "module": {
-                  "type": "string",
-                  "enum": [
-                    "cinder"
-                  ]
-                },
-                "managed": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "name": {
-                        "type": "string",
-                        "allOf": [
-                          {
-                            "minLength": 1
-                          }
-                        ]
-                      },
-                      "size_gb": {
-                        "type": "integer",
-                        "allOf": [
-                          {
-                            "exclusiveMinimum": 0
-                          }
-                        ]
-                      },
-                      "type": {
-                        "type": "string",
-                        "allOf": [
-                          {
-                            "minLength": 1
-                          }
-                        ]
-                      },
-                      "retain": {
-                        "type": "boolean"
-                      },
-                      "pvc": {
-                        "type": "object",
-                        "properties": {
-                          "namespace": {
-                            "type": "string",
-                            "allOf": [
-                              {
-                                "minLength": 1
-                              }
-                            ]
-                          },
-                          "access_modes": {
-                            "type": "array",
-                            "items": {
-                              "type": "string",
-                              "enum": [
-                                "ReadWriteOnce",
-                                "ReadWriteMany",
-                                "ReadOnlyMany"
-                              ]
-                            }
-                          }
-                        },
-                        "required": [
-                          "namespace",
-                          "access_modes"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "required": [
-                      "name",
-                      "size_gb",
-                      "type",
-                      "retain"
-                    ],
-                    "additionalProperties": false
-                  }
-                }
-              },
-              "required": [
-                "module",
-                "managed"
-              ],
-              "additionalProperties": false
+              "$ref": "#/$defs/Objects_3"
             }
           ]
         },
         "object_storage": {
-          "anyOf": [
-            {
-              "type": "object",
-              "properties": {
-                "module": {
-                  "type": "string",
-                  "enum": [
-                    "none"
-                  ]
-                }
-              },
-              "required": [
-                "module"
-              ],
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "properties": {
-                "module": {
-                  "type": "string",
-                  "enum": [
-                    "ovh"
-                  ]
-                },
-                "buckets": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "name": {
-                        "type": "string",
-                        "allOf": [
-                          {
-                            "pattern": "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
-                          }
-                        ]
-                      },
-                      "region": {
-                        "type": "string",
-                        "allOf": [
-                          {
-                            "minLength": 1
-                          }
-                        ]
-                      },
-                      "versioning": {
-                        "type": "boolean"
-                      },
-                      "encryption": {
-                        "type": "boolean"
-                      },
-                      "retain": {
-                        "type": "boolean"
-                      }
-                    },
-                    "required": [
-                      "name",
-                      "region",
-                      "versioning",
-                      "encryption",
-                      "retain"
-                    ],
-                    "additionalProperties": false
-                  }
-                }
-              },
-              "required": [
-                "module",
-                "buckets"
-              ],
-              "additionalProperties": false
-            }
-          ]
+          "$ref": "#/$defs/Union_"
         },
         "secrets": {
-          "anyOf": [
-            {
-              "type": "object",
-              "properties": {
-                "sink": {
-                  "type": "string",
-                  "enum": [
-                    "none"
-                  ]
-                }
-              },
-              "required": [
-                "sink"
-              ],
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "properties": {
-                "sink": {
-                  "type": "string",
-                  "enum": [
-                    "sops"
-                  ]
-                },
-                "dir": {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "minLength": 1
-                    }
-                  ]
-                },
-                "sops": {
-                  "type": "object",
-                  "properties": {
-                    "age_recipient": {
-                      "type": "string",
-                      "allOf": [
-                        {
-                          "pattern": "^age1"
-                        }
-                      ]
-                    }
-                  },
-                  "required": [
-                    "age_recipient"
-                  ],
-                  "additionalProperties": false
-                }
-              },
-              "required": [
-                "sink",
-                "dir",
-                "sops"
-              ],
-              "additionalProperties": false
-            }
-          ]
+          "$ref": "#/$defs/Union_1"
         },
         "provider": {
           "type": "string",
@@ -1185,87 +358,7 @@
           ]
         },
         "dns": {
-          "anyOf": [
-            {
-              "type": "object",
-              "properties": {
-                "module": {
-                  "type": "string",
-                  "enum": [
-                    "none"
-                  ]
-                }
-              },
-              "required": [
-                "module"
-              ],
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "properties": {
-                "module": {
-                  "type": "string",
-                  "enum": [
-                    "ovh",
-                    "hetzner"
-                  ]
-                },
-                "zone": {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "minLength": 1
-                    }
-                  ]
-                },
-                "ttl": {
-                  "type": "integer",
-                  "allOf": [
-                    {
-                      "exclusiveMinimum": 0
-                    }
-                  ]
-                },
-                "records": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "name": {
-                        "type": "string",
-                        "allOf": [
-                          {
-                            "minLength": 1
-                          }
-                        ]
-                      },
-                      "target": {
-                        "type": "string",
-                        "allOf": [
-                          {
-                            "minLength": 1
-                          }
-                        ]
-                      }
-                    },
-                    "required": [
-                      "name",
-                      "target"
-                    ],
-                    "additionalProperties": false
-                  }
-                }
-              },
-              "required": [
-                "module",
-                "zone",
-                "ttl",
-                "records"
-              ],
-              "additionalProperties": false
-            }
-          ]
+          "$ref": "#/$defs/Union_2"
         },
         "network": {
           "type": "object",
@@ -1474,5 +567,454 @@
       }
     }
   ],
-  "$defs": {}
+  "$defs": {
+    "Objects_": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "type": "string",
+          "enum": [
+            "yaml",
+            "json"
+          ]
+        }
+      },
+      "required": [
+        "format"
+      ],
+      "additionalProperties": false
+    },
+    "Objects_1": {
+      "type": "object",
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": [
+            "application_credential",
+            "clouds_yaml",
+            "env",
+            "api_token"
+          ]
+        },
+        "region": {
+          "type": "string",
+          "allOf": [
+            {
+              "minLength": 1
+            }
+          ]
+        }
+      },
+      "required": [
+        "method",
+        "region"
+      ],
+      "additionalProperties": false
+    },
+    "Arrays_": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "allOf": [
+              {
+                "minLength": 1
+              }
+            ]
+          },
+          "flavor": {
+            "type": "string",
+            "allOf": [
+              {
+                "minLength": 1
+              }
+            ]
+          },
+          "count": {
+            "type": "integer",
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ]
+          },
+          "labels": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "taints": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "autoscaling": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "min": {
+                "type": "integer",
+                "allOf": [
+                  {
+                    "minimum": 0
+                  }
+                ]
+              },
+              "max": {
+                "type": "integer",
+                "allOf": [
+                  {
+                    "exclusiveMinimum": 0
+                  }
+                ]
+              }
+            },
+            "required": [
+              "enabled",
+              "min",
+              "max"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "name",
+          "flavor",
+          "count"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "Objects_2": {
+      "type": "object",
+      "properties": {
+        "module": {
+          "type": "string",
+          "enum": [
+            "none"
+          ]
+        }
+      },
+      "required": [
+        "module"
+      ],
+      "additionalProperties": false
+    },
+    "Objects_4": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "allOf": [
+            {
+              "minLength": 1
+            }
+          ]
+        },
+        "size_gb": {
+          "type": "integer",
+          "allOf": [
+            {
+              "exclusiveMinimum": 0
+            }
+          ]
+        },
+        "type": {
+          "type": "string",
+          "allOf": [
+            {
+              "minLength": 1
+            }
+          ]
+        },
+        "retain": {
+          "type": "boolean"
+        },
+        "pvc": {
+          "type": "object",
+          "properties": {
+            "namespace": {
+              "type": "string",
+              "allOf": [
+                {
+                  "minLength": 1
+                }
+              ]
+            },
+            "access_modes": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "ReadWriteOnce",
+                  "ReadWriteMany",
+                  "ReadOnlyMany"
+                ]
+              }
+            }
+          },
+          "required": [
+            "namespace",
+            "access_modes"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "name",
+        "size_gb",
+        "type",
+        "retain"
+      ],
+      "additionalProperties": false
+    },
+    "Objects_3": {
+      "type": "object",
+      "properties": {
+        "module": {
+          "type": "string",
+          "enum": [
+            "cinder"
+          ]
+        },
+        "managed": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Objects_4"
+          }
+        }
+      },
+      "required": [
+        "module",
+        "managed"
+      ],
+      "additionalProperties": false
+    },
+    "Union_": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "module": {
+              "type": "string",
+              "enum": [
+                "none"
+              ]
+            }
+          },
+          "required": [
+            "module"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "module": {
+              "type": "string",
+              "enum": [
+                "ovh"
+              ]
+            },
+            "buckets": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "allOf": [
+                      {
+                        "pattern": "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
+                      }
+                    ]
+                  },
+                  "region": {
+                    "type": "string",
+                    "allOf": [
+                      {
+                        "minLength": 1
+                      }
+                    ]
+                  },
+                  "versioning": {
+                    "type": "boolean"
+                  },
+                  "encryption": {
+                    "type": "boolean"
+                  },
+                  "retain": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "name",
+                  "region",
+                  "versioning",
+                  "encryption",
+                  "retain"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "module",
+            "buckets"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Union_1": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "sink": {
+              "type": "string",
+              "enum": [
+                "none"
+              ]
+            }
+          },
+          "required": [
+            "sink"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "sink": {
+              "type": "string",
+              "enum": [
+                "sops"
+              ]
+            },
+            "dir": {
+              "type": "string",
+              "allOf": [
+                {
+                  "minLength": 1
+                }
+              ]
+            },
+            "sops": {
+              "type": "object",
+              "properties": {
+                "age_recipient": {
+                  "type": "string",
+                  "allOf": [
+                    {
+                      "pattern": "^age1"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "age_recipient"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "sink",
+            "dir",
+            "sops"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Union_2": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "module": {
+              "type": "string",
+              "enum": [
+                "none"
+              ]
+            }
+          },
+          "required": [
+            "module"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "module": {
+              "type": "string",
+              "enum": [
+                "ovh",
+                "hetzner"
+              ]
+            },
+            "zone": {
+              "type": "string",
+              "allOf": [
+                {
+                  "minLength": 1
+                }
+              ]
+            },
+            "ttl": {
+              "type": "integer",
+              "allOf": [
+                {
+                  "exclusiveMinimum": 0
+                }
+              ]
+            },
+            "records": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "allOf": [
+                      {
+                        "minLength": 1
+                      }
+                    ]
+                  },
+                  "target": {
+                    "type": "string",
+                    "allOf": [
+                      {
+                        "minLength": 1
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "name",
+                  "target"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "module",
+            "zone",
+            "ttl",
+            "records"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
 }
