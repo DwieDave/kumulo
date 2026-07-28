@@ -12,6 +12,7 @@ export interface ProviderSection {
 }
 
 const _ovhVars = distroRegistry["ovh-mks"].requiredEnvVars
+const _upcloudVars = distroRegistry["upcloud-uks"].requiredEnvVars
 // The full OS_* set `loadCredentials` reads — same keys the OpenStack doctor
 // checks source. Only some are required (depends on auth.method); presence is
 // shown for all so the operator sees which auth path will be picked.
@@ -85,6 +86,8 @@ const _requiredVars = (config: ClusterConfig): ReadonlyArray<string> => [
     // `loadCredentials` accepts several shapes (clouds.yaml, OS_CLOUD,
     // application-credential or password), so no single variable is required.
     ...(config.distro === "ovh-mks" ? distroRegistry["ovh-mks"].requiredEnvVars : []),
+    // UpCloud's static bearer token has no alternative source either (mirrors the OVH trio above).
+    ...(config.distro === "upcloud-uks" ? _upcloudVars : []),
     ..._dnsVars[config.dns.module],
     ..._objectStorageVars[config.object_storage.module]
   ])

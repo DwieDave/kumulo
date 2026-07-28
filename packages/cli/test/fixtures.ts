@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 import { decodeConfig } from "@kumulo/core"
-import type { ClusterConfig, ClusterConfigEncoded, K3sClusterConfig, K3sClusterConfigEncoded, MksClusterConfigEncoded } from "@kumulo/core"
+import type { ClusterConfig, ClusterConfigEncoded, K3sClusterConfig, K3sClusterConfigEncoded, MksClusterConfigEncoded, UpcloudUksClusterConfig } from "@kumulo/core"
 
 /** Same base fixture core's own tests use (see `test/k3s/plan.test.ts`), dns overridable per test. */
 export const baseEncodedConfig: K3sClusterConfigEncoded = {
@@ -49,6 +49,13 @@ export const baseMksEncodedConfig: MksClusterConfigEncoded = {
 /** Decode through the real schema so test configs are honest `ClusterConfig`s, no casts. */
 export const decodeTestConfig = (encoded: ClusterConfigEncoded): ClusterConfig =>
   Effect.runSync(decodeConfig(encoded))
+
+/** Same decode, narrowed to the upcloud-uks variant (throws if the fixture is not upcloud-uks). */
+export const decodeUpcloudTestConfig = (encoded: ClusterConfigEncoded): UpcloudUksClusterConfig => {
+  const config = decodeTestConfig(encoded)
+  if (config.distro !== "upcloud-uks") throw new Error(`expected an upcloud-uks config, got ${config.distro}`)
+  return config
+}
 
 /** Same decode, narrowed to the k3s variant for the k3s-only modules (throws if the fixture is not k3s). */
 export const decodeK3sTestConfig = (encoded: K3sClusterConfigEncoded): K3sClusterConfig => {

@@ -12,6 +12,7 @@ import { kumuloCli } from "../../src/commands.ts"
 import { fakeCredentials } from "./fake-credentials.ts"
 import { MksEnv } from "../../src/mks/env.ts"
 import { OpenStackEnv } from "../../src/doctor-openstack/env.ts"
+import { unavailableUpcloudEnvLayer } from "../fake-upcloud-env.ts"
 import { StorageEnv } from "../../src/storage/env.ts"
 import { makeFakeMksServer } from "../e2e/fake-mks-server.ts"
 import { makeFakeCinder } from "./fake-cinder.ts"
@@ -138,6 +139,7 @@ const _runDelete = (networkDelete: RouteHandler = _deleted) =>
       Effect.provide(Layer.succeed(MksEnv, { mks: makeMksClient(recordingMks), serviceName: "service-1" })),
       Effect.provide(_fakeOpenStack(timeline, networkDelete)),
       Effect.provide(_openStackEnvLayer),
+      Effect.provide(unavailableUpcloudEnvLayer),
       Effect.provide(_storageLayer),
       Effect.provide(fakeCredentials),
       Effect.provide(BunServices.layer)

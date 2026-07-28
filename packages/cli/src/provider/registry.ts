@@ -173,6 +173,16 @@ const _openStackEntry = (kind: ProviderKind): ProviderEntry => ({
   credentialsFromDistro: true
 })
 
+// `upcloud-uks` never reaches the OpenStack `CloudProvider` port — its network
+// is UpCloud's own SDN, converged directly by `distro-upcloud-uks` through
+// `UpcloudEnv` (see `upcloud/reconcile.ts`), not this port. These three members
+// exist only so `providerRegistry` stays a total `Record<ProviderKind, _>`;
+// nothing on the `upcloud-uks` path ever calls them (only `kind`,
+// `credentialsFromDistro` and `requiredEnvVars` are read generically, by
+// `env-summary.ts`'s `providerSections`).
+const _unavailableUpcloudCredential = (): Effect.Effect<never, AuthenticationFailed> =>
+  Effect.fail(new AuthenticationFailed({ hint: "upcloud-uks has no OpenStack credential — see UpcloudEnv" }))
+
 /** Adding a `provider` literal breaks compilation here until its entry exists. */
 export const providerRegistry: Record<ProviderKind, ProviderEntry> = {
   ovh: _openStackEntry("ovh"),
@@ -184,6 +194,15 @@ export const providerRegistry: Record<ProviderKind, ProviderEntry> = {
     secGroupRules: (config) => buildHetznerSecGroupRules(_ruleOptions(config)),
     requiredEnvVars: ["HCLOUD_TOKEN"],
     credentialsFromDistro: false
+  },
+  upcloud: {
+    kind: "upcloud",
+    cloudProviderLayer: () => _unavailableCloudProvider("upcloud-uks does not use the OpenStack CloudProvider port"),
+    cloudCredential: _unavailableUpcloudCredential,
+    secGroupRules: () => [],
+    // Credentials come from the distro (UPCLOUD_API_TOKEN via UpcloudEnv) — same rationale as `_openStackEntry`.
+    requiredEnvVars: [],
+    credentialsFromDistro: true
   }
 }
 

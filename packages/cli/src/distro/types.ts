@@ -6,11 +6,12 @@ import type { DoctorCheck } from "../doctor/types.ts"
 import type { OpenStackEnv } from "../doctor-openstack/env.ts"
 import type { K3sError } from "../k3s/reconcile.ts"
 import type { MksEnv } from "../mks/env.ts"
+import type { UpcloudEnv } from "../upcloud/env.ts"
 
 // Widened env/error channels: every distro verb already runs under `MainLive`
 // (see `main.ts`), so quantifying over the union costs nothing at runtime and
 // is what lets the registry be a plain `Record<DistroKind, DistroEntry>`.
-export type DistroServices = MksEnv | OpenStackEnv | CinderAuth | HttpClient.HttpClient
+export type DistroServices = MksEnv | OpenStackEnv | CinderAuth | HttpClient.HttpClient | UpcloudEnv
 export type DistroFailure = MksError | K3sError | ConfigInvalid
 
 export interface DistroApplyResult {

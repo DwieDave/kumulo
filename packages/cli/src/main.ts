@@ -8,6 +8,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient"
 import { HttpClientError, TransportError } from "effect/unstable/http/HttpClientError"
 import { makeMksClient } from "@kumulo/distro-ovh-mks"
 import { makeStorageClient } from "@kumulo/storage-ovh"
+import { makeNetworkClient, makeNodeGroupsClient, makeRouterClient, makeUksClient, makeZoneClient } from "@kumulo/upcloud"
 import { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/unstable/process"
 import { kumuloCli } from "./commands.ts"
 import { resolveSecretsFile, secretsConfigProvider } from "./secrets-file.ts"
@@ -16,10 +17,12 @@ import { exitCodeFor } from "./exit-codes.ts"
 import { renderCliError } from "./errors.ts"
 import { MksEnv, MksEnvLive } from "./mks/env.ts"
 import { StorageEnv, StorageEnvLive } from "./storage/env.ts"
+import { UpcloudEnv, UpcloudEnvLive } from "./upcloud/env.ts"
 import { CinderAuthLive } from "./volumes/env.ts"
 import packageJson from "../package.json" with { type: "json" }
 
 const OVH_HINT = "OVH credentials unavailable (OVH_CLIENT_ID / OVH_CLIENT_SECRET / OVH_SERVICE_NAME)"
+const UPCLOUD_HINT = "UpCloud credentials unavailable (UPCLOUD_API_TOKEN)"
 
 /** An `HttpClient` that fails every request — see `_mksLive` below. */
 const _unavailable = (hint: string): HttpClient.HttpClient =>
@@ -38,6 +41,22 @@ const _mksLive = Layer.catchCause(
 const _storageLive = Layer.catchCause(
   StorageEnvLive.pipe(Layer.provide(_mksLive)),
   () => Layer.succeed(StorageEnv, { storage: makeStorageClient(_unavailable(OVH_HINT)), serviceName: "" })
+)
+// Same shape as `_mksLive`: a k3s/ovh-mks run must not die on a missing
+// `UPCLOUD_API_TOKEN` before it even plans — the fallback client fails on
+// first request, surfacing on the upcloud-uks code path that actually needs it.
+const _upcloudLive = Layer.catchCause(
+  UpcloudEnvLive,
+  () =>
+    Layer.succeed(UpcloudEnv, {
+      clients: {
+        uks: makeUksClient(_unavailable(UPCLOUD_HINT)),
+        nodeGroups: makeNodeGroupsClient(_unavailable(UPCLOUD_HINT)),
+        network: makeNetworkClient(_unavailable(UPCLOUD_HINT)),
+        router: makeRouterClient(_unavailable(UPCLOUD_HINT))
+      },
+      zones: makeZoneClient(_unavailable(UPCLOUD_HINT))
+    })
 )
 
 // Explicit Layer wiring at the composition root, no runtime module
@@ -58,6 +77,7 @@ const _storageLive = Layer.catchCause(
 const MainLive = Layer.mergeAll(
   _mksLive,
   _storageLive,
+  _upcloudLive,
   CinderAuthLive.pipe(Layer.provideMerge(OpenStackEnvLive)),
   NodeHttpClient.layerUndici
 ).pipe(Layer.provide(NodeHttpClient.layerUndici))

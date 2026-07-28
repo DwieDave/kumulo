@@ -54,6 +54,7 @@
     "@kumulo/core": "workspace:*",
     "@kumulo/distro-k3s": "workspace:*",
     "@kumulo/distro-ovh-mks": "workspace:*",
+    "@kumulo/distro-upcloud-uks": "workspace:*",
     "@kumulo/dns-hetzner": "workspace:*",
     "@kumulo/dns-ovh": "workspace:*",
     "@kumulo/hetzner": "workspace:*",
@@ -61,6 +62,7 @@
     "@kumulo/provider-ovh": "workspace:*",
     "@kumulo/secrets-sops": "workspace:*",
     "@kumulo/storage-ovh": "workspace:*",
+    "@kumulo/upcloud": "workspace:*",
     "@kumulo/volumes-cinder": "workspace:*"
   },
   "peerDependencies": {

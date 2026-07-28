@@ -6,6 +6,7 @@ import type { MksClusterConfigEncoded } from "@kumulo/core"
 import { mksEntry } from "../../src/distro/mks-entry.ts"
 import { MksEnv } from "../../src/mks/env.ts"
 import { OpenStackEnv } from "../../src/doctor-openstack/env.ts"
+import { unavailableUpcloudEnvLayer } from "../fake-upcloud-env.ts"
 import { makeFakeMksServer } from "../e2e/fake-mks-server.ts"
 import { makeFakeCinder } from "../commands/fake-cinder.ts"
 import { baseMksEncodedConfig, decodeTestConfig } from "../fixtures.ts"
@@ -44,7 +45,8 @@ const _rows = (encoded: MksClusterConfigEncoded) =>
       // The distro service set is shared across distros; a plan for an
       // `ovh-mks` config must reach neither of these.
       Effect.provide(makeFakeCinder({})),
-      Effect.provide(_openStackEnvLayer)
+      Effect.provide(_openStackEnvLayer),
+      Effect.provide(unavailableUpcloudEnvLayer)
     )
   })
 
