@@ -71,7 +71,8 @@ const _volumeActions = (config: ClusterConfig): ReadonlyArray<PlanAction> =>
 const _cases = [
   { file: "ovh-mks.yaml", label: "ovh-mks" },
   { file: "k3s.yaml", label: "k3s" },
-  { file: "k3s-hetzner.yaml", label: "k3s-hetzner" }
+  { file: "k3s-hetzner.yaml", label: "k3s-hetzner" },
+  { file: "upcloud-uks.yaml", label: "upcloud-uks" }
 ] as const
 
 for (const { file, label } of _cases) {

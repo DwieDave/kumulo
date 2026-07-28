@@ -68,7 +68,8 @@
           "enum": [
             "ovh",
             "generic",
-            "hetzner"
+            "hetzner",
+            "upcloud"
           ]
         },
         "distro": {
@@ -439,6 +440,209 @@
         "provider",
         "distro",
         "version",
+        "dns"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string",
+          "allOf": [
+            {
+              "minLength": 1
+            }
+          ]
+        },
+        "outputs": {
+          "$ref": "#/$defs/Objects_"
+        },
+        "auth": {
+          "$ref": "#/$defs/Objects_1"
+        },
+        "worker_pools": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "allOf": [
+                  {
+                    "pattern": "^[a-z0-9]([a-z0-9-]{0,52}[a-z0-9])?$"
+                  }
+                ]
+              },
+              "flavor": {
+                "type": "string",
+                "allOf": [
+                  {
+                    "minLength": 1
+                  }
+                ]
+              },
+              "count": {
+                "type": "integer",
+                "allOf": [
+                  {
+                    "minimum": 0
+                  }
+                ]
+              },
+              "labels": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "taints": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "autoscaling": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "min": {
+                    "type": "integer",
+                    "allOf": [
+                      {
+                        "minimum": 0
+                      }
+                    ]
+                  },
+                  "max": {
+                    "type": "integer",
+                    "allOf": [
+                      {
+                        "exclusiveMinimum": 0
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "enabled",
+                  "min",
+                  "max"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "name",
+              "flavor",
+              "count"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "volumes": {
+          "$ref": "#/$defs/Objects_2"
+        },
+        "object_storage": {
+          "$ref": "#/$defs/Union_"
+        },
+        "secrets": {
+          "$ref": "#/$defs/Union_1"
+        },
+        "provider": {
+          "type": "string",
+          "enum": [
+            "upcloud"
+          ]
+        },
+        "distro": {
+          "type": "string",
+          "enum": [
+            "upcloud-uks"
+          ]
+        },
+        "version": {
+          "type": "string",
+          "allOf": [
+            {
+              "pattern": "^v?\\d+\\.\\d+$"
+            }
+          ]
+        },
+        "zone": {
+          "type": "string",
+          "allOf": [
+            {
+              "minLength": 1
+            }
+          ]
+        },
+        "plan": {
+          "type": "string",
+          "allOf": [
+            {
+              "minLength": 1
+            }
+          ]
+        },
+        "network": {
+          "type": "object",
+          "properties": {
+            "cidr": {
+              "type": "string",
+              "allOf": [
+                {
+                  "pattern": "^(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\/(3[0-2]|[12]?\\d)$"
+                }
+              ]
+            }
+          },
+          "required": [
+            "cidr"
+          ],
+          "additionalProperties": false
+        },
+        "dns": {
+          "$ref": "#/$defs/Union_2"
+        },
+        "control_plane_ip_filter": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "allOf": [
+              {
+                "pattern": "^(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\/(3[0-2]|[12]?\\d)$"
+              }
+            ]
+          }
+        },
+        "storage_encryption": {
+          "type": "boolean"
+        },
+        "upgrade_strategy": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "rolling-update"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "auth",
+        "worker_pools",
+        "volumes",
+        "object_storage",
+        "secrets",
+        "provider",
+        "distro",
+        "version",
+        "zone",
+        "network",
         "dns"
       ],
       "additionalProperties": false

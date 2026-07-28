@@ -2,7 +2,8 @@
 
 A CLI that provisions and manages Kubernetes clusters from a single YAML
 config — either a self-managed `k3s` cluster on plain cloud instances (OVH
-or Hetzner), or OVH's managed Kubernetes service (`ovh-mks`).
+or Hetzner), or a provider's managed Kubernetes service: OVH (`ovh-mks`) or
+UpCloud (`upcloud-uks`).
 
 ## Install
 
@@ -25,8 +26,9 @@ bun run packages/cli/src/main.ts <command> <config-path>
 
 Every command reads a cluster from one YAML config. See
 [`examples/k3s.yaml`](examples/k3s.yaml),
-[`examples/k3s-hetzner.yaml`](examples/k3s-hetzner.yaml) and
-[`examples/ovh-mks.yaml`](examples/ovh-mks.yaml) for full, schema-valid
+[`examples/k3s-hetzner.yaml`](examples/k3s-hetzner.yaml),
+[`examples/ovh-mks.yaml`](examples/ovh-mks.yaml) and
+[`examples/upcloud-uks.yaml`](examples/upcloud-uks.yaml) for full, schema-valid
 examples — copy one and edit `name`, `auth.region`, `ssh.public_key_path`,
 and `worker_pools` for your cluster.
 
@@ -37,6 +39,7 @@ Credentials are read from the environment, not the config file:
 | `OVH_CLIENT_ID`, `OVH_CLIENT_SECRET`, `OVH_SERVICE_NAME` | `ovh-mks` cluster API calls |
 | `OS_AUTH_URL`, `OS_USERNAME`, `OS_PASSWORD`, `OS_PROJECT_NAME`, `OS_REGION_NAME` (or `OS_CLOUD` + `clouds.yaml`) | Cinder volumes (both distros); the `ovh-mks` `network`/`ingress` blocks |
 | `HCLOUD_TOKEN`, `HETZNER_DNS_TOKEN` | `k3s` clusters with `provider: hetzner` |
+| `UPCLOUD_API_TOKEN` | `upcloud-uks` cluster API calls |
 
 They can also come from a sops-encrypted file — see
 [`packages/cli/README.md`](packages/cli/README.md).
@@ -80,7 +83,7 @@ node packages/cli/dist/main.mjs delete examples/ovh-mks.yaml --yes
 | `status <config>` | Cluster inventory + health. |
 | `kubeconfig <config>` | Prints the cluster's kubeconfig to stdout. |
 | `delete <config>` | Tears the cluster down; volumes marked `retain: true` in `volumes.managed[]` are kept. |
-| `upgrade <config>` | Renders SUC upgrade Plans for `k3s`; drives the OVH API directly for `ovh-mks`. |
+| `upgrade <config>` | Renders SUC upgrade Plans for `k3s`; drives the OVH or UpCloud API directly for `ovh-mks`/`upcloud-uks`. |
 | `volumes list <config>` / `volumes adopt <config>` | Inspect or re-bind retained Cinder volumes into a (re)created cluster. |
 
 The config path is a positional argument on every command. Shared flags:

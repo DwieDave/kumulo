@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=../kumulo.schema.json
+name: staging-de
+provider: upcloud
+distro: upcloud-uks
+version: "1.31"
+auth:
+  method: api_token
+  region: de-fra1
+zone: de-fra1
+# Optional. Omit it and the control plane lands on UpCloud's own default
+# (`dev-md`). This is a creation-time field (D11): changing it on a live
+# cluster is refused at plan time, never silently applied.
+plan: dev-md
+# kumulo owns this network end to end (D10): it creates the SDN network and
+# its router, and tears both down after the cluster on delete. No adoption
+# of a pre-existing network in this cut.
+network:
+  cidr: 10.0.0.0/16
+worker_pools:
+  - name: general
+    flavor: 2xCPU-4GB
+    count: 1
+    labels:
+      workload: general
+dns:
+  module: none
+volumes:
+  module: none
+object_storage:
+  module: none
+secrets:
+  sink: none
