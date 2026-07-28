@@ -41,24 +41,34 @@ Credentials are read from the environment, not the config file:
 They can also come from a sops-encrypted file — see
 [`packages/cli/README.md`](packages/cli/README.md).
 
+Build once — the CLI runs on node, and `dist/main.mjs` carries its own
+`#!/usr/bin/env node` shebang, so `./packages/cli/dist/main.mjs` works too:
+
+```sh
+bun run build            # every package in dependency order, cli last
+```
+
+`bun run --cwd packages/cli build` alone is not enough: the CLI bundles with
+every `@kumulo/*` package external, so they must be built first.
+
 ```sh
 # See what would change, without touching anything
-dist/kumulo apply examples/ovh-mks.yaml --dry-run
+node packages/cli/dist/main.mjs apply examples/ovh-mks.yaml --dry-run
 
 # Apply it
-dist/kumulo apply examples/ovh-mks.yaml --yes
+node packages/cli/dist/main.mjs apply examples/ovh-mks.yaml --yes
 
 # Check on it
-dist/kumulo status examples/ovh-mks.yaml
+node packages/cli/dist/main.mjs status examples/ovh-mks.yaml
 
 # Grab the kubeconfig
-dist/kumulo kubeconfig examples/ovh-mks.yaml > kubeconfig.yaml
+node packages/cli/dist/main.mjs kubeconfig examples/ovh-mks.yaml > kubeconfig.yaml
 
 # Grow/shrink a worker pool: edit worker_pools[].count in the config, then
-dist/kumulo scale examples/ovh-mks.yaml --yes
+node packages/cli/dist/main.mjs scale examples/ovh-mks.yaml --yes
 
 # Tear it down (retained volumes survive, see volumes.managed[].retain)
-dist/kumulo delete examples/ovh-mks.yaml --yes
+node packages/cli/dist/main.mjs delete examples/ovh-mks.yaml --yes
 ```
 
 ## Command reference
@@ -78,7 +88,7 @@ The config path is a positional argument on every command. Shared flags:
 change nothing), `--show-env` (print the provider env-var summary),
 `--secrets-file <path>` (sops-encrypted credentials, see
 [`packages/cli/README.md`](packages/cli/README.md)). Run
-`dist/kumulo <command> --help` for a command's own flags.
+`node packages/cli/dist/main.mjs <command> --help` for a command's own flags.
 
 ## Config reference
 

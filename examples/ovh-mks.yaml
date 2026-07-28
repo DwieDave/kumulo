@@ -15,7 +15,12 @@ network:
 # Optional, and only alongside `network`. Present means kumulo creates one empty
 # public Octavia load balancer with a floating IP; an in-cluster Service adopts
 # it by id and the cloud-controller-manager owns its listeners and pools.
-ingress: {}
+ingress:
+  # Octavia flavor. `flavor` names one (MKS Free sizes small/medium/large),
+  # `flavor_id` gives a UUID (MKS Standard) — one or the other, never both.
+  # Omit entirely for Octavia's default. An unknown name fails naming what the
+  # region does offer, so `openstack loadbalancer flavor list` is the check.
+  flavor: small
 worker_pools:
   - name: general
     flavor: d2-4
@@ -26,8 +31,22 @@ worker_pools:
       enabled: true
       min: 1
       max: 1
+# `api_server` resolves to the MKS control-plane hostname (a CNAME); `ingress`
+# resolves to the floating IP kumulo allocated for the LB above (an A record) —
+# which is what lets one apply point DNS at the ingress without waiting for any
+# in-cluster workload to appear. Change `zone` to one you own, or set
+# `module: none` to skip DNS entirely.
 dns:
-  module: none
+  module: hetzner
+  zone: example.com
+  ttl: 300
+  records:
+    - name: api.staging-eu
+      target: api_server
+    - name: apps.staging-eu
+      target: ingress
+    - name: "*.apps.staging-eu"
+      target: ingress
 volumes:
   module: cinder
   managed:
