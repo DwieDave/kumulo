@@ -21,6 +21,7 @@ import {
   findClusterByName,
   listNodePools,
   parseKubeVersion,
+  pollUntil,
   requireVrack,
   type Mks,
   type MksClusterConfig,
@@ -307,19 +308,65 @@ export const kubeconfigMks = (
     return yield* fetchKubeconfig({ mks, ref: { serviceName, kubeId: info.id } })
   })
 
+/**
+ * `deleteCloudProjectServiceNameKubeKubeId` returns the moment OVH accepts the
+ * request; the node VMs — and the Neutron ports they hold on the private
+ * network — outlive it. Deleting the network before they are gone is a
+ * guaranteed 409, so the teardown blocks here rather than turning T5.3's
+ * exceptional failure into the normal path.
+ */
+const _waitClusterGone = (
+  { config, mks, serviceName }: { readonly config: ClusterConfig; readonly mks: Mks; readonly serviceName: string }
+): Effect.Effect<void, MksError> =>
+  pollUntil({
+    check: findClusterByName({ mks, config: _toMksConfig({ config, serviceName }) }).pipe(
+      Effect.map((info) => info?.status ?? "DELETED")
+    ),
+    isDone: (status) => status === "DELETED",
+    interval: "5 seconds",
+    timeout: "20 minutes",
+    ref: config.name
+  }).pipe(Effect.asVoid)
+
+/**
+ * The OpenStack side of teardown (R17): load balancer, then its floating IP,
+ * then the network — `deleteByTag`'s own order, with the server/server-group/
+ * security-group steps finding nothing on a managed control plane.
+ *
+ * Gated on the `network` block for the same reason `_ensureMksNetwork` is: a
+ * config that never asked for one must still delete without OS_* credentials
+ * (R5), and every verb on the unavailable provider fails at first use.
+ *
+ * The network is ALWAYS deleted, never retained (D3/T5.2): it is fully
+ * reproducible from the config, unlike a volume's or a bucket's contents, so
+ * there is nothing a `retain` flag here could preserve.
+ */
+const _deleteMksInfra = (config: ClusterConfig): Effect.Effect<void, MksError, CloudProvider> =>
+  Effect.gen(function*() {
+    if (config.distro !== "ovh-mks" || config.network === undefined) return
+    const cloud = yield* CloudProvider
+    yield* cloud.deleteByTag(config.name)
+  })
+
 /** Delete: resolves the cluster by name (idempotent lookup); missing cluster is a no-op, never provisions one. */
-export const deleteMksEffect = (config: ClusterConfig): Effect.Effect<void, MksError, MksEnv | DnsProvider> =>
+export const deleteMksEffect = (config: ClusterConfig): Effect.Effect<void, MksError, MksEnv | DnsProvider | CloudProvider> =>
   Effect.gen(function*() {
     const { mks, serviceName } = yield* MksEnv
     const mksConfig = _toMksConfig({ config, serviceName })
     yield* removeDns(config)
     const info = yield* findClusterByName({ mks, config: mksConfig })
-    if (info === undefined) return
-    yield* deleteCluster({ mks, ref: { serviceName, kubeId: info.id } })
+    if (info !== undefined) {
+      yield* deleteCluster({ mks, ref: { serviceName, kubeId: info.id } })
+      yield* _waitClusterGone({ config, mks, serviceName })
+    }
+    yield* _deleteMksInfra(config)
   })
 
-/** `deleteMksEffect` wired to its live `DnsProvider` (mirrors `deleteK3s`). */
+/** `deleteMksEffect` wired to its live `DnsProvider` and `CloudProvider` (mirrors `applyMks`). */
 export const deleteMks = (
   config: ClusterConfig
-): Effect.Effect<void, MksError | ConfigInvalid, MksEnv | HttpClient.HttpClient> =>
-  deleteMksEffect(config).pipe(Effect.provide(dnsProviderLayerFor(config)))
+): Effect.Effect<void, MksError | ConfigInvalid, MksEnv | OpenStackEnv | HttpClient.HttpClient> =>
+  deleteMksEffect(config).pipe(
+    Effect.provide(dnsProviderLayerFor(config)),
+    Effect.provide(mksCloudProviderLayer(config))
+  )

@@ -21,6 +21,35 @@ const _mksPlanLive = (config: ClusterConfig) =>
     return buildMksPlan({ config, inventory: { ...mks, volumeNames } })
   })
 
+/**
+ * The OpenStack resources teardown removes, in the order it removes them
+ * (R17): load balancer, floating IP, then the network with its subnets. Rows
+ * come off the *config*, not the live cluster — `deleteByTag` finds each
+ * resource by name and deleting an absent one is a no-op, so a config that
+ * declares a network always gets a `Delete` row for it.
+ *
+ * There is deliberately no `(retained)` variant here (D3/T5.2): a network is
+ * fully reproducible from `cluster.json`, unlike a volume's or a bucket's
+ * contents, so retaining one would strand an unowned resource for no gain.
+ *
+ * Every row is gated on the `network` block alone, `ingress` included: that is
+ * the single condition `_deleteMksInfra` gates on, and `deleteByTag` then
+ * deletes the LB and releases the floating IP unconditionally, finding both by
+ * name. Gating the LB rows on `config.ingress` would under-report exactly the
+ * config that removed its `ingress:` block before deleting — the teardown still
+ * destroys the load balancer the earlier apply created.
+ */
+const _infraDeleteRows = (config: ClusterConfig): ReadonlyArray<string> => {
+  if (config.distro !== "ovh-mks" || config.network === undefined) return []
+  return [
+    `load-balancer/${config.name}/ingress`,
+    `floating-ip/${config.name}/ingress`,
+    `subnet/${config.name}/nodes`,
+    `subnet/${config.name}/load-balancers`,
+    `network/${config.name}`
+  ]
+}
+
 const _deletePlanActions = (config: ClusterConfig) =>
   Effect.gen(function*() {
     const inventory = yield* lookupMksInventory(config)
@@ -32,7 +61,8 @@ const _deletePlanActions = (config: ClusterConfig) =>
       _tag: "Delete" as const,
       name: `mks-pool/${config.name}/${pool}`
     }))
-    return [clusterAction, ...poolActions]
+    const infraActions = _infraDeleteRows(config).map((name) => ({ _tag: "Delete" as const, name }))
+    return [clusterAction, ...poolActions, ...infraActions]
   })
 
 const _statusMks = Effect.fn(function*(config: ClusterConfig) {

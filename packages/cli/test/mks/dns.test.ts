@@ -6,6 +6,7 @@ import { makeMksClient } from "@kumulo/distro-ovh-mks"
 import { makeFakeMksServer } from "../e2e/fake-mks-server.ts"
 import { baseMksEncodedConfig, decodeTestConfig } from "../fixtures.ts"
 import { spyDnsLayer as _spyDnsLayer } from "./spy-dns.ts"
+import { cloudProviderNever } from "./fake-cloud-provider.ts"
 
 const _recordsConfig = (records: ReadonlyArray<{ readonly name: string; readonly target: string }>) =>
   decodeTestConfig({ ...baseMksEncodedConfig, name: "c1", dns: { module: "hetzner", zone: "example.com", ttl: 300, records } })
@@ -72,6 +73,10 @@ it.effect("delete removes the cluster-owned DNS records", () =>
     const spy = _spyDnsLayer()
     const server = makeFakeMksServer()
     const mksEnvLayer = Layer.succeed(MksEnv, { mks: makeMksClient(server.httpClient), serviceName: "service-1" })
-    yield* deleteMksEffect(_config).pipe(Effect.provide(spy.layer), Effect.provide(mksEnvLayer))
+    yield* deleteMksEffect(_config).pipe(
+      Effect.provide(spy.layer),
+      Effect.provide(mksEnvLayer),
+      Effect.provide(cloudProviderNever)
+    )
     assert.deepStrictEqual(spy.removed, ["c1"])
   }))

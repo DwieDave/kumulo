@@ -3,7 +3,9 @@ import {
   CloudProvider,
   CONFIG_HASH_KEY,
   configHash,
+  pollUntil,
   ProvisioningTimeout,
+  ResourceConflict,
   ResourceNotFound,
   ResponseDecodeError
 } from "@kumulo/core"
@@ -373,6 +375,7 @@ const _LOAD_BALANCERS = "v2/lbaas/loadbalancers"
 interface Vip extends Named {
   readonly vip_address?: string | undefined
   readonly vip_port_id?: string | undefined
+  readonly provisioning_status?: string | undefined
 }
 
 // Optional keys are omitted, never `undefined` — the generated schemas use
@@ -656,6 +659,40 @@ const _deleteServerGroups = (options: CloudProviderOptions): R<void> =>
     }, { discard: true })
   })
 
+/**
+ * `cascade: true` deliberately, including for the MKS ingress LB whose
+ * listeners and pools belong to the CCM (D2/R14). Teardown is the one moment
+ * that ownership split does not protect anything: the cluster is already gone,
+ * so its Services can never be reconciled again, and a non-cascade delete of an
+ * LB that still carries listeners is a 409 that reads exactly like the
+ * network-in-use conflict below while meaning something else entirely.
+ * Reconcile still never touches a child — only this verb does, and only here.
+ */
+/**
+ * Octavia ACCEPTS a delete, it does not perform one: the LB enters
+ * PENDING_DELETE and keeps its VIP port on the load-balancers subnet until the
+ * amphora teardown finishes. `_deleteNetworking` is three list calls away, so
+ * without this wait T5.3's exceptional `NetworkInUse` 409 becomes the normal
+ * path for every cluster carrying an LB — the same defect `_waitClusterGone`
+ * prevents for node ports. Octavia keeps a DELETED record around until
+ * housekeeping purges it, so "gone" is a DELETED status *or* an entry that has
+ * left the list; anything else still holds the port and is waited out.
+ */
+const _lbStatus = (options: CloudProviderOptions): R<string> =>
+  _findLoadBalancer(options).pipe(
+    Effect.map((found) => found === undefined ? "DELETED" : found.provisioning_status ?? "UNKNOWN")
+  )
+
+const _waitLbGone = (options: CloudProviderOptions): R<void> =>
+  pollUntil({
+    check: _lbStatus(options),
+    isDone: (status) => status === "DELETED",
+    interval: "2 seconds",
+    timeout: "10 minutes",
+    kind: "load-balancer",
+    ref: _name(options)
+  }).pipe(Effect.asVoid)
+
 const _deleteLoadBalancer = (options: CloudProviderOptions): R<void> =>
   Effect.gen(function*() {
     const found = yield* _findLoadBalancer(options)
@@ -667,6 +704,23 @@ const _deleteLoadBalancer = (options: CloudProviderOptions): R<void> =>
         query: { cascade: true }
       }).pipe(Effect.mapError(_at("load-balancer", _LOAD_BALANCERS)))
     )
+    yield* _waitLbGone(options)
+  })
+
+/**
+ * T5.3/R17. Neutron refuses a network that still has ports with 409
+ * (`NetworkInUse`), which `statusError` already tags `ResourceConflict` — but
+ * with the endpoint path as its `ref`, rendering as the unactionable line
+ * "network conflict: v2.0/networks". Naming the network and the remedy is the
+ * difference between a loud failure and a useful one. Same shape as
+ * `driftConflict`/`_networkIds`: a purpose-built `kind`, a full sentence in
+ * `ref`.
+ */
+const _networkInUse = (id: string): ResourceConflict =>
+  new ResourceConflict({
+    kind: "network-in-use",
+    ref: `network ${id} still has ports attached and was NOT deleted — something is still on it ` +
+      `(a cluster, a load balancer or a server outside kumulo). Remove it, then re-run delete.`
   })
 
 const _deleteNetworking = (options: CloudProviderOptions): R<void> =>
@@ -682,18 +736,26 @@ const _deleteNetworking = (options: CloudProviderOptions): R<void> =>
     }
     const network = yield* _findNetwork(options)
     if (network !== undefined) {
+      const id = _idOf(network)
+      // Deliberately NOT `_ignoreConflict`: swallowing this leaves a half-torn
+      // network behind and reports success.
       yield* _ignoreMissing(
-        client.networks.networksNetworkIdDelete({ params: { network_id: _idOf(network) } }).pipe(
+        client.networks.networksNetworkIdDelete({ params: { network_id: id } }).pipe(
           Effect.mapError(_at("network", "v2.0/networks"))
         )
-      )
+      ).pipe(Effect.catchTag("ResourceConflict", () => Effect.fail(_networkInUse(id))))
     }
   })
 
-// kumulo: reverse dependency order — LB, servers, server groups, security group, network.
+// kumulo: reverse dependency order — LB, floating IP, servers, server groups,
+// security group, network (R17). The floating IP is released after the LB that
+// owned its port, which is exactly why `_fipKey` keys on `description` rather
+// than `port_id`; a cluster that never allocated one lists none and this is a
+// single no-op read (the k3s path, unchanged — N1).
 export const deleteByTag = ({ options }: { readonly options: CloudProviderOptions }): R<void> =>
   Effect.gen(function*() {
     yield* _deleteLoadBalancer(options)
+    yield* releaseFloatingIp({ options })
     yield* _deleteServers(options)
     yield* _deleteServerGroups(options)
     yield* _deleteNetworking(options)

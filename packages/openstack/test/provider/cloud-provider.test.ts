@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Effect } from "effect"
-import { FastCheck as fc } from "effect/testing"
+import { Effect, Fiber } from "effect"
+import { FastCheck as fc, TestClock } from "effect/testing"
 import { CapabilityMissing, ProvisioningTimeout, ResourceNotFound, ResponseDecodeError, type SecGroupSpec } from "@kumulo/core"
 import {
   deleteByTag,
@@ -17,6 +17,7 @@ import {
   type CloudProviderOptions
 } from "../../src/provider/cloud-provider.ts"
 import { makeFakeOpenStack, requestJson } from "./fake-openstack.ts"
+import type { RouteHandler } from "./fake-openstack.ts"
 
 // Glance validates its image ids against the UUID pattern.
 const IMG_1 = "11111111-1111-4111-8111-111111111111"
@@ -28,6 +29,27 @@ const options: CloudProviderOptions = {
   octaviaEnabled: true,
   imageAliases: { "ubuntu-24.04": "Ubuntu 24.04" }
 }
+
+// `provisioning_status` drives the teardown wait, and the DELETE flips it:
+// a fake that answers 204 and keeps listing the LB unchanged cannot tell a
+// synchronous delete from Octavia's asynchronous one.
+const _octaviaRoutes = (
+  { deleted, lb, onDelete }: {
+    readonly deleted: Array<string>
+    readonly lb: { status: string }
+    readonly onDelete: string
+  }
+): Record<string, RouteHandler> => ({
+  "GET /v2/lbaas/loadbalancers": () => ({
+    status: 200,
+    body: { loadbalancers: [{ id: "lb-1", name: "kumulo-prod", provisioning_status: lb.status }] }
+  }),
+  "DELETE /v2/lbaas/loadbalancers/lb-1": () => {
+    deleted.push("lb")
+    lb.status = onDelete
+    return { status: 204 }
+  }
+})
 
 // Narrows the `unknown` a route handler receives down to `subnet.cidr`. Written
 // as a guard chain rather than a cast — `as` is banned repo-wide.
@@ -385,10 +407,14 @@ describe("openstack CloudProvider", () => {
 
   it.effect("deleteByTag removes resources in reverse dependency order", () => {
     const deleted: Array<string> = []
+    const lb = { status: "ACTIVE" }
     const fake = makeFakeOpenStack({
-      "GET /v2/lbaas/loadbalancers": () => ({ status: 200, body: { loadbalancers: [{ id: "lb-1", name: "kumulo-prod" }] } }),
-      "DELETE /v2/lbaas/loadbalancers/lb-1": () => {
-        deleted.push("lb")
+      // The amphora teardown finishes while the DELETE is in flight.
+      ..._octaviaRoutes({ deleted, lb, onDelete: "DELETED" }),
+      // R17: released after the LB that owned its port, before the network.
+      "GET /v2.0/floatingips": () => ({ status: 200, body: { floatingips: [{ id: "fip-1" }] } }),
+      "DELETE /v2.0/floatingips/fip-1": () => {
+        deleted.push("floating-ip")
         return { status: 204 }
       },
       "GET /v2.1/servers/detail": () => ({ status: 200, body: { servers: [{ id: "srv-1" }] } }),
@@ -418,7 +444,70 @@ describe("openstack CloudProvider", () => {
     })
     return Effect.gen(function*() {
       yield* deleteByTag({ options })
-      expect(deleted).toEqual(["lb", "server", "server-group", "server-group", "security-group", "network"])
+      expect(deleted).toEqual(["lb", "floating-ip", "server", "server-group", "server-group", "security-group", "network"])
+    }).pipe(Effect.provide(fake.layer))
+  })
+
+  // T5.3/R17. Octavia's DELETE returns the moment it is accepted; the VIP port
+  // stays on the load-balancers subnet until PENDING_DELETE resolves. Deleting
+  // the network in between is a guaranteed `NetworkInUse` 409 — T5.3's
+  // exceptional failure turned into the normal path for every cluster with an
+  // LB. The teardown blocks on the status instead, exactly as
+  // `_waitClusterGone` blocks on the cluster's node ports.
+  it.effect("deleteByTag waits out a PENDING_DELETE load balancer before deleting the network", () => {
+    const deleted: Array<string> = []
+    const lb = { status: "ACTIVE" }
+    const fake = makeFakeOpenStack({
+      ..._octaviaRoutes({ deleted, lb, onDelete: "PENDING_DELETE" }),
+      "GET /v2.0/floatingips": () => ({ status: 200, body: { floatingips: [] } }),
+      "GET /v2.1/servers/detail": () => ({ status: 200, body: { servers: [] } }),
+      "GET /v2.1/os-server-groups": () => ({ status: 200, body: { server_groups: [] } }),
+      "GET /v2.0/security-groups": () => ({ status: 200, body: { security_groups: [] } }),
+      "GET /v2.0/networks": () => ({ status: 200, body: { networks: [{ id: "net-1" }] } }),
+      "DELETE /v2.0/networks/net-1": () => {
+        deleted.push("network")
+        return { status: 204 }
+      }
+    })
+    return Effect.gen(function*() {
+      const fiber = yield* deleteByTag({ options }).pipe(Effect.provide(fake.layer), Effect.forkChild)
+      yield* TestClock.adjust("2 minutes")
+      // The amphorae are still holding the VIP port: nothing may touch the network.
+      expect(deleted).toEqual(["lb"])
+      lb.status = "DELETED"
+      yield* TestClock.adjust("10 seconds")
+      yield* Fiber.join(fiber)
+      expect(deleted).toEqual(["lb", "network"])
+    })
+  })
+
+  // T5.3/R17. Neutron answers a network that still has ports with 409
+  // (`NetworkInUse`). Swallowing it — an `_ignoreConflict` here, or an
+  // `Effect.ignore` around the teardown — leaves a half-torn network behind and
+  // reports success, so the failure must propagate AND say which network and
+  // what to do about it. The bare tag alone renders as "network conflict:
+  // v2.0/networks", which is loud but unactionable.
+  it.effect("a network still holding ports fails loudly, naming the network and the remedy", () => {
+    const fake = makeFakeOpenStack({
+      "GET /v2/lbaas/loadbalancers": () => ({ status: 200, body: { loadbalancers: [] } }),
+      "GET /v2.0/floatingips": () => ({ status: 200, body: { floatingips: [] } }),
+      "GET /v2.1/servers/detail": () => ({ status: 200, body: { servers: [] } }),
+      "GET /v2.1/os-server-groups": () => ({ status: 200, body: { server_groups: [] } }),
+      "GET /v2.0/security-groups": () => ({ status: 200, body: { security_groups: [] } }),
+      "GET /v2.0/networks": () => ({ status: 200, body: { networks: [{ id: "net-1" }] } }),
+      "DELETE /v2.0/networks/net-1": () => ({
+        status: 409,
+        body: { NeutronError: { message: "There are one or more ports still in use on the network." } }
+      })
+    })
+    return Effect.gen(function*() {
+      const failure = yield* Effect.flip(deleteByTag({ options }))
+      expect(failure).toMatchObject({
+        _tag: "ResourceConflict",
+        kind: "network-in-use",
+        ref: expect.stringContaining("net-1")
+      })
+      expect(failure).toMatchObject({ ref: expect.stringContaining("ports") })
     }).pipe(Effect.provide(fake.layer))
   })
 

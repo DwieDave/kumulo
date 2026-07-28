@@ -349,3 +349,114 @@ callers route through.
   every future adapter inherits it; it needed one new harness hook
   (`kindsAt`) because `targetOf` deliberately returns the first non-TXT record
   and so cannot see a split-brain name.
+
+## M5 — Teardown (T5.1–T5.3, landed)
+
+### D2 is STILL provisional
+
+M0 was not run, for the fourth milestone running. M5 builds to the documented
+contract only. Nothing here has been observed against a live MKS cluster.
+
+### Shipped
+
+- `deleteMksEffect` (cli `mks/reconcile.ts`) now runs
+  DNS → cluster → *wait* → `cloud.deleteByTag(config.name)`. Its R gained
+  `CloudProvider`; `deleteMks` provides `mksCloudProviderLayer(config)` beside
+  the DNS layer, exactly as `applyMks` does.
+- `_waitClusterGone` polls `findClusterByName(...)?.status ?? "DELETED"` via the
+  distro's `pollUntil` (now exported from `@kumulo/distro-ovh-mks`), 5s interval,
+  20min timeout → `ProvisioningTimeout{kind:"mks-cluster"}`.
+- `deleteByTag` (openstack) gained `releaseFloatingIp` between the LB and the
+  servers. k3s never allocates a FIP, so for that path it is one extra
+  `GET /v2.0/floatingips?description=kumulo-<tag>` returning empty (N1).
+- `_networkInUse` → `ResourceConflict{kind:"network-in-use"}` naming the network
+  id and the remedy, raised from `_deleteNetworking`'s 409.
+- `_infraDeleteRows` (cli `distro/mks-entry.ts`) emits `load-balancer/…`,
+  `floating-ip/…`, both `subnet/…` and `network/<cluster>` Delete rows.
+
+### Decisions worth not re-deriving
+
+- **`deleteByTag` is REUSED for MKS rather than a new port verb.** Widening
+  `CloudProvider` would force edits to the Hetzner adapter and to
+  `_unavailableCloudProvider`'s verb list. On MKS the server/server-group/
+  security-group steps simply find nothing — three cheap reads — and the
+  LB/FIP/network steps are exactly R17's order. `deleteByTag` itself stays
+  byte-compatible for k3s apart from the FIP release.
+- **`cascade: true` is KEPT for the ingress LB, reversing M3's note** ("M5 must
+  not reuse that verb"). At teardown the cluster is already gone, so the
+  CCM-owned listeners D2 protects can never be reconciled again; a non-cascade
+  delete of an LB carrying listeners is a 409 that reads exactly like the
+  network-in-use conflict while meaning something else. Documented at the call
+  site in `_deleteLoadBalancer`.
+- **The teardown is gated on `config.network`, not on `ingress`.**
+  `isIngressPlaceable` already forbids `ingress` without `network`, and the gate
+  is what keeps OS_* credentials optional for a network-less MKS delete (R5).
+  The three MKS delete tests that use a network-less config now provide
+  `cloudProviderNever`, which dies on every verb — the gate is asserted, not
+  assumed. Do NOT "fix" those by handing them credentials.
+- **Delete plan rows come off the CONFIG, not the live cluster.** `deleteByTag`
+  finds each resource by name and deleting an absent one is a no-op, so a
+  declared network always plans `Delete`. This sidesteps `_networkActions`'
+  apply-side ceiling (existence inferred from `clusterState.privateNetworkId`)
+  rather than inheriting it.
+- **No `retain` for the network, ever (D3).** Volumes/buckets keep theirs
+  untouched. `_infraDeleteRows` has no `(retained)` branch and a property test
+  pins that no delete row ever contains the word.
+
+### Traps that bit, or would have
+
+- **`it.effect` runs on the TestClock — real sleeps never elapse.** A 409 on an
+  idempotent method is replayed by `OpenStackHttpLive` with exponential backoff
+  (`transportMaxRetries = 5`, ~6s), and under `it.effect` the test hangs forever
+  instead of failing. Cost an hour chasing a phantom "infinite retry" bug in the
+  transport; there is none. Any test that must observe a real backoff, timeout
+  or poll interval needs `it.live` (plus an explicit vitest timeout).
+- `Effect.repeat`'s `times`/`while` options do NOT bound a delayed schedule in a
+  way that is observable under the TestClock — do not "fix" the transport on
+  that evidence. Verified: `Schedule.recurs(n)` terminates, `exponential`
+  does not, purely because the latter sleeps.
+- oxlint's `kumulo(no-type-assertion)` plus TS narrowing: `assert.strictEqual`
+  does not narrow a tagged union, so reading `failure.kind`/`failure.ref` after
+  it fails `typecheck` even though the test passes. `expect(x).toMatchObject({
+  _tag, kind, ref: expect.stringContaining(...) })` needs no narrowing.
+- `deletePlanActions`' declared R is the whole `DistroServices` union, so a test
+  calling it through `mksEntry` must provide `CinderAuth`/`HttpClient`
+  (`makeFakeCinder({})`) and `OpenStackEnv` even though an `ovh-mks` plan
+  reaches neither.
+
+### Known ceilings
+
+- The delete of the two subnets is implicit: Neutron removes a network's
+  subnets with it, so no subnet DELETE is ever issued. The plan rows are still
+  honest (they do get deleted) but nothing would notice a Neutron that stopped
+  cascading.
+- `_waitClusterGone` polls the cluster only. Nothing waits on the Nova ports
+  themselves, so a slow port release still lands on the 409 — which is now
+  retried by the transport (~6s) and then fails loudly with the remedy. Upgrade
+  path if it bites: poll Neutron ports on the network before the network delete.
+- MKS delete now issues three no-op OpenStack reads (servers by tag, server
+  groups, security groups) that a managed control plane can never own. Cheap,
+  and the price of not widening the `CloudProvider` port.
+
+### M5 verification fixes (2026-07-28)
+
+- Octavia's `DELETE /lbaas/loadbalancers/:id` is ACCEPTED, not performed: the LB
+  goes PENDING_DELETE and keeps its VIP port on the load-balancers subnet, so the
+  network delete ~1-2s later 409s on every real MKS teardown. `_deleteLoadBalancer`
+  now polls `provisioning_status` (2s/10min) until DELETED or gone from the list —
+  the LB twin of `_waitClusterGone`. Octavia keeps a DELETED record until
+  housekeeping purges it, so waiting on a 404 alone would have hung for the
+  retention window.
+- Fakes that answer a DELETE with 204 and keep listing the resource unchanged
+  cannot distinguish a synchronous delete from an asynchronous one — every
+  teardown fake now flips `provisioning_status`. That is what made this defect
+  invisible to the M5 suite.
+- `TestClock` from `effect/testing` DOES work under `it.effect`
+  (`Effect.forkChild` + `TestClock.adjust` + `Fiber.join`); `it.live` is only
+  needed where the sleep is inside the transport's retry, which the fiber can't
+  observe. First use in this repo — see the PENDING_DELETE test in
+  `packages/openstack/test/provider/cloud-provider.test.ts`.
+- Delete-plan rows must be gated on exactly what the teardown gates on.
+  `_deleteMksInfra` gates on `network` alone and `deleteByTag` then finds the LB
+  and the floating IP BY NAME, so gating the plan's rows on `config.ingress`
+  under-reported any config that dropped its `ingress:` block after applying it.

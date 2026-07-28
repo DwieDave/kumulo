@@ -108,6 +108,8 @@ it.effect("yaml → plan → apply → nodepool scale-update → kubeconfig → 
     const kubeconfig = yield* kubeconfigMks(config).pipe(Effect.provide(mksEnvLayer))
     assert.match(kubeconfig.content, /kind: Config/)
 
-    yield* deleteMksEffect(config).pipe(Effect.provide(mksEnvLayer), Effect.provide(dnsNoopLive))
+    // `cloudProviderNever` dies on every verb: this config declares no
+    // `network`, so teardown must reach no OpenStack call at all (R5).
+    yield* deleteMksEffect(config).pipe(Effect.provide(mksEnvLayer), Effect.provide(dnsNoopLive), Effect.provide(cloudProviderNever))
     assert.strictEqual(server.clusters.has(info.id), false)
   }).pipe(Effect.provide(_fsTestLayer)))
