@@ -1,4 +1,5 @@
 import { Config, Effect, Option, Redacted } from "effect"
+import { AuthenticationFailed } from "@kumulo/core"
 import type { ClusterConfig } from "@kumulo/core"
 import { distroFor, distroRegistry } from "./distro/registry.ts"
 import { providerFor } from "./provider/registry.ts"
@@ -70,6 +71,60 @@ export const renderEnvSummary = (
       )
     ])
   ].join("\n")
+
+/**
+ * The vars a run genuinely cannot proceed without, as opposed to the fuller set
+ * `providerSections` displays. The OS_* set is deliberately excluded: which of
+ * them is required depends on the auth path `loadCredentials` picks, so
+ * demanding all of them would reject valid setups.
+ */
+const _requiredVars = (config: ClusterConfig): ReadonlyArray<string> => [
+  ...new Set([
+    // OVH's OAuth2 client-credentials trio has no alternative source, so its
+    // absence is always fatal. k3s's OS_* set deliberately is not listed here:
+    // `loadCredentials` accepts several shapes (clouds.yaml, OS_CLOUD,
+    // application-credential or password), so no single variable is required.
+    ...(config.distro === "ovh-mks" ? distroRegistry["ovh-mks"].requiredEnvVars : []),
+    ..._dnsVars[config.dns.module],
+    ..._objectStorageVars[config.object_storage.module]
+  ])
+]
+
+/**
+ * Required-but-unset credentials (pure; presence is the caller's to supply).
+ *
+ * Without this a missing var surfaces as whatever the first doomed request
+ * happens to look like — `GET /cloud/project//kube`, whose empty path segment
+ * is the only clue that `OVH_SERVICE_NAME` is unset. `main.ts` does attach a
+ * hint to the fallback client, but that hint is unreachable: with no
+ * credentials there is no base-URL mapping either, so the request stays
+ * relative and fails as `InvalidUrlError` before the handler that carries it
+ * ever runs.
+ */
+export const missingCredentials = (
+  { config, present }: { readonly config: ClusterConfig; readonly present: (name: string) => boolean }
+): ReadonlyArray<string> => _requiredVars(config).filter((name) => !present(name))
+
+/** `missingCredentials` against the real environment, as the failure every command path refuses with. */
+export const requireCredentials = (config: ClusterConfig): Effect.Effect<void, AuthenticationFailed> =>
+  Effect.gen(function*() {
+    const names = _requiredVars(config)
+    const entries = yield* Effect.all(
+      names.map((name) =>
+        Config.option(Config.redacted(name)).pipe(Effect.map((value) => [name, Option.isSome(value)] as const))
+      )
+    ).pipe(Effect.orDie)
+    const set = new Map(entries)
+    const missing = missingCredentials({ config, present: (name) => set.get(name) === true })
+    if (missing.length === 0) return
+    return yield* Effect.fail(
+      new AuthenticationFailed({
+        hint: `missing required environment variable${missing.length === 1 ? "" : "s"}: ${
+          missing.join(", ")
+        } — export them, or pass --secrets-file (see --show-env for everything this config reads)`
+      })
+    )
+  })
 
 /** Env-var presence for `renderEnvSummary`, read via `Config` (not raw `process.env`), redacted end to end. */
 export const envSummary = (config: ClusterConfig): Effect.Effect<string> =>

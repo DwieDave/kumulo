@@ -119,3 +119,22 @@ it("renders a CLI-only DistroNotWired error", () => {
   const message = renderCliError(new DistroNotWired({ distro: "k3s" }))
   assert.match(message, /k3s.*not wired/)
 })
+
+// A missing credential must name the variable. `_mksLive` deliberately keeps
+// MksEnv available with an empty serviceName so a hetzner-only k3s run does not
+// die on OVH vars it never needs — the price is that the OVH path then fails on
+// a request instead of at layer build, and the hint carried on that request is
+// the only thing telling the operator what is unset. Without it the whole
+// message is `GET /cloud/project//kube`, where an empty path segment is the
+// sole clue.
+it("renders the credential hint carried by a TransportError, not just the URL", () => {
+  const request = HttpClientRequest.make("GET")("/cloud/project//kube")
+  const cause = new HttpClientError.HttpClientError({
+    reason: new HttpClientError.TransportError({
+      request,
+      description: "OVH credentials unavailable (OVH_CLIENT_ID / OVH_CLIENT_SECRET / OVH_SERVICE_NAME)"
+    })
+  })
+  const message = renderCliError(new HttpTransportError({ cause }))
+  assert.match(message, /OVH_SERVICE_NAME/)
+})

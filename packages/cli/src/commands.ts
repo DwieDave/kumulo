@@ -12,7 +12,7 @@ import type { OutputsIngress, OutputsInvalid } from "@kumulo/volumes-cinder"
 import type { FileSystem } from "effect/FileSystem"
 import type { PlatformError } from "effect/PlatformError"
 import { loadConfig } from "./config.ts"
-import { envSummary } from "./env-summary.ts"
+import { envSummary, requireCredentials } from "./env-summary.ts"
 import {
   convergeManagedVolumes,
   lookupManagedVolumeNames,
@@ -211,6 +211,7 @@ const _applyFlow = Effect.fn(function*({ config: configPath }: { readonly config
   const configDir = dirname(configPath)
   const { appliedPrefixes } = distroFor(config)
   if (root.showEnv) yield* Console.log(`${yield* envSummary(config)}\n`)
+  yield* requireCredentials(config)
   const storageLayer = wantsObjectStorage(config) ? yield* storageLayers(config) : undefined
   const plan: Plan = yield* withSpinner({
     label: _planPhrases,
@@ -299,6 +300,7 @@ export const del = Command.make(
     const { deletedLabel } = distroFor(config)
 
     if (root.showEnv) yield* Console.log(`${yield* envSummary(config)}\n`)
+    yield* requireCredentials(config)
     const plan = yield* withSpinner({ label: _planPhrases, effect: _deletePlan(config, dirname(configPath)) })
     yield* Console.log(`${renderPlan(plan)}\n`)
     if (root.dryRun) return

@@ -11,6 +11,7 @@ import { makeStorageClient } from "@kumulo/storage-ovh"
 import { parseOutputsYaml } from "@kumulo/volumes-cinder"
 import { makeMksClient } from "@kumulo/distro-ovh-mks"
 import { kumuloCli } from "../../src/commands.ts"
+import { fakeCredentials } from "./fake-credentials.ts"
 import { MksEnv } from "../../src/mks/env.ts"
 import { OpenStackEnv } from "../../src/doctor-openstack/env.ts"
 import { StorageEnv } from "../../src/storage/env.ts"
@@ -130,6 +131,7 @@ it.effect("apply records the ingress LB it created in <cluster>.outputs.yaml", (
       Effect.provide(_fakeOpenStack()),
       Effect.provide(_openStackEnvLayer),
       Effect.provide(_storageLayer),
+      Effect.provide(fakeCredentials),
       Effect.provide(BunServices.layer)
     )
     assert.strictEqual(server.clusters.size, 1)

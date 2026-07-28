@@ -9,6 +9,7 @@ import { assert, expect, it } from "@effect/vitest"
 import { makeStorageClient } from "@kumulo/storage-ovh"
 import { makeMksClient } from "@kumulo/distro-ovh-mks"
 import { kumuloCli } from "../../src/commands.ts"
+import { fakeCredentials } from "./fake-credentials.ts"
 import { MksEnv } from "../../src/mks/env.ts"
 import { OpenStackEnv } from "../../src/doctor-openstack/env.ts"
 import { StorageEnv } from "../../src/storage/env.ts"
@@ -134,6 +135,7 @@ const _runDelete = (networkDelete: RouteHandler = _deleted) =>
       Effect.provide(_fakeOpenStack(timeline, networkDelete)),
       Effect.provide(_openStackEnvLayer),
       Effect.provide(_storageLayer),
+      Effect.provide(fakeCredentials),
       Effect.provide(BunServices.layer)
     )
     return { server, timeline }
