@@ -127,4 +127,233 @@
     "path": "/paths/~1v2.0~1routers~1{id}~1remove_router_interface/put/requestBody/required",
     "value": true
   }
+  ,
+  // kumulo: the Neutron spec mistypes this response repeatedly — OVH sends
+  // `ipv4_address_scope`/`ipv6_address_scope` as null and `l2_adjacency` as a
+  // boolean, both typed `string` here, and each one killed a real apply AFTER
+  // the network was created. kumulo reads only `id` and `name` off these, so
+  // every other scalar is widened to tolerate null (and l2_adjacency a bool)
+  // rather than waiting to be broken by the next field nobody reads.
+  {
+    "op": "replace",
+    "path": "/components/schemas/NetworksIndexResponse/properties/networks/items/properties/created_at/type",
+    "value": ["string", "null"]
+  },
+  {
+    "op": "replace",
+    "path": "/components/schemas/NetworksIndexResponse/properties/networks/items/properties/description/type",
+    "value": ["string", "null"]
+  },
+  {
+    "op": "replace",
+    "path": "/components/schemas/NetworksIndexResponse/properties/networks/items/properties/dns_domain/type",
+    "value": ["string", "null"]
+  },
+  {
+    "op": "replace",
+    "path": "/components/schemas/NetworksIndexResponse/properties/networks/items/properties/ipv4_address_scope/type",
+    "value": ["string", "null"]
+  },
+  {
+    "op": "replace",
+    "path": "/components/schemas/NetworksIndexResponse/properties/networks/items/properties/ipv6_address_scope/type",
+    "value": ["string", "null"]
+  },
+  {
+    "op": "replace",
+    "path": "/components/schemas/NetworksIndexResponse/properties/networks/items/properties/l2_adjacency/type",
+    "value": ["string", "boolean", "null"]
+  },
+  {
+    "op": "replace",
+    "path": "/components/schemas/NetworksIndexResponse/properties/networks/items/properties/mtu/type",
+    "value": ["integer", "null"]
+  },
+  {
+    "op": "replace",
+    "path": "/components/schemas/NetworksIndexResponse/properties/networks/items/properties/provider:network_type/type",
+    "value": ["string", "null"]
+  },
+  {
+    "op": "replace",
+    "path": "/components/schemas/NetworksIndexResponse/properties/networks/items/properties/provider:physical_network/type",
+    "value": ["string", "null"]
+  },
+  {
+    "op": "replace",
+    "path": "/components/schemas/NetworksIndexResponse/properties/networks/items/properties/revision_number/type",
+    "value": ["integer", "null"]
+  },
+  {
+    "op": "replace",
+    "path": "/components/schemas/NetworksIndexResponse/properties/networks/items/properties/status/type",
+    "value": ["string", "null"]
+  },
+  {
+    "op": "replace",
+    "path": "/components/schemas/NetworksIndexResponse/properties/networks/items/properties/tenant_id/type",
+    "value": ["string", "null"]
+  },
+  {
+    "op": "replace",
+    "path": "/components/schemas/NetworksIndexResponse/properties/networks/items/properties/updated_at/type",
+    "value": ["string", "null"]
+  },
+  {
+    "op": "replace",
+    "path": "/components/schemas/NetworksCreateResponse/properties/network/properties/created_at/type",
+    "value": ["string", "null"]
+  },
+  {
+    "op": "replace",
+    "path": "/components/schemas/NetworksCreateResponse/properties/network/properties/description/type",
+    "value": ["string", "null"]
+  },
+  {
+    "op": "replace",
+    "path": "/components/schemas/NetworksCreateResponse/properties/network/properties/dns_domain/type",
+    "value": ["string", "null"]
+  },
+  {
+    "op": "replace",
+    "path": "/components/schemas/NetworksCreateResponse/properties/network/properties/ipv4_address_scope/type",
+    "value": ["string", "null"]
+  },
+  {
+    "op": "replace",
+    "path": "/components/schemas/NetworksCreateResponse/properties/network/properties/ipv6_address_scope/type",
+    "value": ["string", "null"]
+  },
+  {
+    "op": "replace",
+    "path": "/components/schemas/NetworksCreateResponse/properties/network/properties/l2_adjacency/type",
+    "value": ["string", "boolean", "null"]
+  },
+  {
+    "op": "replace",
+    "path": "/components/schemas/NetworksCreateResponse/properties/network/properties/mtu/type",
+    "value": ["integer", "null"]
+  },
+  {
+    "op": "replace",
+    "path": "/components/schemas/NetworksCreateResponse/properties/network/properties/provider:network_type/type",
+    "value": ["string", "null"]
+  },
+  {
+    "op": "replace",
+    "path": "/components/schemas/NetworksCreateResponse/properties/network/properties/provider:physical_network/type",
+    "value": ["string", "null"]
+  },
+  {
+    "op": "replace",
+    "path": "/components/schemas/NetworksCreateResponse/properties/network/properties/revision_number/type",
+    "value": ["integer", "null"]
+  },
+  {
+    "op": "replace",
+    "path": "/components/schemas/NetworksCreateResponse/properties/network/properties/status/type",
+    "value": ["string", "null"]
+  },
+  {
+    "op": "replace",
+    "path": "/components/schemas/NetworksCreateResponse/properties/network/properties/tenant_id/type",
+    "value": ["string", "null"]
+  },
+  {
+    "op": "replace",
+    "path": "/components/schemas/NetworksCreateResponse/properties/network/properties/updated_at/type",
+    "value": ["string", "null"]
+  }
+  ,
+  // kumulo: UPSTREAM CODEGEN BUG, worked around here.
+  // `@effect/openapi-generator` drops "null" from a `type: [..., "null"]`
+  // union whenever the property also carries a `format`, emitting a
+  // one-member `Schema.Union([Schema.String.annotate(...)])`. Such a field
+  // then rejects the null the spec itself documents — `qos_policy_id` killed
+  // a real apply, and floatingips carry the same shape on a path kumulo uses.
+  // `format` is a pure annotation here (Effect Schema does not validate on
+  // it), so dropping it costs nothing and restores the union.
+  // Scoped to schemas the allowlist actually emits — the pipeline prunes
+  // before patching, so an op against a pruned schema is a hard error.
+  // Revert once the generator honours null alongside format.
+  {
+    "op": "remove",
+    "path": "/components/schemas/FloatingipsCreateRequest/properties/floatingip/properties/subnet_id/format"
+  },
+  {
+    "op": "remove",
+    "path": "/components/schemas/FloatingipsCreateRequest/properties/floatingip/properties/port_id/format"
+  },
+  {
+    "op": "remove",
+    "path": "/components/schemas/FloatingipsCreateRequest/properties/floatingip/properties/qos_policy_id/format"
+  },
+  {
+    "op": "remove",
+    "path": "/components/schemas/FloatingipsCreateResponse/properties/floatingip/properties/router_id/format"
+  },
+  {
+    "op": "remove",
+    "path": "/components/schemas/FloatingipsCreateResponse/properties/floatingip/properties/port_id/format"
+  },
+  {
+    "op": "remove",
+    "path": "/components/schemas/FloatingipsCreateResponse/properties/floatingip/properties/qos_policy_id/format"
+  },
+  {
+    "op": "remove",
+    "path": "/components/schemas/FloatingipsIndexResponse/properties/floatingips/items/properties/router_id/format"
+  },
+  {
+    "op": "remove",
+    "path": "/components/schemas/FloatingipsIndexResponse/properties/floatingips/items/properties/port_id/format"
+  },
+  {
+    "op": "remove",
+    "path": "/components/schemas/FloatingipsIndexResponse/properties/floatingips/items/properties/qos_policy_id/format"
+  },
+  {
+    "op": "remove",
+    "path": "/components/schemas/FloatingipUpdateRequest/properties/floatingip/properties/port_id/format"
+  },
+  {
+    "op": "remove",
+    "path": "/components/schemas/FloatingipUpdateRequest/properties/floatingip/properties/qos_policy_id/format"
+  },
+  {
+    "op": "remove",
+    "path": "/components/schemas/FloatingipUpdateResponse/properties/floatingip/properties/router_id/format"
+  },
+  {
+    "op": "remove",
+    "path": "/components/schemas/FloatingipUpdateResponse/properties/floatingip/properties/port_id/format"
+  },
+  {
+    "op": "remove",
+    "path": "/components/schemas/FloatingipUpdateResponse/properties/floatingip/properties/qos_policy_id/format"
+  },
+  {
+    "op": "remove",
+    "path": "/components/schemas/NetworksIndexResponse/properties/networks/items/properties/qos_policy_id/format"
+  },
+  {
+    "op": "remove",
+    "path": "/components/schemas/NetworksCreateRequest/properties/network/properties/qos_policy_id/format"
+  },
+  {
+    "op": "remove",
+    "path": "/components/schemas/NetworksCreateResponse/properties/network/properties/qos_policy_id/format"
+  },
+  {
+    "op": "remove",
+    "path": "/components/schemas/SubnetsIndexResponse/properties/subnets/items/properties/segment_id/format"
+  },
+  {
+    "op": "remove",
+    "path": "/components/schemas/SubnetsCreateRequest/properties/subnet/properties/segment_id/format"
+  },
+  {
+    "op": "remove",
+    "path": "/components/schemas/SubnetsCreateResponse/properties/subnet/properties/segment_id/format"
+  }
 ]

@@ -284,7 +284,9 @@ const _FLOATING_IPS = "v2.0/floatingips"
 
 interface FloatingIp extends Named {
   readonly floating_ip_address?: string | undefined
-  readonly port_id?: string | undefined
+  // Null, not just absent: an unassociated floating IP reports `port_id: null`,
+  // which is exactly the state teardown finds it in.
+  readonly port_id?: string | null | undefined
 }
 
 export interface FloatingIpInfo {

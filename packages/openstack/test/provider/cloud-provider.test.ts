@@ -9,6 +9,7 @@ import {
   ensureLoadBalancer,
   ensureNetwork,
   ensureSecurityGroups,
+  findNetwork,
   ensureServer,
   ensureServerGroups,
   listClusterResources,
@@ -822,6 +823,38 @@ describe("openstack CloudProvider", () => {
 // kumulo created there is no such router until it makes one, so the LB's
 // floating IP (R9) is unreachable without this. OVH sells the same thing as
 // "Public Cloud Gateway"; in Neutron terms it is a router.
+// Regression, twice over: OVH sends `ipv4_address_scope`/`ipv6_address_scope`
+// as null and `l2_adjacency` as a boolean, all three typed `string` by the
+// Neutron spec. Each killed a real apply AFTER the network had been created —
+// once on the create response, once on the list. kumulo reads only `id` and
+// `name` here, so the fixture sends the wrong-typed shape on BOTH routes.
+const _OVH_NETWORK = {
+  id: "net-1",
+  name: "kumulo-prod",
+  ipv4_address_scope: null,
+  ipv6_address_scope: null,
+  l2_adjacency: true,
+  // Nullable in the spec already, but the generator dropped the null because
+  // the field also carries `format: uuid` — see the patch file's note.
+  qos_policy_id: null
+}
+
+it.effect("decodes the network shape OVH actually returns, on create and on list", () => {
+  const fake = makeFakeOpenStack({
+    "GET /v2.0/networks": () => ({ status: 200, body: { networks: [_OVH_NETWORK] } }),
+    "POST /v2.0/networks": () => ({ status: 201, body: { network: _OVH_NETWORK } }),
+    "GET /v2.0/subnets": () => ({ status: 200, body: { subnets: [{ id: "sub-1", cidr: "10.0.0.0/24" }] } }),
+    "POST /v2.0/subnets": () => ({ status: 201, body: { subnet: { id: "sub-1", cidr: "10.0.0.0/24" } } })
+  })
+  return Effect.gen(function*() {
+    // The list route is what `apply` hits first, before anything is created.
+    const found = yield* findNetwork({ options, spec: { cidr: "10.0.0.0/24" } })
+    expect(found?.id).toBe("net-1")
+    const info = yield* ensureNetwork({ options, spec: { cidr: "10.0.0.0/24" } })
+    expect(info.id).toBe("net-1")
+  }).pipe(Effect.provide(fake.layer))
+})
+
 describe("hasGateway", () => {
   const _routersFake = (routers: ReadonlyArray<{ readonly id: string; readonly name: string }>) =>
     makeFakeOpenStack({ "GET /v2.0/routers": () => ({ status: 200, body: { routers } }) })
