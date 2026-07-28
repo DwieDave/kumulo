@@ -79,5 +79,52 @@
         "$ref": "#/components/parameters/floatingips_id"
       }
     ]
+  },
+  // kumulo: `/v2.0/routers` GET declares `routers_id` as a PATH parameter on a
+  // collection endpoint that has no `{id}` in its path, so the generator emits a
+  // required `RoutersGetPathParams = { id: string }` that no caller can satisfy
+  // — every list call fails to decode. Same shape as the security-groups GET
+  // patch above.
+  {
+    "op": "remove",
+    "path": "/paths/~1v2.0~1routers/get/parameters/0"
+  },
+  // Same missing `required` as the networks/subnets creates above.
+  {
+    "op": "add",
+    "path": "/paths/~1v2.0~1routers/post/requestBody/required",
+    "value": true
+  }
+  ,
+  // kumulo: these three declare no `parameters` at all, so `{id}` is never
+  // substituted and the client sends the literal `:id` in the path. Same fix as
+  // the networks/security-groups deletes above.
+  {
+    "op": "add",
+    "path": "/paths/~1v2.0~1routers~1{id}~1add_router_interface/put/parameters",
+    "value": [{ "$ref": "#/components/parameters/routers_id" }]
+  },
+  {
+    "op": "add",
+    "path": "/paths/~1v2.0~1routers~1{id}~1remove_router_interface/put/parameters",
+    "value": [{ "$ref": "#/components/parameters/routers_id" }]
+  },
+  {
+    "op": "add",
+    "path": "/paths/~1v2.0~1routers~1{id}/delete/parameters",
+    "value": [{ "$ref": "#/components/parameters/routers_id" }]
+  }
+  ,
+  // Same missing `required` again: without it the payload is a NoContent union
+  // and the interface PUTs go out with an empty body.
+  {
+    "op": "add",
+    "path": "/paths/~1v2.0~1routers~1{id}~1add_router_interface/put/requestBody/required",
+    "value": true
+  },
+  {
+    "op": "add",
+    "path": "/paths/~1v2.0~1routers~1{id}~1remove_router_interface/put/requestBody/required",
+    "value": true
   }
 ]

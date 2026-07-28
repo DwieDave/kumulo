@@ -5,6 +5,7 @@ import { CapabilityMissing, ProvisioningTimeout, ResourceNotFound, ResponseDecod
 import {
   deleteByTag,
   ensureFloatingIp,
+  hasGateway,
   ensureLoadBalancer,
   ensureNetwork,
   ensureSecurityGroups,
@@ -96,6 +97,14 @@ const _postedFloatingIp = (payload: unknown): Record<string, string> => {
     Object.entries(wrapper).filter((entry): entry is [string, string] => typeof entry[1] === "string")
   )
 }
+
+// Narrows the posted `{ subnet_id }` interface body. Guard chain, not a cast —
+// `as` is banned repo-wide.
+const _postedSubnetId = (payload: unknown): string =>
+  typeof payload === "object" && payload !== null && "subnet_id" in payload &&
+    typeof payload.subnet_id === "string"
+    ? payload.subnet_id
+    : ""
 
 const _route = (call: { readonly method: string; readonly url: string }) => `${call.method} ${new URL(call.url).pathname}`
 
@@ -472,6 +481,11 @@ describe("openstack CloudProvider", () => {
         return { status: 204 }
       },
       "GET /v2.0/networks": () => ({ status: 200, body: { networks: [{ id: "net-1" }] } }),
+      // Teardown reads the network's subnets and looks for a gateway to detach
+      // before deleting the network (R17). These fixtures have neither, so the
+      // gateway step is a no-op read.
+      "GET /v2.0/subnets": () => ({ status: 200, body: { subnets: [] } }),
+      "GET /v2.0/routers": () => ({ status: 200, body: { routers: [] } }),
       "DELETE /v2.0/networks/net-1": () => {
         deleted.push("network")
         return { status: 204 }
@@ -499,6 +513,11 @@ describe("openstack CloudProvider", () => {
       "GET /v2.1/os-server-groups": () => ({ status: 200, body: { server_groups: [] } }),
       "GET /v2.0/security-groups": () => ({ status: 200, body: { security_groups: [] } }),
       "GET /v2.0/networks": () => ({ status: 200, body: { networks: [{ id: "net-1" }] } }),
+      // Teardown reads the network's subnets and looks for a gateway to detach
+      // before deleting the network (R17). These fixtures have neither, so the
+      // gateway step is a no-op read.
+      "GET /v2.0/subnets": () => ({ status: 200, body: { subnets: [] } }),
+      "GET /v2.0/routers": () => ({ status: 200, body: { routers: [] } }),
       "DELETE /v2.0/networks/net-1": () => {
         deleted.push("network")
         return { status: 204 }
@@ -530,6 +549,11 @@ describe("openstack CloudProvider", () => {
       "GET /v2.1/os-server-groups": () => ({ status: 200, body: { server_groups: [] } }),
       "GET /v2.0/security-groups": () => ({ status: 200, body: { security_groups: [] } }),
       "GET /v2.0/networks": () => ({ status: 200, body: { networks: [{ id: "net-1" }] } }),
+      // Teardown reads the network's subnets and looks for a gateway to detach
+      // before deleting the network (R17). These fixtures have neither, so the
+      // gateway step is a no-op read.
+      "GET /v2.0/subnets": () => ({ status: 200, body: { subnets: [] } }),
+      "GET /v2.0/routers": () => ({ status: 200, body: { routers: [] } }),
       "DELETE /v2.0/networks/net-1": () => ({
         status: 409,
         body: { NeutronError: { message: "There are one or more ports still in use on the network." } }
@@ -553,6 +577,11 @@ describe("openstack CloudProvider", () => {
         body: { servers: [{ id: "srv-1", name: "master-1", addresses: {}, metadata: { "kumulo-config-hash": "abc" } }] }
       }),
       "GET /v2.0/networks": () => ({ status: 200, body: { networks: [{ id: "net-1" }] } }),
+      // Teardown reads the network's subnets and looks for a gateway to detach
+      // before deleting the network (R17). These fixtures have neither, so the
+      // gateway step is a no-op read.
+      "GET /v2.0/subnets": () => ({ status: 200, body: { subnets: [] } }),
+      "GET /v2.0/routers": () => ({ status: 200, body: { routers: [] } }),
       "GET /v2.0/security-groups": () => ({ status: 200, body: { security_groups: [{ id: "sg-1" }] } }),
       "GET /v2/lbaas/loadbalancers": () => ({ status: 200, body: { loadbalancers: [] } })
     })
@@ -786,4 +815,28 @@ describe("openstack CloudProvider", () => {
       expect(exit).toBeInstanceOf(ResourceNotFound)
     }).pipe(Effect.provide(fake.layer))
   })
+})
+
+// A floating IP only routes if its subnet hangs off a router with an external
+// gateway — Neutron refuses the association otherwise. On a private network
+// kumulo created there is no such router until it makes one, so the LB's
+// floating IP (R9) is unreachable without this. OVH sells the same thing as
+// "Public Cloud Gateway"; in Neutron terms it is a router.
+describe("hasGateway", () => {
+  const _routersFake = (routers: ReadonlyArray<{ readonly id: string; readonly name: string }>) =>
+    makeFakeOpenStack({ "GET /v2.0/routers": () => ({ status: 200, body: { routers } }) })
+
+  // An OVH gateway IS a Neutron router, so existence is answerable here even
+  // though creation is not — only OVH's own API carries the tier. This read is
+  // what keeps that create idempotent.
+  it.effect("reports an existing gateway by the cluster's router name", () =>
+    Effect.gen(function*() {
+      expect(yield* hasGateway({ options, name: "kumulo-prod" })).toBe(true)
+    }).pipe(Effect.provide(_routersFake([{ id: "router-1", name: "kumulo-prod" }]).layer)))
+
+  it.effect("reports none when the project has no such router", () =>
+    Effect.gen(function*() {
+      expect(yield* hasGateway({ options, name: "kumulo-prod" })).toBe(false)
+    }).pipe(Effect.provide(_routersFake([]).layer)))
+
 })

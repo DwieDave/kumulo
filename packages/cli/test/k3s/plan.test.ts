@@ -114,6 +114,7 @@ const _inventoryOf = (servers: Inventory["servers"]): Layer.Layer<CloudProvider>
   Layer.succeed(CloudProvider, {
     ensureNetwork: () => _unused,
     findNetwork: () => _unused,
+    hasGateway: () => Effect.succeed(false),
     ensureSecurityGroups: () => _unused,
     ensureLoadBalancer: () => _unused,
     ensureServer: () => _unused,

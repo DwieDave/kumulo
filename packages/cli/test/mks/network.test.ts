@@ -145,3 +145,24 @@ it.effect("applies a networkless config with no OpenStack credentials present", 
 
     assert.strictEqual(server.clusters.get(info.id)?.privateNetworkId, undefined)
   }).pipe(_withYaml(_yaml(""))))
+
+// The whole reason the gateway is created through OVH's API rather than
+// Neutron: `routersPost` has no `model`, so a router made that way silently
+// lands on OVH's default tier and `gateway_model` would be a lie.
+it.effect("creates the gateway at the tier the config asked for", () =>
+  Effect.gen(function*() {
+    const cloud = fakeCloudProvider()
+    const server = makeFakeMksServer()
+    yield* _run({ cloud, server })
+    assert.deepStrictEqual(server.gateways, [{ model: "l", name: "kumulo-staging" }])
+  }).pipe(_withYaml(_yaml(`${_NETWORK}  gateway_model: l\n`))))
+
+// `s` is OVH's own default, but sending it explicitly keeps the applied tier
+// visible rather than inherited.
+it.effect("defaults the tier to s when the config names none", () =>
+  Effect.gen(function*() {
+    const cloud = fakeCloudProvider()
+    const server = makeFakeMksServer()
+    yield* _run({ cloud, server })
+    assert.deepStrictEqual(server.gateways, [{ model: "s", name: "kumulo-staging" }])
+  }).pipe(_withYaml(_yaml(_NETWORK))))

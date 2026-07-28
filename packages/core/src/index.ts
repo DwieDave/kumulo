@@ -113,6 +113,7 @@ export type {
   ManagedClusterInfo,
   ManagedClusterRef,
   NetworkInfo,
+  GatewayRef,
   NetworkSpec,
   NodeContext,
   NodeRef,

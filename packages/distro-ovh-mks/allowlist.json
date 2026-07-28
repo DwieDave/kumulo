@@ -2,19 +2,65 @@
   "service": "mks",
   "spec": "../../tools/ovh2openapi/specs/ovh/cloud.json",
   "operations": [
-    { "path": "/cloud/project/{serviceName}/vrack", "method": "GET" },
-    { "path": "/cloud/project/{serviceName}/kube", "method": "GET" },
-    { "path": "/cloud/project/{serviceName}/kube", "method": "POST" },
-    { "path": "/cloud/project/{serviceName}/kube/{kubeId}", "method": "GET" },
-    { "path": "/cloud/project/{serviceName}/kube/{kubeId}", "method": "PUT" },
-    { "path": "/cloud/project/{serviceName}/kube/{kubeId}", "method": "DELETE" },
-    { "path": "/cloud/project/{serviceName}/kube/{kubeId}/kubeconfig", "method": "POST" },
-    { "path": "/cloud/project/{serviceName}/kube/{kubeId}/kubeconfig/reset", "method": "POST" },
-    { "path": "/cloud/project/{serviceName}/kube/{kubeId}/update", "method": "POST" },
-    { "path": "/cloud/project/{serviceName}/kube/{kubeId}/nodepool", "method": "GET" },
-    { "path": "/cloud/project/{serviceName}/kube/{kubeId}/nodepool", "method": "POST" },
-    { "path": "/cloud/project/{serviceName}/kube/{kubeId}/nodepool/{nodePoolId}", "method": "GET" },
-    { "path": "/cloud/project/{serviceName}/kube/{kubeId}/nodepool/{nodePoolId}", "method": "PUT" },
-    { "path": "/cloud/project/{serviceName}/kube/{kubeId}/nodepool/{nodePoolId}", "method": "DELETE" }
+    {
+      "path": "/cloud/project/{serviceName}/vrack",
+      "method": "GET"
+    },
+    {
+      "path": "/cloud/project/{serviceName}/kube",
+      "method": "GET"
+    },
+    {
+      "path": "/cloud/project/{serviceName}/kube",
+      "method": "POST"
+    },
+    {
+      "path": "/cloud/project/{serviceName}/kube/{kubeId}",
+      "method": "GET"
+    },
+    {
+      "path": "/cloud/project/{serviceName}/kube/{kubeId}",
+      "method": "PUT"
+    },
+    {
+      "path": "/cloud/project/{serviceName}/kube/{kubeId}",
+      "method": "DELETE"
+    },
+    {
+      "path": "/cloud/project/{serviceName}/kube/{kubeId}/kubeconfig",
+      "method": "POST"
+    },
+    {
+      "path": "/cloud/project/{serviceName}/kube/{kubeId}/kubeconfig/reset",
+      "method": "POST"
+    },
+    {
+      "path": "/cloud/project/{serviceName}/kube/{kubeId}/update",
+      "method": "POST"
+    },
+    {
+      "path": "/cloud/project/{serviceName}/kube/{kubeId}/nodepool",
+      "method": "GET"
+    },
+    {
+      "path": "/cloud/project/{serviceName}/kube/{kubeId}/nodepool",
+      "method": "POST"
+    },
+    {
+      "path": "/cloud/project/{serviceName}/kube/{kubeId}/nodepool/{nodePoolId}",
+      "method": "GET"
+    },
+    {
+      "path": "/cloud/project/{serviceName}/kube/{kubeId}/nodepool/{nodePoolId}",
+      "method": "PUT"
+    },
+    {
+      "path": "/cloud/project/{serviceName}/kube/{kubeId}/nodepool/{nodePoolId}",
+      "method": "DELETE"
+    },
+    {
+      "path": "/cloud/project/{serviceName}/region/{regionName}/network/{networkId}/subnet/{subnetId}/gateway",
+      "method": "POST"
+    }
   ]
 }

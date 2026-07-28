@@ -7,6 +7,8 @@ import * as HttpClientError from "effect/unstable/http/HttpClientError"
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
 // non-recursive definitions
+export type Cloud_OperationStatusEnum = "canceled" | "completed" | "created" | "in-error" | "in-progress" | "unknown"
+export const Cloud_OperationStatusEnum = Schema.Literals(["canceled", "completed", "created", "in-error", "in-progress", "unknown"])
 export type Cloud_ProjectKubeCustomizationAPIServerAdmissionPluginsEnum = "AlwaysPullImages" | "NodeRestriction"
 export const Cloud_ProjectKubeCustomizationAPIServerAdmissionPluginsEnum = Schema.Literals(["AlwaysPullImages", "NodeRestriction"])
 export type Cloud_ProjectKubeCustomizationCiliumClusterMeshApiServerServiceTypeEnum = "LoadBalancer" | "NodePort"
@@ -53,6 +55,10 @@ export type Cloud_kube_UpdateStrategyEnum = "LATEST_PATCH" | "NEXT_MINOR"
 export const Cloud_kube_UpdateStrategyEnum = Schema.Literals(["LATEST_PATCH", "NEXT_MINOR"])
 export type Cloud_kube_VersionEnum = "1.31" | "1.32" | "1.33" | "1.34" | "1.35"
 export const Cloud_kube_VersionEnum = Schema.Literals(["1.31", "1.32", "1.33", "1.34", "1.35"])
+export type Cloud_network_GatewayModelEnum = "2xl" | "3xl" | "l" | "m" | "s" | "xl"
+export const Cloud_network_GatewayModelEnum = Schema.Literals(["2xl", "3xl", "l", "m", "s", "xl"])
+export type Cloud_SubOperation = { readonly "action"?: string, readonly "completedAt"?: string | null, readonly "id"?: string, readonly "progress"?: number, readonly "regions"?: ReadonlyArray<string> | null, readonly "resourceId"?: string | null, readonly "startedAt"?: string | null, readonly "status"?: Cloud_OperationStatusEnum }
+export const Cloud_SubOperation = Schema.Struct({ "action": Schema.optionalKey(Schema.String), "completedAt": Schema.optionalKey(Schema.Union([Schema.String.annotate({ "format": "date-time" }), Schema.Null])), "id": Schema.optionalKey(Schema.String), "progress": Schema.optionalKey(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt())), "regions": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "resourceId": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])), "startedAt": Schema.optionalKey(Schema.Union([Schema.String.annotate({ "format": "date-time" }), Schema.Null])), "status": Schema.optionalKey(Cloud_OperationStatusEnum) })
 export type Cloud_ProjectKubeCustomizationAPIServerAdmissionPlugins = { readonly "disabled"?: ReadonlyArray<Cloud_ProjectKubeCustomizationAPIServerAdmissionPluginsEnum> | null, readonly "enabled"?: ReadonlyArray<Cloud_ProjectKubeCustomizationAPIServerAdmissionPluginsEnum> | null }
 export const Cloud_ProjectKubeCustomizationAPIServerAdmissionPlugins = Schema.Struct({ "disabled": Schema.optionalKey(Schema.Union([Schema.Array(Cloud_ProjectKubeCustomizationAPIServerAdmissionPluginsEnum), Schema.Null])), "enabled": Schema.optionalKey(Schema.Union([Schema.Array(Cloud_ProjectKubeCustomizationAPIServerAdmissionPluginsEnum), Schema.Null])) })
 export type Cloud_ProjectKubeCustomizationCiliumClusterMeshApiServer = { readonly "nodePort"?: number | null, readonly "serviceType"?: Cloud_ProjectKubeCustomizationCiliumClusterMeshApiServerServiceTypeEnum | null }
@@ -67,6 +73,10 @@ export type Cloud_ProjectKubeUpdate = { readonly "name"?: string, readonly "upda
 export const Cloud_ProjectKubeUpdate = Schema.Struct({ "name": Schema.optionalKey(Schema.String), "updatePolicy": Schema.optionalKey(Cloud_kube_UpdatePolicyEnum) })
 export type Cloud_ProjectKubeUpdateCreation = { readonly "force"?: boolean | null, readonly "strategy"?: Cloud_kube_UpdateStrategyEnum }
 export const Cloud_ProjectKubeUpdateCreation = Schema.Struct({ "force": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])), "strategy": Schema.optionalKey(Cloud_kube_UpdateStrategyEnum) })
+export type Cloud_network_CreateGatewaySummary = { readonly "model": Cloud_network_GatewayModelEnum, readonly "name": string }
+export const Cloud_network_CreateGatewaySummary = Schema.Struct({ "model": Cloud_network_GatewayModelEnum, "name": Schema.String })
+export type Cloud_Operation = { readonly "action"?: string, readonly "completedAt"?: string | null, readonly "createdAt"?: string, readonly "id"?: string, readonly "progress"?: number, readonly "regions"?: ReadonlyArray<string> | null, readonly "resourceId"?: string | null, readonly "startedAt"?: string | null, readonly "status"?: Cloud_OperationStatusEnum, readonly "subOperations"?: ReadonlyArray<Cloud_SubOperation> | null }
+export const Cloud_Operation = Schema.Struct({ "action": Schema.optionalKey(Schema.String), "completedAt": Schema.optionalKey(Schema.Union([Schema.String.annotate({ "format": "date-time" }), Schema.Null])), "createdAt": Schema.optionalKey(Schema.String.annotate({ "format": "date-time" })), "id": Schema.optionalKey(Schema.String), "progress": Schema.optionalKey(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt())), "regions": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "resourceId": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])), "startedAt": Schema.optionalKey(Schema.Union([Schema.String.annotate({ "format": "date-time" }), Schema.Null])), "status": Schema.optionalKey(Cloud_OperationStatusEnum), "subOperations": Schema.optionalKey(Schema.Union([Schema.Array(Cloud_SubOperation), Schema.Null])) })
 export type Cloud_ProjectKubeCustomizationAPIServer = { readonly "admissionPlugins"?: Cloud_ProjectKubeCustomizationAPIServerAdmissionPlugins | null }
 export const Cloud_ProjectKubeCustomizationAPIServer = Schema.Struct({ "admissionPlugins": Schema.optionalKey(Schema.Union([Cloud_ProjectKubeCustomizationAPIServerAdmissionPlugins, Schema.Null])) })
 export type Cloud_ProjectKubeCustomizationCiliumClusterMesh = { readonly "apiServer"?: Cloud_ProjectKubeCustomizationCiliumClusterMeshApiServer | null, readonly "enabled"?: boolean | null }
@@ -122,6 +132,10 @@ export type PutCloudProjectServiceNameKubeKubeIdNodepoolNodePoolIdRequestJson = 
 export const PutCloudProjectServiceNameKubeKubeIdNodepoolNodePoolIdRequestJson = Cloud_ProjectKubeNodePoolUpdate
 export type PostCloudProjectServiceNameKubeKubeIdUpdateRequestJson = Cloud_ProjectKubeUpdateCreation
 export const PostCloudProjectServiceNameKubeKubeIdUpdateRequestJson = Cloud_ProjectKubeUpdateCreation
+export type PostCloudProjectServiceNameRegionRegionNameNetworkNetworkIdSubnetSubnetIdGatewayRequestJson = Cloud_network_CreateGatewaySummary
+export const PostCloudProjectServiceNameRegionRegionNameNetworkNetworkIdSubnetSubnetIdGatewayRequestJson = Cloud_network_CreateGatewaySummary
+export type PostCloudProjectServiceNameRegionRegionNameNetworkNetworkIdSubnetSubnetIdGateway200 = Cloud_Operation
+export const PostCloudProjectServiceNameRegionRegionNameNetworkNetworkIdSubnetSubnetIdGateway200 = Cloud_Operation
 export type GetCloudProjectServiceNameVrack200 = Cloud_Vrack
 export const GetCloudProjectServiceNameVrack200 = Cloud_Vrack
 
@@ -285,6 +299,13 @@ export const make = (
       orElse: unexpectedStatus
     }))
   ),
+    "postCloudProjectServiceNameRegionRegionNameNetworkNetworkIdSubnetSubnetIdGateway": (serviceName, regionName, networkId, subnetId, options) => HttpClientRequest.post(`/cloud/project/${serviceName}/region/${regionName}/network/${networkId}/subnet/${subnetId}/gateway`).pipe(
+    HttpClientRequest.bodyJsonUnsafe(options.payload),
+    withResponse(options.config)(HttpClientResponse.matchStatus({
+      "2xx": decodeSuccess(PostCloudProjectServiceNameRegionRegionNameNetworkNetworkIdSubnetSubnetIdGateway200),
+      orElse: unexpectedStatus
+    }))
+  ),
     "getCloudProjectServiceNameVrack": (serviceName, options) => HttpClientRequest.get(`/cloud/project/${serviceName}/vrack`).pipe(
     withResponse(options?.config)(HttpClientResponse.matchStatus({
       "2xx": decodeSuccess(GetCloudProjectServiceNameVrack200),
@@ -309,6 +330,7 @@ export interface Mks {
   readonly "putCloudProjectServiceNameKubeKubeIdNodepoolNodePoolId": <Config extends OperationConfig>(serviceName: string, kubeId: string, nodePoolId: string, options: { readonly payload: typeof PutCloudProjectServiceNameKubeKubeIdNodepoolNodePoolIdRequestJson.Encoded; readonly config?: Config | undefined }) => Effect.Effect<WithOptionalResponse<void, Config>, HttpClientError.HttpClientError | SchemaError>
   readonly "deleteCloudProjectServiceNameKubeKubeIdNodepoolNodePoolId": <Config extends OperationConfig>(serviceName: string, kubeId: string, nodePoolId: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<void, Config>, HttpClientError.HttpClientError | SchemaError>
   readonly "postCloudProjectServiceNameKubeKubeIdUpdate": <Config extends OperationConfig>(serviceName: string, kubeId: string, options: { readonly payload: typeof PostCloudProjectServiceNameKubeKubeIdUpdateRequestJson.Encoded; readonly config?: Config | undefined }) => Effect.Effect<WithOptionalResponse<void, Config>, HttpClientError.HttpClientError | SchemaError>
+  readonly "postCloudProjectServiceNameRegionRegionNameNetworkNetworkIdSubnetSubnetIdGateway": <Config extends OperationConfig>(serviceName: string, regionName: string, networkId: string, subnetId: string, options: { readonly payload: typeof PostCloudProjectServiceNameRegionRegionNameNetworkNetworkIdSubnetSubnetIdGatewayRequestJson.Encoded; readonly config?: Config | undefined }) => Effect.Effect<WithOptionalResponse<typeof PostCloudProjectServiceNameRegionRegionNameNetworkNetworkIdSubnetSubnetIdGateway200.Type, Config>, HttpClientError.HttpClientError | SchemaError>
   readonly "getCloudProjectServiceNameVrack": <Config extends OperationConfig>(serviceName: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<typeof GetCloudProjectServiceNameVrack200.Type, Config>, HttpClientError.HttpClientError | SchemaError>
 }
 

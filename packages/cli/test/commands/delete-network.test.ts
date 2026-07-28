@@ -101,6 +101,10 @@ const _fakeOpenStack = (timeline: Array<string>, networkDelete: RouteHandler) =>
     "GET /v2.1/os-server-groups": () => ({ status: 200, body: { server_groups: [] } }),
     "GET /v2.0/security-groups": () => ({ status: 200, body: { security_groups: [] } }),
     "GET /v2.0/networks": () => ({ status: 200, body: { networks: [{ id: "net-1", name: "kumulo-staging" }] } }),
+    // Teardown detaches the gateway before the network (R17); this fixture has
+    // neither subnets nor a router, so both reads are no-ops.
+    "GET /v2.0/subnets": () => ({ status: 200, body: { subnets: [] } }),
+    "GET /v2.0/routers": () => ({ status: 200, body: { routers: [] } }),
     "DELETE /v2.0/networks/net-1": (request) => {
       record("network")
       return networkDelete(request)

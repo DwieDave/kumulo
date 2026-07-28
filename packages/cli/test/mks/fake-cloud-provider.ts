@@ -33,6 +33,7 @@ export const fakeCloudProvider = (info: NetworkInfo = defaultNetworkInfo) => {
     // Read-only: deliberately does NOT record into `specs`, so a test asserting
     // "no network was created" still means exactly that (R8 reads at plan time).
     findNetwork: (_spec: NetworkSpec) => Effect.succeed(info),
+    hasGateway: () => Effect.succeed(false),
     ensureLoadBalancer: (spec: LbSpec) => {
       lbSpecs.push(spec)
       return Effect.succeed(defaultLbInfo)

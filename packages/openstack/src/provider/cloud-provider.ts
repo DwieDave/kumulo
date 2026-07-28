@@ -14,6 +14,7 @@ import type {
   Inventory,
   LbInfo,
   LbSpec,
+  GatewayRef,
   NetworkInfo,
   NetworkSpec,
   SecGroupInfo,
@@ -217,6 +218,65 @@ export const findNetwork = (
     const subnets = yield* _listSubnets({ client, networkId: id })
     return _networkInfo({ id, spec, ids: _subnetCidrs(spec).map((cidr) => _subnetIdOf(subnets, cidr)) })
   })
+
+// ---- Gateway (Neutron router) ------------------------------------------
+
+const _ROUTERS = "v2.0/routers"
+
+/**
+ * Does this cluster already have a gateway? An OVH "Public Cloud Gateway" IS a
+ * Neutron router, so existence is answerable here even though creation is not:
+ * only OVH's own API carries the `model` (tier), so `distro-ovh-mks` makes it
+ * and this read is what keeps that create idempotent.
+ */
+export const hasGateway = (
+  { name, options }: { readonly options: CloudProviderOptions; readonly name: string }
+): R<boolean> =>
+  Effect.gen(function*() {
+    const client = yield* neutronClient(options.region)
+    const listed = yield* client.routers.routersGet({ query: { name } }).pipe(Effect.mapError(_at("router", _ROUTERS)))
+    return _first(listed.routers) !== undefined
+  })
+
+/**
+ * Teardown, in the only order Neutron accepts: every subnet interface off the
+ * router first, then the router. A router still holding an interface refuses
+ * deletion, and a subnet still attached to one refuses deletion too — which is
+ * why this runs before the network goes (R17).
+ */
+export const deleteGateway = (
+  { options, subnetIds }: {
+    readonly options: CloudProviderOptions
+    readonly subnetIds: ReadonlyArray<string>
+  }
+): R<void> =>
+  Effect.gen(function*() {
+    const client = yield* neutronClient(options.region)
+    const listed = yield* client.routers.routersGet({ query: { name: _name(options) } }).pipe(
+      Effect.mapError(_at("router", _ROUTERS))
+    )
+    const existing = _first(listed.routers)
+    if (existing === undefined) return
+    const id = _idOf(existing)
+    yield* Effect.forEach(subnetIds, (subnetId) => _detachSubnet({ client, routerId: id, subnetId }), { discard: true })
+    yield* _ignoreMissing(
+      client.routers.routersIdDelete({ params: { id } }).pipe(Effect.mapError(_at("router", _ROUTERS)))
+    )
+  })
+
+const _detachSubnet = (
+  { client, routerId, subnetId }: {
+    readonly client: NeutronClient
+    readonly routerId: string
+    readonly subnetId: string
+  }
+): R<void> =>
+  _ignoreMissing(
+    client.routers.routersIdRemoveRouterInterfacePut({
+      params: { id: routerId },
+      payload: { subnet_id: subnetId }
+    }).pipe(Effect.mapError(_at("router-interface", `${_ROUTERS}/${routerId}`)))
+  )
 
 // ---- Floating IPs (R9) -------------------------------------------------
 
@@ -799,6 +859,11 @@ const _deleteNetworking = (options: CloudProviderOptions): R<void> =>
     const network = yield* _findNetwork(options)
     if (network !== undefined) {
       const id = _idOf(network)
+      // The router holds an interface on every subnet, and Neutron refuses to
+      // delete a subnet — or the network above it — while one is attached. So
+      // the gateway goes first, detaching as it does (R17).
+      const subnets = yield* _listSubnets({ client, networkId: id })
+      yield* deleteGateway({ options, subnetIds: subnets.map(_idOf).filter((subnetId) => subnetId !== "") })
       // Deliberately NOT `_ignoreConflict`: swallowing this leaves a half-torn
       // network behind and reports success.
       yield* _ignoreMissing(
@@ -877,6 +942,7 @@ export const CloudProviderLive = (options: CloudProviderOptions): Layer.Layer<Cl
       return {
         ensureNetwork: (spec: NetworkSpec) => run(ensureNetwork({ options, spec })),
         findNetwork: (spec: NetworkSpec) => run(findNetwork({ options, spec })),
+        hasGateway: (spec: GatewayRef) => run(hasGateway({ options, name: spec.name })),
         ensureSecurityGroups: (spec: SecGroupSpec) => run(ensureSecurityGroups({ options, spec })),
         ensureLoadBalancer: (spec: LbSpec) => run(ensureLoadBalancer({ options, spec })),
         ensureServer: (spec: ServerSpec) => run(ensureServer({ options, spec })),

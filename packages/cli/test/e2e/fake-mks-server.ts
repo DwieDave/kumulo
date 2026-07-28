@@ -36,6 +36,7 @@ interface FakeBody {
   readonly autoscale?: boolean
   readonly antiAffinity?: boolean
   readonly monthlyBilled?: boolean
+  readonly model?: string
   readonly privateNetworkId?: string
   readonly nodesSubnetId?: string
   readonly loadBalancersSubnetId?: string
@@ -104,10 +105,18 @@ export const makeFakeMksServer = (
   // ponytail: fixture request bodies are one all-optional shape — whatever
   // `JSON.parse` hands back, read field by field with defaults, so a missing
   // field surfaces as a failed assertion in the test rather than a cast.
+  const gateways: Array<{ readonly model: string; readonly name: string }> = []
+
   const _handle = (request: HttpClientRequest.HttpClientRequest, body: FakeBody | undefined): Response => {
     const path = new URL(request.url).pathname
     if (path.match(/^\/cloud\/project\/[^/]+\/vrack$/) && request.method === "GET") {
       return vrackId === null ? new Response(JSON.stringify({ message: "not found" }), { status: 404 }) : _json({ id: vrackId })
+    }
+    // Gateway create is subnet-scoped and returns a cloud.Operation. Recorded
+    // so a test can assert the tier the config asked for actually went out.
+    if (path.match(/^\/cloud\/project\/[^/]+\/region\/[^/]+\/network\/[^/]+\/subnet\/[^/]+\/gateway$/) && request.method === "POST") {
+      gateways.push({ model: body?.model ?? "", name: body?.name ?? "" })
+      return _json({ id: "op-gateway-1", status: "completed" })
     }
     const kubeMatch = path.match(/^\/cloud\/project\/[^/]+\/kube$/)
     if (kubeMatch && request.method === "GET") return _json([...clusters.keys()])
@@ -189,7 +198,7 @@ export const makeFakeMksServer = (
     return new Response(JSON.stringify({ message: "not found" }), { status: 404 })
   }
 
-  return { clusters, pools, httpClient: _fixtureHttpClient(_handle) }
+  return { clusters, pools, gateways, httpClient: _fixtureHttpClient(_handle) }
 
   function _fixtureHttpClient(handle: (request: HttpClientRequest.HttpClientRequest, body: FakeBody | undefined) => Response) {
     return HttpClient.make((request) =>

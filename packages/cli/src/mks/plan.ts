@@ -149,8 +149,15 @@ const _networkActions = (
   if (config.network === undefined) return []
   const id = inventory.clusterState?.privateNetworkId
   const exists = id !== undefined && id !== null && id !== ""
-  return [`network/${config.name}`, `subnet/${config.name}/nodes`, `subnet/${config.name}/load-balancers`]
-    .map((name) => _createOrNoOp({ exists, name }))
+  // The gateway is created with the network, from the same existence signal —
+  // and it is billed per tier, so leaving it off the plan under-reports what an
+  // apply will charge for.
+  return [
+    `network/${config.name}`,
+    `subnet/${config.name}/nodes`,
+    `subnet/${config.name}/load-balancers`,
+    `gateway/${config.name}`
+  ].map((name) => _createOrNoOp({ exists, name }))
 }
 
 /**

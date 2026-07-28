@@ -117,10 +117,22 @@ const isSubnetsWithinCidr = Schema.makeFilter(
 // bastion concept a managed control plane has no use for, and MKS takes two
 // distinct subnet ids at cluster creation (nodes, load balancers — D1), so both
 // are explicit rather than one derived from the other.
+// kumulo: OVH's own `cloud.network.GatewayModelEnum`. The gateway is created
+// through OVH's API rather than Neutron precisely because this is the one thing
+// Neutron's router has no field for, and it is what the gateway is billed on.
+const GatewayModel = Schema.Literals(["s", "m", "l", "xl", "2xl", "3xl"])
+
 const MksNetwork = Schema.Struct({
   cidr: Cidr,
   nodes_subnet: Cidr,
-  load_balancers_subnet: Cidr
+  load_balancers_subnet: Cidr,
+  /**
+   * Bandwidth tier of the gateway created with this network (`s` is OVH's
+   * default). A gateway is not optional — nodes reach the internet through its
+   * SNAT, and a floating IP cannot be associated with a port whose subnet has
+   * no router carrying an external gateway — so only its size is a choice.
+   */
+  gateway_model: Schema.optionalKey(GatewayModel)
 }).check(isSubnetsWithinCidr)
 
 // kumulo: presence is the switch, exactly as `network`'s is — an `ingress`

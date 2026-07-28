@@ -21,6 +21,7 @@ import type {
   Inventory,
   LbInfo,
   LbSpec,
+  GatewayRef,
   NetworkInfo,
   NetworkSpec,
   SecGroupInfo,
@@ -53,6 +54,12 @@ export class CloudProvider extends Context.Service<CloudProvider, {
    * unappliable on MKS, and the operator must see that before apply, not after.
    */
   readonly findNetwork: (spec: NetworkSpec) => Effect.Effect<NetworkInfo | undefined, CloudError>
+  /**
+   * Whether a gateway already exists for this cluster. Read-only: creating one
+   * is OVH's API, not Neutron's, because only OVH's carries the tier — but a
+   * gateway IS a Neutron router, so existence is answerable here.
+   */
+  readonly hasGateway: (spec: GatewayRef) => Effect.Effect<boolean, CloudError>
   readonly ensureSecurityGroups: (spec: SecGroupSpec) => Effect.Effect<SecGroupInfo, CloudError>
   readonly ensureLoadBalancer: (spec: LbSpec) => Effect.Effect<LbInfo, CloudError>
   readonly ensureServer: (spec: ServerSpec) => Effect.Effect<ServerInfo, CloudError>

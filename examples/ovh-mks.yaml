@@ -8,10 +8,20 @@ auth:
   region: DE1
 # Optional. Omit it and the cluster lands on OVH's default public addressing.
 # Set at cluster creation and never changeable afterwards.
+#
+# Declaring it also creates a Gateway (OVHcloud "Public Cloud Gateway"). It is
+# not optional, so only its size is a choice: a private-network cluster cannot
+# work without one — nodes reach the internet through its SNAT, image pulls
+# included, and Neutron refuses to associate a floating IP with a port whose
+# subnet has no router carrying an external gateway, so `ingress` below depends
+# on it too. It is billed per tier, and torn down with the network.
 network:
   cidr: 10.0.0.0/16
   nodes_subnet: 10.0.1.0/24
   load_balancers_subnet: 10.0.2.0/24
+  # Gateway bandwidth tier: s | m | l | xl | 2xl | 3xl (OVH's own
+  # cloud.network.GatewayModelEnum). Omit for `s`, which is OVH's default.
+  gateway_model: s
 # Optional, and only alongside `network`. Present means kumulo creates one empty
 # public Octavia load balancer with a floating IP; an in-cluster Service adopts
 # it by id and the cloud-controller-manager owns its listeners and pools.

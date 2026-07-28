@@ -28,6 +28,7 @@ export const FakeCloudProviderLive: Layer.Layer<CloudProvider> = Layer.effect(
 
     return {
       findNetwork: (_spec) => Ref.get(network),
+      hasGateway: () => Effect.succeed(false),
 
       ensureNetwork: (spec) =>
         Ref.get(network).pipe(

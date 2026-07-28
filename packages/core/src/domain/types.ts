@@ -20,6 +20,11 @@ export interface NetworkSpec {
   /** Omitted means no load-balancer subnet is created. */
   readonly loadBalancersSubnet?: string
 }
+/** A gateway by the name kumulo gives it — enough to answer "does one exist?". */
+export interface GatewayRef {
+  readonly name: string
+}
+
 export interface NetworkInfo {
   readonly id: string
   readonly cidr: string

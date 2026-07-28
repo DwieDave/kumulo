@@ -453,6 +453,10 @@ export const CloudProviderLive = (options: CloudProviderOptions): Layer.Layer<Cl
       return {
         ensureNetwork: (spec: NetworkSpec) => run(ensureNetwork({ options, spec })),
         findNetwork: (spec: NetworkSpec) => run(findNetwork({ options, spec })),
+        // hcloud networks reach the internet through each server's own public
+        // interface and floating IPs attach straight to a server — there is no
+        // gateway object, so there is never one to find.
+        hasGateway: () => Effect.succeed(false),
         ensureSecurityGroups: (spec: SecGroupSpec) => run(ensureSecurityGroups({ options, spec })),
         ensureLoadBalancer: (spec: LbSpec) => run(ensureLoadBalancer({ options, spec })),
         ensureServer: (spec: ServerSpec) => run(ensureServer({ options, spec })),

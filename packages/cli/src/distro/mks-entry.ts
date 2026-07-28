@@ -151,7 +151,7 @@ export const mksEntry: DistroEntry = {
   // `network/`/`subnet/` are converged inside `applyMks` too (ahead of the
   // cluster) — a row whose prefix is missing here renders and then never
   // checks off.
-  appliedPrefixes: ["network/", "subnet/", "mks-cluster/", "mks-pool/", "load-balancer/", "floating-ip/"],
+  appliedPrefixes: ["network/", "subnet/", "gateway/", "mks-cluster/", "mks-pool/", "load-balancer/", "floating-ip/"],
   status: _statusMks,
   upgrade: _upgradeMksEntry,
   credentialsLabel: "ovh api",

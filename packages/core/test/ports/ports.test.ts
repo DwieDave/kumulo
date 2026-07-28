@@ -33,6 +33,7 @@ describe("ports", () => {
               nodesSubnetId: `nodes-${spec.nodesSubnet}`,
               loadBalancersSubnetId: `lb-${spec.loadBalancersSubnet}`
             }),
+          hasGateway: () => Effect.succeed(false),
           ensureSecurityGroups: () => Effect.succeed({ id: "sg-1" }),
           ensureLoadBalancer: () => Effect.succeed({ id: "lb-1", vip: "1.2.3.4" }),
           ensureServer: () => Effect.succeed({ id: "srv-1", name: "master-1", ip: "10.0.0.2" }),

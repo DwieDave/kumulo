@@ -17,6 +17,8 @@ export {
   mksPoolHash,
   parseKubeVersion,
   pollUntil,
+  ensureGateway,
+  type GatewayModel,
   requireVrack,
   upgrade
 } from "./distro/index.ts"

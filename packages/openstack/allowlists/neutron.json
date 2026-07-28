@@ -14,6 +14,11 @@
     "floatingips:get",
     "floatingips:post",
     "floatingips/id:put",
-    "floatingips/id:delete"
+    "floatingips/id:delete",
+    "routers:get",
+    "routers:post",
+    "routers/id:delete",
+    "routers/id/add_router_interface:put",
+    "routers/id/remove_router_interface:put"
   ]
 }

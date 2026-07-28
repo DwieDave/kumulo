@@ -30,6 +30,7 @@ const FakeCloudProviderLive: Layer.Layer<CloudProvider> = Layer.effect(
     return {
       ensureNetwork: (spec) => Effect.succeed({ id: "net-1", cidr: spec.cidr }),
       findNetwork: (spec) => Effect.succeed({ id: "net-1", cidr: spec.cidr }),
+      hasGateway: () => Effect.succeed(false),
       ensureSecurityGroups: (_spec) => Effect.succeed({ id: "sg-1" }),
       ensureLoadBalancer: (_spec) =>
         Ref.get(lb).pipe(

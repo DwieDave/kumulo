@@ -40,6 +40,7 @@ const _unavailableCloudProvider = (hint: string): Layer.Layer<CloudProvider> => 
   return Layer.succeed(CloudProvider, {
     ensureNetwork: reject,
     findNetwork: reject,
+    hasGateway: reject,
     ensureSecurityGroups: reject,
     ensureLoadBalancer: reject,
     ensureServer: reject,

@@ -104,9 +104,15 @@ const _fakeOpenStack = () => {
       return { status: 201, body: { network: { id: "net-1" } } }
     },
     "GET /v2.0/subnets": () => ({ status: 200, body: { subnets } }),
+    // The gateway (Neutron router) a floating IP needs before it can route.
+    "GET /v2.0/routers": () => ({ status: 200, body: { routers: [] } }),
+    "POST /v2.0/routers": () => ({ status: 201, body: { router: { id: "router-1", name: "kumulo-staging" } } }),
+    "PUT /v2.0/routers/router-1/add_router_interface": () => ({ status: 200, body: { id: "router-1" } }),
     "POST /v2.0/subnets": (request) => {
       const cidr = _postedCidr(request)
-      const subnet = { id: `sub-${cidr}`, cidr }
+      // Real Neutron subnet ids are UUIDs; a `/` from the CIDR would split the
+      // gateway create path — a fixture artefact, not a product bug.
+      const subnet = { id: `sub-${cidr.replace("/", "-")}`, cidr }
       subnets.push(subnet)
       return { status: 201, body: { subnet } }
     },

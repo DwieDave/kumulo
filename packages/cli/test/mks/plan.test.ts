@@ -72,12 +72,28 @@ it("pools never plan as NoOp when the cluster itself is missing", () => {
 // because that is the order they are reconciled in (R7).
 const _networked: MksPlanInput = { ..._config, network: { cidr: "10.0.0.0/16" } }
 
+// The gateway is created with the network and is billed per tier, so a plan
+// that omits it under-reports what apply will charge for.
+it("plans the gateway alongside the network it is created with", () => {
+  const plan = buildMksPlan({ config: _networked, inventory: emptyMksInventory })
+  assert.deepStrictEqual(
+    plan.actions.filter((a) => a.name.startsWith("gateway/")),
+    [{ _tag: "Create", name: "gateway/prod-eu" }]
+  )
+})
+
+it("plans no gateway when the config declares no network block", () => {
+  const plan = buildMksPlan({ config: _config, inventory: emptyMksInventory })
+  assert.deepStrictEqual(plan.actions.filter((a) => a.name.startsWith("gateway/")), [])
+})
+
 it("plans the network and both subnets ahead of the cluster when a network block is declared", () => {
   const plan = buildMksPlan({ config: _networked, inventory: emptyMksInventory })
-  assert.deepStrictEqual(plan.actions.slice(0, 4), [
+  assert.deepStrictEqual(plan.actions.slice(0, 5), [
     { _tag: "Create", name: "network/prod-eu" },
     { _tag: "Create", name: "subnet/prod-eu/nodes" },
     { _tag: "Create", name: "subnet/prod-eu/load-balancers" },
+    { _tag: "Create", name: "gateway/prod-eu" },
     { _tag: "Create", name: "mks-cluster/prod-eu" }
   ])
 })

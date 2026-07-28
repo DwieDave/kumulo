@@ -22,7 +22,9 @@ import {
   listNodePools,
   parseKubeVersion,
   pollUntil,
+  ensureGateway,
   requireVrack,
+  type GatewayModel,
   type Mks,
   type MksClusterConfig,
   type MksClusterRef
@@ -203,7 +205,46 @@ const _ensureMksNetwork = (
     yield* _refuseClusterDrift({ config, mks, serviceName })
     yield* requireVrack({ mks, region: config.auth.region, serviceName })
     const cloud = yield* CloudProvider
-    return yield* _networkIds({ info: yield* cloud.ensureNetwork(mksNetworkSpec(network)), spec: mksNetworkSpec(network) })
+    const spec = mksNetworkSpec(network)
+    const ids = yield* _networkIds({ info: yield* cloud.ensureNetwork(spec), spec })
+    yield* _ensureMksGateway({ config, ids, mks, network, serviceName })
+    return ids
+  })
+
+/**
+ * The gateway makes the network usable at all: nodes get SNAT for image pulls,
+ * and Neutron will only associate the ingress floating IP (R9) with a port
+ * whose subnet hangs off a router carrying an external gateway.
+ *
+ * Created through OVH's API rather than Neutron because only OVH's has the
+ * `model` (tier) the config sets. Existence is checked through Neutron first —
+ * an OVH gateway IS a Neutron router, so `findNetwork`'s sibling lookup answers
+ * it against the same object, and OVH's own list endpoint cannot be generated.
+ */
+const _ensureMksGateway = (
+  { config, ids, mks, network, serviceName }: {
+    readonly config: ClusterConfig
+    readonly ids: MksNetworkIds
+    readonly mks: Mks
+    readonly network: { readonly gateway_model?: GatewayModel }
+    readonly serviceName: string
+  }
+): Effect.Effect<void, MksError, CloudProvider> =>
+  Effect.gen(function*() {
+    const cloud = yield* CloudProvider
+    const name = `kumulo-${config.name}`
+    if (yield* cloud.hasGateway({ name })) return
+    if (ids.privateNetworkId === undefined || ids.nodesSubnetId === undefined) return
+    yield* ensureGateway({
+      mks,
+      serviceName,
+      region: config.auth.region,
+      networkId: ids.privateNetworkId,
+      subnetId: ids.nodesSubnetId,
+      name,
+      // `s` is OVH's own default; naming it keeps the applied tier explicit.
+      model: network.gateway_model ?? "s"
+    })
   })
 
 /** The config's network block as a `NetworkSpec` — one translation, both the read and the write path. */
