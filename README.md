@@ -14,21 +14,24 @@ npm install -g @kumulo/cli
 kumulo --help
 ```
 
-For development, [Bun](https://bun.sh) >= 1.3 is the workspace toolchain; run
-the CLI straight from source:
+The CLI runs on both Node >= 22 and [Bun](https://bun.sh) >= 1.3 — it picks
+its HTTP client from the runtime it finds itself on (`src/runtime-http.ts`).
+Bun is the workspace toolchain for development; run the CLI straight from
+source with either:
 
 ```sh
 bun install
 bun run packages/cli/src/main.ts <command> <config-path>
+node packages/cli/dist/main.mjs <command> <config-path>   # after `bun run build`
 ```
 
 ## Quickstart
 
-Every command reads a cluster from one YAML config. See
+Every command reads a cluster from one config file — YAML or JSON. See
 [`examples/k3s.yaml`](examples/k3s.yaml),
 [`examples/k3s-hetzner.yaml`](examples/k3s-hetzner.yaml),
 [`examples/ovh-mks.yaml`](examples/ovh-mks.yaml) and
-[`examples/upcloud-uks.yaml`](examples/upcloud-uks.yaml) for full, schema-valid
+[`examples/upcloud-uks.json`](examples/upcloud-uks.json) for full, schema-valid
 examples — copy one and edit `name`, `auth.region`, `ssh.public_key_path`,
 and `worker_pools` for your cluster.
 

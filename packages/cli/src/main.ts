@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import { NodeRuntime } from "@effect/platform-node"
-import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient"
 import * as NodeServices from "@effect/platform-node/NodeServices"
 import { ConfigProvider, Console, Effect, Layer, Option } from "effect"
 import { CliError, Command } from "effect/unstable/cli"
@@ -18,6 +17,7 @@ import { renderCliError } from "./errors.ts"
 import { MksEnv, MksEnvLive } from "./mks/env.ts"
 import { StorageEnv, StorageEnvLive } from "./storage/env.ts"
 import { UpcloudEnv, UpcloudEnvLive } from "./upcloud/env.ts"
+import { platformHttpClient } from "./runtime-http.ts"
 import { CinderAuthLive } from "./volumes/env.ts"
 import packageJson from "../package.json" with { type: "json" }
 
@@ -74,13 +74,17 @@ const _upcloudLive = Layer.catchCause(
 // per-cluster at command runtime (`reconcileVolumesOnDelete`,
 // `storageLayers`), not at Layer-build time, so they still need an ambient
 // `HttpClient` to reach.
+// Resolved once: every `HttpClient` in the process must be the same layer, and
+// the runtime cannot change mid-run.
+const _platformHttp = platformHttpClient()
+
 const MainLive = Layer.mergeAll(
   _mksLive,
   _storageLive,
   _upcloudLive,
   CinderAuthLive.pipe(Layer.provideMerge(OpenStackEnvLive)),
-  NodeHttpClient.layerUndici
-).pipe(Layer.provide(NodeHttpClient.layerUndici))
+  _platformHttp
+).pipe(Layer.provide(_platformHttp))
 
 // `--secrets-file` is a real shared flag (visible in `--help`, see `root.ts`);
 // `KUMULO_SECRETS_FILE` is the flagless fallback (R2). The credential layers

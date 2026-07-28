@@ -1,0 +1,38 @@
+{
+  "$schema": "../kumulo.schema.json",
+  "name": "staging-de",
+  "provider": "upcloud",
+  "distro": "upcloud-uks",
+  "version": "1.31",
+  "auth": {
+    "method": "api_token",
+    "region": "de-fra1"
+  },
+  "zone": "de-fra1",
+  "plan": "dev-md",
+  "network": {
+    "cidr": "10.0.0.0/16"
+  },
+  "worker_pools": [
+    {
+      "name": "general",
+      "flavor": "2xCPU-4GB",
+      "count": 1,
+      "labels": {
+        "workload": "general"
+      }
+    }
+  ],
+  "dns": {
+    "module": "none"
+  },
+  "volumes": {
+    "module": "none"
+  },
+  "object_storage": {
+    "module": "none"
+  },
+  "secrets": {
+    "sink": "none"
+  }
+}

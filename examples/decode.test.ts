@@ -34,8 +34,8 @@ describe("example configs", () => {
     expect(config.name).toBe("prod-fsn")
   })
 
-  it("upcloud-uks.yaml decodes to a valid ClusterConfig", () => {
-    const config = Effect.runSync(parseConfigYaml(_load("upcloud-uks.yaml")))
+  it("upcloud-uks.json decodes to a valid ClusterConfig", () => {
+    const config = Effect.runSync(parseConfigYaml(_load("upcloud-uks.json")))
     expect(config.distro).toBe("upcloud-uks")
     expect(config.provider).toBe("upcloud")
     expect(config.name).toBe("staging-de")
