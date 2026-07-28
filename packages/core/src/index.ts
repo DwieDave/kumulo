@@ -24,6 +24,7 @@ export { renderError } from "./errors/renderer.ts"
 export type { RendererRegistry } from "./errors/renderer.ts"
 
 export {
+  authMethodsByProvider,
   ClusterConfig,
   decodeConfig,
   encodeConfig,
@@ -31,12 +32,17 @@ export {
   MksClusterConfig,
   OutputsFormat,
   parseConfigYaml,
-  stringifyConfigYaml
+  stringifyConfigYaml,
+  UpcloudUksClusterConfig,
+  UpgradeStrategy
 } from "./config/index.ts"
 export type {
+  AuthMethod,
   ClusterConfigEncoded,
   K3sClusterConfigEncoded,
   MksClusterConfigEncoded,
+  Provider,
+  UpcloudUksClusterConfigEncoded,
   WorkerPool
 } from "./config/index.ts"
 

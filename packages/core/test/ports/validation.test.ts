@@ -35,6 +35,17 @@ describe("validateAutoscaling", () => {
     const expectRejected = pools.some((p) => p.autoscaling?.enabled === true)
     expect(Option.isSome(validateAutoscaling(config))).toBe(expectRejected)
   })
+
+  // AC8: the rejection message names the offending distro, not a hardcoded "k3s"
+  it("names upcloud-uks, not k3s, in the rejection reason", () => {
+    const config: ClusterConfigShape = {
+      distro: "upcloud-uks",
+      worker_pools: [{ name: "a", autoscaling: { enabled: true } }],
+      addons: { cni: "flannel" }
+    }
+    const rejected = validateAutoscaling(config)
+    expect(Option.isSome(rejected) && rejected.value.reason.includes("upcloud-uks")).toBe(true)
+  })
 })
 
 describe("validateCni", () => {

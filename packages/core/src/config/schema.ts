@@ -10,6 +10,43 @@ const isCidr = Schema.isPattern(new RegExp(`^${octet}\\.${octet}\\.${octet}\\.${
 
 const Cidr = Schema.String.check(isCidr)
 
+// kumulo: UpCloud SDN networks must be /8-/29, and cannot overlap the ranges
+// UpCloud itself reserves (carrier-grade NAT, loopback, multicast, link-local).
+const _UPCLOUD_EXCLUDED_RANGES: ReadonlyArray<readonly [string, number]> = [
+  ["100.64.0.0", 10],
+  ["127.0.0.0", 8],
+  ["224.0.0.0", 4],
+  ["169.254.0.0", 16]
+]
+const _ipToInt = (ip: string): number => ip.split(".").reduce((acc, part) => acc * 256 + Number(part), 0)
+const _rangeOf = (ip: string, bits: number): readonly [number, number] => {
+  const size = 2 ** (32 - bits)
+  const first = Math.floor(_ipToInt(ip) / size) * size
+  return [first, first + size - 1]
+}
+const isUpcloudCidr = Schema.makeFilter((cidr: string) => {
+  const [address = "", bitsStr = "0"] = cidr.split("/")
+  const bits = Number(bitsStr)
+  if (bits < 8 || bits > 29) return "prefix must be between /8 and /29"
+  const [first, last] = _rangeOf(address, bits)
+  const overlaps = _UPCLOUD_EXCLUDED_RANGES.some(([rangeIp, rangeBits]) => {
+    const [rangeFirst, rangeLast] = _rangeOf(rangeIp, rangeBits)
+    return first <= rangeLast && last >= rangeFirst
+  })
+  return overlaps
+    ? "must not overlap UpCloud's excluded ranges (100.64.0.0/10, 127.0.0.0/8, 224.0.0.0/4, 169.254.0.0/16)"
+    : undefined
+})
+const UpcloudCidr = Cidr.check(isUpcloudCidr)
+
+// kumulo: UpCloud node group names are lowercase/digits/hyphen, 1-63 chars,
+// no leading/trailing hyphen (R20). Bounded to 54 here so D9's `-<hash8>`
+// replace suffix always fits inside UpCloud's 63-char limit.
+const isUpcloudPoolName = Schema.isPattern(/^[a-z0-9]([a-z0-9-]{0,52}[a-z0-9])?$/, {
+  message: "must be 1-54 lowercase/digit/hyphen characters, no leading or trailing hyphen"
+})
+const UpcloudPoolName = Schema.String.check(isUpcloudPoolName)
+
 const isOddCount = Schema.makeFilter((count: number) =>
   count >= 1 && count % 2 === 1 ? undefined : "must be 1 or an odd number (embedded etcd quorum)"
 )
@@ -17,11 +54,14 @@ const isOddCount = Schema.makeFilter((count: number) =>
 const PositiveInt = Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0))
 const NonNegativeInt = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))
 
-const Provider = Schema.Literals(["ovh", "generic", "hetzner"])
+const Provider = Schema.Literals(["ovh", "generic", "hetzner", "upcloud"])
 const PublicAccess = Schema.Literals(["bastionless", "nat"])
 const AuthMethod = Schema.Literals(["application_credential", "clouds_yaml", "env", "api_token"])
 const Cni = Schema.Literals(["flannel", "cilium"])
 const AccessMode = Schema.Literals(["ReadWriteOnce", "ReadWriteMany", "ReadOnlyMany"])
+
+export type Provider = typeof Provider.Type
+export type AuthMethod = typeof AuthMethod.Type
 
 // kumulo: version format is distro-dependent — k3s embeds a
 // `+k3sN` build suffix, ovh-mks uses plain upstream Kubernetes versions.
@@ -32,6 +72,12 @@ const K3sVersion = Schema.String.check(
 const PlainK8sVersion = Schema.String.check(
   Schema.isPattern(/^v?\d+\.\d+\.\d+$/, { message: "must be a Kubernetes version like v1.31.4" })
 )
+// kumulo: UKS is minor-only (D7) — the cluster carries `version: "1.31"` and
+// `available-upgrades` returns the same minor-only vocabulary. No patch
+// component ever leaves the config file.
+const UksVersion = Schema.String.check(
+  Schema.isPattern(/^v?\d+\.\d+$/, { message: "must be a minor-only Kubernetes version like 1.31" })
+)
 
 // kumulo: object storage buckets carry secrets, so an ovh module requires a real sink
 const isSecretsRequiredForObjectStorage = Schema.makeFilter(
@@ -41,13 +87,20 @@ const isSecretsRequiredForObjectStorage = Schema.makeFilter(
       : undefined
 )
 
-// kumulo: hetzner uses a static hcloud API token; every other provider uses
-// an OpenStack-style auth method — the two vocabularies never mix
+// kumulo: hetzner and upcloud each use a static API token; ovh and generic
+// use an OpenStack-style auth method — the two vocabularies never mix (D5).
+export const authMethodsByProvider: Record<Provider, ReadonlyArray<AuthMethod>> = {
+  hetzner: ["api_token"],
+  upcloud: ["api_token"],
+  ovh: ["application_credential", "clouds_yaml", "env"],
+  generic: ["application_credential", "clouds_yaml", "env"]
+}
+
 const isAuthMethodConsistentWithProvider = Schema.makeFilter(
-  (config: { provider: string; auth: { method: string } }) =>
-    (config.provider === "hetzner") !== (config.auth.method === "api_token")
-      ? "auth.method must be api_token if and only if provider is hetzner"
-      : undefined
+  (config: { provider: Provider; auth: { method: AuthMethod } }) =>
+    authMethodsByProvider[config.provider].includes(config.auth.method)
+      ? undefined
+      : `auth.method must be one of ${authMethodsByProvider[config.provider].join(", ")} for provider ${config.provider}`
 )
 
 // kumulo: hcloud volumes only exist on hetzner; cinder volumes only exist on
@@ -135,6 +188,14 @@ const MksNetwork = Schema.Struct({
   gateway_model: Schema.optionalKey(GatewayModel)
 }).check(isSubnetsWithinCidr)
 
+// kumulo: kumulo owns the network for UKS (D10) — it creates the SDN network
+// and its router, and tears both down after the cluster on delete. Unlike
+// MksNetwork there is no separate subnets split (UpCloud's SDN network is
+// itself the one CIDR nodes and the control plane share).
+const UpcloudNetwork = Schema.Struct({
+  cidr: UpcloudCidr
+})
+
 // kumulo: presence is the switch, exactly as `network`'s is — an `ingress`
 // block means the cluster gets one public Octavia load balancer, absent means
 // it gets none. Everything that shapes the LB is set at creation (D4): OVH
@@ -197,6 +258,19 @@ const Autoscaling = Schema.Struct({
 
 const WorkerPool = Schema.Struct({
   name: Schema.NonEmptyString,
+  flavor: Schema.NonEmptyString,
+  count: NonNegativeInt,
+  labels: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
+  taints: Schema.optionalKey(Schema.Array(Schema.String)),
+  autoscaling: Schema.optionalKey(Autoscaling)
+})
+
+// kumulo: same shape as WorkerPool, but `name` is bounded by UpCloud's node
+// group naming rules (R20) rather than the generic NonEmptyString. The
+// `autoscaling` block stays accepted-but-runtime-rejected (AC8): UKS has no
+// autoscaler, scaling is `count` drift the way D8 already handles it.
+const UpcloudWorkerPool = Schema.Struct({
+  name: UpcloudPoolName,
   flavor: Schema.NonEmptyString,
   count: NonNegativeInt,
   labels: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
@@ -374,12 +448,40 @@ export const MksClusterConfig = Schema.Struct({
   ingress: Schema.optionalKey(MksIngress)
 }).check(isSecretsRequiredForObjectStorage, isAuthMethodConsistentWithProvider, isIngressPlaceable, isFlavorUnambiguous)
 
-export const ClusterConfig = Schema.Union([K3sClusterConfig, MksClusterConfig])
+// kumulo: creation-time fields only (D11) — `zone`, `plan`,
+// `control_plane_ip_filter` and `storage_encryption` can never change on a
+// live cluster (D8/AC6), so they are plain fields here and drift on them is
+// refused at plan time by clusterDrift (M4), not encoded in the schema.
+// `upgrade_strategy` is deliberately not named `strategy` — the CLI verb
+// already has one (D11). `volumes` is fixed to `none`: UKS has no managed
+// cinder/hcloud volume story in this cut (R15).
+export const UpgradeStrategy = Schema.Literals(["manual", "rolling-update"])
+
+export const UpcloudUksClusterConfig = Schema.Struct({
+  ..._commonFields,
+  provider: Schema.Literal("upcloud"),
+  distro: Schema.Literal("upcloud-uks"),
+  version: UksVersion,
+  zone: Schema.NonEmptyString,
+  // Optional: absent means UpCloud's own default (`dev-md`).
+  plan: Schema.optionalKey(Schema.NonEmptyString),
+  network: UpcloudNetwork,
+  worker_pools: Schema.Array(UpcloudWorkerPool),
+  dns: Dns,
+  volumes: NoVolumes,
+  control_plane_ip_filter: Schema.optionalKey(Schema.Array(Cidr)),
+  storage_encryption: Schema.optionalKey(Schema.Boolean),
+  upgrade_strategy: Schema.optionalKey(UpgradeStrategy)
+}).check(isSecretsRequiredForObjectStorage, isAuthMethodConsistentWithProvider)
+
+export const ClusterConfig = Schema.Union([K3sClusterConfig, MksClusterConfig, UpcloudUksClusterConfig])
 
 export type K3sClusterConfig = typeof K3sClusterConfig.Type
 export type K3sClusterConfigEncoded = typeof K3sClusterConfig.Encoded
 export type MksClusterConfig = typeof MksClusterConfig.Type
 export type MksClusterConfigEncoded = typeof MksClusterConfig.Encoded
+export type UpcloudUksClusterConfig = typeof UpcloudUksClusterConfig.Type
+export type UpcloudUksClusterConfigEncoded = typeof UpcloudUksClusterConfig.Encoded
 export type ClusterConfig = typeof ClusterConfig.Type
 export type ClusterConfigEncoded = typeof ClusterConfig.Encoded
 export type WorkerPool = typeof WorkerPool.Type

@@ -22,3 +22,20 @@ it.effect("generic profile accepts any region/HA/volume-type combo (no assumptio
   Effect.gen(function*() {
     yield* genericProfile.validate(baseConfig)
   }))
+
+// AC8: `provider: upcloud` has no bespoke profile, so it lands on `generic` —
+// which used to validate nothing, letting an autoscaling config apply with the
+// block silently dropped.
+it.effect("generic profile rejects autoscaling on a distro that cannot do it (AC8)", () =>
+  Effect.gen(function*() {
+    const config: ClusterConfigShape = {
+      ...baseConfig,
+      distro: "upcloud-uks",
+      worker_pools: [{ name: "workers", autoscaling: { enabled: true } }]
+    }
+    const result = yield* Effect.result(genericProfile.validate(config))
+    assert.isTrue(result._tag === "Failure")
+    if (result._tag === "Failure") {
+      assert.include(result.failure.issues[0]?.message ?? "", "upcloud-uks")
+    }
+  }))

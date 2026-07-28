@@ -8,5 +8,6 @@ export interface DistroCapabilities {
 
 export const distroCapabilities: Record<DistroKind, DistroCapabilities> = {
   "k3s": { autoscaling: false, selectableCni: true },
-  "ovh-mks": { autoscaling: true, selectableCni: false }
+  "ovh-mks": { autoscaling: true, selectableCni: false },
+  "upcloud-uks": { autoscaling: false, selectableCni: false }
 }

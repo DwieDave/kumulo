@@ -6,7 +6,7 @@ import type { Redacted } from "effect"
 
 export type ClusterTag = string
 export type NodeRole = "master" | "worker"
-export type DistroKind = "k3s" | "ovh-mks"
+export type DistroKind = "k3s" | "ovh-mks" | "upcloud-uks"
 export type Capability = "octavia" | "floatingIps" | "cilium"
 export type Version = string
 

@@ -1,4 +1,4 @@
-import type { K3sClusterConfigEncoded, MksClusterConfigEncoded } from "../../src/config/schema.ts"
+import type { K3sClusterConfigEncoded, MksClusterConfigEncoded, UpcloudUksClusterConfigEncoded } from "../../src/config/schema.ts"
 
 // kumulo: mirrors the §5 design-doc sample verbatim so tests exercise the real shape
 export const validConfig: K3sClusterConfigEncoded = {
@@ -87,3 +87,21 @@ export const validMksNetwork = {
   nodes_subnet: "10.0.1.0/24",
   load_balancers_subnet: "10.0.2.0/24"
 } as const
+
+// kumulo: UpCloud's UKS variant — a managed control plane like ovh-mks, but
+// kumulo owns the network (D10) so it is required rather than optional, and
+// the version vocabulary is minor-only (D7).
+export const validUpcloudUksConfig: UpcloudUksClusterConfigEncoded = {
+  name: "staging-eu",
+  provider: "upcloud",
+  distro: "upcloud-uks",
+  version: "1.31",
+  zone: "de-fra1",
+  auth: { method: "api_token", region: "de-fra1" },
+  network: { cidr: "10.0.0.0/16" },
+  worker_pools: [{ name: "general", flavor: "2xCPU-4GB", count: 1 }],
+  dns: { module: "none" },
+  volumes: { module: "none" },
+  object_storage: { module: "none" },
+  secrets: { sink: "none" }
+}

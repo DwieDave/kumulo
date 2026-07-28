@@ -7,11 +7,12 @@ import type { ClusterConfigShape } from "../domain/types.ts"
 // schema, rejected at runtime because the capability doesn't exist under
 // the chosen distro.
 
-// kumulo: k3s has no autoscaler yet — schema accepts the block
-// for forward-compat, runtime rejects it.
+// kumulo: schema accepts the autoscaling block on every distro for
+// forward-compat; runtime rejects it wherever the distro doesn't implement
+// it (AC8), naming the offending distro rather than hardcoding one.
 export const validateAutoscaling = (config: ClusterConfigShape): Option.Option<PlanRejected> =>
   !distroCapabilities[config.distro].autoscaling && config.worker_pools.some((pool) => pool.autoscaling?.enabled === true)
-    ? Option.some(new PlanRejected({ reason: "autoscaling is not yet implemented for k3s" }))
+    ? Option.some(new PlanRejected({ reason: `autoscaling is not yet implemented for ${config.distro}` }))
     : Option.none()
 
 // ovh-mks is a fixed-CNI managed product; Cilium is only selectable when
