@@ -218,9 +218,13 @@ describe("k3s CLI composition root", () => {
         expect(command).toContain("--tls-san='api.test-k3s.example.com'") // DNS api record (shell-quoted)
       }
 
-      // DNS: the api_server target record was ensured against the LB VIP.
+      // DNS: the api_server target record was ensured against the LB VIP, with
+      // the TXT ownership record that lets the next apply recognise it as ours.
       expect(dnsCalls.ensured).toHaveLength(1)
-      expect(dnsCalls.ensured[0]).toEqual([{ name: "api.test-k3s", target: "10.0.0.100" }])
+      expect(dnsCalls.ensured[0]).toEqual([
+        { name: "api.test-k3s", target: "10.0.0.100" },
+        { name: "api.test-k3s", target: "kumulo.cluster=test-k3s" }
+      ])
 
       // Volumes: the retained volume was ensured (created).
       expect(volumeCalls.ensured).toEqual(["pg-data"])

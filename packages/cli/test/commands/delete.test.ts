@@ -71,7 +71,7 @@ const _runDelete = (args: ReadonlyArray<string>) =>
   Effect.gen(function*() {
     const timeline: Array<string> = []
     const server = makeFakeMksServer()
-    server.clusters.set("kube-1", { id: "kube-1", name: "staging", status: "READY" })
+    server.clusters.set("kube-1", { id: "kube-1", name: "staging", status: "READY", url: "https://kube-1.fixture.mks.invalid" })
     server.pools.set("kube-1", new Map())
     // Record on the request side: re-wrapping `execute` would drop the fake
     // server's own `prependUrl`, leaving every call with a relative URL.

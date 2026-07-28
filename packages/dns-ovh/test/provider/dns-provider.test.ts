@@ -15,7 +15,8 @@ describe("ovh dns-ovh provider — port contract", () => {
       targetOf: (subDomain) => fake.peek(subDomain)?.target,
       seedForeign: (subDomain, target) => fake.seed({ fieldType: "A", subDomain, target }),
       seedForeignKind: (subDomain, fieldType, target) => fake.seed({ fieldType, subDomain, target }),
-      seedForeignOwnerTxt: (subDomain, tag) => fake.seed({ fieldType: "TXT", subDomain, target: `kumulo.cluster=${tag}` })
+      seedForeignOwnerTxt: (subDomain, tag) => fake.seed({ fieldType: "TXT", subDomain, target: `kumulo.cluster=${tag}` }),
+      kindsAt: (subDomain) => fake.peekAll().filter((r) => r.subDomain === subDomain).map((r) => r.fieldType).sort()
     }
   })
 })

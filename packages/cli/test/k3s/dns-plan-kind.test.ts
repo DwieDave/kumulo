@@ -4,7 +4,7 @@ import { dnsPlanActions } from "../../src/dns-plan.ts"
 const _kinds = (targets: ReadonlyArray<string>) =>
   dnsPlanActions({
     config: { module: "ovh", zone: "example.com", records: targets.map((target, i) => ({ name: `r${i}`, target })) },
-    targetKind: "ip"
+    targets: { api_server: "ip" }
   }).map((action) => action.name.slice(action.name.indexOf("(")))
 
 it("classifies IPv4 as A, IPv6 as AAAA, hostname as CNAME", () => {

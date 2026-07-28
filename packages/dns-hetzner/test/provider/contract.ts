@@ -18,6 +18,8 @@ export interface ContractHarness {
   readonly seedForeignKind: (subDomain: string, fieldType: string, target: string) => void
   /** Seeds a foreign TXT ownership record (a different cluster's tag) directly in the backend. */
   readonly seedForeignOwnerTxt: (subDomain: string, tag: string) => void
+  /** Every record kind present at a subdomain, sorted — a name may only ever hold one non-TXT kind. */
+  readonly kindsAt: (subDomain: string) => ReadonlyArray<string>
 }
 
 const _ownedRecord = (): DesiredRecord => ({ name: "api.example.com", target: "10.0.0.1" })
@@ -81,6 +83,23 @@ export const runDnsProviderContractSuite = (build: () => ContractHarness): void 
       )
       assert.strictEqual(result._tag, "ResourceConflict")
       assert.strictEqual(targetOf(record.name), undefined)
+    }))
+
+  // A record's kind changes when its target does (a CNAME to a hostname becomes
+  // an A to an address). RFC 1034 3.6.2 forbids a CNAME beside any other data at
+  // the same name, so the stale kind has to go rather than sit next to the new
+  // one — this is the only place that can migrate it, since `removeClusterRecords`
+  // never runs on an apply.
+  it.effect("migrates an owned record to a new kind instead of leaving both", () =>
+    Effect.gen(function*() {
+      const { zone, provider, targetOf, kindsAt } = build()
+      const name = "www.example.com"
+      const owner = _ownershipRecord(name, "cluster-a")
+      yield* provider.ensureRecords(zone, [owner, { name, target: "lb.example.net" }])
+      assert.deepStrictEqual(kindsAt(name), ["CNAME", "TXT"])
+      yield* provider.ensureRecords(zone, [owner, { name, target: "203.0.113.1" }])
+      assert.deepStrictEqual(kindsAt(name), ["A", "TXT"])
+      assert.strictEqual(targetOf(name), "203.0.113.1")
     }))
 
   it.effect("removeClusterRecords only deletes records owned by the given tag", () =>

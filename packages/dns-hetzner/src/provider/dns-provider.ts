@@ -40,6 +40,25 @@ const _ensureRaw = (
     ? Effect.void
     : _wrap(zone, name, dns.putRRset(zone, name, kind, { ttl: existing?.ttl ?? _DEFAULT_TTL, records: [{ value: target }] }))
 
+/**
+ * Drops the rrsets left at this name by a *previous* kind of the same record —
+ * a target that changes from a hostname to an address turns a CNAME into an A,
+ * and RFC 1034 §3.6.2 forbids the two coexisting. Only ever reached past the
+ * ownership guard below, so every rrset it deletes is one this module wrote.
+ */
+const _deleteStaleKinds = (
+  { dns, zone, name, kind, existingOther }: {
+    readonly dns: HetznerDns
+    readonly zone: string
+    readonly name: string
+    readonly kind: DnsRecordKind
+    readonly existingOther: ReadonlyArray<HetznerRRset>
+  }
+): Effect.Effect<void, DnsError> =>
+  Effect.forEach(existingOther.filter((r) => r.type !== kind), (r) => _wrap(zone, name, dns.deleteRRset(zone, name, r.type)), {
+    discard: true
+  })
+
 // kumulo: never mutate a record this module doesn't own: *any* pre-existing
 // non-TXT rrset at this name (regardless of its kind), and any existing TXT
 // ownership rrset for a *different* tag, are only touched (or claimed via a
@@ -61,6 +80,7 @@ const _ensurePair = (
     if (ownerTarget !== undefined) {
       yield* _ensureRaw({ dns, zone, name, target: ownerTarget, kind: "TXT", existing: existingOwnerTxt })
     }
+    yield* _deleteStaleKinds({ dns, zone, name, kind, existingOther })
     const existingSame = existingOther.find((r) => r.type === kind)
     yield* _ensureRaw({ dns, zone, name, target, kind, existing: existingSame })
   })

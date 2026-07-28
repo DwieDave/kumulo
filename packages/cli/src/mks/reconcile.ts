@@ -32,6 +32,7 @@ import { MksEnv } from "./env.ts"
 import type { MksInventory } from "./plan.ts"
 import { mksClusterRow, mksPoolRow, toMksPool } from "./plan.ts"
 import { dnsProviderLayerFor, reconcileDns, removeDns } from "../dns.ts"
+import type { DnsTargets } from "../dns.ts"
 
 const _toMksConfig = (
   { config, serviceName }: { readonly config: ClusterConfig; readonly serviceName: string }
@@ -69,12 +70,33 @@ const _endpointInvalid = (apiEndpoint: string) =>
   })
 
 /**
+ * `ingress` resolves to the address kumulo allocated for the ingress LB, so one
+ * apply can point DNS at it without discovering anything in-cluster (D2). No LB
+ * — no `ingress` block, or an LB whose floating IP never materialised — leaves
+ * the key absent, and the placeholder passes through literally (R15) instead of
+ * this inventing an address.
+ */
+const _dnsTargets = (
+  { hostname, ingress }: { readonly hostname: string; readonly ingress: LbInfo | undefined }
+): DnsTargets => ({
+  api_server: { kind: "hostname", value: hostname },
+  ...(ingress?.floatingIp === undefined || ingress.floatingIp === ""
+    ? {}
+    : { ingress: { kind: "ip" as const, value: ingress.floatingIp } })
+})
+
+/**
  * MKS DNS phase: the managed control plane is only ever reachable by name, so
  * `api_server` becomes a CNAME to `apiEndpoint`'s hostname (D3). An endpoint we
  * can't parse a hostname out of fails loudly rather than skipping DNS silently.
  */
 export const reconcileMksDns = (
-  { apiEndpoint, config }: { readonly config: ClusterConfig; readonly apiEndpoint: string }
+  { apiEndpoint, config, ingress }: {
+    readonly config: ClusterConfig
+    readonly apiEndpoint: string
+    /** The ingress LB this apply converged, when the config declared one. */
+    readonly ingress?: LbInfo
+  }
 ): Effect.Effect<void, MksError | ConfigInvalid, DnsProvider> =>
   Effect.gen(function*() {
     // ponytail: `none` short-circuits before the endpoint check — no records to
@@ -85,7 +107,7 @@ export const reconcileMksDns = (
       catch: () => _endpointInvalid(apiEndpoint)
     })
     if (hostname === "") return yield* Effect.fail(_endpointInvalid(apiEndpoint))
-    yield* reconcileDns({ config, apiTarget: { kind: "hostname", value: hostname } })
+    yield* reconcileDns({ config, targets: _dnsTargets({ hostname, ingress }) })
   })
 
 /** The creation-time network ids MKS accepts, all three or none (R6). */
@@ -251,7 +273,7 @@ export const applyMksEffect = (
     const ref: MksClusterRef = { serviceName, kubeId: info.id }
     yield* ensureNodePools({ mks, ref, pools: mksConfig.worker_pools, replace: pools })
     const ingress = yield* _ensureMksIngress({ config, network })
-    yield* reconcileMksDns({ config, apiEndpoint: info.apiEndpoint })
+    yield* reconcileMksDns({ config, apiEndpoint: info.apiEndpoint, ingress })
     return { ...info, ...(ingress === undefined ? {} : { ingress }) }
   })
 

@@ -6,6 +6,7 @@ import type { ClusterTag, DesiredRecord, DnsError } from "@kumulo/core"
 import type { Dns, Domain_zone_RecordTypeEnum } from "../generated/client.ts"
 import { toDnsError } from "./errors.ts"
 import { recordsAt } from "./existing.ts"
+import type { ZoneRecord } from "./existing.ts"
 
 const _wrap = (
   zone: string,
@@ -35,6 +36,27 @@ const _ensureRaw = (
     ? _wrap(zone, name, dns.editRecord(zone, String(existingRecord.id), { payload: { target } }))
     : Effect.void
 
+/**
+ * Drops the records left at this name by a *previous* kind of the same record —
+ * a target that changes from a hostname to an address turns a CNAME into an A,
+ * and RFC 1034 §3.6.2 forbids the two coexisting. Only ever reached past the
+ * ownership guard below, so every record it deletes is one this module wrote.
+ */
+const _deleteStaleKinds = (
+  { dns, zone, name, kind, existingOther }: {
+    readonly dns: Dns
+    readonly zone: string
+    readonly name: string
+    readonly kind: Domain_zone_RecordTypeEnum
+    readonly existingOther: ReadonlyArray<ZoneRecord>
+  }
+): Effect.Effect<void, DnsError> =>
+  Effect.forEach(
+    existingOther.filter((r) => r.fieldType !== kind),
+    (r) => _wrap(zone, name, dns.deleteRecord(zone, String(r.id), undefined)),
+    { discard: true }
+  )
+
 // kumulo: never mutate a record this module doesn't own: *any* pre-existing
 // non-TXT record at this name (regardless of its kind — a foreign CNAME
 // blocks a desired A record just as much as a foreign A does), and any
@@ -57,6 +79,7 @@ const _ensurePair = (
     if (ownerTarget !== undefined) {
       yield* _ensureRaw({ dns, zone, name, target: ownerTarget, kind: "TXT", existingRecord: existingOwnerTxt })
     }
+    yield* _deleteStaleKinds({ dns, zone, name, kind, existingOther })
     const existingSame = existingOther.find((r) => r.fieldType === kind)
     yield* _ensureRaw({ dns, zone, name, target, kind, existingRecord: existingSame })
   })

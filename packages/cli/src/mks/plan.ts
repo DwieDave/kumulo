@@ -1,6 +1,6 @@
 import type { Plan, PlanAction } from "@kumulo/core"
 import { clusterDrift, mksPoolHash, type MksClusterState, type MksWorkerPoolConfig } from "@kumulo/distro-ovh-mks"
-import { type DnsPlanInput, dnsPlanActions } from "../dns-plan.ts"
+import { type DnsPlanInput, dnsPlanActions, type DnsPlanTargets } from "../dns-plan.ts"
 
 /** Structural slice of a `ClusterConfig` worker pool — enough to build the MKS pool spec. */
 export interface MksPoolInput {
@@ -160,6 +160,21 @@ const _ingressActions = (
     `floating-ip/${config.name}/ingress`
   ].map((name) => _createOrNoOp({ exists: inventory.clusterExists, name }))
 
+/**
+ * What each DNS placeholder will resolve to at apply time (R16). The `ingress`
+ * block is the whole signal: an ingress LB always gets a Neutron floating IP,
+ * which is always IPv4 (scope §7), so the row is an A record even on the apply
+ * that creates the LB — plan reads no Octavia address and needs none.
+ *
+ * No `ingress` block means the apply resolves `ingress` to nothing and writes
+ * the placeholder literally (R15); `dnsPlanActions` then renders it exactly as
+ * that write will land, instead of promising an address neither has.
+ */
+const _dnsTargets = (config: MksPlanInput): DnsPlanTargets => ({
+  api_server: "hostname",
+  ...(config.ingress === undefined ? {} : { ingress: "ip" as const })
+})
+
 export const buildMksPlan = (
   { config, inventory }: { readonly config: MksPlanInput; readonly inventory: MksInventory }
 ): Plan => ({
@@ -174,6 +189,6 @@ export const buildMksPlan = (
       ? config.volumes.managed.map((v) => _createOrNoOp({ exists: inventory.volumeNames.has(v.name), name: `volume/${v.name}` }))
       : []),
     // MKS exposes the api server as a hostname → CNAME (see `applyMks`).
-    ...(config.dns === undefined ? [] : dnsPlanActions({ config: config.dns, targetKind: "hostname" }))
+    ...(config.dns === undefined ? [] : dnsPlanActions({ config: config.dns, targets: _dnsTargets(config) }))
   ]
 })

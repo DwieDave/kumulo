@@ -15,7 +15,8 @@ describe("hetzner dns-hetzner provider — port contract", () => {
       targetOf: (subDomain) => fake.peek(subDomain)?.records[0]?.value,
       seedForeign: (subDomain, target) => fake.seed({ type: "A", name: subDomain, target }),
       seedForeignKind: (subDomain, fieldType, target) => fake.seed({ type: fieldType, name: subDomain, target }),
-      seedForeignOwnerTxt: (subDomain, tag) => fake.seed({ type: "TXT", name: subDomain, target: `kumulo.cluster=${tag}` })
+      seedForeignOwnerTxt: (subDomain, tag) => fake.seed({ type: "TXT", name: subDomain, target: `kumulo.cluster=${tag}` }),
+      kindsAt: (subDomain) => fake.peekAll().filter((r) => r.name === subDomain).map((r) => r.type).sort()
     }
   })
 })

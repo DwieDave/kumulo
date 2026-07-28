@@ -2,14 +2,16 @@ import { Effect, Layer } from "effect"
 import { layerNoop } from "effect/FileSystem"
 import { assert, it } from "@effect/vitest"
 import { dnsNoopLive } from "@kumulo/core"
+import type { DnsProvider } from "@kumulo/core"
 import { makeMksClient } from "@kumulo/distro-ovh-mks"
 import { loadConfig } from "../../src/config.ts"
 import { MksEnv } from "../../src/mks/env.ts"
 import { applyMksEffect } from "../../src/mks/reconcile.ts"
 import { makeFakeMksServer } from "../e2e/fake-mks-server.ts"
 import { defaultLbInfo, fakeCloudProvider } from "./fake-cloud-provider.ts"
+import { spyDnsLayer } from "./spy-dns.ts"
 
-const _yaml = (blocks: string) => `
+const _yaml = (blocks: string, dns = "  module: none\n") => `
 name: staging
 provider: ovh
 distro: ovh-mks
@@ -19,13 +21,20 @@ auth:
   region: GRA5
 ${blocks}worker_pools: []
 dns:
-  module: none
-volumes:
+${dns}volumes:
   module: none
 object_storage:
   module: none
 secrets:
   sink: none
+`
+
+const _INGRESS_DNS = `  module: hetzner
+  zone: example.com
+  ttl: 300
+  records:
+    - name: www
+      target: ingress
 `
 
 const _NETWORK = `network:
@@ -35,8 +44,9 @@ const _NETWORK = `network:
 `
 
 const _run = (
-  { cloud, server }: {
+  { cloud, dns = dnsNoopLive, server }: {
     readonly cloud: ReturnType<typeof fakeCloudProvider>
+    readonly dns?: Layer.Layer<DnsProvider>
     readonly server: ReturnType<typeof makeFakeMksServer>
   }
 ) =>
@@ -46,7 +56,7 @@ const _run = (
   }).pipe(
     Effect.provide(Layer.succeed(MksEnv, { mks: makeMksClient(server.httpClient), serviceName: "service-1" })),
     Effect.provide(cloud.layer),
-    Effect.provide(dnsNoopLive)
+    Effect.provide(dns)
   )
 
 const _withYaml = (yaml: string) => Effect.provide(layerNoop({ readFileString: () => Effect.succeed(yaml) }))
@@ -118,6 +128,21 @@ it.effect("touches no load balancer when the config declares no ingress", () =>
 
     assert.deepStrictEqual(cloud.lbSpecs, [])
   }).pipe(_withYaml(_yaml(_NETWORK))))
+
+// R15, the seam: an apply that creates the LB must hand its floating IP to the
+// DNS phase in the same run. Each half is covered on its own (`ingress.test.ts`
+// above, `mks/dns.test.ts`), so only this asserts the join between them.
+it.effect("an apply points a target: ingress record at the floating IP it just allocated", () =>
+  Effect.gen(function*() {
+    const dns = spyDnsLayer()
+
+    yield* _run({ cloud: fakeCloudProvider(), dns: dns.layer, server: makeFakeMksServer() })
+
+    assert.deepStrictEqual(dns.ensured, [[
+      { name: "www", target: defaultLbInfo.floatingIp },
+      { name: "www", target: "kumulo.cluster=staging" }
+    ]])
+  }).pipe(_withYaml(_yaml(`${_NETWORK}ingress: {}\n`, _INGRESS_DNS))))
 
 // R10 — placement is required on MKS: an LB Octavia places wherever it likes is
 // unreachable from the cluster. Rejected at decode, not discovered at apply.

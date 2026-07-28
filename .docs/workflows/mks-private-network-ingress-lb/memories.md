@@ -256,3 +256,96 @@ open, and M4/M5 inherit it.
   `<cluster>.outputs.yaml` back off disk.
 - `makeFakeCinder` keeps query params in `request.urlParams`, not in
   `request.url` — read them from there (`router:external=true`).
+
+## M4 — `ingress` DNS target (T4.1–T4.4, landed)
+
+### D2 is STILL provisional
+
+M0 was not run, for the third milestone running. `target: ingress` now
+resolves to the floating IP kumulo allocated; whether OVH's CCM ever attaches
+listeners to that LB is unobserved. A correct DNS record pointing at an LB with
+no listeners is the failure mode this milestone cannot rule out.
+
+### Shipped
+
+- `DnsTargets = { api_server: DnsTarget; ingress?: DnsTarget }` (cli `dns.ts`).
+  `desiredRecords`/`reconcileDns` take `targets`, not `apiTarget`.
+  `_resolveTarget` is a lookup: an absent key falls through exactly as an
+  unrecognised target does.
+- `DnsPlanTargets` (cli `dns-plan.ts`) is the same map in *kinds*
+  (`"ip" | "hostname"`), consumed by `_kindOf`. `k3s/plan.ts` passes
+  `{ api_server: "ip" }`, `mks/plan.ts` passes `_dnsTargets(config)`.
+- `reconcileMksDns` gained an optional `ingress?: LbInfo`; `_dnsTargets`
+  (cli `mks/reconcile.ts`) offers it only when `floatingIp` is a non-empty
+  string, mirroring `_ingressOutputs`' guard.
+- `packages/cli/test/mks/spy-dns.ts` — the `DnsProvider` spy, hoisted out of
+  `test/mks/dns.test.ts` so `ingress.test.ts` can drive the seam.
+- The fake MKS server now returns a cluster `url`. Without one `apiEndpoint`
+  was `""` and every fixture apply with a real `dns.module` failed
+  `ConfigInvalid` before reaching the DNS phase. `test/commands/delete.test.ts`
+  hand-builds a `FakeCluster` and had to gain the field too.
+
+### Decisions worth not re-deriving
+
+- **A partial map, not a second parameter.** k3s must keep passing `ingress`
+  through literally (scope §5); an absent key gives that for free, while a
+  required second argument would force k3s to invent a target it has none of.
+- **Plan derives the ingress record kind from the `ingress:` block alone.** A
+  Neutron FIP is always IPv4 → `A`, so the row is right even on the apply that
+  creates the LB. Reading Octavia at plan time would make `kumulo plan` demand
+  OS_* credentials (same ceiling `_networkActions`/`_ingressActions` carry).
+- **Plan and apply must move together.** Fixing `_resolveTarget` without
+  `_kindOf` would have shipped a plan promising a CNAME where the apply writes
+  an A record — worse than the old uniform lie, because the plan then looks
+  trustworthy.
+
+### Known ceiling — decided deliberately, not overlooked
+
+`target: ingress` with **no `ingress:` block** decodes clean, plans a `CNAME`
+row and applies a CNAME to the literal hostname `ingress`. Nothing validates a
+record's target against the ingress block (`isIngressPlaceable` only enforces
+`ingress ⇒ network`). Left as-is because R15 requires an unrecognised target to
+pass through literally and R16 asks for an honest *row*, not a rejected config —
+plan and apply now agree on exactly what lands. The same silence makes any
+mistyped target (`api-server`) a valid record pointing nowhere; it is pinned by
+a test rather than left to be rediscovered. Upgrade path if it starts biting: a
+cross-field schema filter beside `isIngressPlaceable`, which then also needs the
+`crossFieldConstraints` mirror in `scripts/generate-schema.ts` + a committed
+`kumulo.schema.json` (the `ingress ⇒ network` precedent from M3).
+
+### Traps that bit
+
+- oxlint's `kumulo(no-type-assertion)` bans `as` in tests too — a property
+  expectation indexing a map by the generated target needed rewriting as
+  explicit branches. `as const` is fine.
+- The config schema rejects an empty record target (`NonEmptyString`), so `""`
+  cannot appear in a target arbitrary: `decodeTestConfig` throws before the
+  property runs.
+
+## M4 verification fixes — DNS ownership TXT + kind migration
+
+Two defects found by verifying a *second* apply (M4 only ever exercised one).
+Both pre-existing and shared with k3s, both fixed at the single place all
+callers route through.
+
+- **The CLI never emitted the ownership TXT.** `DnsProvider`'s contract keys
+  ownership off a `kumulo.cluster=<tag>` TXT rrset at the same name — every
+  provider contract test passed one explicitly, and nothing in `src/` ever did.
+  So apply #2 saw its own records as foreign (`ResourceConflict`) and
+  `removeClusterRecords` deleted nothing. `desiredRecords`
+  (`packages/cli/src/dns.ts`) now appends one TXT per distinct name, tagged
+  `config.name` — the same tag `removeDns` deletes by. Records first, ownership
+  appended, so `ensureRecords`' pairing (which is order-independent) and the
+  existing "first element is the resolved record" tests both hold.
+- **A record's *kind* could not migrate.** `_ensurePair` looked up
+  `existingOther.find(r => r.type === kind)`, so a name whose target changed
+  from hostname to address gained an A rrset *beside* the stale CNAME —
+  invalid per RFC 1034 §3.6.2. M4 is the first release where a kind moves
+  (`target: ingress` with no `ingress:` block writes CNAME `www -> ingress`,
+  then adding `ingress: {}` makes it an A). `_deleteStaleKinds` drops the
+  other-kind rrsets past the ownership guard, in **both** dns-ovh and
+  dns-hetzner (identical `_ensurePair`, identical bug).
+- The kind-migration test lives in the shared `runDnsProviderContractSuite`, so
+  every future adapter inherits it; it needed one new harness hook
+  (`kindsAt`) because `targetOf` deliberately returns the first non-TXT record
+  and so cannot see a split-brain name.

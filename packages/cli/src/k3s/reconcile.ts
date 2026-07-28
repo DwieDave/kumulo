@@ -332,7 +332,9 @@ export const applyK3sEffect = (
       yield* _installAddons(config)
       yield* _drainOrphanedWorkers(config)
     }).pipe(Effect.provide(k8sClientLayer({ config, master1 })))
-    yield* reconcileDns({ config, apiTarget: { kind: "ip", value: infra.lbVip } })
+    // k3s supplies no ingress target (scope §5): `target: ingress` keeps
+    // reaching the provider literally, as it does today.
+    yield* reconcileDns({ config, targets: { api_server: { kind: "ip", value: infra.lbVip } } })
     yield* _reconcileVolumes(config)
     const kubeconfigPath = yield* _writeKubeconfig(config, master1, infra.lbVip, configDir)
     return { apiEndpoint: infra.lbVip, kubeconfigPath }

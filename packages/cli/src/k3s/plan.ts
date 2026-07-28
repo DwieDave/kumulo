@@ -64,8 +64,9 @@ export const k3sPlanFor = (
 ): Plan => ({
   actions: [
     ...computePlan({ desired: buildK3sNodes(config), actual: observed }).actions,
-    // k3s points `api_server` at a master IP -> A record (see `applyK3s`).
-    ...dnsPlanActions({ config: config.dns, targetKind: "ip" })
+    // k3s points `api_server` at a master IP -> A record (see `applyK3s`), and
+    // resolves no other placeholder (scope §5).
+    ...dnsPlanActions({ config: config.dns, targets: { api_server: "ip" } })
   ]
 })
 

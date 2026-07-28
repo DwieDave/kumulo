@@ -9,6 +9,8 @@ interface FakeCluster {
   id: string
   name: string
   status: string
+  /** OVH's api-server endpoint (`Cloud_kube_Cluster.url`) — what MKS DNS points `api_server` at. */
+  url: string
   // Creation-time only, read back verbatim: OVH's update payload cannot change
   // any of them (`Cloud_ProjectKubeUpdate`).
   privateNetworkId?: string
@@ -89,6 +91,7 @@ export const makeFakeMksServer = (
       id,
       name,
       status: "READY",
+      url: `https://${id}.fixture.mks.invalid`,
       privateNetworkId: body.privateNetworkId,
       nodesSubnetId: body.nodesSubnetId,
       loadBalancersSubnetId: body.loadBalancersSubnetId
