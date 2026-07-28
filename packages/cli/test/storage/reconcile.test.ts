@@ -15,9 +15,6 @@ version: "1.31.0"
 auth:
   method: application_credential
   region: GRA5
-network:
-  cidr: 10.0.0.0/16
-  public_access: nat
 api_server:
   high_availability: true
   allowed_cidrs: ["0.0.0.0/0"]

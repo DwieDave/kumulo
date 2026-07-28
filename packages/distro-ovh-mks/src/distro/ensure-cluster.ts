@@ -1,8 +1,7 @@
 import { Effect } from "effect"
-import { ResourceConflict } from "@kumulo/core"
 import type { ManagedClusterInfo, MksError } from "@kumulo/core"
 import type { Mks } from "../client/mks.ts"
-import { clusterDrift } from "./cluster-drift.ts"
+import { clusterDrift, driftConflict } from "./cluster-drift.ts"
 import type { MksClusterState } from "./cluster-drift.ts"
 import { mapMksError } from "./errors.ts"
 import { pollUntil } from "./status.ts"
@@ -16,6 +15,8 @@ interface RawCluster {
   readonly url?: string
   readonly version?: string
   readonly region?: string
+  /** `null` is OVH's "no private network"; distinct from a field it never sent. */
+  readonly privateNetworkId?: string | null
 }
 
 /** `ManagedClusterInfo` plus the cluster-scoped fields drift detection compares (§`cluster-drift.ts`). */
@@ -26,7 +27,8 @@ const _toInfo = (cluster: RawCluster): MksClusterInfo => ({
   apiEndpoint: cluster.url ?? "",
   status: cluster.status ?? "UNKNOWN",
   version: cluster.version,
-  region: cluster.region
+  region: cluster.region,
+  privateNetworkId: cluster.privateNetworkId
 })
 
 /** Resolves the cluster by name only — never creates one: a missing cluster is a no-op, not a provisioning trigger. */
@@ -63,7 +65,8 @@ const _create = (
         region: config.region,
         version: config.version,
         privateNetworkId: config.privateNetworkId,
-        nodesSubnetId: config.nodesSubnetId
+        nodesSubnetId: config.nodesSubnetId,
+        loadBalancersSubnetId: config.loadBalancersSubnetId
       }
     }),
     ctx: { kind: "kube", ref: config.name }
@@ -92,11 +95,12 @@ const _awaitReady = (
 const _convergeCluster = (
   { cluster, mks, config }: { readonly mks: Mks; readonly config: MksClusterConfig; readonly cluster: RawCluster }
 ): Effect.Effect<void, MksError> => {
-  const drift = clusterDrift({ desired: config, actual: _toInfo(cluster) })
+  // By here the network reconcile has run, so a configured network means a
+  // resolved `privateNetworkId` — the presence flag needs no separate source.
+  const desired = { ...config, privateNetwork: config.privateNetworkId !== undefined }
+  const drift = clusterDrift({ desired, actual: _toInfo(cluster) })
   if (drift._tag === "None") return Effect.void
-  if (drift._tag === "Blocked") {
-    return Effect.fail(new ResourceConflict({ kind: "cluster-drift", ref: `${drift.field}: ${drift.reason}` }))
-  }
+  if (drift._tag === "Blocked") return Effect.fail(driftConflict(drift))
   return upgrade({
     mks,
     ref: { serviceName: config.serviceName, kubeId: cluster.id ?? "" },

@@ -11,6 +11,11 @@ interface FakeCluster {
   status: string
   url: string
   pollsRemaining: number
+  // Creation-time only, and read back verbatim — OVH's update payload cannot
+  // change any of them (`Cloud_ProjectKubeUpdate`).
+  privateNetworkId?: string
+  nodesSubnetId?: string
+  loadBalancersSubnetId?: string
 }
 
 /** Mirrors `Cloud_kube_NodePoolTemplate` in the generated client (metadata + spec, same casing). */
@@ -53,6 +58,9 @@ interface CreateClusterBody {
   readonly name?: string
   readonly region?: string
   readonly version?: string
+  readonly privateNetworkId?: string
+  readonly nodesSubnetId?: string
+  readonly loadBalancersSubnetId?: string
 }
 
 interface CreatePoolBody {
@@ -117,7 +125,10 @@ export const makeFakeMksServer = (options: { readonly readyAfterPolls?: number }
         version: payload.version,
         status: "INSTALLING",
         url: `https://${id}.mks.ovh`,
-        pollsRemaining: readyAfterPolls
+        pollsRemaining: readyAfterPolls,
+        privateNetworkId: payload.privateNetworkId,
+        nodesSubnetId: payload.nodesSubnetId,
+        loadBalancersSubnetId: payload.loadBalancersSubnetId
       })
       pools.set(id, new Map())
       return new Response(JSON.stringify(clusters.get(id)), { status: 200 })

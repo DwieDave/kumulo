@@ -31,8 +31,12 @@ export interface MksClusterConfig {
   readonly name: string
   readonly region: string
   readonly version?: Cloud_kube_VersionEnum
+  // Creation-time only: `Cloud_ProjectKubeUpdate` is `{ name?, updatePolicy? }`,
+  // so a cluster's networking is fixed the moment it exists. All three are
+  // resolved from a `NetworkInfo` before `ensureCluster` runs (R7), or none are.
   readonly privateNetworkId?: string
   readonly nodesSubnetId?: string
+  readonly loadBalancersSubnetId?: string
   readonly worker_pools: ReadonlyArray<MksWorkerPoolConfig>
 }
 

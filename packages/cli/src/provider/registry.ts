@@ -1,11 +1,12 @@
 import { Config, Effect, Layer, Redacted } from "effect"
 import type * as HttpClient from "effect/unstable/http/HttpClient"
-import { AuthenticationFailed } from "@kumulo/core"
-import type { ClusterConfig, CloudProvider, K3sClusterConfig, SecGroupSpec } from "@kumulo/core"
+import { AuthenticationFailed, CloudProvider } from "@kumulo/core"
+import type { ClusterConfig, K3sClusterConfig, SecGroupSpec } from "@kumulo/core"
 import { buildFr57Rules, CloudProviderLive, KeystoneAuth, OpenStackHttpLive } from "@kumulo/openstack"
 import type { CloudProviderOptions } from "@kumulo/openstack"
 import { buildHetznerSecGroupRules, CloudProviderLive as HcloudCloudProviderLive, hcloudHttpClientLive } from "@kumulo/hetzner"
 import { OpenStackEnv } from "../doctor-openstack/env.ts"
+import type { OpenStackEnvShape } from "../doctor-openstack/env.ts"
 import { requiredRedactedEnv } from "../env.ts"
 import type { CloudCredentialShape } from "../k3s/env.ts"
 
@@ -25,39 +26,76 @@ export interface ProviderEntry {
   readonly credentialsFromDistro: boolean
 }
 
-const _cloudProviderOptions = (config: K3sClusterConfig, region: string): CloudProviderOptions => ({
-  tag: config.name,
-  region,
-  octaviaEnabled: config.api_server.high_availability,
-  imageAliases: {}
-})
+type OpenStackCloudProviderLayer = Layer.Layer<CloudProvider, AuthenticationFailed, OpenStackEnv | HttpClient.HttpClient>
 
 /**
- * The k3s composition root's OpenStack `CloudProvider`, reusing the
- * already-resolved `OpenStackEnv` (shared with the doctor checks and
- * `CinderAuth`) instead of re-deriving Keystone auth. Fails at first use
- * (never at Layer-build time) when OpenStack credentials are missing, same
- * contract as `OpenStackEnv`/`CinderAuthLive`.
+ * Every verb fails with the `AuthenticationFailed` the Layer would once have
+ * failed to *build* with. Building it eagerly made missing OS_* credentials
+ * fatal to callers that never touch OpenStack — an `ovh-mks` apply with no
+ * `network` block reaches no verb at all and must still run (R5).
  */
-export const k3sCloudProviderLayer = (
-  config: K3sClusterConfig
-): Layer.Layer<CloudProvider, AuthenticationFailed, OpenStackEnv | HttpClient.HttpClient> =>
-  Layer.unwrap(
-    Effect.gen(function*() {
-      const env = yield* OpenStackEnv
-      if (env.keystone === undefined || env.region === undefined) {
-        return yield* Effect.fail(new AuthenticationFailed({ hint: env.unavailableReason ?? "OpenStack auth unavailable" }))
-      }
-      // The token/retry/semaphore wrapper (`OpenStackHttpLive`) sits between
-      // the generated Nova/Neutron/Glance/Octavia clients and the ambient
-      // `HttpClient` — without it every call ships without `X-Auth-Token`.
-      const keystone = Layer.succeed(KeystoneAuth, env.keystone)
-      return CloudProviderLive(_cloudProviderOptions(config, env.region)).pipe(
-        Layer.provide(OpenStackHttpLive().pipe(Layer.provide(keystone))),
-        Layer.provide(keystone)
-      )
-    })
+const _unavailableCloudProvider = (hint: string): Layer.Layer<CloudProvider> => {
+  const reject = () => Effect.fail(new AuthenticationFailed({ hint }))
+  return Layer.succeed(CloudProvider, {
+    ensureNetwork: reject,
+    ensureSecurityGroups: reject,
+    ensureLoadBalancer: reject,
+    ensureServer: reject,
+    deleteServer: reject,
+    deleteByTag: reject,
+    listClusterResources: reject,
+    resolveImage: reject,
+    resolveFlavor: reject
+  })
+}
+
+// The token/retry/semaphore wrapper (`OpenStackHttpLive`) sits between the
+// generated Nova/Neutron/Glance/Octavia clients and the ambient `HttpClient` —
+// without it every call ships without `X-Auth-Token`.
+const _liveCloudProvider = (
+  { auth, options, region }: {
+    readonly options: Omit<CloudProviderOptions, "region">
+    readonly auth: NonNullable<OpenStackEnvShape["keystone"]>
+    readonly region: string
+  }
+): Layer.Layer<CloudProvider, never, HttpClient.HttpClient> => {
+  const keystone = Layer.succeed(KeystoneAuth, auth)
+  return CloudProviderLive({ ...options, region }).pipe(
+    Layer.provide(OpenStackHttpLive().pipe(Layer.provide(keystone))),
+    Layer.provide(keystone)
   )
+}
+
+/**
+ * The OpenStack `CloudProvider`, reusing the already-resolved `OpenStackEnv`
+ * (shared with the doctor checks and `CinderAuth`) instead of re-deriving
+ * Keystone auth. Fails at first use (never at Layer-build time) when OpenStack
+ * credentials are missing, same contract as `OpenStackEnv`/`CinderAuthLive`.
+ * `region` is the env's, so callers supply everything else.
+ */
+const _openStackCloudProviderLayer = (options: Omit<CloudProviderOptions, "region">): OpenStackCloudProviderLayer =>
+  Layer.unwrap(
+    Effect.map(OpenStackEnv, (env) =>
+      env.keystone === undefined || env.region === undefined
+        ? _unavailableCloudProvider(env.unavailableReason ?? "OpenStack auth unavailable")
+        : _liveCloudProvider({ auth: env.keystone, options, region: env.region }))
+  )
+
+export const k3sCloudProviderLayer = (config: K3sClusterConfig): OpenStackCloudProviderLayer =>
+  _openStackCloudProviderLayer({
+    tag: config.name,
+    octaviaEnabled: config.api_server.high_availability,
+    imageAliases: {}
+  })
+
+/**
+ * The same OpenStack `CloudProvider` for the ovh-mks path, which reaches it
+ * only to create the cluster's private network (R7). MKS configs have no
+ * `api_server` block to read `octaviaEnabled` from — R11 gives it a real
+ * source; `ensureNetwork` never reads the flag, so `false` is honest until then.
+ */
+export const mksCloudProviderLayer = (config: { readonly name: string }): OpenStackCloudProviderLayer =>
+  _openStackCloudProviderLayer({ tag: config.name, octaviaEnabled: false, imageAliases: {} })
 
 /** `HCLOUD_TOKEN`-backed `HttpClient`, shared by the hcloud compute Layers. */
 export const hcloudHttpClientLayer = (): Layer.Layer<HttpClient.HttpClient, AuthenticationFailed, HttpClient.HttpClient> =>

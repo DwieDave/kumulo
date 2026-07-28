@@ -97,7 +97,10 @@ export const mksEntry: DistroEntry = {
   delete: deleteMks,
   kubeconfig: kubeconfigMks,
   deletedLabel: "mks-cluster",
-  appliedPrefixes: ["mks-cluster/", "mks-pool/"],
+  // `network/`/`subnet/` are converged inside `applyMks` too (ahead of the
+  // cluster) — a row whose prefix is missing here renders and then never
+  // checks off.
+  appliedPrefixes: ["network/", "subnet/", "mks-cluster/", "mks-pool/"],
   status: _statusMks,
   upgrade: _upgradeMksEntry,
   credentialsLabel: "ovh api",

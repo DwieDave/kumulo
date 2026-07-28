@@ -10,6 +10,7 @@ import { loadConfig } from "../../src/config.ts"
 import { MksEnv } from "../../src/mks/env.ts"
 import { buildMksPlan, type MksInventory, type MksPlanInput } from "../../src/mks/plan.ts"
 import { applyMksEffect } from "../../src/mks/reconcile.ts"
+import { cloudProviderNever, fakeCloudProvider } from "./fake-cloud-provider.ts"
 
 // ── plan ────────────────────────────────────────────────────────────────────
 
@@ -64,6 +65,35 @@ it("a downgrade is refused rather than planned as an upgrade", () => {
   assert.include(reason, "version")
 })
 
+// R8 — MKS's update payload is `{ name?, updatePolicy? }`, so a network the
+// cluster was not created with can never be applied to it. The plan must say
+// recreate, and it must say it before anything is written.
+const _networked: MksPlanInput = { ..._config, network: { cidr: "10.0.0.0/16" } }
+
+/** `_clusterRow` for a config that carries a network block — which puts network rows ahead of the cluster's. */
+const _networkedClusterRow = (inventory: MksInventory): readonly [string, string] => {
+  const action = buildMksPlan({ config: _networked, inventory }).actions.find((a) => a.name === "mks-cluster/prod-eu")
+  if (action === undefined) return ["missing", ""]
+  return [action._tag, action._tag === "Update" || action._tag === "ReplaceNeedsConfirm" ? action.reason : ""]
+}
+
+it("adding a network block to a cluster created without one plans as ReplaceNeedsConfirm saying recreate", () => {
+  const [tag, reason] = _networkedClusterRow(_live({ region: "GRA5", version: "1.31.4", privateNetworkId: null }))
+  assert.strictEqual(tag, "ReplaceNeedsConfirm")
+  assert.include(reason, "recreate")
+})
+
+it("dropping the network block from a cluster that lives on one is refused the same way", () => {
+  const [tag, reason] = _clusterRow(_live({ region: "GRA5", version: "1.31.4", privateNetworkId: "net-1" }))
+  assert.strictEqual(tag, "ReplaceNeedsConfirm")
+  assert.include(reason, "recreate")
+})
+
+it("a cluster already on a private network the config still asks for is a NoOp", () => {
+  const [tag, reason] = _networkedClusterRow(_live({ region: "GRA5", version: "1.31.4", privateNetworkId: "net-1" }))
+  assert.deepStrictEqual([tag, reason], ["NoOp", ""])
+})
+
 // ── apply ───────────────────────────────────────────────────────────────────
 
 const _yaml = `
@@ -92,7 +122,9 @@ secrets:
 `
 
 /** One live cluster, plus a log of every mutating request — a refusal must leave it empty. */
-const _fakeMks = (cluster: { readonly region: string; readonly version: string }) => {
+const _fakeMks = (
+  cluster: { readonly region: string; readonly version: string; readonly privateNetworkId?: string | null }
+) => {
   const mutations: Array<string> = []
   const body = { id: "kube-1", name: "prod-eu", status: "READY", url: "https://kube-1.mks.ovh", ...cluster }
   const _handle = (request: HttpClientRequest.HttpClientRequest): Response => {
@@ -120,7 +152,7 @@ it.effect("applying a kubernetes minor bump asks OVH to upgrade the cluster", ()
     const config = yield* loadConfig("cluster.yaml")
     const server = _fakeMks({ region: "GRA5", version: "1.30.9" })
 
-    yield* applyMksEffect({ config }).pipe(Effect.provide(server.layer), Effect.provide(dnsNoopLive))
+    yield* applyMksEffect({ config }).pipe(Effect.provide(server.layer), Effect.provide(dnsNoopLive), Effect.provide(cloudProviderNever))
 
     assert.deepStrictEqual(server.mutations, ["POST /cloud/project/service-1/kube/kube-1/update"])
   }).pipe(Effect.provide(_fsTestLayer)))
@@ -132,7 +164,7 @@ it.effect("applying a region change fails naming the field and performs zero mut
 
     const failure = yield* applyMksEffect({ config }).pipe(
       Effect.provide(server.layer),
-      Effect.provide(dnsNoopLive),
+      Effect.provide(dnsNoopLive), Effect.provide(cloudProviderNever),
       Effect.flip
     )
 
@@ -146,7 +178,58 @@ it.effect("applying an unchanged cluster mutates nothing", () =>
     const config = yield* loadConfig("cluster.yaml")
     const server = _fakeMks({ region: "GRA5", version: "1.31.7" })
 
-    yield* applyMksEffect({ config }).pipe(Effect.provide(server.layer), Effect.provide(dnsNoopLive))
+    yield* applyMksEffect({ config }).pipe(Effect.provide(server.layer), Effect.provide(dnsNoopLive), Effect.provide(cloudProviderNever))
 
     assert.deepStrictEqual(server.mutations, [])
   }).pipe(Effect.provide(_fsTestLayer)))
+
+// R8, converge-time backstop for the plan-time refusal above: this config
+// declares no network, so nothing is created before the check — the refusal
+// costs zero mutations on OVH *and* zero on Neutron (`cloudProviderNever`
+// dies if `ensureNetwork` is reached at all).
+it.effect("applying a config that dropped its network block fails saying recreate, mutating nothing", () =>
+  Effect.gen(function*() {
+    const config = yield* loadConfig("cluster.yaml")
+    const server = _fakeMks({ region: "GRA5", version: "1.31.0", privateNetworkId: "net-1" })
+
+    const failure = yield* applyMksEffect({ config }).pipe(
+      Effect.provide(server.layer),
+      Effect.provide(dnsNoopLive),
+      Effect.provide(cloudProviderNever),
+      Effect.flip
+    )
+
+    assert.strictEqual(failure._tag, "ResourceConflict")
+    assert.include(JSON.stringify(failure), "recreate")
+    assert.deepStrictEqual(server.mutations, [])
+  }).pipe(Effect.provide(_fsTestLayer)))
+
+// R8, the other direction — and the one that writes first. `_convergeCluster`
+// only runs after `ensureNetwork`, so refusing there leaves a Neutron network
+// and both subnets orphaned (M2 ships no teardown). The refusal has to happen
+// before the first Neutron call, and before the vRack read too: `_fakeMks`
+// answers `/vrack` with a 500, so reaching it fails this test loudly.
+const _networkedYaml = `${_yaml}network:
+  cidr: 10.0.0.0/16
+  nodes_subnet: 10.0.1.0/24
+  load_balancers_subnet: 10.0.2.0/24
+`
+
+it.effect("applying a network block to a cluster created without one refuses before touching Neutron", () =>
+  Effect.gen(function*() {
+    const config = yield* loadConfig("cluster.yaml")
+    const server = _fakeMks({ region: "GRA5", version: "1.31.0", privateNetworkId: null })
+    const cloud = fakeCloudProvider()
+
+    const failure = yield* applyMksEffect({ config }).pipe(
+      Effect.provide(server.layer),
+      Effect.provide(dnsNoopLive),
+      Effect.provide(cloud.layer),
+      Effect.flip
+    )
+
+    assert.strictEqual(failure._tag, "ResourceConflict")
+    assert.include(JSON.stringify(failure), "recreate")
+    assert.deepStrictEqual(cloud.specs, [])
+    assert.deepStrictEqual(server.mutations, [])
+  }).pipe(Effect.provide(layerNoop({ readFileString: () => Effect.succeed(_networkedYaml) }))))

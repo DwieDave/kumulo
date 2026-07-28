@@ -9,6 +9,11 @@ interface FakeCluster {
   id: string
   name: string
   status: string
+  // Creation-time only, read back verbatim: OVH's update payload cannot change
+  // any of them (`Cloud_ProjectKubeUpdate`).
+  privateNetworkId?: string
+  nodesSubnetId?: string
+  loadBalancersSubnetId?: string
 }
 /** Mirrors `Cloud_kube_NodePoolTemplate` in the generated client (metadata + spec, same casing). */
 interface FakeTemplate {
@@ -29,6 +34,9 @@ interface FakeBody {
   readonly autoscale?: boolean
   readonly antiAffinity?: boolean
   readonly monthlyBilled?: boolean
+  readonly privateNetworkId?: string
+  readonly nodesSubnetId?: string
+  readonly loadBalancersSubnetId?: string
 }
 /** The node pool as OVH really reads it back (`Cloud_kube_NodePool`) — `template` included. */
 interface FakePool {
@@ -67,14 +75,24 @@ const _badRequest = (message: string): Response => new Response(JSON.stringify({
  * under a sibling package's `test/` dir, unreachable across the
  * `no-deep-package-imports` boundary from here).
  */
-export const makeFakeMksServer = () => {
+export const makeFakeMksServer = (
+  // `null` = the project has no vRack, which is OVH's 404 (see `requireVrack`).
+  { vrackId = "pn-vrack-1" }: { readonly vrackId?: string | null } = {}
+) => {
   let nextId = 1
   const clusters = new Map<string, FakeCluster>()
   const pools = new Map<string, Map<string, FakePool>>()
 
-  const _create = (name: string) => {
+  const _create = (name: string, body: FakeBody) => {
     const id = `kube-${nextId++}`
-    const cluster: FakeCluster = { id, name, status: "READY" }
+    const cluster: FakeCluster = {
+      id,
+      name,
+      status: "READY",
+      privateNetworkId: body.privateNetworkId,
+      nodesSubnetId: body.nodesSubnetId,
+      loadBalancersSubnetId: body.loadBalancersSubnetId
+    }
     clusters.set(id, cluster)
     pools.set(id, new Map())
     return cluster
@@ -85,13 +103,16 @@ export const makeFakeMksServer = () => {
   // field surfaces as a failed assertion in the test rather than a cast.
   const _handle = (request: HttpClientRequest.HttpClientRequest, body: FakeBody | undefined): Response => {
     const path = new URL(request.url).pathname
+    if (path.match(/^\/cloud\/project\/[^/]+\/vrack$/) && request.method === "GET") {
+      return vrackId === null ? new Response(JSON.stringify({ message: "not found" }), { status: 404 }) : _json({ id: vrackId })
+    }
     const kubeMatch = path.match(/^\/cloud\/project\/[^/]+\/kube$/)
     if (kubeMatch && request.method === "GET") return _json([...clusters.keys()])
     if (kubeMatch && request.method === "POST") {
       if (body === undefined) return _badRequest("cluster create sent an empty body")
       const name = body.name ?? ""
       const existing = [...clusters.values()].find((cluster) => cluster.name === name)
-      return _json(existing ?? _create(name))
+      return _json(existing ?? _create(name, body))
     }
 
     const idMatch = path.match(/^\/cloud\/project\/[^/]+\/kube\/([^/]+)$/)

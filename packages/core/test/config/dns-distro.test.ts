@@ -10,12 +10,16 @@ const dnsModules = ["ovh", "hetzner"] as const
 const realDns = { zone: "example.com", ttl: 300, records: [{ name: "api.prod-eu", target: "api_server" }] }
 
 // kumulo: version format is distro-dependent, so vary it with the distro to
-// keep the version filter out of the way of the dns/distro property.
-const _forDistro = (distro: (typeof distros)[number]) => ({
-  ...validConfig,
-  distro,
-  version: distro === "k3s" ? "v1.31.4+k3s1" : "v1.31.4"
-})
+// keep the version filter out of the way of the dns/distro property. `network`
+// is dropped for ovh-mks: both distros declare one, but MKS's is a different
+// struct (two subnets, no `public_access`), so the k3s block is not a valid
+// ovh-mks block and would fail decode for reasons this property is not about.
+const _forDistro = (distro: (typeof distros)[number]) => {
+  const { network: _k3sOnly, ...withoutNetwork } = validConfig
+  return distro === "k3s"
+    ? { ...validConfig, distro, version: "v1.31.4+k3s1" }
+    : { ...withoutNetwork, distro, version: "v1.31.4" }
+}
 
 describe("ClusterConfig — dns × distro", () => {
   it.prop(

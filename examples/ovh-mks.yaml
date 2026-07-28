@@ -6,6 +6,12 @@ version: 1.35.0
 auth:
   method: application_credential
   region: DE1
+# Optional. Omit it and the cluster lands on OVH's default public addressing.
+# Set at cluster creation and never changeable afterwards.
+network:
+  cidr: 10.0.0.0/16
+  nodes_subnet: 10.0.1.0/24
+  load_balancers_subnet: 10.0.2.0/24
 worker_pools:
   - name: general
     flavor: d2-4

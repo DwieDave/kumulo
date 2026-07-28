@@ -7,6 +7,7 @@ import { rejectUnconfirmedReplace } from "../../src/commands.ts"
 import { MksEnv } from "../../src/mks/env.ts"
 import { buildMksPlan, emptyMksInventory, mksClusterRow, mksPoolRow, toMksPool } from "../../src/mks/plan.ts"
 import { applyMksEffect } from "../../src/mks/reconcile.ts"
+import { cloudProviderNever } from "./fake-cloud-provider.ts"
 import { makeFakeMksServer } from "../e2e/fake-mks-server.ts"
 import { baseMksEncodedConfig, decodeTestConfig } from "../fixtures.ts"
 
@@ -22,7 +23,7 @@ const _withFlavor = (flavor: string): ClusterConfig => ({
 const _converged = Effect.fn(function*() {
   const server = makeFakeMksServer()
   const mksEnv = Layer.succeed(MksEnv, { mks: makeMksClient(server.httpClient), serviceName: "service-1" })
-  yield* applyMksEffect({ config: _config }).pipe(Effect.provide(mksEnv), Effect.provide(dnsNoopLive))
+  yield* applyMksEffect({ config: _config }).pipe(Effect.provide(mksEnv), Effect.provide(dnsNoopLive), Effect.provide(cloudProviderNever))
   const [kubeId] = [...server.clusters.keys()]
   const pools = () => [...(server.pools.get(kubeId ?? "")?.values() ?? [])]
   return { mksEnv, pools }
@@ -36,7 +37,7 @@ it.effect("a confirmed replace deletes the drifted pool and creates it anew", ()
 
     yield* applyMksEffect({ config: _withFlavor("b3-32"), replace: new Set([_poolRow]) }).pipe(
       Effect.provide(mksEnv),
-      Effect.provide(dnsNoopLive)
+      Effect.provide(dnsNoopLive), Effect.provide(cloudProviderNever)
     )
 
     const after = pools()
@@ -50,7 +51,7 @@ it.effect("an unconfirmed replace mutates nothing", () =>
     const { mksEnv, pools } = yield* _converged()
     const before = pools()
 
-    yield* applyMksEffect({ config: _withFlavor("b3-32") }).pipe(Effect.provide(mksEnv), Effect.provide(dnsNoopLive))
+    yield* applyMksEffect({ config: _withFlavor("b3-32") }).pipe(Effect.provide(mksEnv), Effect.provide(dnsNoopLive), Effect.provide(cloudProviderNever))
 
     assert.deepStrictEqual(pools(), before)
   }))
@@ -80,7 +81,7 @@ it.effect("replacing the MKS control plane is refused outright", () =>
 
     const failure = yield* applyMksEffect({ config: _config, replace: new Set([mksClusterRow(_config.name)]) }).pipe(
       Effect.provide(mksEnv),
-      Effect.provide(dnsNoopLive),
+      Effect.provide(dnsNoopLive), Effect.provide(cloudProviderNever),
       Effect.flip
     )
 

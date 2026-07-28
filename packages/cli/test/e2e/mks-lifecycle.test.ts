@@ -5,6 +5,7 @@ import { loadConfig } from "../../src/config.ts"
 import { MksEnv } from "../../src/mks/env.ts"
 import { buildMksPlan } from "../../src/mks/plan.ts"
 import { applyMksEffect, deleteMksEffect, kubeconfigMks, lookupMksInventory } from "../../src/mks/reconcile.ts"
+import { cloudProviderNever } from "../mks/fake-cloud-provider.ts"
 import { decidePlanAction, renderPlan } from "../../src/present.ts"
 import { makeFakeMksServer } from "./fake-mks-server.ts"
 import { makeMksClient } from "@kumulo/distro-ovh-mks"
@@ -18,9 +19,6 @@ version: "1.31.0"
 auth:
   method: application_credential
   region: GRA5
-network:
-  cidr: 10.0.0.0/16
-  public_access: nat
 api_server:
   high_availability: true
   allowed_cidrs: ["0.0.0.0/0"]
@@ -88,7 +86,7 @@ it.effect("yaml → plan → apply → nodepool scale-update → kubeconfig → 
     assert.strictEqual(decision._tag, "Proceed")
     assert.match(renderPlan(plan), /Plan: 2 to create/)
 
-    const info = yield* applyMksEffect({ config }).pipe(Effect.provide(mksEnvLayer), Effect.provide(dnsNoopLive))
+    const info = yield* applyMksEffect({ config }).pipe(Effect.provide(mksEnvLayer), Effect.provide(dnsNoopLive), Effect.provide(cloudProviderNever))
     assert.strictEqual(info.status, "READY")
 
     // Re-plan against the now-populated fake API: everything exists -> all NoOp.
@@ -104,7 +102,7 @@ it.effect("yaml → plan → apply → nodepool scale-update → kubeconfig → 
     const [firstPool] = config.worker_pools
     assert.ok(firstPool, "fixture must define a worker pool")
     const scaledConfig = { ...config, worker_pools: [{ ...firstPool, count: 5 }] }
-    yield* applyMksEffect({ config: scaledConfig }).pipe(Effect.provide(mksEnvLayer), Effect.provide(dnsNoopLive))
+    yield* applyMksEffect({ config: scaledConfig }).pipe(Effect.provide(mksEnvLayer), Effect.provide(dnsNoopLive), Effect.provide(cloudProviderNever))
     assert.strictEqual([...(server.pools.get(info.id)?.values() ?? [])][0]?.desiredNodes, 5)
 
     const kubeconfig = yield* kubeconfigMks(config).pipe(Effect.provide(mksEnvLayer))

@@ -26,11 +26,10 @@ const _missing = ({ region, serviceName }: VrackRef): CapabilityMissing =>
  * before anything is created. A missing vRack is OVH's 404, or a 200 whose
  * payload carries no id; every other failure stays itself.
  *
- * NOT YET CALLED FROM PRODUCTION, deliberately: nothing on the MKS path creates
- * a network yet (`MksClusterConfig` has no `network` block until T2.1), and
- * calling this unconditionally would refuse every MKS apply on a vRack-less
- * project — the exact behaviour R5 says must be preserved when no network is
- * asked for. T2.3 wires it, gated on the `network` block, ahead of the network.
+ * Called from `_ensureMksNetwork` (cli), gated on the config's `network` block
+ * and ahead of `ensureNetwork`. The gate is not incidental: calling this
+ * unconditionally would refuse every MKS apply on a vRack-less project — the
+ * exact behaviour R5 says must be preserved when no network is asked for.
  */
 export const requireVrack = (
   { mks, region, serviceName }: VrackRef & { readonly mks: Mks }

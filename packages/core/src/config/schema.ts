@@ -88,6 +88,41 @@ const Network = Schema.Struct({
   public_access: PublicAccess
 })
 
+// kumulo: an IPv4 CIDR as the inclusive [first, last] address range it covers,
+// with the host bits masked off (`10.0.1.5/16` is the same range as `10.0.0.0/16`)
+const _cidrRange = (cidr: string): readonly [number, number] => {
+  const [address = "", bits = "0"] = cidr.split("/")
+  const size = 2 ** (32 - Number(bits))
+  const first = Math.floor(address.split(".").reduce((acc, part) => acc * 256 + Number(part), 0) / size) * size
+  return [first, first + size - 1]
+}
+
+// kumulo: `cidr` is the network's declared address space and nothing downstream
+// reads it — Neutron only ever sees the two subnet CIDRs. Unchecked it is a
+// required field that does nothing, and a subnet outside the network an
+// operator believes they declared would decode clean.
+const _SUBNET_FIELDS = ["nodes_subnet", "load_balancers_subnet"] as const
+const isSubnetsWithinCidr = Schema.makeFilter(
+  (network: { cidr: string; nodes_subnet: string; load_balancers_subnet: string }) => {
+    const [first, last] = _cidrRange(network.cidr)
+    const outside = _SUBNET_FIELDS.filter((field) => {
+      const [start, end] = _cidrRange(network[field])
+      return start < first || end > last
+    })
+    return outside.length === 0 ? undefined : `${outside.join(" and ")} must be inside cidr ${network.cidr}`
+  }
+)
+
+// kumulo: MKS's network block is deliberately NOT k3s's. `public_access` is a
+// bastion concept a managed control plane has no use for, and MKS takes two
+// distinct subnet ids at cluster creation (nodes, load balancers — D1), so both
+// are explicit rather than one derived from the other.
+const MksNetwork = Schema.Struct({
+  cidr: Cidr,
+  nodes_subnet: Cidr,
+  load_balancers_subnet: Cidr
+}).check(isSubnetsWithinCidr)
+
 const ApiServer = Schema.Struct({
   high_availability: Schema.Boolean,
   allowed_cidrs: Schema.Array(Cidr)
@@ -279,7 +314,12 @@ export const MksClusterConfig = Schema.Struct({
   distro: Schema.Literal("ovh-mks"),
   version: PlainK8sVersion,
   dns: Dns,
-  volumes: OpenStackVolumes
+  volumes: OpenStackVolumes,
+  // Optional: absent keeps today's behaviour (OVH's default public addressing).
+  // Networking is a creation-time input to MKS and can never be changed after
+  // (`Cloud_ProjectKubeUpdate` is `{ name?, updatePolicy? }`), so adding or
+  // removing this block on a live cluster is refused at plan time, not applied.
+  network: Schema.optionalKey(MksNetwork)
 }).check(isSecretsRequiredForObjectStorage, isAuthMethodConsistentWithProvider)
 
 export const ClusterConfig = Schema.Union([K3sClusterConfig, MksClusterConfig])

@@ -25,6 +25,8 @@ export interface MksPlanInput {
   /** Cluster-level fields (same optionality rationale as `dns`). */
   readonly version?: string
   readonly auth?: { readonly region: string }
+  /** The optional private-network block; absent is a config asking for none. */
+  readonly network?: { readonly cidr: string }
 }
 
 /** The one place a config worker pool becomes an MKS nodepool spec — plan and apply must hash the same value. */
@@ -105,17 +107,43 @@ const _clusterAction = (
   const name = mksClusterRow(config.name)
   if (!inventory.clusterExists) return { _tag: "Create", name }
   if (config.auth === undefined || inventory.clusterState === undefined) return { _tag: "NoOp", name }
-  const drift = clusterDrift({ desired: { region: config.auth.region, version: config.version }, actual: inventory.clusterState })
+  const drift = clusterDrift({
+    desired: { region: config.auth.region, version: config.version, privateNetwork: config.network !== undefined },
+    actual: inventory.clusterState
+  })
   if (drift._tag === "None") return { _tag: "NoOp", name }
   return drift._tag === "Upgrade"
     ? { _tag: "Update", name, reason: `kubernetes version ${drift.from} → ${drift.to}` }
     : { _tag: "ReplaceNeedsConfirm", name, reason: `${drift.field}: ${drift.reason}` }
 }
 
+/**
+ * Network + subnet rows (R18). Existence comes off the live cluster: MKS
+ * records the ids it was created with, and `ensureNetwork` creates both
+ * subnets with the network, so one field answers for all three rows.
+ *
+ * ponytail: a network that outlived its cluster (an earlier apply that failed
+ * after `ensureNetwork`) plans as `Create` and applies as a no-op, since
+ * `ensureNetwork` is create-if-missing. Reading Neutron at plan time would
+ * need a read-only network lookup the `CloudProvider` port does not have —
+ * add one if that stops being the rare case.
+ */
+const _networkActions = (
+  { config, inventory }: { readonly config: MksPlanInput; readonly inventory: MksInventory }
+): ReadonlyArray<PlanAction> => {
+  if (config.network === undefined) return []
+  const id = inventory.clusterState?.privateNetworkId
+  const exists = id !== undefined && id !== null && id !== ""
+  return [`network/${config.name}`, `subnet/${config.name}/nodes`, `subnet/${config.name}/load-balancers`]
+    .map((name) => _createOrNoOp({ exists, name }))
+}
+
 export const buildMksPlan = (
   { config, inventory }: { readonly config: MksPlanInput; readonly inventory: MksInventory }
 ): Plan => ({
   actions: [
+    // Ahead of the cluster row: the ids are creation-time inputs to it (R7).
+    ..._networkActions({ config, inventory }),
     _clusterAction({ config, inventory }),
     ...config.worker_pools.map((pool) => _poolAction({ cluster: config.name, inventory, pool })),
     ...(config.volumes.module === "cinder"

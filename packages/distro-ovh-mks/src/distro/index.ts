@@ -4,7 +4,7 @@
 // composes.
 export { ensureCluster, findClusterByName } from "./ensure-cluster.ts"
 export type { MksClusterInfo } from "./ensure-cluster.ts"
-export { clusterDrift } from "./cluster-drift.ts"
+export { clusterDrift, driftConflict } from "./cluster-drift.ts"
 export type { MksClusterDrift, MksClusterState, MksDesiredCluster } from "./cluster-drift.ts"
 export { parseKubeVersion } from "./parse-kube-version.ts"
 export { ensureNodePools, listNodePools } from "./ensure-nodepools.ts"

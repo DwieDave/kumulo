@@ -8,6 +8,7 @@ export {
   clusterDrift,
   deleteCluster,
   diffNodePools,
+  driftConflict,
   ensureCluster,
   ensureNodePools,
   fetchKubeconfig,

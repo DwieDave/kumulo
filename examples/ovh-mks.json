@@ -8,6 +8,11 @@
     "method": "application_credential",
     "region": "DE1"
   },
+  "network": {
+    "cidr": "10.0.0.0/16",
+    "nodes_subnet": "10.0.1.0/24",
+    "load_balancers_subnet": "10.0.2.0/24"
+  },
   "worker_pools": [
     {
       "name": "general",

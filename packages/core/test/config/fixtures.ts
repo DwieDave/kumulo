@@ -1,4 +1,4 @@
-import type { K3sClusterConfigEncoded } from "../../src/config/schema.ts"
+import type { K3sClusterConfigEncoded, MksClusterConfigEncoded } from "../../src/config/schema.ts"
 
 // kumulo: mirrors the §5 design-doc sample verbatim so tests exercise the real shape
 export const validConfig: K3sClusterConfigEncoded = {
@@ -63,3 +63,27 @@ export const validConfig: K3sClusterConfigEncoded = {
   },
   k3s: { extra_server_args: ["--disable=traefik"], extra_agent_args: [] }
 }
+
+// kumulo: the `ovh-mks` counterpart — MKS's control plane, node access and
+// addons are OVH-managed, so the k3s-only blocks are simply absent rather than
+// spread-and-overridden from `validConfig` (whose k3s `network` block is a
+// different shape entirely).
+export const validMksConfig: MksClusterConfigEncoded = {
+  name: "staging-eu",
+  provider: "ovh",
+  distro: "ovh-mks",
+  version: "v1.31.4",
+  auth: { method: "application_credential", region: "DE1" },
+  worker_pools: [{ name: "general", flavor: "d2-4", count: 1 }],
+  dns: { module: "none" },
+  volumes: { module: "none" },
+  object_storage: { module: "none" },
+  secrets: { sink: "none" }
+}
+
+/** `validMksConfig` plus the optional private-network block (R5/D1). */
+export const validMksNetwork = {
+  cidr: "10.0.0.0/16",
+  nodes_subnet: "10.0.1.0/24",
+  load_balancers_subnet: "10.0.2.0/24"
+} as const
