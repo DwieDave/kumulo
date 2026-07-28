@@ -123,6 +123,26 @@ const MksNetwork = Schema.Struct({
   load_balancers_subnet: Cidr
 }).check(isSubnetsWithinCidr)
 
+// kumulo: presence is the switch, exactly as `network`'s is — an `ingress`
+// block means the cluster gets one public Octavia load balancer, absent means
+// it gets none. Everything that shapes the LB is set at creation (D4): OVH
+// ignores the feature annotations once a Service adopts an LB by id.
+// ponytail: `flavor_id` only — proxy-protocol and timeouts are unanswered
+// questions (Q2), and a field for an undecided default is worse than none.
+const MksIngress = Schema.Struct({
+  /** Octavia flavor id (a UUID on MKS Standard). Absent = Octavia's default. */
+  flavor_id: Schema.optionalKey(Schema.NonEmptyString)
+})
+
+// An LB Octavia places wherever it likes is unreachable from the cluster, so
+// `ingress` is only meaningful alongside the `network` block that supplies the
+// load-balancer subnet (R10).
+const isIngressPlaceable = Schema.makeFilter((config: { network?: unknown; ingress?: unknown }) =>
+  config.ingress !== undefined && config.network === undefined
+    ? "ingress requires a network block: the load balancer's VIP must sit on the cluster's load_balancers_subnet"
+    : undefined
+)
+
 const ApiServer = Schema.Struct({
   high_availability: Schema.Boolean,
   allowed_cidrs: Schema.Array(Cidr)
@@ -319,8 +339,10 @@ export const MksClusterConfig = Schema.Struct({
   // Networking is a creation-time input to MKS and can never be changed after
   // (`Cloud_ProjectKubeUpdate` is `{ name?, updatePolicy? }`), so adding or
   // removing this block on a live cluster is refused at plan time, not applied.
-  network: Schema.optionalKey(MksNetwork)
-}).check(isSecretsRequiredForObjectStorage, isAuthMethodConsistentWithProvider)
+  network: Schema.optionalKey(MksNetwork),
+  // Optional: absent means no ingress load balancer, which is today's behaviour.
+  ingress: Schema.optionalKey(MksIngress)
+}).check(isSecretsRequiredForObjectStorage, isAuthMethodConsistentWithProvider, isIngressPlaceable)
 
 export const ClusterConfig = Schema.Union([K3sClusterConfig, MksClusterConfig])
 

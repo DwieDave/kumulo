@@ -7,6 +7,10 @@ import type { ClusterConfig, ClusterConfigShape, ConfigInvalid, CredentialsSink,
 import { ovhObjectStorageProviderLive } from "@kumulo/storage-ovh"
 import { ovhProfileLive } from "@kumulo/provider-ovh"
 import { hetznerProfileLive } from "@kumulo/hetzner"
+import { readOutputs, setIngress, writeOutputs } from "@kumulo/volumes-cinder"
+import type { OutputsIngress, OutputsInvalid } from "@kumulo/volumes-cinder"
+import type { FileSystem } from "effect/FileSystem"
+import type { PlatformError } from "effect/PlatformError"
 import { loadConfig } from "./config.ts"
 import { envSummary } from "./env-summary.ts"
 import {
@@ -118,6 +122,30 @@ const _logApplied = (
   )
 
 /**
+ * The ingress LB's ids into `<cluster>.outputs.yaml` (R13), so a consumer can
+ * annotate a Service with `loadbalancer.openstack.org/load-balancer-id`.
+ *
+ * Deliberately NOT written from inside the distro's apply: that runs
+ * concurrently with `convergeManagedVolumes`, which read-modify-writes the same
+ * file, and `stringifyOutputs` rebuilds it from a fixed literal — so an
+ * interleaved write loses one side's data silently. Sequencing it after every
+ * converge step is the whole fix.
+ */
+export const recordIngressOutputs = (
+  { config, configDir, ingress }: {
+    readonly config: ClusterConfig
+    readonly configDir: string
+    readonly ingress: OutputsIngress | undefined
+  }
+): Effect.Effect<void, OutputsInvalid | PlatformError, FileSystem> =>
+  Effect.gen(function*() {
+    if (ingress === undefined) return
+    const format = config.outputs?.format
+    const file = yield* readOutputs({ dir: configDir, tag: config.name, format })
+    yield* writeOutputs({ dir: configDir, file: setIngress({ file, ingress }), format })
+  })
+
+/**
  * Cluster+pools, volumes, and buckets have no dependencies on each other
  * (pools depend on the cluster, sequenced inside the distro's `apply`;
  * credentials depend on buckets, sequenced inside `convergeBuckets`) —
@@ -157,6 +185,7 @@ const _convergeAll = Effect.fn(function*(
       Effect.tap(() => _logApplied({ plan, prefixes: ["bucket/"] }))
     )
   const [result] = yield* Effect.all([clusterStep, volumesStep, bucketsStep], { concurrency: 3 })
+  yield* recordIngressOutputs({ config, configDir, ingress: result.ingress })
   return result
 })
 

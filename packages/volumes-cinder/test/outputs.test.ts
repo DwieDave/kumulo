@@ -8,6 +8,7 @@ import {
   parseOutputsYaml,
   readOutputs,
   removeVolume,
+  setIngress,
   stringifyOutputsYaml,
   upsertVolume,
   writeOutputs
@@ -101,4 +102,53 @@ describe("readOutputs / writeOutputs (in-memory FileSystem)", () => {
       const read = yield* readOutputs({ dir: "/out", tag: "prod", format: "json" }).pipe(Effect.provide(fs))
       expect(read).toEqual(file)
     }))
+})
+
+// ---- ingress (R13, N6) ----------------------------------------------------
+
+const ingressArb = fc.record({
+  load_balancer_id: fc.string({ minLength: 1, maxLength: 20 }).filter((s) => s.trim().length > 0),
+  floating_ip: fc.string({ minLength: 1, maxLength: 20 }).filter((s) => s.trim().length > 0)
+})
+
+describe("ingress outputs", () => {
+  it("setIngress records the LB id and floating IP without touching volumes", () => {
+    const file = { cluster: "prod", volumes: [{ name: "a", id: "1", retain: true }] }
+    const withIngress = setIngress({ file, ingress: { load_balancer_id: "lb-1", floating_ip: "203.0.113.1" } })
+    expect(withIngress.ingress).toEqual({ load_balancer_id: "lb-1", floating_ip: "203.0.113.1" })
+    expect(withIngress.volumes).toEqual(file.volumes)
+  })
+
+  it.effect.prop(
+    "stringify -> parse recovers a file carrying ingress",
+    { file: outputsFileArb, ingress: ingressArb },
+    ({ file, ingress }) =>
+      Effect.gen(function*() {
+        const withIngress = setIngress({ file, ingress })
+        expect(yield* parseOutputsYaml(stringifyOutputsYaml(withIngress))).toEqual(withIngress)
+      })
+  )
+
+  // N6 — `<cluster>.outputs.yaml` is not encrypted. It carries ids and
+  // addresses and nothing else: anything credential-shaped that reaches the
+  // file object must not survive serialisation.
+  it.effect.prop(
+    "serialisation is a closed allowlist: no key outside {cluster, volumes, ingress} survives",
+    { file: outputsFileArb, ingress: ingressArb, secret: fc.string({ minLength: 1 }) },
+    ({ file, ingress, secret }) =>
+      Effect.gen(function*() {
+        const smuggled = {
+          ...setIngress({ file, ingress }),
+          accessKey: secret,
+          secretKey: secret,
+          ingressSecret: secret
+        }
+        const text = stringifyOutputsYaml(smuggled)
+        const parsed = yield* parseOutputsYaml(text)
+        expect(Object.keys(parsed).toSorted()).toEqual(["cluster", "ingress", "volumes"])
+        expect(Object.keys(parsed.ingress ?? {}).toSorted()).toEqual(["floating_ip", "load_balancer_id"])
+        expect(text).not.toContain("accessKey")
+        expect(text).not.toContain("secretKey")
+      })
+  )
 })

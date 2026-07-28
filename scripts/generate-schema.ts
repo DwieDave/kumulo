@@ -40,6 +40,12 @@ const crossFieldConstraints = [
       required: ["object_storage"]
     },
     then: { properties: { secrets: { properties: { sink: { not: { const: "none" } } } } } }
+  },
+  // `isIngressPlaceable`: an ingress LB's VIP has to sit on the network's
+  // load_balancers_subnet, so `ingress` is meaningless without `network`.
+  {
+    if: { required: ["ingress"] },
+    then: { required: ["network"] }
   }
 ]
 

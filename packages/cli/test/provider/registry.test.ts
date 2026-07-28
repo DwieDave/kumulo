@@ -2,12 +2,12 @@ import { Effect, Layer } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import type { HttpClientRequest } from "effect/unstable/http"
 import { assert, it } from "@effect/vitest"
-import { CloudProvider } from "@kumulo/core"
+import { CapabilityMissing, CloudProvider } from "@kumulo/core"
 import type { SecGroupRule } from "@kumulo/core"
 import { CloudProviderLive as HcloudCloudProviderLive } from "@kumulo/hetzner"
 import { OpenStackEnv } from "../../src/doctor-openstack/env.ts"
 import { secGroupRules } from "../../src/k3s/env.ts"
-import { k3sCloudProviderLayer } from "../../src/provider/registry.ts"
+import { k3sCloudProviderLayer, mksCloudProviderLayer } from "../../src/provider/registry.ts"
 import { baseEncodedConfig, decodeK3sTestConfig } from "../fixtures.ts"
 
 // Every other test in the suite fakes `CloudProvider` wholesale, so nothing
@@ -29,15 +29,18 @@ const _recordingClient = (
     return Effect.succeed(HttpClientResponse.fromWeb(request, new Response(JSON.stringify(body), { status: 200 })))
   })
 
-const _openStackEnvLayer = Layer.succeed(OpenStackEnv, {
-  keystone: {
-    token: Effect.succeed("tok-123"),
-    invalidate: Effect.void,
-    endpoint: () => Effect.succeed("https://compute.example.com/")
-  },
-  region: "GRA11",
-  unavailableReason: undefined
-})
+const _openStackEnvAt = (region: string) =>
+  Layer.succeed(OpenStackEnv, {
+    keystone: {
+      token: Effect.succeed("tok-123"),
+      invalidate: Effect.void,
+      endpoint: () => Effect.succeed("https://compute.example.com/")
+    },
+    region,
+    unavailableReason: undefined
+  })
+
+const _openStackEnvLayer = _openStackEnvAt("GRA11")
 
 // Blocker 1: without `OpenStackHttpLive` between the generated clients and the
 // ambient HttpClient, every OpenStack call ships unauthenticated.
@@ -53,6 +56,51 @@ it.effect("openstack CloudProvider sends X-Auth-Token on every request", () =>
     assert.strictEqual(id, "f1")
     assert.isAbove(seen.length, 0)
     for (const request of seen) assert.strictEqual(request.headers["x-auth-token"], "tok-123")
+  }))
+
+// R11: MKS configs carry no `api_server.high_availability`, so `octaviaEnabled`
+// was hardcoded `false` and every MKS `ensureLoadBalancer` failed
+// `CapabilityMissing` before it reached the wire. The region's Octavia
+// availability is the real source (`hasOctavia`, @kumulo/provider-ovh).
+const _mksLoadBalancerAt = (region: string) =>
+  Effect.gen(function*() {
+    const seen: Array<HttpClientRequest.HttpClientRequest> = []
+    const provider = yield* CloudProvider.pipe(
+      Effect.provide(mksCloudProviderLayer({ name: "prod" })),
+      Effect.provide(_openStackEnvAt(region)),
+      Effect.provide(Layer.succeed(HttpClient.HttpClient, _recordingClient({ body: { loadbalancers: [] }, sink: seen })))
+    )
+    const gated = yield* provider.ensureLoadBalancer({ members: [] }).pipe(
+      Effect.as(false),
+      Effect.catchTag("CapabilityMissing", () => Effect.succeed(true)),
+      Effect.catchCause(() => Effect.succeed(false))
+    )
+    return { gated, requests: seen.length }
+  })
+
+it.effect("mks CloudProvider derives octaviaEnabled from the region, not from api_server", () =>
+  Effect.gen(function*() {
+    const enabled = yield* _mksLoadBalancerAt("DE1")
+    assert.isFalse(enabled.gated)
+    assert.isAbove(enabled.requests, 0)
+    const disabled = yield* _mksLoadBalancerAt("ZZZ0")
+    assert.isTrue(disabled.gated)
+    assert.strictEqual(disabled.requests, 0)
+  }))
+
+// N1: k3s keeps `api_server.high_availability` as its source. Flipping it to a
+// region lookup would silently change which k3s configs can boot — `DE1` has
+// Octavia, so a region-derived flag would let this call through.
+it.effect("k3s CloudProvider still gates octavia on api_server.high_availability", () =>
+  Effect.gen(function*() {
+    const config = decodeK3sTestConfig({ ...baseEncodedConfig, api_server: { high_availability: false, allowed_cidrs: [] } })
+    const provider = yield* CloudProvider.pipe(
+      Effect.provide(k3sCloudProviderLayer(config)),
+      Effect.provide(_openStackEnvAt("DE1")),
+      Effect.provide(Layer.succeed(HttpClient.HttpClient, _recordingClient({ body: { loadbalancers: [] }, sink: [] })))
+    )
+    const error = yield* Effect.flip(provider.ensureLoadBalancer({ members: [] }))
+    assert.instanceOf(error, CapabilityMissing)
   }))
 
 // Blocker 2: the registry must hand every adapter core's neutral

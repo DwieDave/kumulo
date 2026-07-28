@@ -43,5 +43,41 @@
         "$ref": "#/components/parameters/networks_network_id"
       }
     ]
+  },
+  {
+    "op": "add",
+    "path": "/paths/~1v2.0~1floatingips/post/requestBody/required",
+    "value": true
+  },
+  // The collection GET lists `floatingips_id` — an `in: path` parameter — as its
+  // first filter. Same upstream defect as security-groups' GET, same removal.
+  {
+    "op": "remove",
+    "path": "/paths/~1v2.0~1floatingips/get/parameters/0"
+  },
+  {
+    "op": "add",
+    "path": "/paths/~1v2.0~1floatingips~1{id}/delete/parameters",
+    "value": [
+      {
+        "$ref": "#/components/parameters/floatingips_id"
+      }
+    ]
+  },
+  // The PUT is what re-associates an adopted floating IP with a recreated load
+  // balancer's VIP port — Neutron nulls `port_id` when the old port goes away.
+  {
+    "op": "add",
+    "path": "/paths/~1v2.0~1floatingips~1{id}/put/requestBody/required",
+    "value": true
+  },
+  {
+    "op": "add",
+    "path": "/paths/~1v2.0~1floatingips~1{id}/put/parameters",
+    "value": [
+      {
+        "$ref": "#/components/parameters/floatingips_id"
+      }
+    ]
   }
 ]

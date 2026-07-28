@@ -13,6 +13,7 @@
     "nodes_subnet": "10.0.1.0/24",
     "load_balancers_subnet": "10.0.2.0/24"
   },
+  "ingress": {},
   "worker_pools": [
     {
       "name": "general",

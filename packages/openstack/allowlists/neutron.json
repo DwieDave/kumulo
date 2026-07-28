@@ -10,6 +10,10 @@
     "security-groups:get",
     "security-groups:post",
     "security-groups/id:delete",
-    "security-group-rules:post"
+    "security-group-rules:post",
+    "floatingips:get",
+    "floatingips:post",
+    "floatingips/id:put",
+    "floatingips/id:delete"
   ]
 }

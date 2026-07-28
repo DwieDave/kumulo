@@ -1301,6 +1301,20 @@
             "load_balancers_subnet"
           ],
           "additionalProperties": false
+        },
+        "ingress": {
+          "type": "object",
+          "properties": {
+            "flavor_id": {
+              "type": "string",
+              "allOf": [
+                {
+                  "minLength": 1
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
         }
       },
       "required": [
@@ -1426,6 +1440,18 @@
             }
           }
         }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "ingress"
+        ]
+      },
+      "then": {
+        "required": [
+          "network"
+        ]
       }
     }
   ],

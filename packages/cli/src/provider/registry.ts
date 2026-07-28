@@ -5,6 +5,7 @@ import type { ClusterConfig, K3sClusterConfig, SecGroupSpec } from "@kumulo/core
 import { buildFr57Rules, CloudProviderLive, KeystoneAuth, OpenStackHttpLive } from "@kumulo/openstack"
 import type { CloudProviderOptions } from "@kumulo/openstack"
 import { buildHetznerSecGroupRules, CloudProviderLive as HcloudCloudProviderLive, hcloudHttpClientLive } from "@kumulo/hetzner"
+import { hasOctavia } from "@kumulo/provider-ovh"
 import { OpenStackEnv } from "../doctor-openstack/env.ts"
 import type { OpenStackEnvShape } from "../doctor-openstack/env.ts"
 import { requiredRedactedEnv } from "../env.ts"
@@ -73,29 +74,41 @@ const _liveCloudProvider = (
  * credentials are missing, same contract as `OpenStackEnv`/`CinderAuthLive`.
  * `region` is the env's, so callers supply everything else.
  */
-const _openStackCloudProviderLayer = (options: Omit<CloudProviderOptions, "region">): OpenStackCloudProviderLayer =>
+const _openStackCloudProviderLayer = (
+  { octaviaEnabled, options }: {
+    readonly options: Omit<CloudProviderOptions, "region" | "octaviaEnabled">
+    /** Resolved against the env's region — the same region the Octavia client is looked up in. */
+    readonly octaviaEnabled: (region: string) => boolean
+  }
+): OpenStackCloudProviderLayer =>
   Layer.unwrap(
     Effect.map(OpenStackEnv, (env) =>
       env.keystone === undefined || env.region === undefined
         ? _unavailableCloudProvider(env.unavailableReason ?? "OpenStack auth unavailable")
-        : _liveCloudProvider({ auth: env.keystone, options, region: env.region }))
+        : _liveCloudProvider({
+          auth: env.keystone,
+          options: { ...options, octaviaEnabled: octaviaEnabled(env.region) },
+          region: env.region
+        }))
   )
 
+// N1: k3s keeps `api_server.high_availability` as its source. It gates apply,
+// kubeconfig AND status unconditionally, so swapping it for a region lookup
+// would silently change which k3s configs can boot.
 export const k3sCloudProviderLayer = (config: K3sClusterConfig): OpenStackCloudProviderLayer =>
   _openStackCloudProviderLayer({
-    tag: config.name,
-    octaviaEnabled: config.api_server.high_availability,
-    imageAliases: {}
+    options: { tag: config.name, imageAliases: {} },
+    octaviaEnabled: () => config.api_server.high_availability
   })
 
 /**
- * The same OpenStack `CloudProvider` for the ovh-mks path, which reaches it
- * only to create the cluster's private network (R7). MKS configs have no
- * `api_server` block to read `octaviaEnabled` from — R11 gives it a real
- * source; `ensureNetwork` never reads the flag, so `false` is honest until then.
+ * The same OpenStack `CloudProvider` for the ovh-mks path. MKS configs have no
+ * `api_server` block, so `octaviaEnabled` comes from OVH's per-region Octavia
+ * availability table (R11) — the honest answer to "can this region serve a load
+ * balancer at all", and the one the doctor's Octavia probe already reports.
  */
 export const mksCloudProviderLayer = (config: { readonly name: string }): OpenStackCloudProviderLayer =>
-  _openStackCloudProviderLayer({ tag: config.name, octaviaEnabled: false, imageAliases: {} })
+  _openStackCloudProviderLayer({ options: { tag: config.name, imageAliases: {} }, octaviaEnabled: hasOctavia })
 
 /** `HCLOUD_TOKEN`-backed `HttpClient`, shared by the hcloud compute Layers. */
 export const hcloudHttpClientLayer = (): Layer.Layer<HttpClient.HttpClient, AuthenticationFailed, HttpClient.HttpClient> =>

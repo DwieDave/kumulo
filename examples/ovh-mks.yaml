@@ -12,6 +12,10 @@ network:
   cidr: 10.0.0.0/16
   nodes_subnet: 10.0.1.0/24
   load_balancers_subnet: 10.0.2.0/24
+# Optional, and only alongside `network`. Present means kumulo creates one empty
+# public Octavia load balancer with a floating IP; an in-cluster Service adopts
+# it by id and the cloud-controller-manager owns its listeners and pools.
+ingress: {}
 worker_pools:
   - name: general
     flavor: d2-4

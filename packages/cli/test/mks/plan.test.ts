@@ -110,3 +110,44 @@ it("every row buildMksPlan emits for the cluster step matches an mksEntry applie
     .filter((name) => !owned.some((prefix) => name.startsWith(prefix)))
   assert.deepStrictEqual(rows.filter((name) => !mksEntry.appliedPrefixes.some((prefix) => name.startsWith(prefix))), [])
 })
+
+// ---- ingress rows (T3.7, R18) ---------------------------------------------
+
+const _ingress: MksPlanInput = {
+  ..._networked,
+  ingress: {}
+}
+
+it("plans no ingress rows at all when the config declares no ingress block", () => {
+  const plan = buildMksPlan({ config: _networked, inventory: emptyMksInventory })
+  assert.deepStrictEqual(
+    plan.actions.filter((a) => a.name.startsWith("load-balancer/") || a.name.startsWith("floating-ip/")),
+    []
+  )
+})
+
+// The LB and its floating IP are converged after the cluster, so their rows sit
+// after the cluster and pool rows — the plan reads in apply order.
+it("plans a load-balancer and floating-ip row after the cluster rows", () => {
+  const names = buildMksPlan({ config: _ingress, inventory: emptyMksInventory }).actions.map((a) => a.name)
+  assert.deepStrictEqual(names.slice(-2), ["load-balancer/prod-eu/ingress", "floating-ip/prod-eu/ingress"])
+  assert.isAbove(names.indexOf("load-balancer/prod-eu/ingress"), names.indexOf("mks-cluster/prod-eu"))
+})
+
+it("plans the ingress rows as NoOp once the cluster exists", () => {
+  const inventory: MksInventory = {
+    clusterExists: true,
+    poolNames: new Set(),
+    volumeNames: new Set(),
+    clusterState: { region: "GRA5", privateNetworkId: "net-1" }
+  }
+  assert.deepStrictEqual(buildMksPlan({ config: _ingress, inventory }).actions.slice(-2), [
+    { _tag: "NoOp", name: "load-balancer/prod-eu/ingress" },
+    { _tag: "NoOp", name: "floating-ip/prod-eu/ingress" }
+  ])
+})
+
+it("every ingress row matches an mksEntry appliedPrefix", () => {
+  const rows = buildMksPlan({ config: _ingress, inventory: emptyMksInventory }).actions.map((a) => a.name)
+  assert.deepStrictEqual(rows.filter((name) => !mksEntry.appliedPrefixes.some((prefix) => name.startsWith(prefix))), [])
+})

@@ -5,6 +5,7 @@ import type {
   ClusterConfig,
   DnsProvider,
   Kubeconfig,
+  LbInfo,
   ManagedClusterInfo,
   MksError,
   NetworkInfo,
@@ -167,6 +168,34 @@ const _ensureMksNetwork = (
     return yield* _networkIds({ info: yield* cloud.ensureNetwork(spec), spec })
   })
 
+/**
+ * The ingress load balancer, converged after the cluster (so a cluster that
+ * never comes up leaves no LB behind) and before DNS (so `target: ingress` can
+ * resolve in the same apply). Gated on the `ingress` block: absent means no
+ * Octavia call at all, so a config that never asked for a load balancer never
+ * needs Octavia in its region.
+ *
+ * kumulo creates an EMPTY load balancer here. Its listeners, pools and members
+ * belong to the cloud-controller-manager once a Service adopts it by
+ * `loadbalancer.openstack.org/load-balancer-id` (R14/D2), so re-running this is
+ * a read, never a diff.
+ */
+const _ensureMksIngress = (
+  { config, network }: { readonly config: ClusterConfig; readonly network: MksNetworkIds }
+): Effect.Effect<LbInfo | undefined, MksError, CloudProvider> =>
+  Effect.gen(function*() {
+    const ingress = config.distro === "ovh-mks" ? config.ingress : undefined
+    if (ingress === undefined) return undefined
+    const cloud = yield* CloudProvider
+    return yield* cloud.ensureLoadBalancer({
+      members: [],
+      floatingIp: true,
+      ...(network.privateNetworkId === undefined ? {} : { vipNetworkId: network.privateNetworkId }),
+      ...(network.loadBalancersSubnetId === undefined ? {} : { vipSubnetId: network.loadBalancersSubnetId }),
+      ...(ingress.flavor_id === undefined ? {} : { flavorId: ingress.flavor_id })
+    })
+  })
+
 const NO_REPLACE: ReadonlySet<string> = new Set()
 
 /**
@@ -195,6 +224,15 @@ const _poolsToReplace = (
   return Effect.succeed(new Set([...replace].flatMap((row) => byRow.get(row) ?? [])))
 }
 
+/**
+ * `ManagedClusterInfo` widened with the ingress LB, so callers that only read
+ * `id`/`apiEndpoint`/`status` are untouched and `mksEntry.apply` can hand the
+ * ids to `<cluster>.outputs.yaml` (R13).
+ */
+export interface MksApplyResult extends ManagedClusterInfo {
+  readonly ingress?: LbInfo
+}
+
 /** Converge control plane + nodepools onto the config, then its DNS records (create and scale share this). */
 export const applyMksEffect = (
   { config, replace = NO_REPLACE }: {
@@ -202,7 +240,7 @@ export const applyMksEffect = (
     /** Node pools the operator confirmed for replacement (plan `ReplaceNeedsConfirm` rows). */
     readonly replace?: ReadonlySet<string>
   }
-): Effect.Effect<ManagedClusterInfo, MksError | ConfigInvalid | PlanRejected, MksEnv | DnsProvider | CloudProvider> =>
+): Effect.Effect<MksApplyResult, MksError | ConfigInvalid | PlanRejected, MksEnv | DnsProvider | CloudProvider> =>
   Effect.gen(function*() {
     const pools = yield* _poolsToReplace({ config, replace })
     const { mks, serviceName } = yield* MksEnv
@@ -212,8 +250,9 @@ export const applyMksEffect = (
     const info = yield* ensureCluster({ mks, config: mksConfig })
     const ref: MksClusterRef = { serviceName, kubeId: info.id }
     yield* ensureNodePools({ mks, ref, pools: mksConfig.worker_pools, replace: pools })
+    const ingress = yield* _ensureMksIngress({ config, network })
     yield* reconcileMksDns({ config, apiEndpoint: info.apiEndpoint })
-    return info
+    return { ...info, ...(ingress === undefined ? {} : { ingress }) }
   })
 
 /**
@@ -226,7 +265,7 @@ export const applyMksEffect = (
  */
 export const applyMks = (
   args: { readonly config: ClusterConfig; readonly replace?: ReadonlySet<string> }
-): Effect.Effect<ManagedClusterInfo, MksError | ConfigInvalid | PlanRejected, MksEnv | OpenStackEnv | HttpClient.HttpClient> =>
+): Effect.Effect<MksApplyResult, MksError | ConfigInvalid | PlanRejected, MksEnv | OpenStackEnv | HttpClient.HttpClient> =>
   applyMksEffect(args).pipe(
     Effect.provide(dnsProviderLayerFor(args.config)),
     Effect.provide(mksCloudProviderLayer(args.config))

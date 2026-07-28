@@ -27,6 +27,8 @@ export interface MksPlanInput {
   readonly auth?: { readonly region: string }
   /** The optional private-network block; absent is a config asking for none. */
   readonly network?: { readonly cidr: string }
+  /** The optional ingress block; absent is a config asking for no load balancer. */
+  readonly ingress?: { readonly flavor_id?: string }
 }
 
 /** The one place a config worker pool becomes an MKS nodepool spec — plan and apply must hash the same value. */
@@ -138,6 +140,26 @@ const _networkActions = (
     .map((name) => _createOrNoOp({ exists, name }))
 }
 
+/**
+ * Ingress LB + floating IP rows (R18). One LB, one floating IP (scope §4), so
+ * these are two rows and not a list.
+ *
+ * ponytail: existence is inferred from the cluster's, because the ingress LB is
+ * only ever created after `ensureCluster` — so no cluster means no LB. The
+ * inversion (adding `ingress:` to a live cluster) plans NoOp and then creates,
+ * the mirror image of `_networkActions`' ceiling and fixable the same way: a
+ * read-only load-balancer lookup on the `CloudProvider` port. Reading Octavia
+ * here today would also make `kumulo plan` fail without OS_* credentials, which
+ * it does not need otherwise.
+ */
+const _ingressActions = (
+  { config, inventory }: { readonly config: MksPlanInput; readonly inventory: MksInventory }
+): ReadonlyArray<PlanAction> =>
+  config.ingress === undefined ? [] : [
+    `load-balancer/${config.name}/ingress`,
+    `floating-ip/${config.name}/ingress`
+  ].map((name) => _createOrNoOp({ exists: inventory.clusterExists, name }))
+
 export const buildMksPlan = (
   { config, inventory }: { readonly config: MksPlanInput; readonly inventory: MksInventory }
 ): Plan => ({
@@ -146,6 +168,8 @@ export const buildMksPlan = (
     ..._networkActions({ config, inventory }),
     _clusterAction({ config, inventory }),
     ...config.worker_pools.map((pool) => _poolAction({ cluster: config.name, inventory, pool })),
+    // After the cluster row: the LB is converged after `ensureCluster`.
+    ..._ingressActions({ config, inventory }),
     ...(config.volumes.module === "cinder"
       ? config.volumes.managed.map((v) => _createOrNoOp({ exists: inventory.volumeNames.has(v.name), name: `volume/${v.name}` }))
       : []),

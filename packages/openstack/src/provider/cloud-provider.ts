@@ -188,6 +188,104 @@ export const ensureNetwork = ({ options, spec }: { readonly options: CloudProvid
     return _networkInfo({ id, spec, ids: cidrs.map((cidr) => _subnetIdOf(subnets, cidr)) })
   })
 
+// ---- Floating IPs (R9) -------------------------------------------------
+
+const _FLOATING_IPS = "v2.0/floatingips"
+
+interface FloatingIp extends Named {
+  readonly floating_ip_address?: string | undefined
+  readonly port_id?: string | undefined
+}
+
+export interface FloatingIpInfo {
+  readonly id: string
+  readonly address: string
+}
+
+// ponytail: floating IPs have neither a `name` nor `tags` on create — Neutron's
+// create body carries only `description` as free text, so that is the natural
+// key. `port_id` would work too, but stops working the moment the LB that owns
+// the port is deleted, which is exactly when teardown needs to find the FIP.
+const _fipKey = (options: CloudProviderOptions): string => _name(options)
+
+const _findFloatingIp = (
+  { client, description }: { readonly client: NeutronClient; readonly description: string }
+): R<FloatingIp | undefined> =>
+  client.floatingips.floatingipsGet({ query: { description } }).pipe(
+    Effect.mapError(_at("floating-ip", _FLOATING_IPS)),
+    // ponytail: `floatingips:get` exposes no `marker`/`limit`, so `_paginate`
+    // cannot be wired here. The `?description=` filter is server-side and
+    // matches at most one FIP per cluster, so page one is the whole answer.
+    Effect.map((listed) => _first(listed.floatingips))
+  )
+
+// ponytail: first `router:external` network wins — OVH exposes exactly one
+// (`Ext-Net`). Name it on `CloudProviderOptions` if a project ever has several.
+const _externalNetworkId = (client: NeutronClient): R<string> =>
+  client.networks.networksGet({ query: { "router:external": true } }).pipe(
+    Effect.mapError(_at("network", "v2.0/networks")),
+    Effect.flatMap((listed) => {
+      const found = _first(listed.networks)
+      return found === undefined
+        ? Effect.fail(new ResourceNotFound({ kind: "network", ref: "router:external=true" }))
+        : Effect.succeed(_idOf(found))
+    })
+  )
+
+const _fipInfo = (fip: FloatingIp | undefined): FloatingIpInfo => ({
+  id: _idOf(fip),
+  address: fip?.floating_ip_address ?? ""
+})
+
+// An adopted FIP is by construction one that outlived something: `description`
+// is the key precisely so teardown can still find it after the LB is gone, and
+// Neutron nulls `port_id` when the VIP port is deleted. Adopting it without
+// re-pointing it publishes an address that routes nowhere, silently.
+const _associate = (
+  { client, existing, portId }: {
+    readonly client: NeutronClient
+    readonly existing: FloatingIp
+    readonly portId: string
+  }
+): R<FloatingIpInfo> =>
+  existing.port_id === portId ? Effect.succeed(_fipInfo(existing)) : client.floatingips.floatingipsIdPut({
+    params: { id: _idOf(existing) },
+    payload: { floatingip: { port_id: portId } }
+  }).pipe(Effect.mapError(_at("floating-ip", _FLOATING_IPS)), Effect.as(_fipInfo(existing)))
+
+/**
+ * Allocates a floating IP on the external network and associates it with
+ * `portId` in a single POST — Neutron associates at create time whenever the
+ * body carries a `port_id`. An existing FIP carrying the cluster's description
+ * is adopted, and re-associated when it no longer points at `portId`.
+ */
+export const ensureFloatingIp = (
+  { options, portId }: { readonly options: CloudProviderOptions; readonly portId: string }
+): R<FloatingIpInfo> =>
+  Effect.gen(function*() {
+    const client = yield* neutronClient(options.region)
+    const description = _fipKey(options)
+    const existing = yield* _findFloatingIp({ client, description })
+    if (existing !== undefined) return yield* _associate({ client, existing, portId })
+    const floating_network_id = yield* _externalNetworkId(client)
+    const created = yield* client.floatingips.floatingipsPost({
+      payload: { floatingip: { floating_network_id, port_id: portId, description } }
+    }).pipe(Effect.mapError(_at("floating-ip", _FLOATING_IPS)))
+    return _fipInfo(created.floatingip)
+  })
+
+export const releaseFloatingIp = ({ options }: { readonly options: CloudProviderOptions }): R<void> =>
+  Effect.gen(function*() {
+    const client = yield* neutronClient(options.region)
+    const found = yield* _findFloatingIp({ client, description: _fipKey(options) })
+    if (found === undefined) return
+    yield* _ignoreMissing(
+      client.floatingips.floatingipsIdDelete({ params: { id: _idOf(found) } }).pipe(
+        Effect.mapError(_at("floating-ip", _FLOATING_IPS))
+      )
+    )
+  })
+
 // ---- Security groups ---------------------------------------------------
 
 const _decodeRule = (rule: unknown): Effect.Effect<SecurityGroupRuleInput, ResponseDecodeError> =>
@@ -270,8 +368,47 @@ export const ensureServerGroups = (
 
 // ---- Load balancer (Octavia, capability-gated) --------------------------
 
+const _LOAD_BALANCERS = "v2/lbaas/loadbalancers"
+
+interface Vip extends Named {
+  readonly vip_address?: string | undefined
+  readonly vip_port_id?: string | undefined
+}
+
+// Optional keys are omitted, never `undefined` — the generated schemas use
+// `optionalKey`. `spec.members` is absent by design, see `LbSpec`'s contract.
+const _lbPayload = (name: string, spec: LbSpec) => ({
+  loadbalancer: {
+    name,
+    ...(spec.vipSubnetId === undefined ? {} : { vip_subnet_id: spec.vipSubnetId }),
+    ...(spec.vipNetworkId === undefined ? {} : { vip_network_id: spec.vipNetworkId }),
+    ...(spec.flavorId === undefined ? {} : { flavor_id: spec.flavorId })
+  }
+})
+
+const _lbInfo = (
+  { lb, options, spec }: { readonly options: CloudProviderOptions; readonly spec: LbSpec; readonly lb: Vip | undefined }
+): R<LbInfo> =>
+  Effect.gen(function*() {
+    const base = { id: _idOf(lb), vip: lb?.vip_address ?? "" }
+    if (spec.floatingIp !== true) return base
+    const portId = lb?.vip_port_id ?? ""
+    // Associating against an empty port id would allocate a dangling floating
+    // IP, so refuse rather than guess.
+    if (portId === "") return yield* Effect.fail(new ResourceNotFound({ kind: "load-balancer-vip-port", ref: base.id }))
+    const fip = yield* ensureFloatingIp({ options, portId })
+    return { ...base, floatingIp: fip.address }
+  })
+
+/**
+ * Creates an EMPTY Octavia load balancer — see `LbSpec`. Listeners, pools and
+ * members belong to the cloud-controller-manager once a Service adopts the LB
+ * by `loadbalancer.openstack.org/load-balancer-id`, so an LB that already
+ * exists is read and never written: whatever the CCM has attached to it is not
+ * kumulo's to converge, prune or diff (R14/D2).
+ */
 export const ensureLoadBalancer = (
-  { options, spec: _spec }: { readonly options: CloudProviderOptions; readonly spec: LbSpec }
+  { options, spec }: { readonly options: CloudProviderOptions; readonly spec: LbSpec }
 ): R<LbInfo> =>
   Effect.gen(function*() {
     if (!options.octaviaEnabled) {
@@ -279,19 +416,14 @@ export const ensureLoadBalancer = (
     }
     const client = yield* octaviaClient(options.region)
     const name = _name(options)
-    const ref = "v2/lbaas/loadbalancers"
-    const listed = yield* client["load-balancers"].lbaasLoadbalancersGet({}).pipe(
-      Effect.mapError(_at("load-balancer", ref))
-    )
+    const fail = _at("load-balancer", _LOAD_BALANCERS)
+    const listed = yield* client["load-balancers"].lbaasLoadbalancersGet({}).pipe(Effect.mapError(fail))
     const existing = _named(listed.loadbalancers, name)
-    if (existing !== undefined) return { id: _idOf(existing), vip: existing.vip_address ?? "" }
-    // ponytail: `spec.members` is deliberately not sent — Octavia takes members
-    // on a pool, never on the load balancer, and the old hand-built body was
-    // rejected by any real Octavia. Wire pools/members when the port asks.
+    if (existing !== undefined) return yield* _lbInfo({ options, spec, lb: existing })
     const created = yield* client["load-balancers"].lbaasLoadbalancersPost({
-      payload: { loadbalancer: { name } }
-    }).pipe(Effect.mapError(_at("load-balancer", ref)))
-    return { id: _idOf(created.loadbalancer), vip: created.loadbalancer?.vip_address ?? "" }
+      payload: _lbPayload(name, spec)
+    }).pipe(Effect.mapError(fail))
+    return yield* _lbInfo({ options, spec, lb: created.loadbalancer })
   })
 
 // ---- Servers -------------------------------------------------------------
@@ -462,15 +594,11 @@ const _findSecurityGroup = (options: CloudProviderOptions): R<Named | undefined>
     return _first(listed.security_groups)
   })
 
-interface LoadBalancer extends Named {
-  readonly vip_address?: string | undefined
-}
-
-const _findLoadBalancer = (options: CloudProviderOptions): R<LoadBalancer | undefined> =>
+const _findLoadBalancer = (options: CloudProviderOptions): R<Vip | undefined> =>
   Effect.gen(function*() {
     const client = yield* octaviaClient(options.region)
     const listed = yield* client["load-balancers"].lbaasLoadbalancersGet({}).pipe(
-      Effect.mapError(_at("load-balancer", "v2/lbaas/loadbalancers"))
+      Effect.mapError(_at("load-balancer", _LOAD_BALANCERS))
     )
     return _named(listed.loadbalancers, _name(options))
   })
@@ -537,7 +665,7 @@ const _deleteLoadBalancer = (options: CloudProviderOptions): R<void> =>
       client["load-balancers"].lbaasLoadbalancersLoadbalancerIdDelete({
         params: { loadbalancer_id: _idOf(found) },
         query: { cascade: true }
-      }).pipe(Effect.mapError(_at("load-balancer", "v2/lbaas/loadbalancers")))
+      }).pipe(Effect.mapError(_at("load-balancer", _LOAD_BALANCERS)))
     )
   })
 

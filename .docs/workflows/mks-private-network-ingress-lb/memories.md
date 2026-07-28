@@ -120,3 +120,139 @@ depends on it. Retire Q4 before M3.
   and DNS only; a network created by M2 is currently orphaned on delete.
 - `MksClusterState` carries `privateNetworkId` only — not the two subnet ids.
   `Cloud_kube_Cluster` returns all three if a later milestone needs them.
+
+## M3 — Floating IP + ingress load balancer (T3.1–T3.7, landed)
+
+### D2 is STILL provisional
+
+M0 was again **not run**. Everything in M3 is built to the documented
+upstream/OVH contract for `loadbalancer.openstack.org/load-balancer-id`
+adoption. T3.6's property test pins *kumulo's* side (it writes nothing to an LB
+that already exists), NOT that OVH's CCM honours the annotation. Q4 is still
+open, and M4/M5 inherit it.
+
+### Shipped
+
+- **Neutron floating IPs are newly generated code.** `allowlists/neutron.json`
+  had no FIP ops at all — T3.1 added `floatingips:get|post|/id:delete` plus
+  three patches (requestBody `required`; removing the `in: path`
+  `floatingips_id` wrongly listed as parameter 0 of the collection GET; adding
+  the path-item `parameters` that `_filterPathItem` drops). Regenerate with
+  `bun run --cwd packages/openstack generate`; `bun run codegen:check` is the
+  gate. **`floatingips/id:put` deliberately NOT allowlisted**: `floatingips:post`
+  associates at create time via `port_id`, so allocate+associate is one call and
+  no generated client here has to emit its first PUT endpoint.
+- `ensureFloatingIp({options, portId})` / `releaseFloatingIp({options})` in
+  `packages/openstack/src/provider/cloud-provider.ts`.
+- `LbSpec` += optional `vipSubnetId`/`vipNetworkId`/`flavorId`/`floatingIp`;
+  `LbInfo` += optional `floatingIp`. All optional — k3s and the Hetzner adapter
+  pass `{ members: [] }` and their wire payload is pinned unchanged (N1).
+- `mksCloudProviderLayer` now derives `octaviaEnabled` from `hasOctavia(region)`
+  (@kumulo/provider-ovh). `_openStackCloudProviderLayer` takes
+  `octaviaEnabled: (region) => boolean` so both distros pick their own source.
+- `ingress` block on core's `MksClusterConfig` (`flavor_id` only), presence =
+  enabled, `isIngressPlaceable` rejects it without `network`.
+- `OutputsFile` += optional `ingress: { load_balancer_id, floating_ip }` in
+  **@kumulo/volumes-cinder** (it owns that file), with `setIngress`.
+- Plan rows `load-balancer/<cluster>/ingress`, `floating-ip/<cluster>/ingress`.
+
+### Decisions worth not re-deriving
+
+- **A floating IP's natural key is `description`, not `port_id` or a name.**
+  Neutron FIPs have no `name`, and the CREATE body has no `tags` (the response
+  does). `port_id` looks tempting but stops working the instant the LB owning
+  that port is deleted — which is exactly when teardown needs to find the FIP.
+  `_fipKey(options)` = `kumulo-<tag>`, and `floatingips:get` takes
+  `?description=` as a real server-side filter.
+- **External network discovery is `?router:external=true` + first match.** No
+  config field. OVH exposes exactly one (`Ext-Net`). Marked `ponytail:`.
+- **`ensureLoadBalancer` allocates the FIP itself** rather than the FIP being a
+  new `CloudProvider` port verb — which is why `_unavailableCloudProvider`'s
+  nine-verb list did not have to grow.
+- **Outputs are RETURNED from apply, not written by it.** `_convergeAll` runs
+  the distro apply concurrently with `convergeManagedVolumes`, which
+  read-modify-writes `<cluster>.outputs.yaml`, and `stringifyOutputs` rebuilds
+  the file from a fixed literal — so an interleaved write silently loses one
+  side. `DistroApplyResult` gained an optional `ingress`, and
+  `recordIngressOutputs` (exported from `cli/src/commands.ts`) writes it AFTER
+  `Effect.all`. Do not move that write back inside the apply.
+- **`MksApplyResult extends ManagedClusterInfo`** so every existing caller and
+  test reading `id`/`apiEndpoint`/`status` was untouched.
+- **k3s's `octaviaEnabled` source is untouched on purpose.** It gates apply,
+  kubeconfig AND status unconditionally; a region lookup would silently change
+  which k3s configs can boot. Pinned by a test in `test/provider/registry.test.ts`.
+
+### Known ceilings (marked `ponytail:` in code)
+
+- `_ingressActions` (cli `mks/plan.ts`) infers LB existence from
+  `inventory.clusterExists`. Adding `ingress:` to a live cluster plans NoOp and
+  then creates. Upgrade path: a read-only LB lookup on the `CloudProvider` port
+  (same fix `_networkActions` wants). Reading Octavia at plan time instead would
+  make `kumulo plan` fail without OS_* credentials.
+- `floatingips:get` as vendored exposes no `marker`/`limit`, so `_paginate` is
+  not wired for FIPs. The `?description=` filter matches at most one per cluster.
+- Octavia's LB list is still unpaginated and matched client-side by name, while
+  D2 guarantees the CCM creates sibling LBs in the same project. A kumulo-owned
+  LB that falls off page one plans as absent and gets re-created. `_paginate`
+  exists and `loadbalancers_links` is on the response — a straight reuse when it
+  matters.
+- The ingress LB is still named `kumulo-<tag>`, same as the network and the
+  security group and the k3s API-VIP LB. Fine today (one distro per cluster),
+  but `_deleteLoadBalancer` sends `cascade: true`, which would destroy exactly
+  the CCM-owned listeners/pools D2 protects. **M5 must not reuse that verb for
+  the ingress LB.**
+
+### Traps that bit, or would have
+
+- `bun run build` before `bun run test`: `examples/cli-smoke.test.ts` and
+  `secrets-smoke.test.ts` run the built `packages/cli/dist/main.mjs` and fail
+  confusingly against a stale one.
+- oxlint's `unicorn(consistent-function-scoping)` fires on a helper defined
+  inside a `describe` body that captures nothing — hoist it to module scope.
+  Likewise `no-array-sort`: use `toSorted()`.
+- `scripts/generate-schema.ts`'s `crossFieldConstraints` DID need an edit this
+  time (unlike M2): `ingress ⇒ network` is expressible in JSON Schema, so it was
+  mirrored there. Only skip the mirror when JSON Schema genuinely cannot say it.
+- Editing `examples/ovh-mks.json` with a JSON round-trip reformats unrelated
+  arrays; patch the text, not the parsed object.
+
+### Unresolved / flagged, not fixed
+
+- **R9 vs the OVH ProviderProfile.** `packages/provider-ovh/src/profile/ovh.ts`
+  declares `capabilities.floatingIps: false` with the comment "Ext-Net model (no
+  floating IPs)", and `defaults.externalNetworkName: "Ext-Net"`. Nothing in
+  `src` reads that flag (tests only), so it is a dormant claim, but it directly
+  contradicts R9. Settle before M5 wires teardown.
+- **Q1/Q2 still open.** `ingress.flavor_id` follows the MKS *Standard*
+  (`loadbalancer.openstack.org/flavor-id`, a UUID) vocabulary because that is
+  what Octavia's POST takes. MKS Free's `S`/`M`/`L` is not expressible. No
+  proxy-protocol field exists — per D4 it must be a creation-time decision, and
+  there is no answer yet.
+- **`_deletePlanActions` (cli `distro/mks-entry.ts`) emits no LB/floating-IP
+  Delete rows.** Deliberate: nothing deletes them yet (M5/T5.1), and a Delete row
+  for a resource nothing removes is a lie. Add them with the teardown.
+- **`_ingressOutputs` (cli `distro/mks-entry.ts`)** guards on empty id/address
+  and is not directly covered by a test; the branches it protects are reachable
+  only if Octavia/Neutron return a body with no id or address.
+
+## M3 — corrections after verification
+
+- **Assert POST bodies, not that a POST happened.** `expect(post).toBeDefined()`
+  passed with `port_id` dropped from the floating-IP create body AND with the
+  LB's *id* associated instead of its `vip_port_id`. The fakes now record every
+  posted body and the tests deep-equal it.
+- **An adopted floating IP has to be re-associated.** `description` is the FIP's
+  key precisely so it survives the LB's deletion — which is exactly the case
+  where Neutron has nulled its `port_id`. Adopting it unchecked published an
+  address that routed nowhere. `floatingips/id:put` was added to
+  `allowlists/neutron.json` (+ the two usual patch entries: `requestBody.required`
+  and the path parameter) and `_associate` re-points a FIP whose `port_id`
+  differs. Re-generated with `bun run --cwd packages/openstack generate`.
+- **Test the seam, not the two halves.** `recordIngressOutputs` and
+  `applyMksEffect(...).ingress` were each covered alone, so the join between
+  them could be deleted with CI green. `test/commands/apply-ingress.test.ts`
+  drives the real `apply` command (fake OVH + fake Neutron/Octavia via
+  `makeFakeCinder`'s HTTP layer + a stubbed `OpenStackEnv` keystone) and reads
+  `<cluster>.outputs.yaml` back off disk.
+- `makeFakeCinder` keeps query params in `request.urlParams`, not in
+  `request.url` — read them from there (`router:external=true`).

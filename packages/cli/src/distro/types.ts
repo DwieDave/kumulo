@@ -1,7 +1,7 @@
 import type { Effect } from "effect"
 import type * as HttpClient from "effect/unstable/http/HttpClient"
 import type { ClusterConfig, ConfigInvalid, DistroKind, Kubeconfig, MksError, Plan } from "@kumulo/core"
-import type { CinderAuth } from "@kumulo/volumes-cinder"
+import type { CinderAuth, OutputsIngress } from "@kumulo/volumes-cinder"
 import type { DoctorCheck } from "../doctor/types.ts"
 import type { OpenStackEnv } from "../doctor-openstack/env.ts"
 import type { K3sError } from "../k3s/reconcile.ts"
@@ -16,6 +16,13 @@ export type DistroFailure = MksError | K3sError | ConfigInvalid
 export interface DistroApplyResult {
   /** The rendered "cluster is up" line, logged verbatim after apply. */
   readonly summary: string
+  /**
+   * Ids to record in `<cluster>.outputs.yaml` (R13). Returned rather than
+   * written here: the apply runs concurrently with `convergeManagedVolumes`,
+   * which read-modify-writes that same file, so the caller writes it once every
+   * converge step has finished.
+   */
+  readonly ingress?: OutputsIngress
 }
 
 export interface DistroEntry<C extends ClusterConfig = ClusterConfig> {

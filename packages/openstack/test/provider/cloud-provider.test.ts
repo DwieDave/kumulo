@@ -4,12 +4,14 @@ import { FastCheck as fc } from "effect/testing"
 import { CapabilityMissing, ProvisioningTimeout, ResourceNotFound, ResponseDecodeError, type SecGroupSpec } from "@kumulo/core"
 import {
   deleteByTag,
+  ensureFloatingIp,
   ensureLoadBalancer,
   ensureNetwork,
   ensureSecurityGroups,
   ensureServer,
   ensureServerGroups,
   listClusterResources,
+  releaseFloatingIp,
   resolveFlavor,
   resolveImage,
   type CloudProviderOptions
@@ -59,6 +61,18 @@ const _fakeNeutron = (seeded: ReadonlyArray<{ readonly id: string; readonly cidr
       return { status: 201, body: { subnet } }
     }
   })
+}
+
+// Narrows the posted `{ floatingip: {...} }` body down to its string fields.
+// Guard chain rather than a cast — `as` is banned repo-wide.
+const _postedFloatingIp = (payload: unknown): Record<string, string> => {
+  const wrapper = typeof payload === "object" && payload !== null && "floatingip" in payload
+    ? payload.floatingip
+    : undefined
+  if (typeof wrapper !== "object" || wrapper === null) return {}
+  return Object.fromEntries(
+    Object.entries(wrapper).filter((entry): entry is [string, string] => typeof entry[1] === "string")
+  )
 }
 
 const _route = (call: { readonly method: string; readonly url: string }) => `${call.method} ${new URL(call.url).pathname}`
@@ -192,6 +206,163 @@ describe("openstack CloudProvider", () => {
         ensureLoadBalancer({ options: { ...options, octaviaEnabled: false }, spec: { members: [] } })
       )
       expect(exit).toBeInstanceOf(CapabilityMissing)
+    }).pipe(Effect.provide(fake.layer))
+  })
+
+  // ---- Load balancer placement + floating IP (R10, R14, D4) ---------------
+
+  const _lbFake = (
+    { loadbalancers, posted }: {
+      readonly loadbalancers: ReadonlyArray<Record<string, unknown>>
+      readonly posted: Array<unknown>
+    }
+  ) => {
+    const postedFips: Array<Record<string, string>> = []
+    return {
+      postedFips,
+      ...makeFakeOpenStack({
+        "GET /v2/lbaas/loadbalancers": () => ({ status: 200, body: { loadbalancers } }),
+        "POST /v2/lbaas/loadbalancers": (request) => {
+          posted.push(requestJson(request))
+          return {
+            status: 201,
+            body: { loadbalancer: { id: "lb-1", vip_address: "10.0.2.7", vip_port_id: "port-vip" } }
+          }
+        },
+        "GET /v2.0/networks": () => ({ status: 200, body: { networks: [{ id: "ext-net", name: "Ext-Net" }] } }),
+        "GET /v2.0/floatingips": () => ({ status: 200, body: { floatingips: [] } }),
+        "POST /v2.0/floatingips": (request) => {
+          const body = _postedFloatingIp(requestJson(request))
+          postedFips.push(body)
+          return { status: 201, body: { floatingip: { id: "fip-1", floating_ip_address: "203.0.113.1", ...body } } }
+        }
+      })
+    }
+  }
+
+  it.effect("ensureLoadBalancer places the VIP and allocates a floating IP on its VIP port", () => {
+    const posted: Array<unknown> = []
+    const fake = _lbFake({ loadbalancers: [], posted })
+    return Effect.gen(function*() {
+      const info = yield* ensureLoadBalancer({
+        options,
+        spec: {
+          members: ["10.0.1.5"],
+          vipSubnetId: "sub-lb",
+          vipNetworkId: "net-1",
+          flavorId: "flavor-1",
+          floatingIp: true
+        }
+      })
+      expect(info).toEqual({ id: "lb-1", vip: "10.0.2.7", floatingIp: "203.0.113.1" })
+      // D4: placement and flavor are set by kumulo at creation, not annotated later.
+      expect(posted).toEqual([{
+        loadbalancer: { name: "kumulo-prod", vip_subnet_id: "sub-lb", vip_network_id: "net-1", flavor_id: "flavor-1" }
+      }])
+      // R9's core clause: the FIP is allocated on the external network and
+      // associated with THIS LB's `vip_port_id` — not its id — in one POST.
+      expect(fake.postedFips).toEqual([
+        { floating_network_id: "ext-net", port_id: "port-vip", description: "kumulo-prod" }
+      ])
+    }).pipe(Effect.provide(fake.layer))
+  })
+
+  // N1 + R14/D4: `spec.members` never reaches the wire. Members live on a pool
+  // the cloud-controller-manager owns, and `{ members: [] }` is exactly what the
+  // k3s reconciler passes — its payload must stay byte-identical to pre-M3.
+  it.effect("ensureLoadBalancer sends no members and, without a floating-IP request, returns none", () => {
+    const posted: Array<unknown> = []
+    const fake = _lbFake({ loadbalancers: [], posted })
+    return Effect.gen(function*() {
+      const k3s = yield* ensureLoadBalancer({ options, spec: { members: [] } })
+      expect(k3s).toStrictEqual({ id: "lb-1", vip: "10.0.2.7" })
+      expect(posted).toEqual([{ loadbalancer: { name: "kumulo-prod" } }])
+      expect(fake.calls().some((call) => call.url.includes("/v2.0/floatingips"))).toBe(false)
+      const withMembers = yield* ensureLoadBalancer({ options, spec: { members: ["10.0.1.5", "10.0.1.6"] } })
+      expect(withMembers).toStrictEqual(k3s)
+      expect(posted[1]).toEqual({ loadbalancer: { name: "kumulo-prod" } })
+    }).pipe(Effect.provide(fake.layer))
+  })
+
+  // ---- R14/D2: inert against CCM-owned children ---------------------------
+
+  // What the cloud-controller-manager leaves on an adopted load balancer: one
+  // listener and pool per Service port, its own tags, and an
+  // `operating_status` that moves as members come and go. kumulo created none
+  // of it and must neither prune, diff nor report it.
+  const _ccmChild = fc.record({ id: fc.stringMatching(/^[a-z0-9-]{1,12}$/) })
+  const _adoptedLb = fc.record({
+    listeners: fc.array(_ccmChild, { minLength: 1, maxLength: 4 }),
+    pools: fc.array(_ccmChild, { minLength: 1, maxLength: 4 }),
+    tags: fc.array(fc.stringMatching(/^[a-z0-9-]{1,12}$/), { maxLength: 3 }),
+    operating_status: fc.constantFrom("ONLINE", "DEGRADED", "OFFLINE")
+  })
+
+  it.effect.prop(
+    "ensureLoadBalancer is a pure read against an LB carrying CCM-created listeners and pools",
+    [_adoptedLb],
+    ([ccm]) => {
+      const posted: Array<unknown> = []
+      const existing = {
+        id: "lb-1",
+        name: "kumulo-prod",
+        vip_address: "10.0.2.7",
+        vip_port_id: "port-vip",
+        vip_subnet_id: "sub-lb",
+        provisioning_status: "ACTIVE",
+        ...ccm
+      }
+      const fake = makeFakeOpenStack({
+        "GET /v2/lbaas/loadbalancers": () => ({ status: 200, body: { loadbalancers: [existing] } }),
+        "POST /v2/lbaas/loadbalancers": (request) => {
+          posted.push(requestJson(request))
+          return { status: 201, body: { loadbalancer: existing } }
+        },
+        "GET /v2.0/floatingips": () => ({
+          status: 200,
+          body: { floatingips: [{ id: "fip-1", floating_ip_address: "203.0.113.1", port_id: "port-vip" }] }
+        })
+      })
+      // The spec asks for a DIFFERENT flavor and subnet than the live LB has:
+      // creation-time attributes on an existing LB are not kumulo's to converge.
+      const spec = { members: [], floatingIp: true, vipSubnetId: "sub-other", flavorId: "flavor-other" }
+      return Effect.gen(function*() {
+        const first = yield* ensureLoadBalancer({ options, spec })
+        const second = yield* ensureLoadBalancer({ options, spec })
+        expect(first).toEqual({ id: "lb-1", vip: "10.0.2.7", floatingIp: "203.0.113.1" })
+        expect(second).toEqual(first)
+        // No mutation of any kind: the CCM's listeners and pools survive because
+        // nothing was written, not because something chose to skip them.
+        expect(fake.calls().filter((call) => call.method !== "GET")).toEqual([])
+        expect(posted).toEqual([])
+        // Nothing about the children leaks into what the reconciler reports.
+        expect(Object.keys(first).toSorted()).toEqual(["floatingIp", "id", "vip"])
+      }).pipe(Effect.provide(fake.layer))
+    }
+  )
+
+  it.effect("listClusterResources reports an adopted LB without its CCM-owned children", () => {
+    const fake = makeFakeOpenStack({
+      "GET /v2.1/servers/detail": () => ({ status: 200, body: { servers: [] } }),
+      "GET /v2.0/networks": () => ({ status: 200, body: { networks: [] } }),
+      "GET /v2.0/security-groups": () => ({ status: 200, body: { security_groups: [] } }),
+      "GET /v2/lbaas/loadbalancers": () => ({
+        status: 200,
+        body: {
+          loadbalancers: [{
+            id: "lb-1",
+            name: "kumulo-prod",
+            vip_address: "10.0.2.7",
+            listeners: [{ id: "listener-ccm" }],
+            pools: [{ id: "pool-ccm" }],
+            operating_status: "DEGRADED"
+          }]
+        }
+      })
+    })
+    return Effect.gen(function*() {
+      const inventory = yield* listClusterResources({ options })
+      expect(inventory.loadBalancers).toEqual([{ id: "lb-1", vip: "10.0.2.7" }])
     }).pipe(Effect.provide(fake.layer))
   })
 
@@ -366,6 +537,118 @@ describe("openstack CloudProvider", () => {
     return Effect.gen(function*() {
       const inventory = yield* listClusterResources({ options })
       expect(inventory.servers.map((server) => server.id)).toEqual(["srv-1", "srv-2"])
+    }).pipe(Effect.provide(fake.layer))
+  })
+
+  // ---- Floating IPs (R9) --------------------------------------------------
+
+  // A Neutron that remembers what it allocated, including each FIP's `port_id`.
+  // The external network is only returned under the `router:external` filter, so
+  // a lookup that skipped the filter would allocate on the cluster's own private
+  // network — which the `floating_network_id` assertion catches.
+  const _fakeFloatingIps = (tag: string) => {
+    const fips: Array<Record<string, string>> = []
+    return {
+      fips,
+      // Neutron nulls `port_id` when the port a FIP points at is deleted —
+      // exactly what happens when the load balancer is recreated.
+      orphan: () => fips.forEach((fip) => delete fip["port_id"]),
+      ...makeFakeOpenStack({
+        "GET /v2.0/networks": (request) =>
+          new URL(request.url).searchParams.get("router:external") === "true"
+            ? { status: 200, body: { networks: [{ id: "ext-net", name: "Ext-Net" }] } }
+            : { status: 200, body: { networks: [{ id: "net-1", name: `kumulo-${tag}` }] } },
+        "GET /v2.0/floatingips": (request) => {
+          const description = new URL(request.url).searchParams.get("description")
+          return { status: 200, body: { floatingips: fips.filter((fip) => fip.description === description) } }
+        },
+        "POST /v2.0/floatingips": (request) => {
+          const index = fips.length + 1
+          const fip = { id: `fip-${index}`, floating_ip_address: `203.0.113.${index}`, ..._postedFloatingIp(requestJson(request)) }
+          fips.push(fip)
+          return { status: 201, body: { floatingip: fip } }
+        },
+        "PUT /v2.0/floatingips/fip-1": (request) => {
+          const patch = _postedFloatingIp(requestJson(request))
+          const fip = Object.assign(fips[0] ?? {}, patch)
+          return { status: 200, body: { floatingip: fip } }
+        },
+        "DELETE /v2.0/floatingips/fip-1": () => {
+          fips.length = 0
+          return { status: 204 }
+        }
+      })
+    }
+  }
+
+  it.effect("ensureFloatingIp allocates on the external network and associates it to the VIP port in one call", () => {
+    const fake = _fakeFloatingIps("prod")
+    return Effect.gen(function*() {
+      const info = yield* ensureFloatingIp({ options, portId: "port-vip" })
+      expect(info).toEqual({ id: "fip-1", address: "203.0.113.1" })
+      // R9: allocated on the external network AND associated to the VIP port, in
+      // the one POST — dropping either field leaves an unreachable address.
+      expect(fake.fips).toEqual([{
+        id: "fip-1",
+        floating_ip_address: "203.0.113.1",
+        floating_network_id: "ext-net",
+        port_id: "port-vip",
+        description: "kumulo-prod"
+      }])
+      expect(fake.calls().filter((call) => call.url.includes("router%3Aexternal=true")).length).toBe(1)
+    }).pipe(Effect.provide(fake.layer))
+  })
+
+  // The `description`-as-key choice exists to survive the LB's deletion — so the
+  // adopted FIP is exactly the one whose `port_id` Neutron has already nulled.
+  // Returning its address without re-associating publishes an address (to
+  // `<cluster>.outputs.yaml`, and to DNS in M4) that routes nowhere.
+  it.effect("ensureFloatingIp re-associates an adopted floating IP orphaned by a recreated load balancer", () => {
+    const fake = _fakeFloatingIps("prod")
+    return Effect.gen(function*() {
+      yield* ensureFloatingIp({ options, portId: "port-vip" })
+      fake.orphan()
+      const info = yield* ensureFloatingIp({ options, portId: "port-vip-2" })
+      // Same allocation, same address — re-pointed rather than re-allocated.
+      expect(info).toEqual({ id: "fip-1", address: "203.0.113.1" })
+      expect(fake.fips[0]?.["port_id"]).toBe("port-vip-2")
+      expect(fake.calls().filter((call) => call.method === "POST").length).toBe(1)
+    }).pipe(Effect.provide(fake.layer))
+  })
+
+  const _tagArb = fc.stringMatching(/^[a-z][a-z0-9-]{0,12}$/)
+
+  // Floating IPs carry no `name` and Neutron's create body has no `tags`, so
+  // `description` is the only create-time handle — this pins that the key is
+  // both written on create and used as the lookup filter.
+  it.effect.prop(
+    "ensureFloatingIp is idempotent: the second call adopts the first's allocation, keyed by description",
+    [_tagArb],
+    ([tag]) => {
+      const fake = _fakeFloatingIps(tag)
+      const scoped = { ...options, tag }
+      return Effect.gen(function*() {
+        const first = yield* ensureFloatingIp({ options: scoped, portId: "port-vip" })
+        const second = yield* ensureFloatingIp({ options: scoped, portId: "port-vip" })
+        expect(second).toEqual(first)
+        expect(first.address).not.toBe("")
+        expect(fake.calls().filter((call) => call.method === "POST").length).toBe(1)
+        expect(fake.calls().some((call) => call.url.includes(`description=kumulo-${tag}`))).toBe(true)
+      }).pipe(Effect.provide(fake.layer))
+    }
+  )
+
+  it.effect("releaseFloatingIp deletes the cluster's floating IP and is a no-op when there is none", () => {
+    const fake = _fakeFloatingIps("prod")
+    return Effect.gen(function*() {
+      yield* releaseFloatingIp({ options })
+      expect(fake.calls().filter((call) => call.method === "DELETE")).toEqual([])
+      yield* ensureFloatingIp({ options, portId: "port-vip" })
+      yield* releaseFloatingIp({ options })
+      expect(fake.calls().filter((call) => call.method === "DELETE").length).toBe(1)
+      // Released for real: a re-release finds nothing left to delete.
+      yield* releaseFloatingIp({ options })
+      expect(fake.calls().filter((call) => call.method === "DELETE").length).toBe(1)
     }).pipe(Effect.provide(fake.layer))
   })
 

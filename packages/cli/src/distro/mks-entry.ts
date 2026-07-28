@@ -1,7 +1,8 @@
 import { Console, Effect } from "effect"
 import { ResourceNotFound } from "@kumulo/core"
-import type { ClusterConfig } from "@kumulo/core"
+import type { ClusterConfig, LbInfo } from "@kumulo/core"
 import { findClusterByName, upgrade as upgradeMks } from "@kumulo/distro-ovh-mks"
+import type { OutputsIngress } from "@kumulo/volumes-cinder"
 import { lookupManagedVolumeNames } from "../commands/volumes.ts"
 import { authValidityCheck, planVsQuotaCheck, projectAccessCheck, regionVersionCapabilityCheck } from "../doctor/ovh/index.ts"
 import { MksEnv } from "../mks/env.ts"
@@ -85,6 +86,16 @@ const _mksDoctorChecks = Effect.fn(function*({ config }: { readonly config: Clus
   ]
 })
 
+/**
+ * The LB is only recorded once both its id and its floating IP are known — a
+ * half-written block would tell a consumer to annotate a Service with an LB it
+ * cannot reach. Ids and addresses only, never credentials (N6).
+ */
+const _ingressOutputs = (info: LbInfo | undefined): { readonly ingress?: OutputsIngress } =>
+  info === undefined || info.id === "" || info.floatingIp === undefined || info.floatingIp === ""
+    ? {}
+    : { ingress: { load_balancer_id: info.id, floating_ip: info.floatingIp } }
+
 export const mksEntry: DistroEntry = {
   kind: "ovh-mks",
   supportsObjectStorage: true,
@@ -92,7 +103,10 @@ export const mksEntry: DistroEntry = {
   deletePlanActions: _deletePlanActions,
   apply: (a) =>
     applyMks({ config: a.config, replace: a.replace }).pipe(
-      Effect.map((info) => ({ summary: `\nCluster "${a.config.name}" is ${info.status} (${info.apiEndpoint}).` }))
+      Effect.map((info) => ({
+        summary: `\nCluster "${a.config.name}" is ${info.status} (${info.apiEndpoint}).`,
+        ..._ingressOutputs(info.ingress)
+      }))
     ),
   delete: deleteMks,
   kubeconfig: kubeconfigMks,
@@ -100,7 +114,7 @@ export const mksEntry: DistroEntry = {
   // `network/`/`subnet/` are converged inside `applyMks` too (ahead of the
   // cluster) — a row whose prefix is missing here renders and then never
   // checks off.
-  appliedPrefixes: ["network/", "subnet/", "mks-cluster/", "mks-pool/"],
+  appliedPrefixes: ["network/", "subnet/", "mks-cluster/", "mks-pool/", "load-balancer/", "floating-ip/"],
   status: _statusMks,
   upgrade: _upgradeMksEntry,
   credentialsLabel: "ovh api",

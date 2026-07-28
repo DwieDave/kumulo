@@ -53,12 +53,31 @@ export interface SecGroupInfo {
   readonly id: string
 }
 
+/**
+ * kumulo creates an EMPTY load balancer. `members` is carried for the ports
+ * that model one (Hetzner) but is never sent to Octavia: once a Kubernetes
+ * Service adopts the LB by id, its listeners, pools and members belong to the
+ * cloud-controller-manager, and kumulo neither creates, prunes nor diffs them.
+ * Everything the LB's shape depends on is therefore set at creation.
+ *
+ * Every field but `members` is optional: `LbSpec` is shared with the k3s distro
+ * and the Hetzner adapter, both of which pass `{ members: [] }`.
+ */
 export interface LbSpec {
   readonly members: ReadonlyArray<string>
+  /** VIP placement. Required for MKS — cluster and LB must share a network. */
+  readonly vipSubnetId?: string
+  readonly vipNetworkId?: string
+  /** Octavia flavor id. */
+  readonly flavorId?: string
+  /** Allocate a floating IP and associate it with the LB's VIP port. */
+  readonly floatingIp?: boolean
 }
 export interface LbInfo {
   readonly id: string
   readonly vip: string
+  /** Present only when `LbSpec.floatingIp` asked for one. */
+  readonly floatingIp?: string
 }
 
 export interface ServerSpec {

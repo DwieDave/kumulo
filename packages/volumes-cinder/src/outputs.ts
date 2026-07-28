@@ -12,9 +12,19 @@ export const OutputsVolume = Schema.Struct({
 })
 export type OutputsVolume = Schema.Schema.Type<typeof OutputsVolume>
 
+// kumulo: the ingress load balancer a consumer annotates a Service with
+// (`loadbalancer.openstack.org/load-balancer-id`) plus the address DNS points
+// at. Ids and addresses only — N6: this file is not encrypted.
+export const OutputsIngress = Schema.Struct({
+  load_balancer_id: Schema.NonEmptyString,
+  floating_ip: Schema.NonEmptyString
+})
+export type OutputsIngress = Schema.Schema.Type<typeof OutputsIngress>
+
 export const OutputsFile = Schema.Struct({
   cluster: Schema.NonEmptyString,
-  volumes: Schema.Array(OutputsVolume)
+  volumes: Schema.Array(OutputsVolume),
+  ingress: Schema.optionalKey(OutputsIngress)
 })
 export type OutputsFile = Schema.Schema.Type<typeof OutputsFile>
 
@@ -37,12 +47,18 @@ export const parseOutputsYaml = (text: string): Effect.Effect<OutputsFile, Outpu
     Effect.flatMap(decodeOutputs)
   )
 
-// kumulo: stable key ordering (cluster, volumes) — regenerating from
-// unchanged state is a byte-identical diff.
+// kumulo: stable key ordering (cluster, volumes, ingress) — regenerating from
+// unchanged state is a byte-identical diff. Rebuilding the object from this
+// literal is also what keeps the file a closed allowlist: any key not named
+// here is dropped rather than written out (N6).
 export const stringifyOutputs = (
   { file, format = "yaml" }: { readonly file: OutputsFile; readonly format?: OutputsFormat }
 ): string => {
-  const ordered = { cluster: file.cluster, volumes: file.volumes }
+  const ordered = {
+    cluster: file.cluster,
+    volumes: file.volumes,
+    ...(file.ingress === undefined ? {} : { ingress: file.ingress })
+  }
   return format === "json" ? `${JSON.stringify(ordered, null, 2)}\n` : stringify(ordered)
 }
 
@@ -82,6 +98,11 @@ export const upsertVolume = (
   cluster: file.cluster,
   volumes: [...file.volumes.filter((existing: OutputsVolume) => existing.name !== volume.name), volume]
 })
+
+// Pure merge: records the ingress LB beside the volume ids (R13).
+export const setIngress = (
+  { file, ingress }: { readonly file: OutputsFile; readonly ingress: OutputsIngress }
+): OutputsFile => ({ cluster: file.cluster, volumes: file.volumes, ingress })
 
 // Pure remove (only called for volumes actually deleted — never `retain: true`).
 export const removeVolume = ({ file, name }: { readonly file: OutputsFile; readonly name: string }): OutputsFile => ({
