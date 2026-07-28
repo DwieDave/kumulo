@@ -15,6 +15,7 @@ export {
   listNodePools,
   mksPoolHash,
   parseKubeVersion,
+  requireVrack,
   upgrade
 } from "./distro/index.ts"
 export type {

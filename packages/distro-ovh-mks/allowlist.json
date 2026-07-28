@@ -2,6 +2,7 @@
   "service": "mks",
   "spec": "../../tools/ovh2openapi/specs/ovh/cloud.json",
   "operations": [
+    { "path": "/cloud/project/{serviceName}/vrack", "method": "GET" },
     { "path": "/cloud/project/{serviceName}/kube", "method": "GET" },
     { "path": "/cloud/project/{serviceName}/kube", "method": "POST" },
     { "path": "/cloud/project/{serviceName}/kube/{kubeId}", "method": "GET" },

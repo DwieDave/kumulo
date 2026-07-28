@@ -10,12 +10,21 @@ export type DistroKind = "k3s" | "ovh-mks"
 export type Capability = "octavia" | "floatingIps" | "cilium"
 export type Version = string
 
+// kumulo: the subnet fields are optional because they are not universal.
+// Hetzner networks carry one subnet and expose no subnet id at all, and the
+// k3s caller passes `cidr` alone. Absent means today's single-subnet behaviour.
 export interface NetworkSpec {
   readonly cidr: string
+  /** Defaults to `cidr` when omitted. */
+  readonly nodesSubnet?: string
+  /** Omitted means no load-balancer subnet is created. */
+  readonly loadBalancersSubnet?: string
 }
 export interface NetworkInfo {
   readonly id: string
   readonly cidr: string
+  readonly nodesSubnetId?: string
+  readonly loadBalancersSubnetId?: string
 }
 
 /**

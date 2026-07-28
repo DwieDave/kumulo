@@ -23,6 +23,8 @@ export type Cloud_ProjectKubeNodePoolAutoscalingParams = { readonly "scaleDownUn
 export const Cloud_ProjectKubeNodePoolAutoscalingParams = Schema.Struct({ "scaleDownUnneededTimeSeconds": Schema.optionalKey(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt())), "scaleDownUnreadyTimeSeconds": Schema.optionalKey(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt())), "scaleDownUtilizationThreshold": Schema.optionalKey(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite())) })
 export type Cloud_ProjectKubeResources = { readonly "cpu"?: string | null, readonly "memory"?: string | null }
 export const Cloud_ProjectKubeResources = Schema.Struct({ "cpu": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])), "memory": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])) })
+export type Cloud_Vrack = { readonly "description"?: string, readonly "id"?: string, readonly "name"?: string }
+export const Cloud_Vrack = Schema.Struct({ "description": Schema.optionalKey(Schema.String), "id": Schema.optionalKey(Schema.String), "name": Schema.optionalKey(Schema.String) })
 export type Cloud_kube_ClusterStatusEnum = "DELETED" | "DELETING" | "ERROR" | "INSTALLING" | "MAINTENANCE" | "READY" | "REDEPLOYING" | "REOPENING" | "RESETTING" | "SUSPENDED" | "SUSPENDING" | "UNKNOWN" | "UPDATING" | "USER_ERROR" | "USER_QUOTA_ERROR" | "USER_WEBHOOK_PREVENTING_OPERATIONS_ERROR"
 export const Cloud_kube_ClusterStatusEnum = Schema.Literals(["DELETED", "DELETING", "ERROR", "INSTALLING", "MAINTENANCE", "READY", "REDEPLOYING", "REOPENING", "RESETTING", "SUSPENDED", "SUSPENDING", "UNKNOWN", "UPDATING", "USER_ERROR", "USER_QUOTA_ERROR", "USER_WEBHOOK_PREVENTING_OPERATIONS_ERROR"])
 export type Cloud_kube_KubeProxyIpvsSchedulerEnum = "dh" | "lc" | "nq" | "rr" | "sed" | "sh"
@@ -120,6 +122,8 @@ export type PutCloudProjectServiceNameKubeKubeIdNodepoolNodePoolIdRequestJson = 
 export const PutCloudProjectServiceNameKubeKubeIdNodepoolNodePoolIdRequestJson = Cloud_ProjectKubeNodePoolUpdate
 export type PostCloudProjectServiceNameKubeKubeIdUpdateRequestJson = Cloud_ProjectKubeUpdateCreation
 export const PostCloudProjectServiceNameKubeKubeIdUpdateRequestJson = Cloud_ProjectKubeUpdateCreation
+export type GetCloudProjectServiceNameVrack200 = Cloud_Vrack
+export const GetCloudProjectServiceNameVrack200 = Cloud_Vrack
 
 export interface OperationConfig {
   /**
@@ -280,6 +284,12 @@ export const make = (
       "204": () => Effect.void,
       orElse: unexpectedStatus
     }))
+  ),
+    "getCloudProjectServiceNameVrack": (serviceName, options) => HttpClientRequest.get(`/cloud/project/${serviceName}/vrack`).pipe(
+    withResponse(options?.config)(HttpClientResponse.matchStatus({
+      "2xx": decodeSuccess(GetCloudProjectServiceNameVrack200),
+      orElse: unexpectedStatus
+    }))
   )
   }
 }
@@ -299,6 +309,7 @@ export interface Mks {
   readonly "putCloudProjectServiceNameKubeKubeIdNodepoolNodePoolId": <Config extends OperationConfig>(serviceName: string, kubeId: string, nodePoolId: string, options: { readonly payload: typeof PutCloudProjectServiceNameKubeKubeIdNodepoolNodePoolIdRequestJson.Encoded; readonly config?: Config | undefined }) => Effect.Effect<WithOptionalResponse<void, Config>, HttpClientError.HttpClientError | SchemaError>
   readonly "deleteCloudProjectServiceNameKubeKubeIdNodepoolNodePoolId": <Config extends OperationConfig>(serviceName: string, kubeId: string, nodePoolId: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<void, Config>, HttpClientError.HttpClientError | SchemaError>
   readonly "postCloudProjectServiceNameKubeKubeIdUpdate": <Config extends OperationConfig>(serviceName: string, kubeId: string, options: { readonly payload: typeof PostCloudProjectServiceNameKubeKubeIdUpdateRequestJson.Encoded; readonly config?: Config | undefined }) => Effect.Effect<WithOptionalResponse<void, Config>, HttpClientError.HttpClientError | SchemaError>
+  readonly "getCloudProjectServiceNameVrack": <Config extends OperationConfig>(serviceName: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<typeof GetCloudProjectServiceNameVrack200.Type, Config>, HttpClientError.HttpClientError | SchemaError>
 }
 
 export interface MksError<Tag extends string, E> {

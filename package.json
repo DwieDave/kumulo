@@ -36,7 +36,7 @@
     }
   },
   "scripts": {
-    "typecheck": "for d in packages/* tools/*; do (cd \"$d\" && echo \"[typecheck] $d\" && ../../node_modules/.bin/tsc --noEmit) || exit 1; done",
+    "typecheck": "s=0; for d in packages/* tools/*; do (cd \"$d\" && echo \"[typecheck] $d\" && ../../node_modules/.bin/tsc --noEmit) || s=1; done; exit $s",
     "test": "vitest run",
     "lint:deps": "depcruise --config .dependency-cruiser.cjs packages tools",
     "codegen:check": "cd tools/codegen && bun run check",

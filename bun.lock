@@ -21,7 +21,7 @@
     },
     "packages/addons": {
       "name": "@kumulo/addons",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@kumulo/core": "workspace:*",
       },
@@ -36,7 +36,7 @@
     },
     "packages/cli": {
       "name": "@kumulo/cli",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "bin": {
         "kumulo": "./dist/main.mjs",
       },
@@ -55,6 +55,7 @@
         "@kumulo/volumes-cinder": "workspace:*",
       },
       "devDependencies": {
+        "@effect/platform-bun": "catalog:",
         "@effect/platform-node": "catalog:",
         "@effect/vitest": "catalog:",
         "effect": "catalog:",
@@ -67,7 +68,7 @@
     },
     "packages/core": {
       "name": "@kumulo/core",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "yaml": "catalog:",
       },
@@ -83,7 +84,7 @@
     },
     "packages/distro-k3s": {
       "name": "@kumulo/distro-k3s",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@kumulo/core": "workspace:*",
         "ssh2": "catalog:",
@@ -100,7 +101,7 @@
     },
     "packages/distro-ovh-mks": {
       "name": "@kumulo/distro-ovh-mks",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@kumulo/core": "workspace:*",
       },
@@ -117,7 +118,7 @@
     },
     "packages/dns-hetzner": {
       "name": "@kumulo/dns-hetzner",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@kumulo/core": "workspace:*",
       },
@@ -132,7 +133,7 @@
     },
     "packages/dns-ovh": {
       "name": "@kumulo/dns-ovh",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@kumulo/core": "workspace:*",
       },
@@ -149,7 +150,7 @@
     },
     "packages/hetzner": {
       "name": "@kumulo/hetzner",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@kumulo/core": "workspace:*",
       },
@@ -165,7 +166,7 @@
     },
     "packages/openstack": {
       "name": "@kumulo/openstack",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@kumulo/core": "workspace:*",
         "yaml": "catalog:",
@@ -190,7 +191,7 @@
     },
     "packages/provider-ovh": {
       "name": "@kumulo/provider-ovh",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@kumulo/core": "workspace:*",
       },
@@ -205,7 +206,7 @@
     },
     "packages/secrets-sops": {
       "name": "@kumulo/secrets-sops",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@kumulo/core": "workspace:*",
         "yaml": "catalog:",
@@ -223,7 +224,7 @@
     },
     "packages/storage-ovh": {
       "name": "@kumulo/storage-ovh",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@kumulo/core": "workspace:*",
         "yaml": "catalog:",
@@ -242,7 +243,7 @@
     },
     "packages/volumes-cinder": {
       "name": "@kumulo/volumes-cinder",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@kumulo/core": "workspace:*",
         "yaml": "catalog:",

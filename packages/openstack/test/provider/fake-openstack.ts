@@ -2,6 +2,10 @@ import { Effect, Layer } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { KeystoneAuth } from "../../src/auth/keystone-auth.ts"
 
+/** The JSON payload a route handler received, or `undefined` for a bodyless request. */
+export const requestJson = (request: HttpClientRequest.HttpClientRequest): unknown =>
+  request.body._tag === "Uint8Array" ? JSON.parse(new TextDecoder().decode(request.body.body)) : undefined
+
 export type RouteHandler = (
   request: HttpClientRequest.HttpClientRequest
 ) => { readonly status: number; readonly body?: unknown }

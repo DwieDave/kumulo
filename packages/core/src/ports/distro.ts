@@ -3,6 +3,7 @@ import { Context } from "effect"
 import type {
   AuthenticationFailed,
   BootstrapFailed,
+  CapabilityMissing,
   ConfigInvalid,
   HttpTransportError,
   ProviderApiError,
@@ -50,6 +51,7 @@ export interface SelfManagedDistroShape {
 
 export type MksError =
   | AuthenticationFailed
+  | CapabilityMissing
   | ResourceNotFound
   | ResourceConflict
   | ProvisioningTimeout

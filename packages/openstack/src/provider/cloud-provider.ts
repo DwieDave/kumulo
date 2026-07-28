@@ -102,25 +102,90 @@ const _ignoreMissing = <A>(effect: R<A>): R<void> =>
 
 // ---- Network ----------------------------------------------------------
 
+const _SUBNETS = "v2.0/subnets"
+
+interface Subnet extends Named {
+  readonly cidr?: string | null | undefined
+}
+
+// kumulo: the nodes subnet spans the whole network CIDR unless narrowed, which
+// is exactly the single subnet the k3s path has always created. A
+// load-balancers subnet is created only when one is asked for.
+const _subnetCidrs = (spec: NetworkSpec): ReadonlyArray<string> => [
+  spec.nodesSubnet ?? spec.cidr,
+  ...(spec.loadBalancersSubnet === undefined ? [] : [spec.loadBalancersSubnet])
+]
+
+// Absent, never `""`: an id is reported only when the read-back actually found
+// the subnet. These ids become creation-time inputs to a cluster, so an empty
+// string masquerading as one is worse than a missing field.
+const _subnetIdOf = (subnets: ReadonlyArray<Subnet>, cidr: string): string | undefined => {
+  const id = subnets.find((subnet) => subnet.cidr === cidr)?.id
+  return id === "" ? undefined : id
+}
+
+const _listSubnets = (
+  { client, networkId }: { readonly client: NeutronClient; readonly networkId: string }
+): R<ReadonlyArray<Subnet>> =>
+  client.subnets.subnetsGet({ query: { network_id: networkId } }).pipe(
+    Effect.mapError(_at("subnet", _SUBNETS)),
+    Effect.map((listed) => listed.subnets ?? [])
+  )
+
+const _createSubnet = (
+  { cidr, client, networkId }: { readonly client: NeutronClient; readonly networkId: string; readonly cidr: string }
+): R<void> =>
+  _ignoreConflict(
+    client.subnets.subnetsPost({ payload: { subnet: { network_id: networkId, cidr, ip_version: 4 } } }).pipe(
+      Effect.mapError(_at("subnet", _SUBNETS))
+    )
+  )
+
+const _networkInfo = (
+  { ids, id, spec }: {
+    readonly id: string
+    readonly spec: NetworkSpec
+    readonly ids: ReadonlyArray<string | undefined>
+  }
+): NetworkInfo => ({
+  id,
+  cidr: spec.cidr,
+  ...(ids[0] === undefined ? {} : { nodesSubnetId: ids[0] }),
+  ...(ids[1] === undefined ? {} : { loadBalancersSubnetId: ids[1] })
+})
+
+const _ensureNetworkId = (
+  { client, name }: { readonly client: NeutronClient; readonly name: string }
+): R<{ readonly id: string; readonly created: boolean }> =>
+  Effect.gen(function*() {
+    const ref = "v2.0/networks"
+    const listed = yield* client.networks.networksGet({ query: { name } }).pipe(Effect.mapError(_at("network", ref)))
+    const existing = _first(listed.networks)
+    if (existing !== undefined) return { id: _idOf(existing), created: false }
+    const created = yield* client.networks.networksPost({ payload: { network: { name } } }).pipe(
+      Effect.mapError(_at("network", ref))
+    )
+    return { id: _idOf(created.network), created: true }
+  })
+
+/**
+ * Subnets are POSTed only into a network this call just created. A network that
+ * already existed is read, never written: `ensureNetwork` is shared with the
+ * k3s distro, and on a live cluster whose `network.cidr` an operator has edited
+ * a subnet POST is not a convergence — it either strands a second subnet on a
+ * running network (nodes are created with `networks: "auto"`, so their IP
+ * becomes non-deterministic) or fails the whole apply on Neutron's overlap 400.
+ * Both paths resolve their ids through the same read-back, so they agree; an
+ * unappliable network change belongs to plan-time rejection (R8), not here.
+ */
 export const ensureNetwork = ({ options, spec }: { readonly options: CloudProviderOptions; readonly spec: NetworkSpec }): R<NetworkInfo> =>
   Effect.gen(function*() {
     const client = yield* neutronClient(options.region)
-    const name = _name(options)
-    const listed = yield* client.networks.networksGet({ query: { name } }).pipe(
-      Effect.mapError(_at("network", "v2.0/networks"))
-    )
-    const existing = _first(listed.networks)
-    if (existing !== undefined) return { id: _idOf(existing), cidr: spec.cidr }
-    const created = yield* client.networks.networksPost({ payload: { network: { name } } }).pipe(
-      Effect.mapError(_at("network", "v2.0/networks"))
-    )
-    const id = _idOf(created.network)
-    yield* _ignoreConflict(
-      client.subnets.subnetsPost({ payload: { subnet: { network_id: id, cidr: spec.cidr, ip_version: 4 } } }).pipe(
-        Effect.mapError(_at("subnet", "v2.0/subnets"))
-      )
-    )
-    return { id, cidr: spec.cidr }
+    const cidrs = _subnetCidrs(spec)
+    const { created, id } = yield* _ensureNetworkId({ client, name: _name(options) })
+    if (created) yield* Effect.forEach(cidrs, (cidr) => _createSubnet({ client, networkId: id, cidr }), { discard: true })
+    const subnets = yield* _listSubnets({ client, networkId: id })
+    return _networkInfo({ id, spec, ids: cidrs.map((cidr) => _subnetIdOf(subnets, cidr)) })
   })
 
 // ---- Security groups ---------------------------------------------------

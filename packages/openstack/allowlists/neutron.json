@@ -5,6 +5,7 @@
     "networks:get",
     "networks:post",
     "networks/network_id:delete",
+    "subnets:get",
     "subnets:post",
     "security-groups:get",
     "security-groups:post",

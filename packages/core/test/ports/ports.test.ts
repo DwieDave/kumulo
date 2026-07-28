@@ -19,7 +19,13 @@ describe("ports", () => {
       const fake = Layer.succeed(
         CloudProvider,
         CloudProvider.of({
-          ensureNetwork: () => Effect.succeed({ id: "net-1", cidr: "10.0.0.0/16" }),
+          ensureNetwork: (spec) =>
+            Effect.succeed({
+              id: "net-1",
+              cidr: spec.cidr,
+              nodesSubnetId: `nodes-${spec.nodesSubnet}`,
+              loadBalancersSubnetId: `lb-${spec.loadBalancersSubnet}`
+            }),
           ensureSecurityGroups: () => Effect.succeed({ id: "sg-1" }),
           ensureLoadBalancer: () => Effect.succeed({ id: "lb-1", vip: "1.2.3.4" }),
           ensureServer: () => Effect.succeed({ id: "srv-1", name: "master-1", ip: "10.0.0.2" }),
@@ -36,6 +42,21 @@ describe("ports", () => {
         fake
       )
       expect(result).toBe("img-1")
+      // Both subnet CIDRs go in, both subnet ids come back out.
+      const network = yield* Effect.provide(
+        CloudProvider.pipe(
+          Effect.flatMap((cp) =>
+            cp.ensureNetwork({ cidr: "10.0.0.0/16", nodesSubnet: "10.0.1.0/24", loadBalancersSubnet: "10.0.2.0/24" })
+          )
+        ),
+        fake
+      )
+      expect(network).toEqual({
+        id: "net-1",
+        cidr: "10.0.0.0/16",
+        nodesSubnetId: "nodes-10.0.1.0/24",
+        loadBalancersSubnetId: "lb-10.0.2.0/24"
+      })
     }))
 
   it.effect("ProviderProfile resolves through a fake Layer", () =>

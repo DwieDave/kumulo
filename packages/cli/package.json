@@ -71,7 +71,8 @@
     "@effect/vitest": "catalog:",
     "vitest": "catalog:",
     "effect": "catalog:",
-    "@effect/platform-node": "catalog:"
+    "@effect/platform-node": "catalog:",
+    "@effect/platform-bun": "catalog:"
   },
   "scripts": {
     "build": "bash ../../scripts/build-package.sh src/main.ts",
