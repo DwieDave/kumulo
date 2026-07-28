@@ -134,10 +134,12 @@ const MksIngress = Schema.Struct({
   /** Octavia flavor id — MKS Standard's vocabulary. Absent = Octavia's default. */
   flavor_id: Schema.optionalKey(Schema.NonEmptyString),
   /**
-   * Octavia flavor *name* — MKS Free sizes load balancers `small`/`medium`/
-   * `large` rather than by UUID (Q1). Resolved against the region's own flavor
-   * list, so an unknown name fails naming what exists instead of silently
-   * handing back Octavia's default.
+   * Octavia flavor *name* — `small` (default), `medium`, `large`, `xl`. The MKS
+   * Free plan accepts only this vocabulary; MKS Standard also accepts a flavor
+   * UUID (Q1). Neither plan makes the load balancer itself free: every Public
+   * Cloud Load Balancer is billed per flavor, and its floating IP separately.
+   * Resolved against the region's own flavor list, so an unknown name fails
+   * naming what exists instead of silently handing back Octavia's default.
    */
   flavor: Schema.optionalKey(Schema.NonEmptyString)
 })

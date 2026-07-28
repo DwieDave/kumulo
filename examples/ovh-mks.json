@@ -32,14 +32,7 @@
     }
   ],
   "dns": {
-    "module": "hetzner",
-    "zone": "example.com",
-    "ttl": 300,
-    "records": [
-      { "name": "api.staging-eu", "target": "api_server" },
-      { "name": "apps.staging-eu", "target": "ingress" },
-      { "name": "*.apps.staging-eu", "target": "ingress" }
-    ]
+    "module": "none"
   },
   "volumes": {
     "module": "cinder",
