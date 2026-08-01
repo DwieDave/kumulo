@@ -959,7 +959,9 @@
           "object_storage": {
             "properties": {
               "module": {
-                "const": "ovh"
+                "not": {
+                  "const": "none"
+                }
               }
             },
             "required": [

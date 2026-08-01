@@ -113,25 +113,29 @@ exports[`dry-run plan against fake inventory (ovh-mks) > partial inventory -> mi
 `;
 
 exports[`dry-run plan against fake inventory (upcloud-uks) > complete matching inventory -> all no-ops, nothing to do (mks: except its always-Create volumes) 1`] = `
-"Plan: 0 to create, 0 to delete, 0 to update, 0 to replace, 1 unchanged.
+"Plan: 0 to create, 0 to delete, 0 to update, 0 to replace, 2 unchanged.
 
-  = kumulo-staging-de-worker-general-0"
+  = kumulo-staging-de-worker-general-0
+  = bucket/staging-de-backups"
 `;
 
 exports[`dry-run plan against fake inventory (upcloud-uks) > drifted inventory -> replace-needs-confirm, never a silent apply 1`] = `
-"Plan: 0 to create, 0 to delete, 0 to update, 1 to replace, 0 unchanged.
+"Plan: 0 to create, 0 to delete, 0 to update, 2 to replace, 0 unchanged.
 
-  -/+ kumulo-staging-de-worker-general-0 (config-hash drifted from desired spec)"
+  -/+ kumulo-staging-de-worker-general-0 (config-hash drifted from desired spec)
+  -/+ bucket/staging-de-backups (region or encryption changed (immutable, delete+recreate))"
 `;
 
 exports[`dry-run plan against fake inventory (upcloud-uks) > empty inventory -> all creates 1`] = `
-"Plan: 1 to create, 0 to delete, 0 to update, 0 to replace, 0 unchanged.
+"Plan: 2 to create, 0 to delete, 0 to update, 0 to replace, 0 unchanged.
 
-  + kumulo-staging-de-worker-general-0"
+  + kumulo-staging-de-worker-general-0
+  + bucket/staging-de-backups"
 `;
 
 exports[`dry-run plan against fake inventory (upcloud-uks) > partial inventory -> mix of no-op and create 1`] = `
-"Plan: 0 to create, 0 to delete, 0 to update, 0 to replace, 1 unchanged.
+"Plan: 0 to create, 0 to delete, 0 to update, 0 to replace, 2 unchanged.
 
-  = kumulo-staging-de-worker-general-0"
+  = kumulo-staging-de-worker-general-0
+  = bucket/staging-de-backups"
 `;

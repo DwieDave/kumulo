@@ -42,7 +42,7 @@ const crossFieldConstraints = [
   },
   {
     if: {
-      properties: { object_storage: { properties: { module: { const: "ovh" } }, required: ["module"] } },
+      properties: { object_storage: { properties: { module: { not: { const: "none" } } }, required: ["module"] } },
       required: ["object_storage"]
     },
     then: { properties: { secrets: { properties: { sink: { not: { const: "none" } } } } } }

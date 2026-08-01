@@ -27,10 +27,31 @@
     "module": "none"
   },
   "volumes": {
-    "module": "none"
+    "module": "upcloud",
+    "managed": [
+      {
+        "name": "staging-de-data",
+        "size_gb": 10,
+        "type": "standard",
+        "retain": false,
+        "pvc": {
+          "namespace": "default",
+          "access_modes": [
+            "ReadWriteOnce"
+          ]
+        }
+      }
+    ]
   },
   "object_storage": {
-    "module": "none"
+    "module": "upcloud",
+    "region": "europe-1",
+    "buckets": [
+      {
+        "name": "staging-de-backups",
+        "retain": false
+      }
+    ]
   },
   "secrets": {
     "sink": "sops",
