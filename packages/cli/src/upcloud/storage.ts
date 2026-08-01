@@ -9,10 +9,11 @@ import { Effect, Redacted } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import type { PlatformError } from "effect/PlatformError"
 import { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/unstable/process"
-import { ConfigInvalid, CredentialsSink } from "@kumulo/core"
+import { ConfigInvalid, CredentialsSink, pollUntil, ProviderApiError } from "@kumulo/core"
 import type { BucketInfo, CredentialEntry, CredentialsSinkError, ObjectStorageError, PlanAction, S3Credentials } from "@kumulo/core"
 import { credentialsPath, sopsCredentialsSinkLive } from "@kumulo/secrets-sops"
 import { mapUpcloudError } from "@kumulo/upcloud"
+import type { ObjectStorageClient } from "@kumulo/upcloud"
 import { deleteBucket, ensureBucket, ensureCredentials, listBuckets } from "@kumulo/storage-upcloud"
 import type { UpcloudObjectStorageOptions } from "@kumulo/storage-upcloud"
 import type { UpcloudUksClusterConfig } from "../cluster-config.ts"
@@ -154,7 +155,31 @@ export const reconcileUpcloudObjectStorageOnDelete = (
           self: objectStorage.services.delete(service.uuid, true),
           ctx: { kind: "object-storage-service", ref: service.uuid }
         })
+        // Service deletion is async (delete-* operational states) and holds a
+        // private attachment on the cluster's SDN network (D6) — the network
+        // delete 409s until the service is fully gone (live probe 2026-08-01),
+        // so D9's ordering needs this polled, not just issued.
+        yield* _awaitServiceGone({ objectStorage, uuid: service.uuid })
       }
     }
     return { kept: buckets.filter((b) => b.retain).map((b) => b.name), deleted: toDelete.map((b) => b.name) }
   })
+
+const _awaitServiceGone = (
+  { objectStorage, uuid }: { readonly objectStorage: ObjectStorageClient; readonly uuid: string }
+): Effect.Effect<void, ObjectStorageError> =>
+  pollUntil({
+    check: mapUpcloudError({ self: objectStorage.services.get(uuid), ctx: { kind: "object-storage-service", ref: uuid } }).pipe(
+      Effect.map(() => "deleting"),
+      Effect.catchTag("ResourceNotFound", () => Effect.succeed("gone"))
+    ),
+    isDone: (state) => state === "gone",
+    interval: "3 seconds",
+    timeout: "10 minutes",
+    kind: "object-storage-service",
+    ref: uuid
+  }).pipe(
+    Effect.asVoid,
+    Effect.catchTag("ProvisioningTimeout", (e) =>
+      Effect.fail(new ProviderApiError({ operation: `object-storage-service ${uuid} teardown`, status: 0, body: `still ${e.lastStatus} after 10 minutes` })))
+  )

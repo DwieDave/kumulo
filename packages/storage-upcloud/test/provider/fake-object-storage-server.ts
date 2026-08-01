@@ -16,6 +16,7 @@ interface FakeService {
   region: string
   configured_status: string
   operational_state: string
+  pollsUntilGone?: number
   labels?: ReadonlyArray<FakeLabel>
   networks?: ReadonlyArray<{ readonly name: string; readonly type: string; readonly family: string; readonly uuid?: string }>
   endpoints?: ReadonlyArray<{ readonly domain_name: string; readonly type: string }>
@@ -98,6 +99,15 @@ export const makeFakeObjectStorageServer = () => {
     const service = services.get(uuid)
     if (request.method === "GET") {
       if (!service) return _notFound("service not found")
+      if (service.pollsUntilGone !== undefined) {
+        if (service.pollsUntilGone <= 0) {
+          services.delete(uuid)
+          buckets.delete(uuid)
+          users.delete(uuid)
+          return _notFound("service not found")
+        }
+        service.pollsUntilGone -= 1
+      }
       if (service.ladderIndex < _stateLadder.length - 1) service.ladderIndex += 1
       service.operational_state = _stateLadder[service.ladderIndex] ?? "running"
       if (service.operational_state === "running") {
@@ -117,9 +127,12 @@ export const makeFakeObjectStorageServer = () => {
       if (!service) return _notFound("service not found")
       const nonDeletedBuckets = [...(buckets.get(uuid)?.values() ?? [])].filter((bucket) => !bucket.deleted)
       if (nonDeletedBuckets.length > 0 && !force) return _conflict("service has buckets: pass ?force=true")
-      services.delete(uuid)
-      buckets.delete(uuid)
-      users.delete(uuid)
+      // Live quirk (2026-08-01): deletion is async — the service lingers in a
+      // delete-* operational_state and still holds its private network
+      // attachment, so callers must poll GET to 404 before touching the
+      // network. One extra GET returns the deleting service, then it is gone.
+      service.operational_state = "delete-service"
+      service.pollsUntilGone = 1
       return _empty()
     }
     return _badRequest(`unsupported method ${request.method}`)
