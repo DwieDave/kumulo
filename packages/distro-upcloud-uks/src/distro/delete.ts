@@ -1,6 +1,7 @@
 /**
- * `deleteCluster`/`deleteAll` (T5.5, R11, R13, AC3): cluster, then router,
- * then network, in that strict order.
+ * `deleteCluster`/`deleteAll` (T5.5, R11, R13, AC3): cluster, then network,
+ * then router, in that strict order (the router 409s while a network is
+ * still attached to it).
  *
  * kumulo: does deleting a cluster release its network automatically, or does
  * the network delete fail while the cluster is still terminating?
@@ -36,7 +37,7 @@ export const deleteCluster = (
     )
   )
 
-/** Full teardown in AC3's order: cluster (polled gone), then router, then network. */
+/** Full teardown: cluster (polled gone), then network, then router. */
 export const deleteAll = (
   { clients, ref, clusterName }: { readonly clients: UksClients; readonly ref: UksClusterRef; readonly clusterName: string }
 ): Effect.Effect<void, MksError> => deleteCluster({ clients, ref }).pipe(Effect.andThen(deleteNetwork({ clients, clusterName })))

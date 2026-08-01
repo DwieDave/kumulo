@@ -93,7 +93,7 @@ export const ensureNetwork = (
   })
 
 /**
- * Router, then network (AC3/R11) — deleting an already-gone resource is a
+ * Network, then router (R11) — deleting an already-gone resource is a
  * success (`ignoreMissing`), so this is safe to call from any partial state
  * (N5). Looks resources up by the same deterministic name `ensureNetwork`
  * used, so it never needs the caller to remember uuids across a re-run.
@@ -102,12 +102,15 @@ export const deleteNetwork = (
   { clients, clusterName }: { readonly clients: UksClients; readonly clusterName: string }
 ): Effect.Effect<void, MksError> =>
   Effect.gen(function*() {
-    const routerUuid = yield* _findRouterByName({ clients, name: routerName(clusterName) })
-    if (routerUuid !== undefined) {
-      yield* ignoreMissing(mapUpcloudError({ self: clients.router.delete(routerUuid), ctx: { kind: "router", ref: routerUuid } }))
-    }
+    // kumulo: network BEFORE router — live probe (2026-08-01) showed the
+    // router delete 409s while a network is still attached; deleting the
+    // network detaches it. AC3's "router, then network" reading was wrong.
     const networkUuid = yield* _findNetworkByName({ clients, name: networkName(clusterName) })
     if (networkUuid !== undefined) {
       yield* ignoreMissing(mapUpcloudError({ self: clients.network.delete(networkUuid), ctx: { kind: "network", ref: networkUuid } }))
+    }
+    const routerUuid = yield* _findRouterByName({ clients, name: routerName(clusterName) })
+    if (routerUuid !== undefined) {
+      yield* ignoreMissing(mapUpcloudError({ self: clients.router.delete(routerUuid), ctx: { kind: "router", ref: routerUuid } }))
     }
   })

@@ -115,6 +115,7 @@ const _bodyOf = <Body>(request: HttpClientRequest.HttpClientRequest): Body | und
 
 const _badRequest = (message: string): Response => new Response(JSON.stringify({ message }), { status: 400 })
 const _notFound = (message: string): Response => new Response(JSON.stringify({ message }), { status: 404 })
+const _conflict = (message: string): Response => new Response(JSON.stringify({ message }), { status: 409 })
 const _ok = (body: unknown): Response => new Response(JSON.stringify(body), { status: 200 })
 const _empty = (): Response => new Response(null, { status: 200 })
 
@@ -318,6 +319,10 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number }
     }
     if (request.method === "DELETE") {
       if (!router) return _notFound("router not found")
+      // Live quirk (2026-08-01 probe): a router with an attached network
+      // 409s — the network must be deleted (detached) first.
+      const attached = [...networks.values()].some((network) => network.router === uuid)
+      if (attached) return _conflict(`router conflict: ${uuid}`)
       routers.delete(uuid)
       return _empty()
     }

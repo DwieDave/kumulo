@@ -210,3 +210,11 @@ samples, never by echoing the request payload.
 Separately, `scripts/generate-schema.ts` hand-mirrored "api_token iff
 hetzner" from before upcloud existed; the auth cross-field constraint is now
 derived from core's `authMethodsByProvider` so new providers can't desync it.
+
+## Teardown order: network before router (live probe 2026-08-01)
+
+AC3's "cluster, then router, then network" was wrong on the router/network
+half: `DELETE /router/{uuid}` 409s ("router conflict") while a network is
+still attached. Deleting the network first detaches it. `deleteNetwork` now
+goes network → router, and the fake server 409s a router delete while any
+fake network still references it, so the ordering is test-enforced.
