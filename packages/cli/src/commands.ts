@@ -320,9 +320,12 @@ export const del = Command.make(
     }
     // Volumes must wait for the cluster (attachments); buckets don't — the
     // bucket teardown runs concurrently with cluster+volume teardown.
+    const selfProgress = distroFor(config).selfProgress === true
     const clusterAndVolumesStep = Effect.gen(function*() {
+      // Self-progress entries mark their own rows stage by stage (bucket and
+      // volume teardown included) — re-wrapping would spin everything at once.
       yield* withRowProgress({
-        match: (name) => !name.startsWith("volume/") && !name.startsWith("bucket/"),
+        match: (name) => !selfProgress && !name.startsWith("volume/") && !name.startsWith("bucket/"),
         effect: onDistro(config)(({ config: cfg, entry }) => entry.delete(cfg))
       })
       yield* _ciLine(`${red("Deleted")} ${deletedLabel}/${config.name}`)
@@ -331,7 +334,7 @@ export const del = Command.make(
       // Retained volumes (`volumes.managed[].retain: true`) survive `delete`;
       // anything else recorded there is torn down alongside the cluster.
       const volumesResult = yield* withRowProgress({
-        match: (name) => name.startsWith("volume/"),
+        match: (name) => config.volumes.module === "cinder" && name.startsWith("volume/"),
         effect: reconcileVolumesOnDelete(config)
       })
       yield* Effect.forEach(volumesResult.deleted, (name) => _ciLine(`${red("Deleted")} volume/${name}`), { discard: true })

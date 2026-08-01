@@ -190,14 +190,28 @@ const _deleteUpcloudUksEffect = (
   config: UpcloudUksClusterConfig
 ): Effect.Effect<void, MksError | ConfigInvalid | ObjectStorageError | VolumeError, UpcloudEnv | DnsProvider> =>
   Effect.gen(function*() {
-    yield* reconcileUpcloudObjectStorageOnDelete(config)
-    yield* reconcileUpcloudVolumesOnDelete(config)
+    yield* withRowProgress({
+      match: (name) => name.startsWith("bucket/"),
+      effect: reconcileUpcloudObjectStorageOnDelete(config)
+    })
+    yield* withRowProgress({
+      match: (name) => name.startsWith("volume/"),
+      effect: reconcileUpcloudVolumesOnDelete(config)
+    })
     const { clients } = yield* UpcloudEnv
-    const info = yield* findClusterByName({ clients, name: config.name })
-    if (info !== undefined) {
-      yield* deleteCluster({ clients, ref: { uuid: info.uuid, name: info.name } })
-    }
-    yield* deleteNetwork({ clients, clusterName: config.name })
+    yield* withRowProgress({
+      match: (name) => name.startsWith("uks-cluster/") || name.startsWith("uks-pool/"),
+      effect: Effect.gen(function*() {
+        const info = yield* findClusterByName({ clients, name: config.name })
+        if (info !== undefined) {
+          yield* deleteCluster({ clients, ref: { uuid: info.uuid, name: info.name } })
+        }
+      })
+    })
+    yield* withRowProgress({
+      match: (name) => name.startsWith("network/") || name.startsWith("router/"),
+      effect: deleteNetwork({ clients, clusterName: config.name })
+    })
     yield* removeDns(config)
   })
 
