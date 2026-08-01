@@ -289,7 +289,10 @@ const _deletePlan = Effect.fn(function*(config: ClusterConfig, configDir: string
     lookupManagedVolumeNames(config),
     bucketDeletePlanActions({ config, configDir })
   ], { concurrency: 3 })
-  const volumeActions = managedVolumes(config)
+  // The upcloud module plans its own volume rows inside `deletePlanActions` —
+  // emitting generic ones too duplicated every row.
+  const genericVolumeModule = config.volumes.module === "cinder" || config.volumes.module === "hcloud"
+  const volumeActions = (genericVolumeModule ? managedVolumes(config) : [])
     .map((entry) =>
       !liveVolumes.has(entry.name)
         ? { _tag: "NoOp" as const, name: `volume/${entry.name} (already absent)` }
@@ -314,6 +317,9 @@ export const del = Command.make(
     const plan = yield* withSpinner({ label: _planPhrases, effect: _deletePlan(config, dirname(configPath)) })
     yield* Console.log(`${renderPlan(plan)}\n`)
     if (root.dryRun) return
+    if (plan.actions.every((action) => action._tag === "NoOp")) {
+      return yield* Console.log("Nothing to delete.")
+    }
     if (!root.yes) {
       const proceed = yield* _confirm({
         message: `Delete cluster "${config.name}"?`,
