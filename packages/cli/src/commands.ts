@@ -84,7 +84,7 @@ const _planPhrases: ReadonlyArray<string> = [
   "Consulting the scheduler...",
   "Herding pods...",
   "Negotiating with the control plane...",
-  "Politely asking OVH...",
+  "Politely asking the cloud...",
   "Rehearsing the plan..."
 ]
 
