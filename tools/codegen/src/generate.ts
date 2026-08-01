@@ -49,6 +49,18 @@ const _isFormatOnlyBranch = (branch: unknown): boolean =>
 const _isUnvalidatedFormatUnion = (key: string, nested: unknown): boolean =>
   key === "oneOf" && Array.isArray(nested) && nested.length > 0 && nested.every(_isFormatOnlyBranch)
 
+// kumulo: effect's isPattern reviver rejects any pattern where `new RegExp(p).source !== p`
+// (JS canonicalizes, e.g. unescaped `/` becomes `\/`); OpenStack specs write unescaped
+// slashes in `pattern` values AND `patternProperties` keys, which crashed generation.
+// Canonicalize through RegExp before handing the spec to the generator.
+const _canonicalPattern = (pattern: string): string => {
+  try {
+    return new RegExp(pattern).source
+  } catch {
+    return pattern
+  }
+}
+
 const _rewrite = (value: unknown, nameMap: boolean): unknown => {
   if (Array.isArray(value)) return value.map((item) => _rewrite(item, false))
   if (typeof value !== "object" || value === null) return value
@@ -58,9 +70,17 @@ const _rewrite = (value: unknown, nameMap: boolean): unknown => {
   for (const [key, nested] of entries) {
     if (!nameMap && key === "description") continue
     if (!nameMap && _isUnvalidatedFormatUnion(key, nested)) continue
-    out[key] = key === "additionalProperties" && nested !== false && close
-      ? false
-      : _rewrite(nested, !nameMap && _nameMapKeys.has(key))
+    if (!nameMap && key === "pattern" && typeof nested === "string") {
+      out[key] = _canonicalPattern(nested)
+      continue
+    }
+    const rewritten = _rewrite(nested, !nameMap && _nameMapKeys.has(key))
+    out[key] = key === "additionalProperties" && nested !== false && close ? false : rewritten
+    if (!nameMap && key === "patternProperties" && typeof rewritten === "object" && rewritten !== null) {
+      out[key] = Object.fromEntries(
+        Object.entries(rewritten).map(([pattern, schema]) => [_canonicalPattern(pattern), schema])
+      )
+    }
   }
   return out
 }
