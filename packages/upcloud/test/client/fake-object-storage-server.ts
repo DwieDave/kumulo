@@ -239,8 +239,11 @@ export const makeFakeObjectStorageServer = () => {
   const _handle = (request: HttpClientRequest.HttpClientRequest): Response => {
     const url = new URL(request.url, "https://fixture.invalid")
     const parts = url.pathname.split("/").filter(Boolean)
-    // ["object-storage-2", ...rest]
-    const rest = parts.slice(1)
+    // ["1.3", "object-storage-2", ...rest] — the /1.3 prefix is enforced: the
+    // live API 404s without it (live probe 2026-08-01, the client shipped
+    // prefix-less and every service lookup "not found"-ed).
+    if (parts[0] !== "1.3" || parts[1] !== "object-storage-2") return _notFound("unknown path")
+    const rest = parts.slice(2)
 
     if (rest.length === 0) return _handleServices(request)
     if (rest[0] === "regions" && request.method === "GET") {

@@ -137,7 +137,7 @@ export interface ObjectStorageClient {
   readonly regions: () => Effect.Effect<ReadonlyArray<ObjectStorageRegion>, UpcloudRawError>
 }
 
-const _base = "/object-storage-2"
+const _base = "/1.3/object-storage-2"
 const _service = (uuid: string) => `${_base}/${uuid}`
 const _buckets = (serviceUuid: string) => `${_service(serviceUuid)}/buckets`
 const _users = (serviceUuid: string) => `${_service(serviceUuid)}/users`
