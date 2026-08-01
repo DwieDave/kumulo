@@ -27,3 +27,24 @@ export type { NetworkClient, NetworkCreateInput, RouterClient } from "./client/n
 
 export { makeZoneClient, Zone } from "./client/zone.ts"
 export type { ZoneClient } from "./client/zone.ts"
+
+export { makeStorageClient, Storage, StorageState, StorageTier } from "./client/storage.ts"
+export type { StorageClient, StorageCreateInput, StoragePatchInput } from "./client/storage.ts"
+
+export {
+  AccessKey,
+  AccessKeyStatus,
+  BucketMetrics,
+  makeObjectStorageClient,
+  ObjectStorageConfiguredStatus,
+  ObjectStorageEndpoint,
+  ObjectStorageNetwork,
+  ObjectStorageRegion,
+  ObjectStorageService,
+  ObjectStorageUser
+} from "./client/object-storage.ts"
+export type {
+  ObjectStorageClient,
+  ObjectStorageServiceCreateInput,
+  ObjectStorageServicePatchInput
+} from "./client/object-storage.ts"
