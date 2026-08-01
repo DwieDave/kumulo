@@ -62,7 +62,7 @@ export const lookupUpcloudVolumes = (
     if (config.volumes.module !== "upcloud" || config.volumes.managed.length === 0) return []
     const { storage } = yield* UpcloudEnv
     const all = yield* mapUpcloudError({ self: storage.list(), ctx: { kind: "storage", ref: config.name } })
-    return all.filter((s) => hasClusterLabel({ labels: s.labels, tag: config.name })).map((s) => ({ name: s.title, tier: s.tier }))
+    return all.filter((s) => hasClusterLabel({ labels: s.labels, tag: config.name })).map((s) => ({ name: s.title, tier: s.tier ?? "unknown" }))
   })
 
 const _options = (config: UpcloudUksClusterConfig): VolumeProviderOptions => ({ tag: config.name, zone: config.zone })

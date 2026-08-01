@@ -35,3 +35,10 @@
   `packages/volumes-upcloud/src/doctor.ts`'s `csiDevicePermissionNote`)
   remain unresolved. Everything else in Milestone 6 is implemented and
   covered by the fake-server tests; only the real-account run is outstanding.
+
+## GET /1.3/storage lists the whole account (live probe 2026-08-01)
+
+The list endpoint returns templates and backups alongside disks, and those
+carry no `tier`. `Storage.tier` is optionalKey now, and the fake seeds one
+tier-less public template so every list decode must tolerate it. Consumers
+filter by kumulo labels first, so their entries always have a tier.

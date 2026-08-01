@@ -21,7 +21,9 @@ export type StorageState = typeof StorageState.Type
 export const Storage = Schema.Struct({
   uuid: Schema.String,
   size: Schema.Number,
-  tier: StorageTier,
+  // kumulo: absent on non-disk storages — `GET /1.3/storage` lists the whole
+  // account, and templates/backups carry no tier (live probe 2026-08-01).
+  tier: Schema.optionalKey(StorageTier),
   zone: Schema.String,
   title: Schema.String,
   encrypted: Schema.optionalKey(Schema.Boolean),

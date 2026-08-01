@@ -11,7 +11,8 @@ interface FakeLabel {
 interface FakeStorage {
   uuid: string
   size: number
-  tier: string
+  // Live quirk: templates/backups in the account-wide list carry no tier.
+  tier?: string
   zone: string
   title: string
   encrypted?: boolean
@@ -62,6 +63,17 @@ export const makeFakeStorageServer = (options: { readonly readyAfterPolls?: numb
   const readyAfterPolls = options.readyAfterPolls ?? 1
   const storages = new Map<string, FakeStorage>()
   let nextId = 1
+  // Live quirk (2026-08-01): GET /1.3/storage lists the WHOLE account —
+  // public templates and backups appear alongside disks and carry no `tier`.
+  // Seeding one forces every list decode to tolerate tier-less entries.
+  storages.set("template-0", {
+    uuid: "01000000-0000-4000-8000-000030060200",
+    size: 4,
+    zone: "de-fra1",
+    title: "Ubuntu Server 24.04 LTS (Noble Numbat)",
+    state: "online",
+    pollsRemaining: 0
+  })
 
   const _handleCollection = (request: HttpClientRequest.HttpClientRequest): Response => {
     if (request.method === "GET") return _ok({ storages: { storage: [...storages.values()] } })
