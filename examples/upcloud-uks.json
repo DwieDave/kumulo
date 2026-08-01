@@ -16,7 +16,7 @@
   "worker_pools": [
     {
       "name": "general",
-      "flavor": "2xCPU-4GB",
+      "flavor": "CLOUDNATIVE-1xCPU-8GB",
       "count": 1,
       "labels": {
         "workload": "general"
