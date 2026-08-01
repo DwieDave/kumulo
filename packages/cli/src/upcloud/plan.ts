@@ -167,11 +167,16 @@ export const upcloudDeletePlanActions = (
     // D9: object storage + volumes are torn down ahead of the cluster —
     // named here in that order even though `deleteUpcloudUks` is what
     // actually executes it, so the plan preview matches apply's order.
-    const bucketActions: ReadonlyArray<PlanAction> = configuredUpcloudBuckets(config).map((bucket) =>
-      bucket.retain
-        ? { _tag: "NoOp" as const, name: `${uksBucketRow(bucket.name)} (retained)` }
-        : { _tag: "Delete" as const, name: uksBucketRow(bucket.name) }
-    )
+    // Like volumes below, bucket rows reflect what exists LIVE — a config
+    // bucket whose service is already gone must not plan a phantom Delete.
+    const liveBucketNames = new Set((inventory.buckets ?? []).map((b) => b.name))
+    const bucketActions: ReadonlyArray<PlanAction> = configuredUpcloudBuckets(config)
+      .filter((bucket) => liveBucketNames.has(bucket.name))
+      .map((bucket) =>
+        bucket.retain
+          ? { _tag: "NoOp" as const, name: `${uksBucketRow(bucket.name)} (retained)` }
+          : { _tag: "Delete" as const, name: uksBucketRow(bucket.name) }
+      )
     const liveVolumeNames = new Set((inventory.volumes ?? []).map((v) => v.name))
     const volumeActions: ReadonlyArray<PlanAction> = managedUpcloudVolumes(config)
       .filter((entry) => liveVolumeNames.has(entry.name))
