@@ -20,7 +20,6 @@ const _toExisting = (pool: UksWorkerPoolConfig): ExistingNodeGroup => ({
 
 describe("diffNodePools", () => {
   it.prop("re-diffing a converged state is a no-op", [fc.array(_poolArb, { maxLength: 4 })], ([pools]) => {
-    // de-dupe by name — the config itself is keyed that way.
     const desired = [...new Map(pools.map((pool) => [pool.name, pool])).values()]
     const existing = desired.map(_toExisting)
     const diff = diffNodePools({ desired, existing })
@@ -35,14 +34,9 @@ describe("diffNodePools", () => {
         const desiredAfter = [...new Map(after.map((pool) => [pool.name, pool])).values()]
         const existingBefore = desiredBefore.map(_toExisting)
 
-        // Apply desiredAfter against existingBefore, confirming every pool
-        // name up front so immutable drift always materializes as a replace.
         const confirmed = new Set(desiredAfter.map((pool) => pool.name))
         const diff = diffNodePools({ desired: desiredAfter, existing: existingBefore, replace: confirmed })
 
-        // Simulate the apply: created/replaced pools land at their new hash
-        // and count; updated pools keep their live name but new count;
-        // deleted/replaced-away live names drop out.
         const deletedNames = new Set(diff.toDelete)
         const replacedLiveNames = new Set(diff.toReplace.map((row) => row.liveName))
         const survivors = existingBefore.filter((group) => !deletedNames.has(group.name) && !replacedLiveNames.has(group.name))
@@ -89,7 +83,6 @@ describe("diffNodePools", () => {
     expect(replaced.toReplace).toHaveLength(1)
     expect(replaced.toUpdate).toEqual([])
 
-    // Unconfirmed immutable drift must not mutate anything at all.
     const unconfirmed = diffNodePools({ desired: [{ ...pool, plan: "4xCPU-8GB" }], existing })
     expect(unconfirmed.toReplace).toEqual([])
     expect(unconfirmed.toUpdate).toEqual([])
@@ -111,10 +104,6 @@ describe("diffNodePools with a duplicated pool label (interrupted replace)", () 
     configHash: "deadbeefdeadbeef"
   }
 
-  // A replace that died between create and delete leaves two live groups
-  // carrying the same `kumulo-pool` label. The stale generation is still
-  // billed, and the desired name is present, so a by-name filter never
-  // reclaims it.
   it("deletes the stale generation once the desired one exists", () => {
     const diff = diffNodePools({ desired: [_pool], existing: [_stale, _toExisting(_pool)] })
     expect(diff.toCreate).toHaveLength(0)
@@ -137,8 +126,6 @@ describe("diffNodePools with a duplicated pool label (interrupted replace)", () 
       existing: [_stale, otherStale],
       replace: new Set(["workers"])
     })
-    // The replaced generation is torn down by the replace itself, so only its
-    // orphaned sibling belongs in toDelete — listing both would delete twice.
     expect(diff.toReplace).toHaveLength(1)
     const replaced = diff.toReplace[0]?.liveName
     const sibling = [_stale.name, otherStale.name].find((name) => name !== replaced)

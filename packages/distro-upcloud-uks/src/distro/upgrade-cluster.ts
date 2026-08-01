@@ -1,10 +1,3 @@
-/**
- * `upgradeCluster` (T5.5, R13, D12, AC7): resolves the target per
- * `resolveUpgradeTarget` (T4.4) against UpCloud's own `available-upgrades`,
- * then posts it with the configured `upgrade_strategy` — a no-op when the
- * resolution says "already current" (`LATEST_PATCH`, or `NEXT_MINOR` with no
- * upgrade available).
- */
 import { Effect } from "effect"
 import { mapUpcloudError } from "@kumulo/upcloud"
 import type { MksError } from "@kumulo/core"

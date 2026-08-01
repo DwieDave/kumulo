@@ -6,7 +6,6 @@ import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
 import { AuthenticationFailed } from "@kumulo/core"
 import { OvhAuth } from "./port.ts"
 
-/** OVH's OAuth2 client-credentials token endpoint (v1 + v2 routes alike, no legacy AK/AS/CK). */
 export const OVH_TOKEN_ENDPOINT = "https://www.ovh.com/auth/oauth2/token"
 
 export interface OvhCredentials {
@@ -21,13 +20,8 @@ const TokenResponse = Schema.Struct({
   expires_in: Schema.Number
 })
 
-// kumulo: 60s expiry skew — refetch slightly before the token actually
-// expires rather than racing a request against expiry.
 const _skewMillis = 60_000
 
-// kumulo: any failure fetching the token itself is transient (network
-// blip, OVH-side 5xx) and worth a bounded exp-backoff+jitter retry before
-// surfacing AuthenticationFailed.
 const _retrySchedule = Schedule.exponential("200 millis").pipe(Schedule.jittered, Schedule.upTo({ times: 3 }))
 
 const _requestToken = (creds: OvhCredentials, httpClient: HttpClient.HttpClient) =>
@@ -37,8 +31,7 @@ const _requestToken = (creds: OvhCredentials, httpClient: HttpClient.HttpClient)
         grant_type: "client_credentials",
         client_id: creds.clientId,
         client_secret: Redacted.value(creds.clientSecret),
-        // kumulo: OVH issues a valid-but-unauthorized token when no scope is
-        // requested (every API call then 401s) — default to "all".
+        // OVH issues a valid-but-unauthorized token when no scope is requested (every call 401s)
         scope: creds.scope ?? "all"
       })
     )
@@ -65,7 +58,6 @@ const _getToken = (creds: OvhCredentials, httpClient: HttpClient.HttpClient, cac
     return fresh.access_token
   })
 
-/** OAuth2 client-credentials auth Layer — cached token w/ expiry skew, exp-backoff+jitter retry on fetch. */
 export const OvhAuthLive = (
   creds: OvhCredentials
 ): Layer.Layer<OvhAuth, never, HttpClient.HttpClient> =>

@@ -1,13 +1,3 @@
-/**
- * Hand-written client (D1) over `/1.3/object-storage-2` (R2). D3: BARE
- * shapes — no envelope anywhere, unlike `storage.ts`'s sibling endpoint.
- * `operational_state` is `Schema.String` rather than a closed literal union:
- * the live API has grown states before without notice (see
- * `.docs/workflows/upcloud-uks/memories.md`'s Q8 note on this API's habit of
- * drifting from its own docs) and a closed union would turn an unknown-but-
- * valid state into a hard decode failure instead of a value pollers can still
- * compare against `"running"`.
- */
 import { Effect } from "effect"
 import * as Schema from "effect/Schema"
 import type * as HttpClient from "effect/unstable/http/HttpClient"
@@ -39,9 +29,7 @@ export const ObjectStorageService = Schema.Struct({
   name: Schema.String,
   region: Schema.String,
   configured_status: ObjectStorageConfiguredStatus,
-  // kumulo: open string, see file header — the ladder here is documented as
-  // setup-network -> setup-service -> setup-dns -> setup-checkup -> running
-  // (and delete-network -> delete-service -> delete-dns on the way out).
+  // kumulo: open string — live API grows states without notice, don't close this to a literal union.
   operational_state: Schema.String,
   labels: Schema.optionalKey(Schema.Array(UpcloudLabel)),
   networks: Schema.optionalKey(Schema.Array(ObjectStorageNetwork)),
@@ -53,8 +41,6 @@ export const BucketMetrics = Schema.Struct({
   name: Schema.String,
   total_objects: Schema.Number,
   total_size_bytes: Schema.Number,
-  // kumulo: an async delete keeps the bucket in the list with `deleted: true`
-  // for one poll (N4) — callers must filter it out (R11).
   deleted: Schema.Boolean
 })
 export type BucketMetrics = typeof BucketMetrics.Type
@@ -62,16 +48,13 @@ export type BucketMetrics = typeof BucketMetrics.Type
 export const ObjectStorageUser = Schema.Struct({ username: Schema.String })
 export type ObjectStorageUser = typeof ObjectStorageUser.Type
 
-// kumulo: capitalized on the wire — go-api's AccessKeyStatusActive is
-// "Active" and the live API agrees (probe 2026-08-01), unlike every other
-// lowercase status vocabulary in this API.
 export const AccessKeyStatus = Schema.Literals(["Active", "Inactive"])
 export type AccessKeyStatus = typeof AccessKeyStatus.Type
 
 export const AccessKey = Schema.Struct({
   access_key_id: Schema.String,
   status: AccessKeyStatus,
-  // kumulo: present ONLY in the create response (D7) — never on get/list.
+  // kumulo: present ONLY in the create response — never on get/list, capture it then or it's gone.
   secret_access_key: Schema.optionalKey(Schema.String)
 })
 export type AccessKey = typeof AccessKey.Type
@@ -91,7 +74,6 @@ const _decodeAccessKey = decodeOn2xx(AccessKey)
 const _decodeAccessKeys = decodeOn2xx(Schema.Array(AccessKey))
 const _decodeRegions = decodeOn2xx(Schema.Array(ObjectStorageRegion))
 
-/** `POST /object-storage-2` body (D6). */
 export interface ObjectStorageServiceCreateInput {
   readonly name: string
   readonly region: string
@@ -100,7 +82,6 @@ export interface ObjectStorageServiceCreateInput {
   readonly networks?: ReadonlyArray<ObjectStorageNetwork>
 }
 
-/** `PATCH /object-storage-2/{uuid}` body. */
 export interface ObjectStorageServicePatchInput {
   readonly configured_status?: ObjectStorageConfiguredStatus
   readonly labels?: ReadonlyArray<UpcloudLabel>
@@ -112,7 +93,6 @@ export interface ObjectStorageClient {
     readonly get: (uuid: string) => Effect.Effect<ObjectStorageService, UpcloudRawError>
     readonly create: (body: ObjectStorageServiceCreateInput) => Effect.Effect<ObjectStorageService, UpcloudRawError>
     readonly patch: (uuid: string, body: ObjectStorageServicePatchInput) => Effect.Effect<ObjectStorageService, UpcloudRawError>
-    /** R2: `force` maps to `?force=true` — non-empty buckets otherwise refuse deletion (D9). */
     readonly delete: (uuid: string, force?: boolean) => Effect.Effect<void, UpcloudRawError>
   }
   readonly buckets: {
@@ -126,7 +106,6 @@ export interface ObjectStorageClient {
     readonly delete: (serviceUuid: string, username: string) => Effect.Effect<void, UpcloudRawError>
   }
   readonly accessKeys: {
-    /** D7: the response's `secret_access_key` is the only time the secret is ever visible again. */
     readonly create: (serviceUuid: string, username: string) => Effect.Effect<AccessKey, UpcloudRawError>
     readonly list: (serviceUuid: string, username: string) => Effect.Effect<ReadonlyArray<AccessKey>, UpcloudRawError>
     readonly patch: (
@@ -147,7 +126,6 @@ const _users = (serviceUuid: string) => `${_service(serviceUuid)}/users`
 const _user = (serviceUuid: string, username: string) => `${_users(serviceUuid)}/${username}`
 const _accessKeys = (serviceUuid: string, username: string) => `${_user(serviceUuid, username)}/access-keys`
 
-/** Hand-written client (D1) over `/object-storage-2*`. */
 export const makeObjectStorageClient = (httpClient: HttpClient.HttpClient): ObjectStorageClient => ({
   services: {
     list: () => httpClient.execute(HttpClientRequest.get(_base)).pipe(Effect.flatMap(_decodeServices)),
@@ -183,7 +161,6 @@ export const makeObjectStorageClient = (httpClient: HttpClient.HttpClient): Obje
       httpClient.execute(HttpClientRequest.delete(_user(serviceUuid, username))).pipe(Effect.flatMap(decodeVoid))
   },
   accessKeys: {
-    // kumulo: create sends an EMPTY body — the API generates the key pair.
     create: (serviceUuid, username) =>
       httpClient.execute(HttpClientRequest.post(_accessKeys(serviceUuid, username))).pipe(Effect.flatMap(_decodeAccessKey)),
     list: (serviceUuid, username) =>

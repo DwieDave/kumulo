@@ -1,8 +1,6 @@
 import { Effect } from "effect"
 
-// ponytail: module-level state — one CLI process, one live region at a time:
-// either the single bottom spinner line (plan loading) or the in-place plan
-// view (apply phase, rewriting the already-printed plan rows via cursor-up).
+// module-level state, single CLI process only
 const _frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 const _active = new Set<() => string>()
 let _timer: ReturnType<typeof setInterval> | undefined
@@ -20,17 +18,13 @@ interface ViewRow {
 }
 
 let _rows: Array<ViewRow> = []
-// Lines between the last plan row and the cursor (trailing blank + the
-// confirm prompt's submitted line) — cursor-up must jump past them.
 let _rowsOffset = 0
 let _viewOn = false
 
 const _rowPrefix = (state: RowState): string =>
   state === "running" ? `${_frames[_frame]} ` : state === "done" ? "\x1b[32m✓\x1b[0m " : "  "
 
-// ponytail: cursor-up math assumes plan rows don't wrap; a plan row wider
-// than the terminal shifts the redraw region. Track wrapped heights if that
-// ever bites.
+// cursor-up math assumes plan rows don't wrap, track wrapped heights if that bites
 const _renderRows = (): void => {
   let out = `\x1b[${_rows.length + _rowsOffset}A`
   for (const row of _rows) out += `${_erase}${_rowPrefix(row.state)}${row.text}\n`
@@ -75,13 +69,8 @@ const _stop = (label: () => string): void => {
   _releaseTimer()
 }
 
-// ~2s per phrase at the 80ms frame rate.
 const _ticksPerPhrase = 25
 
-/**
- * Run `effect` with `label` shown on the shared spinner line (TTY only).
- * An array label rotates through its phrases every couple of seconds.
- */
 export const withSpinner = <A, E, R>(
   { effect, label }: { readonly label: string | ReadonlyArray<string>; readonly effect: Effect.Effect<A, E, R> }
 ): Effect.Effect<A, E, R> => {
@@ -95,12 +84,6 @@ export const withSpinner = <A, E, R>(
   }).pipe(Effect.ensuring(Effect.sync(() => _stop(render))))
 }
 
-/**
- * Turn the plan rows already printed above the cursor into a live checklist
- * while `effect` runs: `withRowProgress` marks rows spinning/checked in
- * place. `offset` is how many lines sit between the last plan row and the
- * cursor. No-op off-TTY.
- */
 export const withPlanView = <A, E, R>(
   { effect, offset, rows }: {
     readonly rows: ReadonlyArray<{ readonly name: string; readonly text: string; readonly active: boolean }>
@@ -123,7 +106,6 @@ export const withPlanView = <A, E, R>(
     })))
     : effect
 
-/** Mark plan-view rows matching `match` as running, then checked once `effect` succeeds. Passthrough off-TTY. */
 export const withRowProgress = <A, E, R>(
   { effect, match }: { readonly match: (name: string) => boolean; readonly effect: Effect.Effect<A, E, R> }
 ): Effect.Effect<A, E, R> =>
@@ -138,7 +120,6 @@ export const withRowProgress = <A, E, R>(
     ))
     : effect
 
-/** `Console.log` that first erases the spinner line so concurrent step logs don't garble it. */
 export const logLine = (message: string): Effect.Effect<void> =>
   Effect.sync(() => {
     process.stdout.write(`${process.stdout.isTTY ? _erase : ""}${message}\n`)

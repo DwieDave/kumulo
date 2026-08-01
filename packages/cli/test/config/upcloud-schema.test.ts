@@ -3,8 +3,6 @@ import { Effect } from "effect"
 import { decodeConfig } from "../../src/cluster-config.ts"
 import { validUpcloudUksConfig } from "./fixtures.ts"
 
-// T1.1 — Provider += "upcloud", DistroKind += "upcloud-uks", UksVersion (D7),
-// UpcloudUksClusterConfig joined into the ClusterConfig union (R14, R15).
 describe("UpcloudUksClusterConfig", () => {
   it.effect("decodes a minimal valid config", () =>
     Effect.gen(function*() {
@@ -13,7 +11,7 @@ describe("UpcloudUksClusterConfig", () => {
       expect(decoded.provider).toBe("upcloud")
     }))
 
-  it.effect("rejects a X.Y.Z version — UKS is minor-only (D7)", () =>
+  it.effect("rejects a X.Y.Z version — UKS is minor-only", () =>
     Effect.gen(function*() {
       const failure = yield* Effect.flip(decodeConfig({ ...validUpcloudUksConfig, version: "1.31.4" }))
       expect(failure._tag).toBe("ConfigInvalid")
@@ -28,9 +26,6 @@ describe("UpcloudUksClusterConfig", () => {
     }))
 })
 
-// T1.1 (upcloud-uks-modules) — volumes.module "upcloud" with the closed tier
-// enum (D5); T1.2 — object_storage.module "upcloud" `{region, buckets}` with
-// the secrets-sink rule extended past ovh (D8, R12).
 describe("upcloud volumes and object storage modules", () => {
   const upcloudVolume = {
     name: "data",
@@ -49,7 +44,7 @@ describe("upcloud volumes and object storage modules", () => {
       expect(decoded.volumes.module).toBe("upcloud")
     }))
 
-  it.effect("rejects an unknown volume tier — the enum is closed (D5)", () =>
+  it.effect("rejects an unknown volume tier — the enum is closed", () =>
     Effect.gen(function*() {
       const failure = yield* Effect.flip(decodeConfig({
         ...validUpcloudUksConfig,
@@ -72,7 +67,7 @@ describe("upcloud volumes and object storage modules", () => {
       expect(decoded.object_storage.module).toBe("upcloud")
     }))
 
-  it.effect("rejects upcloud object storage with secrets.sink none (D8/R12)", () =>
+  it.effect("rejects upcloud object storage with secrets.sink none", () =>
     Effect.gen(function*() {
       const failure = yield* Effect.flip(decodeConfig({
         ...validUpcloudUksConfig,

@@ -2,7 +2,6 @@ import { Effect } from "effect"
 import { decodeConfig } from "../src/cluster-config.ts"
 import type { ClusterConfig, ClusterConfigEncoded, K3sClusterConfig, K3sClusterConfigEncoded, MksClusterConfig, MksClusterConfigEncoded, UpcloudUksClusterConfig } from "../src/cluster-config.ts"
 
-/** Same base fixture core's own tests use (see `test/k3s/plan.test.ts`), dns overridable per test. */
 export const baseEncodedConfig: K3sClusterConfigEncoded = {
   name: "prod-eu",
   provider: "ovh",
@@ -30,7 +29,6 @@ export const baseEncodedConfig: K3sClusterConfigEncoded = {
   k3s: { extra_server_args: [], extra_agent_args: [] }
 }
 
-/** The ovh-mks counterpart: only the fields that variant actually has. */
 export const baseMksEncodedConfig: MksClusterConfigEncoded = {
   name: "prod-eu",
   provider: "ovh",
@@ -46,25 +44,21 @@ export const baseMksEncodedConfig: MksClusterConfigEncoded = {
   secrets: { sink: "none" }
 }
 
-/** Decode through the real schema so test configs are honest `ClusterConfig`s, no casts. */
 export const decodeTestConfig = (encoded: ClusterConfigEncoded): ClusterConfig =>
   Effect.runSync(decodeConfig(encoded))
 
-/** Same decode, narrowed to the upcloud-uks variant (throws if the fixture is not upcloud-uks). */
 export const decodeUpcloudTestConfig = (encoded: ClusterConfigEncoded): UpcloudUksClusterConfig => {
   const config = decodeTestConfig(encoded)
   if (config.distro !== "upcloud-uks") throw new Error(`expected an upcloud-uks config, got ${config.distro}`)
   return config
 }
 
-/** Same decode, narrowed to the ovh-mks variant (throws if the fixture is not ovh-mks). */
 export const decodeMksTestConfig = (encoded: MksClusterConfigEncoded): MksClusterConfig => {
   const config = decodeTestConfig(encoded)
   if (config.distro !== "ovh-mks") throw new Error(`expected an ovh-mks config, got ${config.distro}`)
   return config
 }
 
-/** Same decode, narrowed to the k3s variant for the k3s-only modules (throws if the fixture is not k3s). */
 export const decodeK3sTestConfig = (encoded: K3sClusterConfigEncoded): K3sClusterConfig => {
   const config = decodeTestConfig(encoded)
   if (config.distro !== "k3s") throw new Error(`expected a k3s config, got ${config.distro}`)

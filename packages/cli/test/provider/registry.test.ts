@@ -10,9 +10,6 @@ import { secGroupRules } from "../../src/k3s/env.ts"
 import { k3sCloudProviderLayer, mksCloudProviderLayer } from "../../src/provider/registry.ts"
 import { baseEncodedConfig, decodeK3sTestConfig } from "../fixtures.ts"
 
-// Every other test in the suite fakes `CloudProvider` wholesale, so nothing
-// asserted what the *real* adapters are handed. These two do.
-
 const _ovhConfig = decodeK3sTestConfig(baseEncodedConfig)
 const _hetznerConfig = decodeK3sTestConfig({
   ...baseEncodedConfig,
@@ -20,7 +17,6 @@ const _hetznerConfig = decodeK3sTestConfig({
   auth: { method: "api_token", region: "fsn1" }
 })
 
-/** Records every outgoing request and replays one canned JSON body. */
 const _recordingClient = (
   { body, sink }: { readonly body: unknown; readonly sink: Array<HttpClientRequest.HttpClientRequest> }
 ): HttpClient.HttpClient =>
@@ -42,8 +38,6 @@ const _openStackEnvAt = (region: string) =>
 
 const _openStackEnvLayer = _openStackEnvAt("GRA11")
 
-// Blocker 1: without `OpenStackHttpLive` between the generated clients and the
-// ambient HttpClient, every OpenStack call ships unauthenticated.
 it.effect("openstack CloudProvider sends X-Auth-Token on every request", () =>
   Effect.gen(function*() {
     const seen: Array<HttpClientRequest.HttpClientRequest> = []
@@ -58,10 +52,7 @@ it.effect("openstack CloudProvider sends X-Auth-Token on every request", () =>
     for (const request of seen) assert.strictEqual(request.headers["x-auth-token"], "tok-123")
   }))
 
-// R11: MKS configs carry no `api_server.high_availability`, so `octaviaEnabled`
-// was hardcoded `false` and every MKS `ensureLoadBalancer` failed
-// `CapabilityMissing` before it reached the wire. The region's Octavia
-// availability is the real source (`hasOctavia`, @kumulo/provider-ovh).
+// MKS octaviaEnabled comes from the region's live Octavia availability, not api_server.high_availability
 const _mksLoadBalancerAt = (region: string) =>
   Effect.gen(function*() {
     const seen: Array<HttpClientRequest.HttpClientRequest> = []
@@ -88,9 +79,6 @@ it.effect("mks CloudProvider derives octaviaEnabled from the region, not from ap
     assert.strictEqual(disabled.requests, 0)
   }))
 
-// N1: k3s keeps `api_server.high_availability` as its source. Flipping it to a
-// region lookup would silently change which k3s configs can boot — `DE1` has
-// Octavia, so a region-derived flag would let this call through.
 it.effect("k3s CloudProvider still gates octavia on api_server.high_availability", () =>
   Effect.gen(function*() {
     const config = decodeK3sTestConfig({ ...baseEncodedConfig, api_server: { high_availability: false, allowed_cidrs: [] } })
@@ -103,9 +91,7 @@ it.effect("k3s CloudProvider still gates octavia on api_server.high_availability
     assert.instanceOf(error, CapabilityMissing)
   }))
 
-// Blocker 2: the registry must hand every adapter core's neutral
-// `SecGroupRule`s — a Hetzner-dialect rule (`direction`/`port`/`sourceCidrs`)
-// leaking through here is what `ensureSecurityGroups` cannot decode.
+// a Hetzner-dialect rule leaking through here is what ensureSecurityGroups cannot decode
 const _isNeutral = (rule: SecGroupRule): boolean =>
   !("direction" in rule) && !("port" in rule) && !("sourceCidrs" in rule) &&
   (rule.portMin === undefined || typeof rule.portMin === "number") &&
@@ -117,16 +103,10 @@ it("secGroupRules speaks core's neutral dialect for every provider", () => {
     assert.isAbove(rules.length, 0)
     for (const rule of rules) assert.isTrue(_isNeutral(rule), `not a neutral SecGroupRule: ${JSON.stringify(rule)}`)
   }
-  // Hetzner has no security-group self-reference: the builder must resolve it
-  // to the cluster network CIDR instead of emitting `remoteGroupSelf`.
   assert.isFalse(secGroupRules(_hetznerConfig).some((rule) => rule.remoteGroupSelf === true))
   assert.isTrue(secGroupRules(_ovhConfig).some((rule) => rule.remoteGroupSelf === true))
 })
 
-// ...and the hetzner adapter translates them to hcloud's wire shape, which is
-// the half a fake `CloudProvider` can never check.
-// The fake has to answer with hcloud's *real* envelopes (and its 201s for the
-// create/action endpoints) — the generated client decodes them strictly.
 const _created = "2026-01-01T00:00:00+00:00"
 const _emptyPage = {
   pagination: { page: 1, per_page: 25, previous_page: null, next_page: null, last_page: 1, total_entries: 0 }
@@ -173,6 +153,5 @@ it.effect("hetzner ensureSecurityGroups posts hcloud-shaped rules", () =>
       assert.isArray(rule["source_ips"])
       assert.notStrictEqual(rule["protocol"], "any")
     }
-    // The etcd range survives the translation as hcloud's `"2379-2380"` string.
     assert.isTrue(sent.some((rule) => rule["port"] === "2379-2380"))
   }))

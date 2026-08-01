@@ -9,15 +9,11 @@ interface FakeCluster {
   id: string
   name: string
   status: string
-  /** OVH's api-server endpoint (`Cloud_kube_Cluster.url`) — what MKS DNS points `api_server` at. */
   url: string
-  // Creation-time only, read back verbatim: OVH's update payload cannot change
-  // any of them (`Cloud_ProjectKubeUpdate`).
   privateNetworkId?: string
   nodesSubnetId?: string
   loadBalancersSubnetId?: string
 }
-/** Mirrors `Cloud_kube_NodePoolTemplate` in the generated client (metadata + spec, same casing). */
 interface FakeTemplate {
   readonly metadata: {
     readonly annotations: { readonly [key: string]: string }
@@ -41,7 +37,6 @@ interface FakeBody {
   readonly nodesSubnetId?: string
   readonly loadBalancersSubnetId?: string
 }
-/** The node pool as OVH really reads it back (`Cloud_kube_NodePool`) — `template` included. */
 interface FakePool {
   id: string
   projectId: string
@@ -65,21 +60,9 @@ interface FakePool {
 
 const _timestamp = "2026-01-01T00:00:00Z"
 
-/**
- * The live `apply` found two bugs every fake had missed — an empty request
- * body and a null field — because fakes only ever asserted on responses. A
- * write whose body never arrived is a 400 here, not a silent success.
- */
 const _badRequest = (message: string): Response => new Response(JSON.stringify({ message }), { status: 400 })
 
-/**
- * Self-contained fixture-replay MKS server (no live network) — a smaller,
- * cli-local stand-in for distro-ovh-mks's own test fixture (that one lives
- * under a sibling package's `test/` dir, unreachable across the
- * `no-deep-package-imports` boundary from here).
- */
 export const makeFakeMksServer = (
-  // `null` = the project has no vRack, which is OVH's 404 (see `requireVrack`).
   { vrackId = "pn-vrack-1" }: { readonly vrackId?: string | null } = {}
 ) => {
   let nextId = 1
@@ -102,9 +85,7 @@ export const makeFakeMksServer = (
     return cluster
   }
 
-  // ponytail: fixture request bodies are one all-optional shape — whatever
-  // `JSON.parse` hands back, read field by field with defaults, so a missing
-  // field surfaces as a failed assertion in the test rather than a cast.
+  // fixture bodies stay one all-optional shape read field-by-field with defaults, not cast.
   const gateways: Array<{ readonly model: string; readonly name: string }> = []
 
   const _handle = (request: HttpClientRequest.HttpClientRequest, body: FakeBody | undefined): Response => {
@@ -112,8 +93,6 @@ export const makeFakeMksServer = (
     if (path.match(/^\/cloud\/project\/[^/]+\/vrack$/) && request.method === "GET") {
       return vrackId === null ? new Response(JSON.stringify({ message: "not found" }), { status: 404 }) : _json({ id: vrackId })
     }
-    // Gateway create is subnet-scoped and returns a cloud.Operation. Recorded
-    // so a test can assert the tier the config asked for actually went out.
     if (path.match(/^\/cloud\/project\/[^/]+\/region\/[^/]+\/network\/[^/]+\/subnet\/[^/]+\/gateway$/) && request.method === "POST") {
       gateways.push({ model: body?.model ?? "", name: body?.name ?? "" })
       return _json({ id: "op-gateway-1", status: "completed" })
@@ -132,9 +111,7 @@ export const makeFakeMksServer = (
     if (idMatch && request.method === "DELETE") {
       clusters.delete(idMatch[1] ?? "")
       pools.delete(idMatch[1] ?? "")
-      // kumulo: the generated client's delete op only matches HTTP 200 (OVH's
-      // actual contract), not 204 — a real "no content" response would
-      // otherwise get misread as an unexpected-status error.
+      // Delete op matches HTTP 200 only (OVH's actual contract), not 204.
       return new Response(null, { status: 200 })
     }
 

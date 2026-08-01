@@ -1,33 +1,13 @@
-/**
- * Sops-backed `ConfigProvider` (R1/R4/R6/R7): serves credentials from a
- * sops-encrypted YAML file whose top-level keys are the exact env-var names
- * (`OVH_CLIENT_SECRET: ...`, `HCLOUD_TOKEN: ...`).
- *
- * Plaintext is read from the child process's stdout only and never written to
- * disk (R7) — the mirror image of `sink.ts`'s stdin discipline. Decryption is
- * lazy and happens at most once per process (R4): `sops` is spawned on the
- * first `Config` read that reaches this provider, so a run whose env vars
- * already cover everything never spawns it at all.
- *
- * Canonical source: .docs/workflows/sops-provider-secrets/requirements.md.
- */
+// Plaintext is read from the child process's stdout only and never written to disk.
 import type { Exit} from "effect";
 import { ConfigProvider, Effect, Schema, Semaphore, Stream } from "effect"
 import type { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/unstable/process";
 import { ChildProcess } from "effect/unstable/process"
 
-// kumulo: same nested-tag caveat as `sink.ts` — only the `Service` shape is
-// needed here, callers pass an already-resolved instance.
 type ChildProcessSpawnerService = (typeof ChildProcessSpawnerNS.ChildProcessSpawner)["Service"]
 
-/**
- * The secrets-file contract (R1): a flat mapping of env-var names to string
- * values. Non-string values are a decode error; unknown keys are fine, since
- * one file may hold vars for several clusters and tools.
- */
 export const SopsSecrets = Schema.Record(Schema.String, Schema.String)
 
-/** Flat env-var-name → value map decrypted out of a sops file. */
 export type SopsSecrets = typeof SopsSecrets["Type"]
 
 const _sourceError = (
@@ -50,7 +30,6 @@ const _parseFlatRecord = (
     )
   })
 
-/** Decrypts a sops file to a flat string-valued record. `spawner` is resolved by the caller (N2). */
 export const decryptSopsFile = (
   { file, spawner }: { readonly file: string; readonly spawner: ChildProcessSpawnerService }
 ): Effect.Effect<SopsSecrets, ConfigProvider.SourceError> =>
@@ -69,11 +48,7 @@ export const decryptSopsFile = (
     Effect.catchTag("PlatformError", (cause) => Effect.fail(_sourceError({ file, detail: cause.message, cause })))
   )
 
-// Runs `self` at most once, replaying its `Exit` — success or failure — to
-// every later caller. The semaphore closes the interleaving window so
-// concurrent `Config` reads share one `sops` spawn, and memoizing the failure
-// too keeps the spawn at most once per process even when several credential
-// reads hit a broken file (R4).
+// Memoizes the Exit (success or failure) so concurrent callers share one spawn instead of racing.
 const _once = <A, E>(self: Effect.Effect<A, E>): Effect.Effect<A, E> => {
   const gate = Semaphore.makeUnsafe(1)
   let memo: Exit.Exit<A, E> | undefined
@@ -82,10 +57,6 @@ const _once = <A, E>(self: Effect.Effect<A, E>): Effect.Effect<A, E> => {
   return Effect.suspend(() => memo ?? guarded)
 }
 
-/**
- * A `ConfigProvider` serving the top-level keys of a sops-encrypted file.
- * Only single-segment paths resolve — the file format is flat by contract (R1).
- */
 export const sopsConfigProvider = (
   { file, spawner }: { readonly file: string; readonly spawner: ChildProcessSpawnerService }
 ): ConfigProvider.ConfigProvider => {

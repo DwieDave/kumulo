@@ -1,10 +1,3 @@
-/**
- * `object_storage.module: "upcloud"` (M5/T6.1, R12/R14, AC1/AC5) —
- * plan/apply/delete for the D6 object-storage service + its buckets on the
- * `upcloud-uks` distro. Self-contained, mirroring `upcloud/volumes.ts`: this
- * module is only expressible on `upcloud-uks` (schema), so there is no
- * cross-distro machinery to share it with the ovh path in `storage/*.ts`.
- */
 import { Effect, Redacted } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import type { PlatformError } from "effect/PlatformError"
@@ -19,14 +12,11 @@ import type { UpcloudObjectStorageOptions } from "@kumulo/storage-upcloud"
 import type { UpcloudUksClusterConfig } from "../cluster-config.ts"
 import { UpcloudEnv } from "./env.ts"
 
-/** Plan-row name for one configured bucket (mirrors the ovh path's `bucket/<name>`). */
 export const uksBucketRow = (name: string): string => `bucket/${name}`
-/** Plan-row name for the D6 object-storage service itself. */
 export const uksObjectStorageRow = (cluster: string): string => `object-storage/${cluster}`
 
 type ConfiguredBucket = Extract<UpcloudUksClusterConfig["object_storage"], { readonly module: "upcloud" }>["buckets"][number]
 
-/** Configured buckets, empty unless `object_storage.module: "upcloud"`. */
 export const configuredUpcloudBuckets = (config: UpcloudUksClusterConfig): ReadonlyArray<ConfiguredBucket> =>
   config.object_storage.module === "upcloud" ? config.object_storage.buckets : []
 
@@ -35,7 +25,6 @@ const _options = (config: UpcloudUksClusterConfig): Omit<UpcloudObjectStorageOpt
     ? { cluster: config.name, region: "" }
     : { cluster: config.name, region: config.object_storage.region }
 
-/** Bucket plan rows (AC5): existence live against the service (absent service reads as no buckets, i.e. every configured bucket plans Create). */
 export const bucketPlanActions = (
   { config, live }: { readonly config: UpcloudUksClusterConfig; readonly live: ReadonlyArray<BucketInfo> }
 ): ReadonlyArray<PlanAction> => {
@@ -46,7 +35,6 @@ export const bucketPlanActions = (
   })
 }
 
-/** Live buckets for the plan/delete lookups; empty when the module isn't wired or the service doesn't exist yet. */
 export const lookupUpcloudBuckets = (
   config: UpcloudUksClusterConfig
 ): Effect.Effect<ReadonlyArray<BucketInfo>, ObjectStorageError, UpcloudEnv> =>
@@ -81,14 +69,6 @@ const _credentialEntries = (
   ])
 ]
 
-/**
- * Converges `object_storage.buckets` (R8): ensures every configured bucket
- * (the provider ensures the D6 service first), then issues S3 credentials
- * once (D7/R9) straight to the sops `CredentialsSink` — a re-run whose sink
- * file already exists skips `ensureCredentials` entirely, same as the ovh
- * path's `_ensureCredentialsIfMissing`. No-op for `module` other than
- * `"upcloud"`.
- */
 export const convergeUpcloudBuckets = (
   config: UpcloudUksClusterConfig
 ): Effect.Effect<
@@ -118,12 +98,7 @@ export const convergeUpcloudBuckets = (
     )
   })
 
-/**
- * `delete` (R10/R14/D9): non-retained buckets deleted, retained ones
- * reported+kept; the D6 service itself is deleted with `?force=true` only
- * when every configured bucket is `retain: false` (D9) — a retained bucket
- * anywhere keeps the service alive so that bucket stays reachable.
- */
+// Force-deletes the object-storage service only when every configured bucket is retain:false.
 export const reconcileUpcloudObjectStorageOnDelete = (
   config: UpcloudUksClusterConfig
 ): Effect.Effect<
@@ -141,8 +116,6 @@ export const reconcileUpcloudObjectStorageOnDelete = (
       discard: true,
       concurrency: 4
     })
-    // D9: force-delete the service only when nothing configured is retained
-    // — a retained bucket keeps the service (and thus itself) alive.
     const allNonRetained = buckets.every((b) => !b.retain)
     if (allNonRetained) {
       const services = yield* mapUpcloudError({
@@ -155,10 +128,7 @@ export const reconcileUpcloudObjectStorageOnDelete = (
           self: objectStorage.services.delete(service.uuid, true),
           ctx: { kind: "object-storage-service", ref: service.uuid }
         })
-        // Service deletion is async (delete-* operational states) and holds a
-        // private attachment on the cluster's SDN network (D6) — the network
-        // delete 409s until the service is fully gone (live probe 2026-08-01),
-        // so D9's ordering needs this polled, not just issued.
+        // Network delete 409s until service deletion (async) finishes, so poll before continuing (live probe 2026-08-01).
         yield* _awaitServiceGone({ objectStorage, uuid: service.uuid })
       }
     }

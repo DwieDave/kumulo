@@ -1,10 +1,6 @@
 import type { K8sManifest, ResourceRef } from "@kumulo/core"
 import { Result, Schema } from "effect"
 
-// SUC (rancher/system-upgrade-controller) Plan CRs for a k3s version bump.
-// kumulo: WHY one selector per role — folding both role labels into a single
-// `matchExpressions` selector avoids a duplicate-key YAML clobber some
-// upstream templates hit when emitting two separate keys.
 const NAMESPACE = "system-upgrade"
 const SERVICE_ACCOUNT = "system-upgrade"
 const UPGRADE_IMAGE = "rancher/k3s-upgrade"
@@ -16,7 +12,6 @@ const CRITICAL_ADDONS_TOLERATION = {
   effect: "NoExecute"
 }
 
-/** Masters plan: concurrency 1 (etcd quorum safety), cordon, control-plane-only nodeSelector. */
 export const renderMastersPlan = (version: string): K8sManifest => ({
   apiVersion: "upgrade.cattle.io/v1",
   kind: "Plan",
@@ -39,7 +34,6 @@ export interface WorkersPlanArgs {
   readonly concurrency: number
 }
 
-/** Workers plan: configurable concurrency, `prepare` waits on the k3s-server Plan reaching this version first. */
 export const renderWorkersPlan = ({ version, concurrency }: WorkersPlanArgs): K8sManifest => ({
   apiVersion: "upgrade.cattle.io/v1",
   kind: "Plan",
@@ -66,20 +60,16 @@ export interface UpgradePlanArgs {
   readonly workerConcurrency?: number
 }
 
-/** The full SUC plan set for a target k3s version; masters listed before workers (apply order matters: agents' `prepare` step polls the server Plan by name). */
+// apply order matters: agents' prepare step polls the server Plan by name
 export const renderUpgradePlan = (
   { version, workerConcurrency = 1 }: UpgradePlanArgs
 ): ReadonlyArray<K8sManifest> => [renderMastersPlan(version), renderWorkersPlan({ version, concurrency: workerConcurrency })]
 
-// kumulo: WHY lenient decode — only `name`/`namespace` are extracted, any
-// other metadata fields (labels, ...) pass through unexamined.
 const PlanObjectMeta = Schema.Struct({
   name: Schema.optionalKey(Schema.String),
   namespace: Schema.optionalKey(Schema.String)
 })
 
-// A decode failure (missing/malformed metadata) falls back to the same
-// defaults the old manual guard used, rather than throwing.
 const _metadata = (manifest: K8sManifest): { name: string; namespace: string } => {
   const decoded = Result.getOrElse(
     Schema.decodeUnknownResult(PlanObjectMeta)(manifest.metadata),
@@ -88,9 +78,6 @@ const _metadata = (manifest: K8sManifest): { name: string; namespace: string } =
   return { name: decoded.name ?? "", namespace: decoded.namespace ?? NAMESPACE }
 }
 
-// kumulo: WHY not core's addons `refFor` — that helper's PLURALS map only
-// covers built-in addon kinds, and `Plan` is a CRD this package alone emits
-// (upgrade.cattle.io/v1, namespaced under `system-upgrade`).
 export const refForPlan = (manifest: K8sManifest): ResourceRef => {
   const { name, namespace } = _metadata(manifest)
   return { path: `/apis/upgrade.cattle.io/v1/namespaces/${namespace}/plans/${name}`, kind: "Plan" }

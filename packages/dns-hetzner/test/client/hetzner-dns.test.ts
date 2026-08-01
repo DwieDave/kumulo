@@ -7,10 +7,6 @@ import { makeHetznerDnsClient } from "../../src/client/hetzner-dns.ts"
 
 const _fixtureBaseUrl = "https://fixture.invalid"
 
-/**
- * Fixture-replay HttpClient (zero network) — asserts request shape, replays
- * canned Hetzner Cloud API responses. Mirrors dns-ovh's client test harness.
- */
 const _rawHttpClient = (handle: (request: HttpClientRequest.HttpClientRequest) => Response) =>
   HttpClient.make((request) => Effect.succeed(HttpClientResponse.fromWeb(request, handle(request)))).pipe(
     HttpClient.mapRequest(HttpClientRequest.prependUrl(_fixtureBaseUrl))
@@ -60,8 +56,7 @@ it.effect("lists rrsets across pages (GET /zones/{id}/rrsets)", () =>
       { rrsets: [{ name: "b.example.com", type: "A", ttl: 300, records: [{ value: "10.0.0.2" }] }], meta: { pagination: { next_page: null } } }
     ]
     const httpClient = _rawHttpClient((request) => {
-      // kumulo: query params live in `request.urlParams`, not merged into
-      // `request.url`, until `toUrl` combines them (see dns-ovh's fake-zone.ts).
+      // kumulo: query params live in request.urlParams until toUrl() merges them into request.url
       const url = Option.getOrElse(HttpClientRequest.toUrl(request), () => new URL(request.url))
       const page = Number(url.searchParams.get("page") ?? "1")
       return new Response(JSON.stringify(pages[page - 1]), { status: 200 })

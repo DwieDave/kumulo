@@ -10,15 +10,8 @@ export interface MksEnvShape {
   readonly serviceName: string
 }
 
-/**
- * Holds the composed MKS API client + the OVH cloud project id (`serviceName`)
- * that every MKS endpoint is scoped under. `ClusterConfig` has no such field
- * (it's an OVH account concept, not part of the cluster shape) — read from
- * env, same as the OAuth2 client credentials.
- */
 export class MksEnv extends Context.Service<MksEnv, MksEnvShape>()("@kumulo/cli/MksEnv") {}
 
-/** OVH OAuth2 client-credentials-backed `HttpClient`, shared by `MksEnvLive`, `StorageEnvLive` and `k3sDnsProviderLayer`. */
 export const ovhHttpClientFromEnv = (): Layer.Layer<HttpClient.HttpClient, AuthenticationFailed, HttpClient.HttpClient> =>
   Layer.unwrap(
     Effect.gen(function*() {
@@ -28,7 +21,6 @@ export const ovhHttpClientFromEnv = (): Layer.Layer<HttpClient.HttpClient, Authe
     })
   )
 
-/** Live wiring for the ovh-mks path: OAuth2 client-credentials auth + the generated MKS client. */
 export const MksEnvLive: Layer.Layer<MksEnv, AuthenticationFailed, HttpClient.HttpClient> = Layer.effect(
   MksEnv,
   Effect.gen(function*() {

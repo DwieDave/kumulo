@@ -63,8 +63,6 @@ const _requireNonEmpty = <A>(
     : Effect.succeed([first, ...rest])
 }
 
-// TLS SANs: every master IP + the LB VIP + the DNS api record when
-// configured (127.0.0.1 is always added by `renderServerInstallScript` itself).
 const _apiDnsFqdn = (config: K3sClusterConfig): string | undefined => {
   const dns = config.dns
   if (dns.module === "none") return undefined
@@ -87,11 +85,7 @@ interface Infra {
 
 const NO_REPLACE: ReadonlySet<string> = new Set()
 
-/**
- * Replacing every master at once wipes etcd quorum (and with it the cluster's
- * state) — so a control-plane replace is refused outright rather than executed
- * half-safely. Rebuild the cluster deliberately, or keep master config stable.
- */
+// safety: replacing every master at once wipes etcd quorum, control-plane replace is refused outright
 const _refuseMasterReplace = (
   specs: ReadonlyArray<ServerSpec>,
   replace: ReadonlySet<string>
@@ -106,11 +100,7 @@ const _refuseMasterReplace = (
   )
 }
 
-/**
- * A confirmed replace really replaces: the drifted server is deleted first
- * (`deleteServer` waits until it is gone), so the `ensureServer` pass below —
- * create-if-missing-by-name — recreates it and stamps the new config hash.
- */
+// safety: drifted servers are deleted (and awaited gone) before ensureServer recreates them
 const _deleteDrifted = (
   { config, replace }: { readonly config: K3sClusterConfig; readonly replace: ReadonlySet<string> }
 ): Effect.Effect<void, CloudError, CloudProvider> =>
@@ -124,15 +114,12 @@ const _deleteDrifted = (
     )
   })
 
-/** Network → Security → LB → Replace → Nodes (ServerGroups is absorbed into `ensureServer`). */
 const _provisionInfra = (
   config: K3sClusterConfig,
   replace: ReadonlySet<string>
 ): Effect.Effect<Infra, CloudError | PlanRejected, CloudProvider> =>
   Effect.gen(function*() {
     const cloudProvider = yield* CloudProvider
-    // Shared infra marks its own plan rows (spinner.ts) — it is done long
-    // before the nodes finish bootstrapping.
     const lb = yield* withRowProgress({
       match: (name) =>
         name.startsWith("network/") || name.startsWith("security-group/") || name.startsWith("load-balancer/"),
@@ -153,7 +140,6 @@ const _provisionInfra = (
     return { lbVip: lb.vip, masterInfos, workerInfos }
   })
 
-/** Bootstrap: real SSH-executed install (`runBootstrap`), readiness-gated; returns master 1. */
 const _bootstrap = (config: K3sClusterConfig, infra: Infra): Effect.Effect<SshHost, BootstrapFailed, Ssh> =>
   Effect.gen(function*() {
     const masters = yield* _requireNonEmpty(infra.masterInfos.map(_toHost), "master")
@@ -170,13 +156,6 @@ const _bootstrap = (config: K3sClusterConfig, infra: Infra): Effect.Effect<SshHo
     return masters[0]
   })
 
-/**
- * Injectable K8sClient seam: a `K8sClient` `Layer` built from master
- * 1's own (unrewritten) kubeconfig, fetched over `Ssh` — Addons/scale-down
- * drain/`status` all take `K8sClient` from context instead of a hand-threaded
- * parameter, so production wiring stays identical (`k8sClientLive` is the
- * default) while tests can `Effect.provide` a fake `K8sClient` Layer instead.
- */
 export const k8sClientLive = (
   { config, master1 }: { readonly config: K3sClusterConfig; readonly master1: SshHost }
 ): Layer.Layer<K8sClient, BootstrapFailed | ConfigInvalid, Ssh> =>
@@ -190,7 +169,6 @@ export const k8sClientLive = (
     })
   )
 
-/** Addons phase — `CloudCredentialEnv`'s union tag picks the CCM/CSI credential shape `@kumulo/addons` needs (R11). */
 const _installAddons = (config: K3sClusterConfig): Effect.Effect<void, AddonError, CloudCredentialEnv | K8sClient> =>
   Effect.gen(function*() {
     const k8sClient = yield* K8sClient
@@ -209,7 +187,6 @@ const _installAddons = (config: K3sClusterConfig): Effect.Effect<void, AddonErro
     yield* installAddons({ k8sClient, addons, ctx })
   })
 
-/** Volumes phase: skipped for `volumes.module: none` — "cinder" and "hcloud" both converge through the resolved `VolumeProvider` (R2). */
 const _reconcileVolumes = (config: K3sClusterConfig): Effect.Effect<void, VolumeError, VolumeProvider> => {
   const volumes = config.volumes
   return volumes.module === "none"
@@ -224,7 +201,6 @@ const _reconcileVolumes = (config: K3sClusterConfig): Effect.Effect<void, Volume
     })
 }
 
-/** Any currently-running worker not in the desired spec set (exported for direct unit testing, no k8s client needed). */
 export const orphanedWorkers = (
   { config, workerInfos }: { readonly config: K3sClusterConfig; readonly workerInfos: ReadonlyArray<ServerInfo> }
 ): ReadonlyArray<ServerInfo> => {
@@ -232,13 +208,6 @@ export const orphanedWorkers = (
   return workerInfos.filter((info) => !desiredNames.has(info.name))
 }
 
-/**
- * Scale-down: `infra.workerInfos` only covers this apply's *desired*
- * specs (`ensureServer` is create-if-missing-by-name, it never reports a
- * server that's no longer desired) — orphan detection needs the actual
- * tagged inventory instead, filtered to workers by the same naming
- * convention `kubeconfigK3sEffect` uses to pick out masters.
- */
 const _drainOrphanedWorkers = (
   config: K3sClusterConfig
 ): Effect.Effect<void, BootstrapFailed | CloudError, CloudProvider | K8sClient> =>
@@ -258,7 +227,6 @@ const _drainOrphanedWorkers = (
     )
   })
 
-/** Kubeconfig phase: LB VIP / DNS name / master IP precedence, written 0600 to `<name>.kubeconfig`. */
 const _writeKubeconfig = (
   config: K3sClusterConfig,
   master1: SshHost,
@@ -273,37 +241,20 @@ const _writeKubeconfig = (
     return path
   })
 
-/** `config.provider` → `CloudProvider` Layer (R2/R7) — every apply/delete/kubeconfig/status entry point below dispatches through this. */
 const _cloudProviderLayerFor = (
   config: K3sClusterConfig
 ): Layer.Layer<CloudProvider, AuthenticationFailed, OpenStackEnv | HttpClient.HttpClient> =>
   providerFor(config).cloudProviderLayer(config)
 
-/**
- * `volumes.module` → `VolumeProvider` Layer. `"none"` and `"cinder"` both
- * resolve through the existing Cinder-backed Layer (lazy, never-failing at
- * build time — safe even when nothing is ever converged); only `"hcloud"`
- * needs `HCLOUD_TOKEN`.
- */
 const _volumeProviderLayerFor = (
   config: K3sClusterConfig
 ): Layer.Layer<VolumeProvider, AuthenticationFailed, CinderAuth | HttpClient.HttpClient> =>
   config.volumes.module === "hcloud" ? k3sHetznerVolumeProviderLayer(config) : k3sVolumeProviderLayer({ tag: config.name })
 
-// The full self-managed (k3s) phase pipeline, expressed purely against the
-// ports (`CloudProvider`/`Ssh`/`DnsProvider`/`VolumeProvider`/`CloudCredentialEnv`) —
-// kept separate from `applyK3s`'s live Layer wiring below so tests can
-// drive it against fake `CloudProvider`/`Ssh` Layers instead.
-//
-// `k8sClientLayer` defaults to `k8sClientLive` (the real, kubeconfig-derived
-// client) — production callers (`applyK3s`) never pass it, so wiring is
-// identical; tests pass a fake `K8sClient` Layer to drive the Addons/drain
-// phases without a real kubeconfig/HTTP round-trip.
 export const applyK3sEffect = (
   { config, configDir, replace = NO_REPLACE, k8sClientLayer = k8sClientLive }: {
     readonly config: K3sClusterConfig
     readonly configDir: string
-    /** Nodes the operator confirmed for replacement (plan `ReplaceNeedsConfirm` rows). */
     readonly replace?: ReadonlySet<string>
     readonly k8sClientLayer?: (
       args: { readonly config: K3sClusterConfig; readonly master1: SshHost }
@@ -311,8 +262,6 @@ export const applyK3sEffect = (
   }
 ): Effect.Effect<K3sApplyResult, K3sError, CloudProvider | Ssh | DnsProvider | VolumeProvider | CloudCredentialEnv> =>
   Effect.gen(function*() {
-    // A node row is "done" when the node is bootstrapped and addons are in —
-    // not when its server merely exists — so the node span covers all three.
     const nodeRow = (name: string): boolean => name.startsWith(`kumulo-${config.name}-`)
     const { infra, master1 } = yield* withRowProgress({
       match: nodeRow,
@@ -326,8 +275,6 @@ export const applyK3sEffect = (
         return { infra, master1 }
       })
     })
-    // k3s supplies no ingress target (scope §5): `target: ingress` keeps
-    // reaching the provider literally, as it does today.
     yield* withRowProgress({
       match: (name) => name.startsWith("dns/"),
       effect: reconcileDns({ config, targets: { api_server: { kind: "ip", value: infra.lbVip } } })
@@ -340,7 +287,6 @@ export const applyK3sEffect = (
     return { apiEndpoint: infra.lbVip, kubeconfigPath }
   })
 
-/** `applyK3sEffect` wired to its live Layers, `config.provider`/`config.dns.module`/`config.volumes.module`-dispatched (R2/R6). */
 export const applyK3s = (
   args: { readonly config: K3sClusterConfig; readonly configDir: string; readonly replace?: ReadonlySet<string> }
 ): Effect.Effect<K3sApplyResult, K3sError, OpenStackEnv | CinderAuth | HttpClient.HttpClient> =>
@@ -352,7 +298,6 @@ export const applyK3s = (
     Effect.provide(k3sCloudCredentialLayer(args.config))
   )
 
-/** Delete: inventory-by-tag, `retain: true` volumes skipped; ports-only, see `applyK3sEffect`. */
 export const deleteK3sEffect = (
   config: K3sClusterConfig
 ): Effect.Effect<void, K3sError, CloudProvider | DnsProvider | VolumeProvider> =>
@@ -373,8 +318,6 @@ export const deleteK3sEffect = (
       })
     }
     yield* removeDns(config)
-    // The tag sweep takes nodes and shared infra down together — their rows
-    // genuinely complete as one step.
     yield* withRowProgress({
       match: (name) =>
         name.startsWith(`kumulo-${config.name}-`) || name.startsWith("network/") ||
@@ -383,7 +326,6 @@ export const deleteK3sEffect = (
     })
   })
 
-/** `deleteK3sEffect` wired to its live Layers. */
 export const deleteK3s = (config: K3sClusterConfig): Effect.Effect<void, K3sError, OpenStackEnv | CinderAuth | HttpClient.HttpClient> =>
   deleteK3sEffect(config).pipe(
     Effect.provide(_volumeProviderLayerFor(config)),
@@ -391,7 +333,6 @@ export const deleteK3s = (config: K3sClusterConfig): Effect.Effect<void, K3sErro
     Effect.provide(_cloudProviderLayerFor(config))
   )
 
-/** Kubeconfig: resolves the tagged inventory + LB, re-fetches from master 1; ports-only, see `applyK3sEffect`. */
 export const kubeconfigK3sEffect = (config: K3sClusterConfig): Effect.Effect<Kubeconfig, K3sError, CloudProvider | Ssh> =>
   Effect.gen(function*() {
     const cloudProvider = yield* CloudProvider
@@ -403,7 +344,6 @@ export const kubeconfigK3sEffect = (config: K3sClusterConfig): Effect.Effect<Kub
     return yield* fetchKubeconfig({ master1: _toHost(masterInfo), clusterName: config.name, serverUrl })
   })
 
-/** `kubeconfigK3sEffect` wired to its live Layers. */
 export const kubeconfigK3s = (
   config: K3sClusterConfig
 ): Effect.Effect<Kubeconfig, K3sError, OpenStackEnv | CinderAuth | HttpClient.HttpClient> =>
@@ -425,10 +365,6 @@ export interface K3sStatus {
 
 const NODES_REF = { path: "/api/v1/nodes", kind: "Node" }
 
-// kumulo: WHY lenient decode — a Node manifest missing/malformed
-// metadata.name or status.conditions decodes to the same "not ready" /
-// "" defaults the manual guards previously fell back to, rather than
-// failing status reporting outright.
 const _NodeStatusShape = Schema.Struct({
   metadata: Schema.optional(Schema.Struct({ name: Schema.optional(Schema.String) })),
   status: Schema.optional(Schema.Struct({
@@ -449,11 +385,6 @@ const _nodeName = (manifest: K8sManifest): string => {
   return decoded._tag === "Success" ? decoded.value.metadata?.name ?? "" : ""
 }
 
-/**
- * k3s status: inventory via `CloudProvider` by tag, node health via
- * `K8sClient` (same `k8sClientLive` production wiring as `applyK3sEffect`,
- * built from master 1's kubeconfig once the cluster's inventory says it exists).
- */
 export const k3sStatusEffect = (
   { config, k8sClientLayer = k8sClientLive }: {
     readonly config: K3sClusterConfig
@@ -476,7 +407,6 @@ export const k3sStatusEffect = (
     return { exists: true, apiEndpoint: lb.vip, nodes }
   })
 
-/** `k3sStatusEffect` wired to its live Layers. */
 export const k3sStatus = (
   config: K3sClusterConfig
 ): Effect.Effect<K3sStatus, K3sError, OpenStackEnv | CinderAuth | HttpClient.HttpClient> =>

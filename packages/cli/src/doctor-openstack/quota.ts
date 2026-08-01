@@ -9,10 +9,7 @@ export interface NovaLimits {
   readonly totalInstancesUsed: number
 }
 
-// kumulo: WHY lenient decode — either absolute field missing/wrong-typed
-// defaults to 0/unset rather than failing, matching the previous "coerce to
-// 0" narrowing; a response that isn't shaped like this at all falls through
-// to `_unknownLimits` via `Effect.orElseSucceed` below.
+// missing/wrong-typed fields silently default to 0/unset, unshaped responses fall through to _unknownLimits
 const _NovaLimitsResponse = Schema.Struct({
   limits: Schema.optional(Schema.Struct({
     absolute: Schema.optional(Schema.Struct({
@@ -24,12 +21,6 @@ const _NovaLimitsResponse = Schema.Struct({
 
 const _unknownLimits: NovaLimits = { maxTotalInstances: -1, totalInstancesUsed: 0 }
 
-/**
- * Raw `GET /limits` — quota totals + current usage in one call. No dedicated
- * codegen allowlist entry exists for it (same gap noted in
- * `doctor/ovh/capability.ts`'s ponytail comment), so it's read directly here
- * instead of through a generated client method.
- */
 export const fetchNovaLimits = (args: {
   readonly client: HttpClient.HttpClient
   readonly keystone: OpenStackEndpointResolver
@@ -57,7 +48,6 @@ const _passMessage = (total: number, max: number): string =>
     ? `Quota headroom OK: ${total} Nova instances planned, no quota limit reported.`
     : `Quota headroom OK: ${total}/${max} Nova instances after this plan.`
 
-/** Quota headroom vs plan: existing Nova instance usage + this plan's servers, against Nova's own limit. */
 export const quotaHeadroomCheck = (args: {
   readonly limits: Effect.Effect<NovaLimits>
   readonly plannedInstanceCount: number

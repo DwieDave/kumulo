@@ -43,11 +43,7 @@ const _conflict = (): Response => new Response(JSON.stringify({ message: "storag
 const _ok = (body: unknown): Response => new Response(JSON.stringify(body), { status: 200 })
 const _empty = (): Response => new Response(null, { status: 204 })
 
-/**
- * Minimal in-memory `/1.3/storage` fixture (N4) — enforces the D3 wrapped
- * envelope, the `maintenance -> online` create transition, and a 409 on
- * deleting a storage marked `attached` (R6's never-force-detach path).
- */
+// 409 on deleting a storage marked "attached" — never-force-detach path
 export const makeFakeStorageServer = (options: { readonly readyAfterPolls?: number } = {}) => {
   const readyAfterPolls = options.readyAfterPolls ?? 1
   const storages = new Map<string, FakeStorage>()
@@ -105,7 +101,6 @@ export const makeFakeStorageServer = (options: { readonly readyAfterPolls?: numb
     HttpClient.mapRequest(HttpClientRequest.prependUrl("https://fixture.invalid"))
   )
 
-  /** Marks a storage `attached` so a subsequent `delete` surfaces a 409 (R6). */
   const markAttached = (uuid: string): void => {
     const storage = storages.get(uuid)
     if (storage) storage.attached = true

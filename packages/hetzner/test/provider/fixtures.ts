@@ -1,12 +1,4 @@
-/**
- * Fixture builders for hcloud responses.
- *
- * The provider now decodes through the *generated* schemas, which validate
- * every field the spec marks required — so a fixture has to look like a real
- * hcloud payload, not just the handful of fields a test asserts on. Each
- * builder fills the boring required fields and takes only the interesting ones.
- */
-
+// Fixtures decode through generated schemas that validate every required field, so each builder fills the boring ones and takes only the interesting ones.
 export const meta = (nextPage: number | null = null) => ({
   pagination: { page: 1, per_page: 50, previous_page: null, next_page: nextPage, last_page: 1, total_entries: 1 }
 })

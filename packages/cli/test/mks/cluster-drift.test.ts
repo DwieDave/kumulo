@@ -12,8 +12,6 @@ import { buildMksPlan, type MksInventory, type MksPlanInput } from "../../src/mk
 import { applyMksEffect } from "../../src/mks/reconcile.ts"
 import { cloudProviderNever, fakeCloudProvider } from "./fake-cloud-provider.ts"
 
-// ── plan ────────────────────────────────────────────────────────────────────
-
 const _config: MksPlanInput = {
   name: "prod-eu",
   worker_pools: [],
@@ -36,7 +34,6 @@ it("a kubernetes minor bump plans as an in-place Update on the cluster row", () 
   ])
 })
 
-/** The cluster row's tag plus its reason (empty when the tag carries none) — keeps assertions narrowing-free. */
 const _clusterRow = (inventory: MksInventory): readonly [string, string] => {
   const [action] = buildMksPlan({ config: _config, inventory }).actions
   if (action === undefined) return ["missing", ""]
@@ -65,12 +62,8 @@ it("a downgrade is refused rather than planned as an upgrade", () => {
   assert.include(reason, "version")
 })
 
-// R8 — MKS's update payload is `{ name?, updatePolicy? }`, so a network the
-// cluster was not created with can never be applied to it. The plan must say
-// recreate, and it must say it before anything is written.
 const _networked: MksPlanInput = { ..._config, network: { cidr: "10.0.0.0/16" } }
 
-/** `_clusterRow` for a config that carries a network block — which puts network rows ahead of the cluster's. */
 const _networkedClusterRow = (inventory: MksInventory): readonly [string, string] => {
   const action = buildMksPlan({ config: _networked, inventory }).actions.find((a) => a.name === "mks-cluster/prod-eu")
   if (action === undefined) return ["missing", ""]
@@ -93,8 +86,6 @@ it("a cluster already on a private network the config still asks for is a NoOp",
   const [tag, reason] = _networkedClusterRow(_live({ region: "GRA5", version: "1.31.4", privateNetworkId: "net-1" }))
   assert.deepStrictEqual([tag, reason], ["NoOp", ""])
 })
-
-// ── apply ───────────────────────────────────────────────────────────────────
 
 const _yaml = `
 name: prod-eu
@@ -121,7 +112,6 @@ secrets:
   dir: .
 `
 
-/** One live cluster, plus a log of every mutating request — a refusal must leave it empty. */
 const _fakeMks = (
   cluster: { readonly region: string; readonly version: string; readonly privateNetworkId?: string | null }
 ) => {
@@ -183,10 +173,6 @@ it.effect("applying an unchanged cluster mutates nothing", () =>
     assert.deepStrictEqual(server.mutations, [])
   }).pipe(Effect.provide(_fsTestLayer)))
 
-// R8, converge-time backstop for the plan-time refusal above: this config
-// declares no network, so nothing is created before the check — the refusal
-// costs zero mutations on OVH *and* zero on Neutron (`cloudProviderNever`
-// dies if `ensureNetwork` is reached at all).
 it.effect("applying a config that dropped its network block fails saying recreate, mutating nothing", () =>
   Effect.gen(function*() {
     const config = yield* loadConfig("cluster.yaml")
@@ -204,11 +190,7 @@ it.effect("applying a config that dropped its network block fails saying recreat
     assert.deepStrictEqual(server.mutations, [])
   }).pipe(Effect.provide(_fsTestLayer)))
 
-// R8, the other direction — and the one that writes first. `_convergeCluster`
-// only runs after `ensureNetwork`, so refusing there leaves a Neutron network
-// and both subnets orphaned (M2 ships no teardown). The refusal has to happen
-// before the first Neutron call, and before the vRack read too: `_fakeMks`
-// answers `/vrack` with a 500, so reaching it fails this test loudly.
+// refusal must land before first Neutron/vrack call to avoid orphaned resources
 const _networkedYaml = `${_yaml}network:
   cidr: 10.0.0.0/16
   nodes_subnet: 10.0.1.0/24

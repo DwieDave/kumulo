@@ -12,16 +12,6 @@ export interface StatusPollOptions<Status> {
   readonly ref: string
 }
 
-/**
- * Polls async cluster/node-group provisioning states until `isDone` or
- * `timeout` (surfaced as `ProvisioningTimeout`, N6).
- *
- * kumulo: a local re-implementation of core's `reconcile/poll.ts`
- * `pollUntil` — that helper isn't re-exported from `@kumulo/core`'s package
- * root, and dep-lint's `no-deep-package-imports` rule forbids reaching into
- * core's `src` internals from a sibling package. Mirrors
- * `distro-ovh-mks/src/distro/status.ts`. Small enough to duplicate.
- */
 export const pollUntil = <Status>(options: StatusPollOptions<Status>): Effect.Effect<Status, MksError> =>
   Effect.gen(function*() {
     const last = yield* Ref.make<Status | undefined>(undefined)

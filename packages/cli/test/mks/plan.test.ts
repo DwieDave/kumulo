@@ -67,13 +67,8 @@ it("pools never plan as NoOp when the cluster itself is missing", () => {
   assert.deepStrictEqual(plan.actions.map((a) => a._tag), ["Create", "Create", "Create"])
 })
 
-// R18 — the network and both subnets are resources kumulo creates, so they
-// appear as plan rows alongside `volume/`/`bucket/`, ahead of the cluster row
-// because that is the order they are reconciled in (R7).
 const _networked: MksPlanInput = { ..._config, network: { cidr: "10.0.0.0/16" } }
 
-// The gateway is created with the network and is billed per tier, so a plan
-// that omits it under-reports what apply will charge for.
 it("plans the gateway alongside the network it is created with", () => {
   const plan = buildMksPlan({ config: _networked, inventory: emptyMksInventory })
   assert.deepStrictEqual(
@@ -117,8 +112,6 @@ it("a cluster already on its private network plans the network rows as NoOp", ()
   ])
 })
 
-// A plan row whose prefix `mksEntry` doesn't own renders and then never checks
-// off — the progress view lies and CI logs nothing. Pin the registration.
 it("every row buildMksPlan emits for the cluster step matches an mksEntry appliedPrefix", () => {
   const owned = ["volume/", "bucket/", "dns/"]
   const rows = buildMksPlan({ config: _networked, inventory: emptyMksInventory }).actions
@@ -126,8 +119,6 @@ it("every row buildMksPlan emits for the cluster step matches an mksEntry applie
     .filter((name) => !owned.some((prefix) => name.startsWith(prefix)))
   assert.deepStrictEqual(rows.filter((name) => !mksEntry.appliedPrefixes.some((prefix) => name.startsWith(prefix))), [])
 })
-
-// ---- ingress rows (T3.7, R18) ---------------------------------------------
 
 const _ingress: MksPlanInput = {
   ..._networked,
@@ -142,8 +133,6 @@ it("plans no ingress rows at all when the config declares no ingress block", () 
   )
 })
 
-// The LB and its floating IP are converged after the cluster, so their rows sit
-// after the cluster and pool rows — the plan reads in apply order.
 it("plans a load-balancer and floating-ip row after the cluster rows", () => {
   const names = buildMksPlan({ config: _ingress, inventory: emptyMksInventory }).actions.map((a) => a.name)
   assert.deepStrictEqual(names.slice(-2), ["load-balancer/prod-eu/ingress", "floating-ip/prod-eu/ingress"])
@@ -168,11 +157,7 @@ it("every ingress row matches an mksEntry appliedPrefix", () => {
   assert.deepStrictEqual(rows.filter((name) => !mksEntry.appliedPrefixes.some((prefix) => name.startsWith(prefix))), [])
 })
 
-// R8 at plan time. The gap this closes: editing a subnet CIDR on a live cluster
-// keeps the same tag-named network, so `privateNetworkId` is unchanged and
-// presence-only drift saw nothing — the plan read NoOp and the apply then failed
-// with a Neutron-flavoured "no subnet ids". `findNetwork` resolves the config's
-// CIDRs read-only, so the mismatch is now visible before anything is written.
+// Editing a subnet CIDR on a live cluster keeps the same network id, so presence-only drift used to see nothing and apply failed later.
 const _liveOn = (
   { desired, live }: {
     readonly live: { readonly nodes: string; readonly lbs: string }
@@ -205,8 +190,6 @@ it("plans no cluster change when both subnets resolve to the cluster's own", () 
   assert.strictEqual(row?._tag, "NoOp")
 })
 
-// An unresolved network is "not created yet", not drift — otherwise the very
-// first apply of a networked config would refuse itself.
 it("claims no drift when the network does not exist yet", () => {
   const row = _clusterRow({
     ...emptyMksInventory,

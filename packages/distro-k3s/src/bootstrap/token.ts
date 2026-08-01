@@ -3,13 +3,8 @@ import { randomBytes } from "node:crypto"
 import { Ssh } from "../ssh/port.ts"
 import type { SshHost } from "../ssh/port.ts"
 
-// kumulo: WHY a non-empty tuple — masters.count is schema-validated >= 1,
-// so requiring at least one element here lets TS prove `masters[0]`
-// is defined under `noUncheckedIndexedAccess` without a runtime guard.
 export type NonEmptyMasters = readonly [SshHost, ...Array<SshHost>]
 
-// Quorum-read node-token across existing masters, secure-random
-// fallback, stable first-master identity (oldest token-file mtime wins).
 const NODE_TOKEN_PATH = "/var/lib/rancher/k3s/server/node-token"
 
 const _readToken = (host: SshHost): Effect.Effect<Option.Option<string>, never, Ssh> =>
@@ -33,8 +28,6 @@ const _readMtime = (host: SshHost): Effect.Effect<Option.Option<number>, never, 
     )
   })
 
-// kumulo: WHY tally by frequency — picks the most common per-master token
-// value (quorum), tolerating a stale/mismatched token on a single master.
 const _mostFrequent = (tokens: ReadonlyArray<string>): Option.Option<string> => {
   if (tokens.length === 0) return Option.none()
   const counts = new Map<string, number>()
@@ -57,10 +50,7 @@ export interface ResolvedToken {
   readonly firstMaster: SshHost
 }
 
-// kumulo: WHY oldest mtime wins — sorting masters bearing the quorum token
-// by node-token file creation time (masters without a token file sort last)
-// means the survivor of the earliest bootstrap stays "master 1" on reruns
-// even if node ordering in config changes.
+// Oldest token-file mtime wins, so the survivor of the earliest bootstrap stays "master 1" on reruns.
 const _oldestBearer = (
   masters: NonEmptyMasters,
   bearers: ReadonlyArray<{ readonly host: SshHost; readonly mtime: Option.Option<number> }>
@@ -72,7 +62,6 @@ const _oldestBearer = (
   ).host
 }
 
-/** Resolve the cluster join token and the stable first-master. */
 export const resolveToken = (masters: NonEmptyMasters): Effect.Effect<ResolvedToken, never, Ssh> =>
   Effect.gen(function*() {
     const reads = yield* Effect.forEach(masters, (host) =>

@@ -16,15 +16,8 @@ export interface StorageEnvShape {
   readonly serviceName: string
 }
 
-/**
- * Holds the composed object-storage API client + the OVH project id
- * (`serviceName`, reused from `MksEnv` rather than re-read from
- * `OVH_SERVICE_NAME`) — same OVH OAuth2 client-credentials auth as `MksEnv`,
- * but its own generated client (a separate `make(httpClient)` call).
- */
 export class StorageEnv extends Context.Service<StorageEnv, StorageEnvShape>()("@kumulo/cli/StorageEnv") {}
 
-/** Live wiring for the ovh-mks object-storage path. */
 export const StorageEnvLive: Layer.Layer<StorageEnv, AuthenticationFailed, MksEnv | HttpClient.HttpClient> = Layer.effect(
   StorageEnv,
   Effect.gen(function*() {
@@ -41,12 +34,7 @@ const _sopsConfig = (config: ClusterConfig): Effect.Effect<{ readonly dir: strin
     )
     : Effect.succeed({ dir: config.secrets.dir, ageRecipient: config.secrets.sops.age_recipient })
 
-/**
- * `ObjectStorageProvider` + `CredentialsSink` for one cluster config (R11) —
- * schema guarantees `secrets.sink: sops` (+ `secrets.sops`) whenever
- * `object_storage.module: ovh` (see `isSecretsRequiredForObjectStorage`), so
- * `_sopsConfig`'s failure path only fires on a config that bypassed decode.
- */
+// _sopsConfig's failure path only fires on a config that bypassed schema decode.
 export const storageLayers = (
   config: ClusterConfig
 ): Effect.Effect<

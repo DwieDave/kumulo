@@ -13,14 +13,8 @@ export type BucketReconcileError = ObjectStorageError | CredentialsSinkError | O
 
 type StorageProvider = ObjectStorageProvider["Service"]
 
-/** One configured bucket — only the `module: ovh` variant of the union carries them. */
 type ConfiguredBucket = Extract<ClusterConfig["object_storage"], { readonly module: "ovh" }>["buckets"][number]
 
-/**
- * `secrets.dir` behind the union discriminant. `undefined` means `sink: none`,
- * which the schema only allows when `object_storage.module` isn't `ovh`
- * (`isSecretsRequiredForObjectStorage`) — so there is nothing to write there.
- */
 const _sopsDir = (config: ClusterConfig): string | undefined =>
   config.secrets.sink === "sops" ? config.secrets.dir : undefined
 
@@ -43,12 +37,6 @@ const _bucketDiff = (
     return diffBuckets({ desired: _desiredBuckets(config), existing: file.buckets })
   })
 
-/**
- * Plan actions for `object_storage.buckets` (R5). The retain/encryption diff
- * comes from the last-recorded outputs file (OVH can't answer those), but
- * existence is verified live: a bucket the record calls converged that no
- * longer exists on OVH plans as Create, not NoOp.
- */
 export const bucketPlanActions = (
   { config, configDir }: { readonly config: ClusterConfig; readonly configDir: string }
 ): Effect.Effect<ReadonlyArray<PlanAction>, ObjectStorageError | OutputsInvalid | PlatformError, ObjectStorageProvider | FileSystem> =>
@@ -77,18 +65,11 @@ export const bucketPlanActions = (
       ]
     })
 
-/** Applies one bucket diff via the provider — replace is delete-then-recreate (region/encryption are immutable on OVH's side). */
 const _applyBucketDiff = (
   { provider, diff, desired }: { readonly provider: StorageProvider; readonly diff: BucketDiff; readonly desired: ReadonlyArray<BucketSpec> }
 ): Effect.Effect<void, ObjectStorageError> =>
   Effect.gen(function*() {
-    // Buckets are independent of each other — each diff class converges
-    // concurrently (bounded: OVH rate limits).
     yield* Effect.forEach(diff.toCreate, provider.ensureBucket, { discard: true, concurrency: 4 })
-    // Heal out-of-band deletions: a bucket the outputs file says is converged
-    // may have been removed behind kumulo's back — `ensureBucket` checks live
-    // state and only creates when actually missing, so re-ensuring noops is
-    // both cheap and safe.
     const byName = new Map(desired.map((spec) => [spec.name, spec]))
     const noopSpecs = diff.noop.flatMap((ref) => byName.get(ref.name) ?? [])
     yield* Effect.forEach(noopSpecs, provider.ensureBucket, { discard: true, concurrency: 4 })
@@ -125,12 +106,7 @@ const _credentialEntries = (
   ])
 ]
 
-/**
- * R7: OVH only ever returns an S3 secret once (on creation) — a credential
- * that already exists can't be re-read, so a credentials file already on
- * disk means a prior run already wrote the real secret. Skip `ensureCredentials`
- * (and the whole write) entirely rather than fabricate/omit one.
- */
+// kumulo: OVH returns the S3 secret only once (on creation) — if a credentials file already exists, skip re-issuing rather than fabricate/omit one.
 const _ensureCredentialsIfMissing = (
   { config, provider, desired }: { readonly config: ClusterConfig; readonly provider: StorageProvider; readonly desired: ReadonlyArray<BucketSpec> }
 ): Effect.Effect<void, BucketReconcileError, CredentialsSink | FileSystem> =>
@@ -146,12 +122,6 @@ const _ensureCredentialsIfMissing = (
     yield* sink.write(_credentialEntries({ config, creds, buckets }))
   })
 
-/**
- * Converges `object_storage.buckets` (create/scale, R11): applies the diff
- * against the last-recorded outputs, records the new state, then issues
- * credentials last (R7) — only if none are recorded yet for this cluster.
- * No-op when `object_storage.module` isn't `ovh`.
- */
 export const convergeBuckets = (
   { config, configDir }: { readonly config: ClusterConfig; readonly configDir: string }
 ): Effect.Effect<void, BucketReconcileError, ObjectStorageProvider | CredentialsSink | FileSystem> =>
@@ -175,11 +145,6 @@ export const convergeBuckets = (
     yield* _ensureCredentialsIfMissing({ config, provider, desired })
   })
 
-/**
- * Delete-plan rows from the recorded outputs: non-retained buckets as
- * Delete, retained ones as NoOp tagged "(retained)" so the plan shows why
- * they survive.
- */
 export const bucketDeletePlanActions = (
   { config, configDir }: { readonly config: ClusterConfig; readonly configDir: string }
 ): Effect.Effect<ReadonlyArray<PlanAction>, OutputsInvalid | PlatformError, FileSystem> =>
@@ -194,8 +159,6 @@ export const bucketDeletePlanActions = (
         _tag: "NoOp" as const,
         name: `bucket/${bucket.name} (retained)`
       })),
-      // Configured but never recorded (or already torn down): show it
-      // accounted for, not silently missing — same rule as volumes.
       ...config.object_storage.buckets.filter((bucket) => !recorded.has(bucket.name)).map((bucket) => ({
         _tag: "NoOp" as const,
         name: `bucket/${bucket.name} (already absent)`
@@ -203,12 +166,6 @@ export const bucketDeletePlanActions = (
     ]
   })
 
-/**
- * `delete` (R11): removes every non-retained recorded bucket (R6 refuses a
- * non-empty one, surfaced as-is — nothing else here is rolled back). Retained
- * buckets stay recorded in the outputs file so a future rebuild still sees
- * them. No-op when `object_storage.module` isn't `ovh`.
- */
 export const reconcileBucketsOnDelete = (
   { config, configDir }: { readonly config: ClusterConfig; readonly configDir: string }
 ): Effect.Effect<
@@ -230,7 +187,6 @@ export const reconcileBucketsOnDelete = (
     return { kept: retained.map((bucket) => bucket.name), deleted: diff.toDelete.map((ref) => ref.name) }
   })
 
-/** `status` (R11): buckets recorded for this cluster + whether its credentials file exists — no OVH call. */
 export const bucketStatus = (
   { config, configDir }: { readonly config: ClusterConfig; readonly configDir: string }
 ): Effect.Effect<

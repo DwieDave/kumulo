@@ -64,8 +64,6 @@ k3s:
   extra_agent_args: []
 `
 
-// `delete` retains `retain: true` volumes and prints what it kept;
-// non-retained entries recorded in config are actually deleted.
 it.effect("keeps retain:true volumes and deletes the rest", () =>
   Effect.gen(function*() {
     const config = yield* parseConfigYaml(_yaml)
@@ -101,9 +99,6 @@ it.effect("no-ops when volumes.module isn't cinder", () =>
     assert.deepStrictEqual(result, { kept: [], deleted: [] })
   }))
 
-// in-memory FileSystem covering just `exists`/`readFileString`/`writeFileString`,
-// same pattern as `storage/reconcile.test.ts`'s `_fakeFs`; also exposes the
-// backing store so tests can inspect what got written.
 const _fakeFs = (seed: Record<string, string> = {}) => {
   const store = new Map(Object.entries(seed))
   const layer = layerNoop({
@@ -165,7 +160,6 @@ it.effect("convergeManagedVolumes reuses an already-recorded volume id without r
 
     yield* convergeManagedVolumes({ config, configDir: "." }).pipe(Effect.provide(Layer.merge(fakeCinder, fs.layer)))
 
-    // only `drop-me` is missing from Cinder's tagged list, `keep-me` is reused.
     assert.strictEqual(created, 1)
     const written = yield* parseOutputsYaml(fs.store.get("./staging.outputs.yaml") ?? "")
     assert.deepStrictEqual(written.volumes.find((v) => v.name === "keep-me")?.id, "vol-existing")
@@ -180,9 +174,6 @@ it.effect("convergeManagedVolumes no-ops when volumes.module isn't cinder", () =
     assert.strictEqual(fs.store.size, 0)
   }))
 
-// A missing OS_* env var (surfaced as `CinderAuth`'s
-// `AuthenticationFailed`, see `volumes/env.ts`'s `CinderAuthLive`) must
-// propagate, never be swallowed into a silent no-op.
 it.effect("convergeManagedVolumes fails with AuthenticationFailed when OpenStack credentials are missing, never a silent skip", () =>
   Effect.gen(function*() {
     const config = yield* parseConfigYaml(_yaml)
@@ -190,9 +181,7 @@ it.effect("convergeManagedVolumes fails with AuthenticationFailed when OpenStack
       token: Effect.fail(new AuthenticationFailed({ hint: "missing required env var OS_AUTH_URL" })),
       endpoint: Effect.fail(new AuthenticationFailed({ hint: "missing required env var OS_AUTH_URL" }))
     })
-    // The generated Cinder client reads `HttpClient.HttpClient` from context
-    // before it reads `auth.endpoint` — a client must be present even though the
-    // auth failure means it's never actually used to send a request.
+    // client must be present in context even though auth failure means it's never used
     const deadHttpClient = Layer.succeed(HttpClient.HttpClient, HttpClient.make(() => Effect.die("unreachable")))
 
     const failure = yield* convergeManagedVolumes({ config, configDir: "." }).pipe(

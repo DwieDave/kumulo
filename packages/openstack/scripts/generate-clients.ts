@@ -1,13 +1,5 @@
 #!/usr/bin/env bun
-/**
- * Regenerates the six OpenStack generated clients (`src/generated/<service>.ts`)
- * from the vendored specs, via a filter -> patch -> generate pipeline.
- *
- * Run via `bun run generate` in this package, or the root `specs:update:openstack`
- * flow (re-fetch specs, then re-run this to pick up upstream changes). CI does
- * NOT run this script — `codegen:check` (tools/codegen) regenerates in-memory
- * and diffs against the committed output instead.
- */
+// CI does NOT run this script; codegen:check regenerates in-memory and diffs against committed output instead
 import { Effect } from "effect"
 import { readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
@@ -36,10 +28,6 @@ const services: ReadonlyArray<ServiceConfig> = [
   { name: "Octavia", service: "octavia", specPath: "specs/octavia/v2.yaml", allowlistPath: "allowlists/octavia.json", patchPath: "patches/octavia.patch.json5", outputPath: "src/generated/octavia.ts" }
 ]
 
-// kumulo: patches are JSON5 (allow `// why` comments); stripping `//` line comments
-// before JSON.parse is sufficient since no patch value contains a literal `//`.
-// kumulo: return type is the patch document shape directly (not `unknown`) — JSON.parse's
-// result is a genuine `any`, so this needs no type assertion to satisfy that signature.
 const _parseJson5 = (text: string): NamedPatch["patch"] => JSON.parse(text.replace(/\/\/.*$/gm, ""))
 
 const _generateOne = (config: ServiceConfig) =>

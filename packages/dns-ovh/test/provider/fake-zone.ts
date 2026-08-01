@@ -18,12 +18,6 @@ const _bodyOf = (request: HttpClientRequest.HttpClientRequest): { fieldType?: st
   return body._tag === "Uint8Array" ? JSON.parse(new TextDecoder().decode(body.body)) : {}
 }
 
-/**
- * Zero-network in-memory OVH DNS zone: a mutable record store driving the
- * real generated client through `Dns`, replaying GET/POST/PUT/DELETE/refresh
- * against the store instead of the network. Used both for fixture-replay
- * assertions and as the reusable substrate for the port-contract suite.
- */
 export const makeFakeZone = (zoneName: string) => {
   let nextId = 1
   const records = new Map<number, StoredRecord>()
@@ -32,8 +26,7 @@ export const makeFakeZone = (zoneName: string) => {
   const recordPath = `/domain/zone/${zoneName}/record`
 
   const _handle = (request: HttpClientRequest.HttpClientRequest): Response => {
-    // kumulo: `request.url` is only the bare path — query params live in the
-    // separate `urlParams` field until `toUrl` merges them.
+    // request.url is only the bare path; toUrl merges in urlParams
     const url = Option.getOrElse(HttpClientRequest.toUrl(request), () => new URL(request.url))
     if (request.method === "GET" && url.pathname === recordPath) {
       const subDomain = url.searchParams.get("subDomain")
@@ -79,7 +72,6 @@ export const makeFakeZone = (zoneName: string) => {
 
   return {
     dns: makeDnsClient(httpClient),
-    /** direct store inspection for assertions, bypassing the client under test */
     peek: (subDomain: string): StoredRecord | undefined =>
       [...records.values()].find((r) => r.subDomain === subDomain && r.fieldType !== "TXT"),
     peekAll: (): ReadonlyArray<StoredRecord> => [...records.values()],

@@ -7,7 +7,6 @@ import type { K3sClusterConfigEncoded } from "../../src/cluster-config.ts"
 import { buildK3sNodes, buildK3sPlan, buildK3sServerSpecs, k3sPlanEffect, k3sPlanFor } from "../../src/k3s/plan.ts"
 import { decodeK3sTestConfig } from "../fixtures.ts"
 
-// Same fixture core's own tests use.
 const _encoded: K3sClusterConfigEncoded = {
   name: "prod-eu",
   provider: "ovh",
@@ -35,13 +34,11 @@ const _encoded: K3sClusterConfigEncoded = {
   k3s: { extra_server_args: [], extra_agent_args: [] }
 }
 
-// Converged-cluster fixtures observe the shared infra as present, so the
-// three infra rows plan NoOp alongside the node rows.
 const LIVE_INFRA = { network: true, securityGroups: true, loadBalancer: true }
 
 const _config = decodeK3sTestConfig(_encoded)
 
-it("builds one ServerSpec per master and per worker-pool index, per-index named (Appendix B)", () => {
+it("builds one ServerSpec per master and per worker-pool index, per-index named", () => {
   const specs = buildK3sServerSpecs(_config)
   assert.deepStrictEqual(specs.map((s) => s.name), [
     "kumulo-prod-eu-master-masters-1",
@@ -60,11 +57,9 @@ it("plans one Create action per desired node when nothing is provisioned yet", (
   assert.ok(plan.actions.every((a) => a._tag === "Create"))
 })
 
-/** What the provider inventory reports for a fully-converged cluster (no config hash stored). */
 const _observedFor = (config: typeof _config): ReadonlyArray<TaggedResource> =>
   buildK3sServerSpecs(config).map((spec) => ({ name: spec.name }))
 
-/** A config variant, decoded from the same fixture so every field stays required. */
 const _variant = (
   { masters = 3, workers = 2, workerFlavor = "b3-16" }: {
     readonly masters?: number
@@ -113,7 +108,7 @@ it.prop("observed === desired is always all-NoOp", [fc.constantFrom(1, 3, 5), fc
   return k3sPlanFor({ config, observed: _observedFor(config), infra: LIVE_INFRA }).actions.every((a) => a._tag === "NoOp")
 })
 
-// ponytail: only `listClusterResources` is on the plan path; the rest die if called.
+// only `listClusterResources` is on the plan path; the rest die if called.
 const _unused = Effect.die("not part of the plan path")
 const _inventoryOf = (servers: Inventory["servers"]): Layer.Layer<CloudProvider> =>
   Layer.succeed(CloudProvider, {
@@ -130,7 +125,6 @@ const _inventoryOf = (servers: Inventory["servers"]): Layer.Layer<CloudProvider>
     listClusterResources: () => Effect.succeed({ servers, networks: [{ id: "net-1", cidr: "10.0.0.0/16" }], securityGroups: [{ id: "sg-1" }], loadBalancers: [{ id: "lb-1", vip: "10.0.0.250" }] })
   })
 
-/** What a provider reports after stamping `configHash(spec)` on create. */
 const _stamped = (config: typeof _config): Inventory["servers"] =>
   buildK3sNodes(config).map((node, index) => ({
     id: `srv-${index}`,

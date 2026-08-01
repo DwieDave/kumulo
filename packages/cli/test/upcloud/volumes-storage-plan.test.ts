@@ -30,7 +30,6 @@ const _withBuckets = decodeUpcloudTestConfig({
   }
 })
 
-// T6.1/AC5: existence-only volume plan rows.
 it("plans Create for a managed volume with no matching live storage", () => {
   const actions = volumePlanActions({ config: _withVolumes, live: [] })
   assert.deepStrictEqual(actions, [
@@ -50,8 +49,6 @@ it("plans NoOp for a managed volume whose live tier matches", () => {
   ])
 })
 
-// D5: tier is immutable at the API — a live tier that no longer matches the
-// config is a refused drift, never a silent update.
 it("refuses a changed tier as ReplaceNeedsConfirm, not a silent NoOp/Update", () => {
   const actions = volumePlanActions({ config: _withVolumes, live: [{ name: "data", tier: "standard" }, { name: "kept", tier: "standard" }] })
   const drift = actions.find((a) => a.name === uksVolumeRow("data"))
@@ -75,7 +72,6 @@ it("plans Create for a configured bucket with no live match, NoOp when it exists
   ])
 })
 
-// buildUpcloudPlan appends volume/bucket rows alongside the existing cluster/pool rows (AC5).
 it("buildUpcloudPlan appends volume and bucket rows to the cluster plan", () => {
   const config = decodeUpcloudTestConfig({
     ..._withVolumes,
@@ -89,17 +85,12 @@ it("buildUpcloudPlan appends volume and bucket rows to the cluster plan", () => 
   assert.include(names, uksBucketRow("logs"))
 })
 
-// D9: object storage + volumes precede the cluster row in the delete plan, and
-// retained ones plan NoOp "(retained)" rather than Delete.
 it("upcloudDeletePlanActions orders buckets and volumes ahead of the cluster row, retained ones as NoOp", () => {
   const config = decodeUpcloudTestConfig({
     ..._withVolumes,
     object_storage: _withBuckets.object_storage,
     secrets: _withBuckets.secrets
   })
-  // deletePlanActions' inventory comes from `lookupUpcloudInventory` normally;
-  // here we exercise the pure ordering by constructing rows the same way
-  // `upcloudDeletePlanActions` does, against a config with retained + non-retained entries.
   const bucketRows = config.object_storage.module === "upcloud"
     ? config.object_storage.buckets.map((b) =>
       b.retain

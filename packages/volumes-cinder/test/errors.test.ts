@@ -14,7 +14,6 @@ import { CinderAuth } from "../src/auth.ts"
 import { deleteVolume, listClusterVolumes } from "../src/provider.ts"
 import { makeFakeCinder } from "./fake-cinder.ts"
 
-// `deleteVolume` is the shortest path to a raw status: one request, ref "vol-1".
 const _errorEffect = (status: number, body?: unknown, headers?: Record<string, string>) => {
   const fake = makeFakeCinder({ "DELETE /volumes/vol-1": () => ({ status, body, headers }) })
   return Effect.provide(Effect.flip(deleteVolume({ id: "vol-1" })), fake.layer)
@@ -22,8 +21,7 @@ const _errorEffect = (status: number, body?: unknown, headers?: Record<string, s
 
 const _errorAt = (status: number, body?: unknown) => Effect.runPromise(_errorEffect(status, body))
 
-// The auth port used to be typed `AuthenticationFailed` only, so a Keystone
-// outage or rate limit was rewritten as "bad credentials" on the way through.
+// regression: auth port used to be typed AuthenticationFailed only, rewriting Keystone outages/rate-limits as "bad credentials"
 const _withAuth = (failure: ProviderApiError | RateLimited) =>
   Effect.runPromise(Effect.provide(
     Effect.flip(deleteVolume({ id: "vol-1" })),
@@ -51,7 +49,6 @@ describe("generated-client failures keep their Cinder meaning", () => {
     expect(await _errorAt(409)).toBeInstanceOf(ResourceConflict)
     expect(await _errorAt(401)).toBeInstanceOf(AuthenticationFailed)
     expect(await _errorAt(403)).toBeInstanceOf(AuthenticationFailed)
-    // 404 is swallowed by `deleteVolume`, so it is checked on a listing instead.
     const fake = makeFakeCinder({ "GET /volumes/detail": () => ({ status: 404 }) })
     const missing = await Effect.runPromise(Effect.provide(Effect.flip(listClusterVolumes("prod")), fake.layer))
     expect(missing).toBeInstanceOf(ResourceNotFound)
@@ -81,7 +78,6 @@ describe("generated-client failures keep their Cinder meaning", () => {
     expect(await _errorAt(422, { message: "invalid size" })).toMatchObject({ _tag: "ProviderApiError", status: 422 })
   })
 
-  // A Cinder outage must never read as "bad credentials" to an operator.
   it.effect.prop("every 5xx is a provider error carrying the real status", [fc.integer({ min: 500, max: 599 })], ([status]) =>
     Effect.gen(function*() {
       const error = yield* _errorEffect(status, { message: "boom" })
@@ -117,8 +113,6 @@ describe("list decoding never invents a volume", () => {
       expect(failure).toBeInstanceOf(ResponseDecodeError)
     }))
 
-  // Property: an arbitrary body either fails the effect or yields records with a
-  // real id — never a `VolumeInfo{id:""}` placeholder addressing nothing.
   it.effect.prop("an arbitrary list body never yields id-less volumes", [fc.anything()], ([body]) =>
     Effect.map(
       Effect.result(_list({ volumes: [body] })),

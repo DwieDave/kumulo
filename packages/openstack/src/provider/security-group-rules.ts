@@ -16,7 +16,7 @@ const _forEachCidr = (
   rule: (cidr: string) => SecurityGroupRuleInput
 ): ReadonlyArray<SecurityGroupRuleInput> => cidrs.map(rule)
 
-// ponytail: anti-affinity/SG granularity is masters-vs-workers, not per-pool
+// anti-affinity/SG granularity is masters-vs-workers, not per-pool
 // (ServerSpec carries no pool id yet) — upgrade when the port grows one.
 export const buildFr57Rules = (options: {
   readonly allowedSshCidrs: ReadonlyArray<string>

@@ -1,9 +1,3 @@
-/**
- * The one place the full `ClusterConfig` union exists. Each distro package
- * owns its variant schema; core owns the shared blocks and the codec — the
- * CLI is the only layer that knows every distro, so the union (and the bound
- * decode/encode/yaml helpers) is assembled here.
- */
 import { Schema } from "effect"
 import { decodeConfigWith, encodeConfigWith, parseConfigYamlWith } from "@kumulo/core"
 import { K3sClusterConfig } from "@kumulo/distro-k3s"

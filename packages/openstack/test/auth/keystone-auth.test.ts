@@ -52,11 +52,7 @@ const _jsonBody = (request: HttpClientRequest.HttpClientRequest): unknown =>
   request.body._tag === "Uint8Array" ? JSON.parse(new TextDecoder().decode(request.body.body)) : undefined
 
 describe("KeystoneAuthLive", () => {
-  // kumulo: WHY this test — the spec omits `required` on the token requestBody,
-  // so the generator emitted `payload: [NoContent, ...Json]` and the encoder
-  // matched the empty branch: the token request went out with NO BODY and real
-  // Keystone answered 400. Every fake here only ever checked the response, so
-  // nothing caught it until the first live `apply`. Assert the wire body.
+  // token requestBody has no `required` in the spec, so the encoder can silently emit an empty body -> real Keystone 400s
   it.effect("sends the application-credential body, not an empty request", () => {
     const farFuture = new Date(Date.now() + 3_600_000).toISOString()
     let sent: unknown = undefined
@@ -91,7 +87,6 @@ describe("KeystoneAuthLive", () => {
   })
 
   it.effect("re-issues once expired past the skew window", () => {
-    // expires 30s from now, but a 60s skew pushes it into the past immediately
     const soon = new Date(Date.now() + 30_000).toISOString()
     const fake = _fakeKeystone(() => _okResponse(soon))
     return Effect.gen(function*() {

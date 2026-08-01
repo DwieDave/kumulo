@@ -25,9 +25,6 @@ it.effect("maps the MKS apiEndpoint to the api_server record's hostname", () =>
     ]])
   }))
 
-// R15 — the ingress record points at the address kumulo allocated, not at a
-// hostname it had to discover (D2). A floating IP is IPv4, so the provider
-// classifies it as an A record with no further hint.
 it.effect("points an ingress record at the ingress LB's floating IP", () =>
   Effect.gen(function*() {
     const spy = _spyDnsLayer()
@@ -44,9 +41,6 @@ it.effect("points an ingress record at the ingress LB's floating IP", () =>
     ]])
   }))
 
-// No LB (no `ingress` block, or one whose floating IP never materialised) is
-// the unresolved case: R15 keeps it a literal pass-through rather than
-// inventing an address.
 it.effect("leaves an ingress record literal when there is no ingress LB", () =>
   Effect.gen(function*() {
     const spy = _spyDnsLayer()

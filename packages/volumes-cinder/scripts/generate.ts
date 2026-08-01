@@ -1,17 +1,4 @@
 #!/usr/bin/env bun
-/**
- * Regenerates `src/generated/cinder.ts` from the vendored Cinder v3 spec via
- * the shared filter -> patch -> generate pipeline.
- *
- * The spec is NOT vendored a second time: it is read from
- * `packages/openstack/specs/cinder/v3.70.yaml` (a 21k-line data file, not an
- * import — the sibling-package rule is about module edges). `tools/codegen`'s
- * `services.json` already registers every pipeline with cross-package paths,
- * and `codegen:check` fails loudly the moment that spec moves or changes.
- *
- * Run with `bun run scripts/generate.ts` from this package's directory; the
- * output is committed, CI only checks that regenerating is a no-op.
- */
 import { Effect } from "effect"
 import { readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
@@ -25,11 +12,9 @@ const _allowlistPath = "allowlists/cinder.json"
 const _patchPath = "patches/cinder.patch.json5"
 const _outputPath = "src/generated/cinder.ts"
 
-// kumulo: patches are JSON5 (`// why` comments); stripping `//` line comments
-// before JSON.parse is enough — no patch value contains a literal `//`.
+// kumulo: patches are JSON5; stripping // line comments before JSON.parse is enough here
 const _parseJson5 = (text: string): NamedPatch["patch"] => JSON.parse(text.replace(/\/\/.*$/gm, ""))
 
-/** Pure regeneration — reused by the CLI writer below and by `codegen:check`. */
 export const generate = () =>
   Effect.gen(function*() {
     const allowlist = JSON.parse(readFileSync(join(root, _allowlistPath), "utf8"))

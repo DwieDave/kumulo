@@ -4,25 +4,16 @@ import type { HttpClient} from "effect/unstable/http";
 import { HttpClientRequest } from "effect/unstable/http"
 import type { DoctorCheck } from "../doctor/types.ts"
 
-// Pinned to the generated client's spec version (v2.96); sent explicitly on
-// every Nova request rather than relying on "latest".
 export const NOVA_MICROVERSION = "2.96"
 
 export type MicroversionStatus = "accepted" | "rejected" | "unreachable"
 
-/**
- * The one `KeystoneAuth` method this file needs, narrowed to avoid pulling
- * in the full service shape (same rationale as `doctor/ovh/probe.ts`'s
- * `OvhProjectClient`) — the real `KeystoneAuth.endpoint` satisfies this
- * structurally.
- */
 export interface OpenStackEndpointResolver {
   readonly endpoint: (
     options: { readonly service: string; readonly region: string }
   ) => Effect.Effect<string, OpenStackError>
 }
 
-/** Raw `GET /v2.1/` with the pinned microversion header — Nova answers 406 when it rejects the pin. */
 export const probeMicroversion = (args: {
   readonly client: HttpClient.HttpClient
   readonly keystone: OpenStackEndpointResolver
@@ -48,7 +39,6 @@ export const probeMicroversion = (args: {
 
 const _name = "openstack-nova-microversion"
 
-/** Microversion acceptance: fail loudly here, not mid-`create`, if the pin isn't supported. */
 export const microversionCheck = (args: {
   readonly probe: Effect.Effect<MicroversionStatus>
   readonly microversion: string

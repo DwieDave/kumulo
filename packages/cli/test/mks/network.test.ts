@@ -53,8 +53,6 @@ const _run = (
 
 const _withYaml = (yaml: string) => Effect.provide(layerNoop({ readFileString: () => Effect.succeed(yaml) }))
 
-// R7 — the ids are creation-time inputs to `Cloud_ProjectKubeCreation`, so the
-// network has to exist before the cluster does, not beside it.
 it.effect("creates the network first and hands all three ids to cluster creation", () =>
   Effect.gen(function*() {
     const server = makeFakeMksServer()
@@ -73,8 +71,6 @@ it.effect("creates the network first and hands all three ids to cluster creation
     assert.strictEqual(created?.loadBalancersSubnetId, "subnet-lb-1")
   }).pipe(_withYaml(_yaml(_NETWORK))))
 
-// R5 — no `network` block is today's behaviour: no vRack read, no Neutron call,
-// no ids on the payload. A project without a vRack still provisions.
 it.effect("touches neither vRack nor CloudProvider when the config declares no network", () =>
   Effect.gen(function*() {
     const server = makeFakeMksServer({ vrackId: null })
@@ -86,8 +82,6 @@ it.effect("touches neither vRack nor CloudProvider when the config declares no n
     assert.strictEqual(server.clusters.get(info.id)?.privateNetworkId, undefined)
   }).pipe(_withYaml(_yaml(""))))
 
-// R4 — the vRack check is read-only and runs ahead of everything, so a refusal
-// costs zero mutations: no Neutron network, no cluster.
 it.effect("refuses before creating anything when the project has no vRack", () =>
   Effect.gen(function*() {
     const server = makeFakeMksServer({ vrackId: null })
@@ -100,12 +94,6 @@ it.effect("refuses before creating anything when the project has no vRack", () =
     assert.strictEqual(server.clusters.size, 0)
   }).pipe(_withYaml(_yaml(_NETWORK))))
 
-// `ensureNetwork` omits a subnet id rather than reporting `""` when the
-// read-back didn't find the subnet. Passing that through would create a cluster
-// on half a network, and networking can never be fixed afterwards. Editing a
-// subnet CIDR on a live network lands here — the network exists, so kumulo
-// never re-subnets it — so the message has to name the field and say recreate,
-// not read as a stray Neutron 404 (R8).
 it.effect("fails loudly, creating no cluster, when a subnet id came back missing", () =>
   Effect.gen(function*() {
     const server = makeFakeMksServer()
@@ -120,12 +108,6 @@ it.effect("fails loudly, creating no cluster, when a subnet id came back missing
     assert.strictEqual(server.clusters.size, 0)
   }).pipe(_withYaml(_yaml(_NETWORK))))
 
-// R5 regression guard: `applyMks` is the wired entrypoint and provides the
-// OpenStack `CloudProvider` unconditionally. A config with no `network` block
-// never calls a single OpenStack verb, so an absent OS_* environment must not
-// fail the apply — the Layer has to defer its failure to first use, exactly as
-// it advertises. `applyMksEffect` cannot catch this: it takes `CloudProvider`
-// already built.
 const _noOpenStackCredentials = Layer.succeed(OpenStackEnv, {
   keystone: undefined,
   region: undefined,
@@ -146,9 +128,6 @@ it.effect("applies a networkless config with no OpenStack credentials present", 
     assert.strictEqual(server.clusters.get(info.id)?.privateNetworkId, undefined)
   }).pipe(_withYaml(_yaml(""))))
 
-// The whole reason the gateway is created through OVH's API rather than
-// Neutron: `routersPost` has no `model`, so a router made that way silently
-// lands on OVH's default tier and `gateway_model` would be a lie.
 it.effect("creates the gateway at the tier the config asked for", () =>
   Effect.gen(function*() {
     const cloud = fakeCloudProvider()
@@ -157,8 +136,6 @@ it.effect("creates the gateway at the tier the config asked for", () =>
     assert.deepStrictEqual(server.gateways, [{ model: "l", name: "kumulo-staging" }])
   }).pipe(_withYaml(_yaml(`${_NETWORK}  gateway_model: l\n`))))
 
-// `s` is OVH's own default, but sending it explicitly keeps the applied tier
-// visible rather than inherited.
 it.effect("defaults the tier to s when the config names none", () =>
   Effect.gen(function*() {
     const cloud = fakeCloudProvider()

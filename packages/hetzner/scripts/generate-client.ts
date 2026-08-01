@@ -1,13 +1,5 @@
 #!/usr/bin/env bun
-/**
- * Regenerates `src/generated/hcloud.ts` from the vendored spec, via a
- * filter -> patch -> generate pipeline.
- *
- * Run via `bun run generate` in this package, or the root `specs:update:hetzner`
- * flow (re-fetch the spec, then re-run this to pick up upstream changes). CI does
- * NOT run this script — `codegen:check` (tools/codegen) regenerates in-memory
- * and diffs against the committed output instead.
- */
+// CI does not run this script — codegen:check regenerates in-memory and diffs against the committed output instead.
 import { Effect } from "effect"
 import { readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
@@ -22,8 +14,6 @@ const allowlistPath = "allowlists/hcloud.json"
 const patchPath = "patches/hcloud.patch.json5"
 const outputPath = "src/generated/hcloud.ts"
 
-// kumulo: patches are JSON5 (allow `// why` comments); stripping `//` line comments
-// before JSON.parse is sufficient since no patch value contains a literal `//`.
 const _parseJson5 = (text: string): NamedPatch["patch"] => JSON.parse(text.replace(/\/\/.*$/gm, ""))
 
 const program = Effect.gen(function*() {

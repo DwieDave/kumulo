@@ -39,16 +39,6 @@ const _toMksConfig = (
   worker_pools: config.worker_pools.map(toMksPool)
 })
 
-/**
- * Live cluster/nodepool existence for the plan. `volumeNames` is filled in by
- * the caller (a Cinder lookup lives in `commands/volumes.ts`, not here).
- */
-/**
- * The live network the config asks for, read never created (R8). Gated on the
- * `network` block: a config without one must keep planning with no OS_*
- * credentials at all, which is what `_unavailableCloudProvider` would otherwise
- * refuse on first use.
- */
 export const resolveMksNetwork = (config: ClusterConfig): Effect.Effect<NetworkInfo | undefined, MksError, CloudProvider> =>
   Effect.gen(function*() {
     const network = config.distro === "ovh-mks" ? config.network : undefined
@@ -85,13 +75,6 @@ const _endpointInvalid = (apiEndpoint: string) =>
     issues: [{ path: ["api_server"], message: `MKS apiEndpoint "${apiEndpoint}" has no hostname to point DNS at` }]
   })
 
-/**
- * `ingress` resolves to the address kumulo allocated for the ingress LB, so one
- * apply can point DNS at it without discovering anything in-cluster (D2). No LB
- * — no `ingress` block, or an LB whose floating IP never materialised — leaves
- * the key absent, and the placeholder passes through literally (R15) instead of
- * this inventing an address.
- */
 const _dnsTargets = (
   { hostname, ingress }: { readonly hostname: string; readonly ingress: LbInfo | undefined }
 ): DnsTargets => ({
@@ -101,22 +84,15 @@ const _dnsTargets = (
     : { ingress: { kind: "ip" as const, value: ingress.floatingIp } })
 })
 
-/**
- * MKS DNS phase: the managed control plane is only ever reachable by name, so
- * `api_server` becomes a CNAME to `apiEndpoint`'s hostname (D3). An endpoint we
- * can't parse a hostname out of fails loudly rather than skipping DNS silently.
- */
 export const reconcileMksDns = (
   { apiEndpoint, config, ingress }: {
     readonly config: ClusterConfig
     readonly apiEndpoint: string
-    /** The ingress LB this apply converged, when the config declared one. */
     readonly ingress?: LbInfo
   }
 ): Effect.Effect<void, MksError | ConfigInvalid, DnsProvider> =>
   Effect.gen(function*() {
-    // ponytail: `none` short-circuits before the endpoint check — no records to
-    // write, so an endpoint we can't parse isn't a failure for that config.
+    // `none` short-circuits before the endpoint check.
     if (config.dns.module === "none") return
     const hostname = yield* Effect.try({
       try: () => new URL(apiEndpoint).hostname,
@@ -126,23 +102,12 @@ export const reconcileMksDns = (
     yield* reconcileDns({ config, targets: _dnsTargets({ hostname, ingress }) })
   })
 
-/** The creation-time network ids MKS accepts, all three or none (R6). */
 type MksNetworkIds = Pick<MksDriverConfig, "privateNetworkId" | "nodesSubnetId" | "loadBalancersSubnetId">
 
 const _RECREATE = "MKS sets a cluster's networking at creation and can never change it — " +
   "delete and recreate the cluster (and its network) deliberately, or revert the change"
 
-/**
- * `ensureNetwork` omits a subnet id rather than reporting `""` when its
- * read-back didn't find the subnet. Half a network would produce a cluster
- * whose networking can never be corrected (`Cloud_ProjectKubeUpdate` is
- * `{ name?, updatePolicy? }`), so a missing id fails here instead.
- *
- * This is also where an edited subnet CIDR lands: kumulo never re-subnets a
- * network that already exists, so the new CIDR resolves to no subnet at all.
- * Plan time compares network *presence* only (the desired ids are unknowable
- * before the network exists), so this message has to name the field itself.
- */
+// A missing subnet id fails here: MKS networking can never be corrected post-create (`Cloud_ProjectKubeUpdate` has no such field).
 const _networkIds = (
   { info, spec }: { readonly info: NetworkInfo; readonly spec: NetworkSpec }
 ): Effect.Effect<MksNetworkIds, ResourceConflict> => {
@@ -161,12 +126,7 @@ const _networkIds = (
     })
 }
 
-/**
- * R8's refusal, hoisted ahead of the first Neutron write. `_convergeCluster`
- * makes the same call, but only once `ensureNetwork` has already created the
- * network and both subnets — and M2 ships no teardown, so they would be
- * orphaned for good. Read-only, so a refusal still costs zero mutations.
- */
+// Refusal hoisted ahead of the first Neutron write — a later refusal would already have created the network and subnets, orphaning them.
 const _refuseClusterDrift = (
   { config, mks, serviceName }: { readonly config: ClusterConfig; readonly mks: Mks; readonly serviceName: string }
 ): Effect.Effect<void, MksError> =>
@@ -177,14 +137,6 @@ const _refuseClusterDrift = (
     if (drift._tag === "Blocked") return yield* Effect.fail(driftConflict(drift))
   })
 
-/**
- * The network, reconciled before the cluster (R7) — its ids are creation-time
- * inputs to `Cloud_ProjectKubeCreation`. Gated on the `network` block, so a
- * config that asks for none keeps today's behaviour and never reaches
- * `requireVrack` (R5): ungated, that read would refuse every MKS apply on a
- * vRack-less project. Both preconditions are read-only and run first, so a
- * refusal costs zero mutations.
- */
 const _ensureMksNetwork = (
   { config, mks, serviceName }: {
     readonly config: ClusterConfig
@@ -204,16 +156,7 @@ const _ensureMksNetwork = (
     return ids
   })
 
-/**
- * The gateway makes the network usable at all: nodes get SNAT for image pulls,
- * and Neutron will only associate the ingress floating IP (R9) with a port
- * whose subnet hangs off a router carrying an external gateway.
- *
- * Created through OVH's API rather than Neutron because only OVH's has the
- * `model` (tier) the config sets. Existence is checked through Neutron first —
- * an OVH gateway IS a Neutron router, so `findNetwork`'s sibling lookup answers
- * it against the same object, and OVH's own list endpoint cannot be generated.
- */
+// Created through OVH's API (has the `model`/tier field); existence is checked via Neutron since an OVH gateway IS a Neutron router.
 const _ensureMksGateway = (
   { config, ids, mks, network, serviceName }: {
     readonly config: ClusterConfig
@@ -235,12 +178,10 @@ const _ensureMksGateway = (
       networkId: ids.privateNetworkId,
       subnetId: ids.nodesSubnetId,
       name,
-      // `s` is OVH's own default; naming it keeps the applied tier explicit.
       model: network.gateway_model ?? "s"
     })
   })
 
-/** The config's network block as a `NetworkSpec` — one translation, both the read and the write path. */
 export const mksNetworkSpec = (
   network: { readonly cidr: string; readonly nodes_subnet: string; readonly load_balancers_subnet: string }
 ): NetworkSpec => ({
@@ -249,18 +190,7 @@ export const mksNetworkSpec = (
   loadBalancersSubnet: network.load_balancers_subnet
 })
 
-/**
- * The ingress load balancer, converged after the cluster (so a cluster that
- * never comes up leaves no LB behind) and before DNS (so `target: ingress` can
- * resolve in the same apply). Gated on the `ingress` block: absent means no
- * Octavia call at all, so a config that never asked for a load balancer never
- * needs Octavia in its region.
- *
- * kumulo creates an EMPTY load balancer here. Its listeners, pools and members
- * belong to the cloud-controller-manager once a Service adopts it by
- * `loadbalancer.openstack.org/load-balancer-id` (R14/D2), so re-running this is
- * a read, never a diff.
- */
+// Creates an EMPTY LB — listeners/pools/members belong to cloud-controller-manager once a Service adopts it, so re-running is a no-op.
 const _ensureMksIngress = (
   { config, network }: { readonly config: ClusterConfig; readonly network: MksNetworkIds }
 ): Effect.Effect<LbInfo | undefined, MksError, CloudProvider> =>
@@ -280,16 +210,7 @@ const _ensureMksIngress = (
 
 const NO_REPLACE: ReadonlySet<string> = new Set()
 
-/**
- * Confirmed plan rows → the pool names `ensureNodePools` may destroy.
- *
- * MKS runs the control plane itself, so there is no master analogue to
- * replace: `mks-cluster/<name>` can only be "replaced" by deleting the
- * cluster (and every workload on it). That is refused outright — the same
- * stance `_refuseMasterReplace` takes for k3s etcd quorum. Rows this distro
- * doesn't own (`bucket/`, `volume/`) belong to their own reconcilers and are
- * ignored here, exactly as the k3s path ignores non-server rows.
- */
+// mks-cluster/<name> can only be "replaced" by deleting the cluster and every workload on it — refused outright.
 const _poolsToReplace = (
   { config, replace }: { readonly config: ClusterConfig; readonly replace: ReadonlySet<string> }
 ): Effect.Effect<ReadonlySet<string>, PlanRejected> => {
@@ -306,20 +227,13 @@ const _poolsToReplace = (
   return Effect.succeed(new Set([...replace].flatMap((row) => byRow.get(row) ?? [])))
 }
 
-/**
- * `ManagedClusterInfo` widened with the ingress LB, so callers that only read
- * `id`/`apiEndpoint`/`status` are untouched and `mksEntry.apply` can hand the
- * ids to `<cluster>.outputs.yaml` (R13).
- */
 export interface MksApplyResult extends ManagedClusterInfo {
   readonly ingress?: LbInfo
 }
 
-/** Converge control plane + nodepools onto the config, then its DNS records (create and scale share this). */
 export const applyMksEffect = (
   { config, replace = NO_REPLACE }: {
     readonly config: ClusterConfig
-    /** Node pools the operator confirmed for replacement (plan `ReplaceNeedsConfirm` rows). */
     readonly replace?: ReadonlySet<string>
   }
 ): Effect.Effect<MksApplyResult, MksError | ConfigInvalid | PlanRejected, MksEnv | DnsProvider | CloudProvider> =>
@@ -327,8 +241,6 @@ export const applyMksEffect = (
     const pools = yield* _poolsToReplace({ config, replace })
     const { mks, serviceName } = yield* MksEnv
     const version = yield* parseKubeVersion(config.version)
-    // Each stage marks its own plan rows (spinner.ts's shared view) — the
-    // network is done long before the cluster reaches READY.
     const network = yield* withRowProgress({
       match: (name) => name.startsWith("network/") || name.startsWith("subnet/") || name.startsWith("gateway/"),
       effect: _ensureMksNetwork({ config, mks, serviceName })
@@ -351,14 +263,6 @@ export const applyMksEffect = (
     return { ...info, ...(ingress === undefined ? {} : { ingress }) }
   })
 
-/**
- * `applyMksEffect` wired to its live `DnsProvider` (`config.dns.module`-dispatched, R6)
- * and OpenStack `CloudProvider`. The latter is only ever reached by a config
- * carrying a `network` block, so OS_* credentials stay optional on this path
- * until one is declared — the Layer is built either way, and every verb on it
- * fails at *first use* rather than at build time (R5). Anything else refuses
- * every existing OVH-only MKS apply.
- */
 export const applyMks = (
   args: { readonly config: ClusterConfig; readonly replace?: ReadonlySet<string> }
 ): Effect.Effect<MksApplyResult, MksError | ConfigInvalid | PlanRejected, MksEnv | OpenStackEnv | HttpClient.HttpClient> =>
@@ -367,7 +271,6 @@ export const applyMks = (
     Effect.provide(mksCloudProviderLayer(args.config))
   )
 
-/** Kubeconfig via the OVH API; resolves the cluster by name first (stateless), never creates one. */
 export const kubeconfigMks = (
   config: ClusterConfig
 ): Effect.Effect<Kubeconfig, MksError, MksEnv> =>
@@ -381,13 +284,7 @@ export const kubeconfigMks = (
     return yield* fetchKubeconfig({ mks, ref: { serviceName, kubeId: info.id } })
   })
 
-/**
- * `deleteCloudProjectServiceNameKubeKubeId` returns the moment OVH accepts the
- * request; the node VMs — and the Neutron ports they hold on the private
- * network — outlive it. Deleting the network before they are gone is a
- * guaranteed 409, so the teardown blocks here rather than turning T5.3's
- * exceptional failure into the normal path.
- */
+// OVH's delete call returns before node VMs are gone; deleting the network first is a guaranteed 409, so teardown blocks here.
 const _waitClusterGone = (
   { config, mks, serviceName }: { readonly config: ClusterConfig; readonly mks: Mks; readonly serviceName: string }
 ): Effect.Effect<void, MksError> =>
@@ -401,19 +298,6 @@ const _waitClusterGone = (
     ref: config.name
   }).pipe(Effect.asVoid)
 
-/**
- * The OpenStack side of teardown (R17): load balancer, then its floating IP,
- * then the network — `deleteByTag`'s own order, with the server/server-group/
- * security-group steps finding nothing on a managed control plane.
- *
- * Gated on the `network` block for the same reason `_ensureMksNetwork` is: a
- * config that never asked for one must still delete without OS_* credentials
- * (R5), and every verb on the unavailable provider fails at first use.
- *
- * The network is ALWAYS deleted, never retained (D3/T5.2): it is fully
- * reproducible from the config, unlike a volume's or a bucket's contents, so
- * there is nothing a `retain` flag here could preserve.
- */
 const _deleteMksInfra = (config: ClusterConfig): Effect.Effect<void, MksError, CloudProvider> =>
   Effect.gen(function*() {
     if (config.distro !== "ovh-mks" || config.network === undefined) return
@@ -421,7 +305,6 @@ const _deleteMksInfra = (config: ClusterConfig): Effect.Effect<void, MksError, C
     yield* cloud.deleteByTag(config.name)
   })
 
-/** Delete: resolves the cluster by name (idempotent lookup); missing cluster is a no-op, never provisions one. */
 export const deleteMksEffect = (config: ClusterConfig): Effect.Effect<void, MksError, MksEnv | DnsProvider | CloudProvider> =>
   Effect.gen(function*() {
     const { mks, serviceName } = yield* MksEnv
@@ -445,7 +328,6 @@ export const deleteMksEffect = (config: ClusterConfig): Effect.Effect<void, MksE
     })
   })
 
-/** `deleteMksEffect` wired to its live `DnsProvider` and `CloudProvider` (mirrors `applyMks`). */
 export const deleteMks = (
   config: ClusterConfig
 ): Effect.Effect<void, MksError | ConfigInvalid, MksEnv | OpenStackEnv | HttpClient.HttpClient> =>

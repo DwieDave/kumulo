@@ -34,10 +34,7 @@ it.effect("injects a Bearer authorization header and passes a 200 through untouc
   }).pipe(Effect.provide(hcloudHttpClientLive(token).pipe(Layer.provide(fake.layer))))
 })
 
-// kumulo: it.live, not it.effect — exercises the real `Effect.sleep` between
-// retries (mirrors provider-ovh's `auth/live.test.ts` "persistent failure"
-// case, same it.effect-TestClock-never-advances reasoning). `retry-after: 0`
-// keeps this fast and deterministic — no jitter/backoff randomness involved.
+// it.live, not it.effect: exercises the real Effect.sleep between retries
 it.live("retries a 429 honoring Retry-After, then succeeds", () => {
   const fake = _fakeBase((callNumber) => callNumber === 1 ? { status: 429, headers: { "retry-after": "0" } } : { status: 200 })
   return Effect.gen(function*() {
@@ -54,7 +51,6 @@ it.live("gives up after the bounded retry cap, still surfacing the last response
     const client = yield* HttpClient.HttpClient
     const response = yield* client.execute(request)
     assert.strictEqual(response.status, 429)
-    // 1 initial attempt + 5 bounded retries.
     assert.strictEqual(fake.callCount(), 6)
   }).pipe(Effect.provide(hcloudHttpClientLive(token).pipe(Layer.provide(fake.layer))))
 })

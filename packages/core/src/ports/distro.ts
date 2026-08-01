@@ -30,8 +30,6 @@ import type {
   Version
 } from "../domain/types.ts"
 
-// Self-managed distros (k3s) drive the full phase pipeline
-// themselves via cloud-init + SSH.
 export interface SelfManagedDistroShape {
   readonly kind: "self-managed"
   readonly name: string
@@ -61,8 +59,6 @@ export type MksError =
   | HttpTransportError
   | ResponseDecodeError
 
-// Managed distros (ovh-mks) skip the infra phases; OVH runs
-// the control plane and provisions nodes via its own API.
 export interface ManagedDistroShape {
   readonly kind: "managed"
   readonly name: string
@@ -73,7 +69,6 @@ export interface ManagedDistroShape {
   readonly delete: (ref: ManagedClusterRef) => Effect.Effect<void, MksError>
 }
 
-// Discriminated on `kind` — the reconciler branches once.
 export type DistroShape = SelfManagedDistroShape | ManagedDistroShape
 
 export class Distro extends Context.Service<Distro, DistroShape>()("@kumulo/core/Distro") {}

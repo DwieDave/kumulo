@@ -26,8 +26,7 @@ export interface BootstrapResult {
   readonly firstMaster: SshHost
 }
 
-// cloud-init/ssh readiness always gate an install; controlPlaneReady
-// only gates master 1 (the others' `--server` join needs it already serving).
+// ordering: controlPlaneReady gates only master 1, others' --server join needs it already serving
 const _gateBefore = (host: SshHost): Effect.Effect<void, BootstrapFailed, Ssh> =>
   cloudInitReady(host).pipe(Effect.andThen(sshReady(host)))
 
@@ -39,7 +38,6 @@ const _exec = (host: SshHost, script: string, phase: string): Effect.Effect<void
     )
   })
 
-/** The real (executed, not merely rendered) master install path. */
 const _installMaster = (
   args: RunBootstrapArgs,
   token: string,
@@ -63,7 +61,6 @@ const _installMaster = (
     if (isFirstMaster) yield* controlPlaneReady(host)
   })
 
-/** The real (executed) worker install path. */
 const _installWorker = (
   args: RunBootstrapArgs,
   token: string,
@@ -85,12 +82,6 @@ const _installWorker = (
     yield* _exec(host, script, "install-worker")
   })
 
-/**
- * The single production Bootstrap-phase entrypoint: resolve the
- * join token/first-master, then install masters (serial-first
- * then parallel) and workers, each gated by readiness and actually executed
- * over the `Ssh` port (not just rendered).
- */
 export const runBootstrap = (args: RunBootstrapArgs): Effect.Effect<BootstrapResult, BootstrapFailed, Ssh> =>
   Effect.gen(function*() {
     const { firstMaster, token } = yield* resolveToken(args.masters)

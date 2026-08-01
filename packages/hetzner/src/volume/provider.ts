@@ -14,8 +14,6 @@ export interface VolumeProviderOptions {
 }
 
 type Deps = HttpClient.HttpClient
-// kumulo: `HcloudError` is a strict subset of `VolumeError`, so the generated
-// client's failures land in the port's channel with no narrowing step.
 type R<A> = Effect.Effect<A, VolumeError, Deps>
 
 interface VolumeRecord {
@@ -49,10 +47,7 @@ const _createVolume = (
     ctx: { kind: "volume", ref: spec.name }
   }).pipe(Effect.map((response) => _volumeInfo(response.volume)))
 
-// kumulo: enlarge-only healing (R8, N1) — a size increase resizes the
-// existing volume in place (hcloud's `resize` action, fire-and-forget: the
-// new size is already reflected in the response we don't need, next list
-// call sees it); a decrease refuses loudly rather than silently no-opping.
+// enlarge-only — a size decrease fails loudly rather than silently no-opping
 const _reconcileSize = (
   { client, existing, size, spec }: {
     readonly client: HcloudClient
@@ -98,9 +93,6 @@ export const listClusterVolumes = ({ options }: { readonly options: VolumeProvid
     return records.map(_volumeInfo)
   })
 
-// kumulo: caller (core delete flow) never invokes this for retain: true
-// volumes — the retention policy is enforced one layer up, not here (same
-// contract `@kumulo/volumes-cinder`'s `deleteVolume` documents).
 export const deleteVolume = (ref: VolumeRef): R<void> =>
   Effect.gen(function*() {
     const client = yield* makeHcloudClient

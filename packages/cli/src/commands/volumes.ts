@@ -27,7 +27,6 @@ const volumeIdFlag = Flag.string("volume-id").pipe(
   Flag.withDescription("Existing Cinder volume ID to bind into this cluster's outputs + generated PVs")
 )
 
-/** `kumulo volumes list`: pure projection of `<cluster>.outputs.yaml`. */
 export const volumesList = Command.make(
   "list",
   { config: configArgument() },
@@ -45,10 +44,8 @@ export const volumesList = Command.make(
   })
 ).pipe(Command.withDescription("List recorded volumes for a cluster"))
 
-/** One `volumes.managed[]` entry — only the non-`none` variants of the union carry them. */
 type ManagedVolume = Exclude<ClusterConfig["volumes"], { readonly module: "none" }>["managed"][number]
 
-/** `volumes.managed` behind the union discriminant: empty for `module: none`. */
 export const managedVolumes = (config: ClusterConfig): ReadonlyArray<ManagedVolume> =>
   config.volumes.module === "none" ? [] : config.volumes.managed
 
@@ -57,14 +54,6 @@ const _retainedSpec = (config: ClusterConfig, name: string): VolumeSpec | undefi
   return entry === undefined ? undefined : { name: entry.name, sizeGb: entry.size_gb, type: entry.type, retain: entry.retain }
 }
 
-/**
- * `kumulo volumes adopt`: re-binds an existing Cinder volume ID
- * into this cluster's outputs file + regenerates its static PV(+PVC)
- * manifest, pinned to that volume's `csi.volumeHandle`. No Cinder call
- * needed (the volume already exists) — the spec (size/type/retain/pvc)
- * comes from the config's own `volumes.managed[]` entry matching `--name`,
- * not duplicate CLI flags.
- */
 export const volumesAdopt = Command.make(
   "adopt",
   { config: configArgument(), name: nameFlag, volumeId: volumeIdFlag },
@@ -99,7 +88,6 @@ const _toManagedSpec = (entry: ManagedVolume): VolumeSpec => ({
   retain: entry.retain
 })
 
-/** Names of the cluster's live Cinder volumes for the plan — empty (no OpenStack call) when nothing is managed. */
 export const lookupManagedVolumeNames = (
   config: ClusterConfig
 ): Effect.Effect<ReadonlySet<string>, VolumeError, CinderAuth | HttpClient.HttpClient> =>
@@ -110,19 +98,7 @@ export const lookupManagedVolumeNames = (
     return new Set(existing.map((volume) => volume.name))
   })
 
-/**
- * `create`/`scale` (mks path): converges `volumes.managed` via the Cinder
- * `VolumeProvider`, same as `k3sVolumeProviderLayer`'s `_reconcileVolumes`,
- * recording ids in `<cluster>.outputs.yaml` (the same outputs file
- * `reconcileVolumesOnDelete`/`volumes adopt` read/write). No-op when
- * `volumes.module` isn't `cinder` or nothing is managed; missing `OS_*`
- * credentials surface as `AuthenticationFailed` from `CinderAuth` itself
- * (see `volumes/env.ts`), never a silent skip.
- *
- * TODO(mks-volumes): the mks CLI path has no manifest-apply mechanism yet
- * (unlike k3s's `installAddons`, run against a fetched kubeconfig) — once one
- * exists, apply `staticVolumeManifests` here too instead of only recording ids.
- */
+// Missing OS_* credentials surface as AuthenticationFailed, never a silent skip.
 export const convergeManagedVolumes = (
   { config, configDir }: { readonly config: ClusterConfig; readonly configDir: string }
 ): Effect.Effect<void, VolumeError | OutputsInvalid | PlatformError, CinderAuth | HttpClient.HttpClient | FileSystem> =>
@@ -138,13 +114,7 @@ export const convergeManagedVolumes = (
     yield* writeOutputs({ dir: configDir, file: outputs, format: config.outputs?.format })
   })
 
-/**
- * `delete` skips `retain: true` volumes; called by `del` in
- * `commands.ts` after the cluster itself is torn down. Non-retained
- * volumes with a matching config entry are deleted; anything not present
- * in `volumes.managed` (or module !== "cinder") is left untouched — this
- * command never discovers/deletes volumes it wasn't told about.
- */
+// Only deletes volumes present in volumes.managed — never discovers/deletes on its own.
 export const reconcileVolumesOnDelete = (
   config: ClusterConfig
 ): Effect.Effect<

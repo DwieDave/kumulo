@@ -1,13 +1,4 @@
-/**
- * Thin, friendlier wrappers around the generated per-service clients.
- *
- * Each one resolves its base URL from the Keystone service catalog and runs on
- * the ambient `HttpClient` — in production that is `OpenStackHttpLive`, which
- * carries the token injection, per-attempt timeout and retry policy.
- *
- * ponytail: one module rather than five two-line files; split per service the
- * day one of them needs more than a base URL.
- */
+// one module rather than five two-line files; split per service the day one of them needs more than a base URL.
 import { Effect } from "effect"
 import { HttpApiClient } from "effect/unstable/httpapi"
 import { KeystoneAuth } from "../auth/keystone-auth.ts"
@@ -17,7 +8,6 @@ import { Nova } from "../generated/nova.ts"
 import { Octavia } from "../generated/octavia.ts"
 import { failNon2xx } from "../transport/http-client.ts"
 
-// Catalog URLs may carry a trailing slash; generated paths are absolute.
 const _base = (service: string, region: string) =>
   Effect.gen(function*() {
     const auth = yield* KeystoneAuth

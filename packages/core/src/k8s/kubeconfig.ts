@@ -23,12 +23,6 @@ const _invalid = (message: string): ConfigInvalid => new ConfigInvalid({ issues:
 
 const _base64Decode = (value: string): string => globalThis.atob(value)
 
-// kumulo: lenient decode — every field is optional at the schema
-// level (a kubeconfig's cluster/user entry may carry only some of these),
-// with "is the shape we need actually present" decided afterward in
-// `_parseAuth`/`parseKubeconfig` rather than by the schema failing outright.
-// `Schema.Unknown` array elements (not a nested cluster/user schema) because
-// only entry `0` is ever read — see the single-context comment below.
 const _KubeconfigDoc = Schema.Struct({
   clusters: Schema.optional(Schema.Array(Schema.Struct({
     cluster: Schema.optional(Schema.Struct({
@@ -47,8 +41,7 @@ const _KubeconfigDoc = Schema.Struct({
 type KubeconfigDoc = typeof _KubeconfigDoc.Type
 type KubeconfigUser = NonNullable<NonNullable<KubeconfigDoc["users"]>[number]["user"]>
 
-// kumulo: only token and client-cert auth are needed — kubeconfigs
-// from k3s (client-cert) and MKS (token) never use exec/oidc plugins.
+// landmine: only token/client-cert auth is parsed, exec/oidc plugin kubeconfigs are not supported
 const _parseAuth = (user: KubeconfigUser | undefined): KubeconfigAuth | undefined => {
   if (user?.token !== undefined) return { kind: "token", token: user.token }
   const certData = user?.["client-certificate-data"]
@@ -59,8 +52,6 @@ const _parseAuth = (user: KubeconfigUser | undefined): KubeconfigAuth | undefine
   return undefined
 }
 
-// kumulo: single-context kubeconfigs only (what k3s/MKS emit) — no
-// current-context resolution across multiple clusters/users.
 export const parseKubeconfig = (text: string): Effect.Effect<KubeconfigContext, ConfigInvalid> =>
   Effect.try({ try: () => parse(text), catch: (cause) => _invalid(String(cause)) }).pipe(
     Effect.flatMap((yaml) => Schema.decodeUnknownEffect(_KubeconfigDoc)(yaml).pipe(Effect.mapError(() => _invalid("kubeconfig is not a valid document")))),

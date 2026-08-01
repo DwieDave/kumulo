@@ -1,16 +1,4 @@
-/**
- * `deleteCluster`/`deleteAll` (T5.5, R11, R13, AC3): cluster, then network,
- * then router, in that strict order (the router 409s while a network is
- * still attached to it).
- *
- * kumulo: does deleting a cluster release its network automatically, or does
- * the network delete fail while the cluster is still terminating?
- * Undocumented (plan.md Q10, needs a live probe). This polls the cluster to
- * fully gone before touching the network/router, the conservative reading
- * that avoids racing UpCloud's own teardown — if a live probe shows the
- * network detaches immediately on cluster delete, the poll below is
- * unnecessary but harmless.
- */
+// Strict delete order: cluster, then network, then router — the router 409s while a network is still attached to it.
 import { Effect } from "effect"
 import { ignoreMissing, mapUpcloudError } from "@kumulo/upcloud"
 import type { MksError } from "@kumulo/core"
@@ -18,7 +6,6 @@ import { deleteNetwork } from "./network.ts"
 import { pollUntil } from "./status.ts"
 import type { UksClients, UksClusterRef } from "./types.ts"
 
-/** Deletes the UKS cluster and waits for it to be gone (feeds `deleteAll`'s network-teardown ordering). */
 export const deleteCluster = (
   { clients, ref }: { readonly clients: UksClients; readonly ref: UksClusterRef }
 ): Effect.Effect<void, MksError> =>
@@ -37,7 +24,6 @@ export const deleteCluster = (
     )
   )
 
-/** Full teardown: cluster (polled gone), then network, then router. */
 export const deleteAll = (
   { clients, ref, clusterName }: { readonly clients: UksClients; readonly ref: UksClusterRef; readonly clusterName: string }
 ): Effect.Effect<void, MksError> => deleteCluster({ clients, ref }).pipe(Effect.andThen(deleteNetwork({ clients, clusterName })))

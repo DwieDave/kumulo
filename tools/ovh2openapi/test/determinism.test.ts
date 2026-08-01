@@ -15,12 +15,6 @@ const _schemaArb: fc.Arbitrary<OvhSchema> = fc
   .dictionary(_propName.map((n: string) => `x.${n}`), _objectModel, { maxKeys: 5 })
   .map((models): OvhSchema => ({ apis: [], models }))
 
-// kumulo: rebuilds every dict (models, and each model's properties) with its
-// keys inserted in reverse order — same entries, different iteration order.
-// A `JSON.stringify`/`Object.keys` dependent bug in `convert` would only show
-// up against a *reordered* rebuild, never against converting one fixed
-// object twice (that's deterministic by construction, not by the code
-// under test).
 const _reorderKeys = (schema: OvhSchema): OvhSchema => ({
   ...schema,
   models: Object.fromEntries(

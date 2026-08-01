@@ -10,8 +10,6 @@ export interface CordonNodeOptions {
   readonly name: string
 }
 
-// Scale-down: mark a node unschedulable via server-side apply
-// (spec.unschedulable is a plain field, no dedicated cordon subresource).
 export const cordonNode = (
   options: CordonNodeOptions
 ): Effect.Effect<K8sManifest, ResourceConflict | HttpTransportError> =>
@@ -27,10 +25,6 @@ interface PodRef {
   readonly name: string
 }
 
-// kumulo: a pod without both metadata fields is silently skipped (same
-// "not a manifest -> drop it" lenient-decode semantics as `K8sClient.list`),
-// not a hard failure — a malformed pod entry shouldn't abort draining the
-// rest of the node.
 const _PodMetadata = Schema.Struct({
   metadata: Schema.Struct({ name: Schema.String, namespace: Schema.String })
 })
@@ -46,14 +40,10 @@ const _podRefs = (pods: ReadonlyArray<K8sManifest>): Effect.Effect<ReadonlyArray
 
 export interface DrainNodeOptions {
   readonly client: K8sClient["Service"]
-  // kumulo: caller passes an already fieldSelector-scoped ref
-  // (`?fieldSelector=spec.nodeName=<node>`) — building that query string
-  // is the caller's concern, same "no GVK mapper" call as `ResourceRef`
-  // itself.
+  // caller must pass podsRef already scoped with ?fieldSelector=spec.nodeName=<node>
   readonly podsRef: ResourceRef
 }
 
-// Drain: list a node's pods, evict each.
 export const drainNode = (
   options: DrainNodeOptions
 ): Effect.Effect<void, ResourceNotFound | ResourceConflict | HttpTransportError> =>

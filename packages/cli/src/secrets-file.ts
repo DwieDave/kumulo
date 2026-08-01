@@ -1,9 +1,3 @@
-/**
- * Secrets-file path resolution (R2): the parsed `--secrets-file` shared flag
- * first, else `KUMULO_SECRETS_FILE`. The flag is a real `Command` flag (visible
- * in `--help`); the resulting sops `ConfigProvider` is installed per-invocation
- * via `Command.provide` in `main.ts`, after parsing.
- */
 import { resolve } from "node:path"
 import { ConfigProvider } from "effect"
 import { sopsConfigProvider } from "@kumulo/secrets-sops"
@@ -14,7 +8,6 @@ type ChildProcessSpawnerService = (typeof ChildProcessSpawnerNS.ChildProcessSpaw
 const _nonBlank = (value: string | undefined): string | undefined =>
   value !== undefined && value.trim().length > 0 ? value : undefined
 
-/** Resolves the secrets-file path from the parsed `--secrets-file` flag, else `KUMULO_SECRETS_FILE`, else `undefined`. Pure — no process globals. */
 export const resolveSecretsFile = (
   { flag, env }: {
     readonly flag: string | undefined
@@ -22,11 +15,7 @@ export const resolveSecretsFile = (
   }
 ): string | undefined => _nonBlank(flag) ?? _nonBlank(env.KUMULO_SECRETS_FILE)
 
-/**
- * Real env vars first, the sops file only as a fallback (R3) — a var present in
- * both resolves to the env value and `sops` is never spawned for it (R4).
- * Relative paths resolve against the cwd (R2) so failures name an absolute path.
- */
+// env vars win over sops file; a var in both never spawns sops
 export const secretsConfigProvider = (
   { file, spawner }: { readonly file: string; readonly spawner: ChildProcessSpawnerService }
 ): ConfigProvider.ConfigProvider =>

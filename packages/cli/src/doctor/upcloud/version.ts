@@ -3,12 +3,12 @@ import type { DoctorCheck } from "../types.ts"
 
 const _name = "upcloud-version-supported"
 
-// ponytail: no vendored "supported UKS versions" endpoint (same gap as OVH's
+// no vendored "supported UKS versions" endpoint (same gap as OVH's
 // `regionVersionCapabilityCheck`) — hand-kept list, minor-only (UKS is
 // minor-only per D7). Upgrade: wire a live capability read once vendored.
 const _supportedVersions: ReadonlySet<string> = new Set(["1.31", "1.32", "1.33", "1.34", "1.35"])
 
-/** Requested Kubernetes version supported (see the ponytail note on the missing live endpoint). */
+/** Requested Kubernetes version supported (see the note on the missing live endpoint). */
 export const versionSupportedCheck = (args: { readonly version: string }): DoctorCheck => ({
   name: _name,
   run: Effect.succeed(

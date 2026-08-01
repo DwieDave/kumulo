@@ -18,11 +18,7 @@ import { makeFakeMksServer } from "../e2e/fake-mks-server.ts"
 import { makeFakeCinder } from "./fake-cinder.ts"
 import type { RouteHandler } from "./fake-cinder.ts"
 
-// R17/T5.1. The order is not cosmetic: the cluster's nodes and the LB's VIP
-// each hold a Neutron port on the private network, so a network delete issued
-// before they are gone is a 409, not a race. This drives the real `delete`
-// command over fake OVH + OpenStack and asserts the observed call order.
-
+// order matters: a network delete issued before nodes/LB VIP release their Neutron port is a 409, not a race
 const _yaml = `
 name: staging
 provider: ovh
@@ -58,8 +54,6 @@ const _storageLayer = Layer.succeed(StorageEnv, {
   serviceName: ""
 })
 
-// The real OpenStack `CloudProvider` is built from this env, so the teardown
-// exercises the actual Neutron/Octavia calls against the fake below.
 const _openStackEnvLayer = Layer.succeed(OpenStackEnv, {
   keystone: {
     token: Effect.succeed("tok"),
@@ -72,9 +66,6 @@ const _openStackEnvLayer = Layer.succeed(OpenStackEnv, {
 
 const _fakeOpenStack = (timeline: Array<string>, networkDelete: RouteHandler) => {
   const record = (entry: string) => timeline.push(entry)
-  // Octavia accepts a delete and finishes it asynchronously: the LB reports
-  // PENDING_DELETE — VIP port still on the subnet — until the amphorae are
-  // gone. The teardown must wait that out, so the fake reports it.
   const lb = { status: "ACTIVE" }
   return makeFakeCinder({
     "GET /v2/lbaas/loadbalancers": () => {
@@ -102,8 +93,6 @@ const _fakeOpenStack = (timeline: Array<string>, networkDelete: RouteHandler) =>
     "GET /v2.1/os-server-groups": () => ({ status: 200, body: { server_groups: [] } }),
     "GET /v2.0/security-groups": () => ({ status: 200, body: { security_groups: [] } }),
     "GET /v2.0/networks": () => ({ status: 200, body: { networks: [{ id: "net-1", name: "kumulo-staging" }] } }),
-    // Teardown detaches the gateway before the network (R17); this fixture has
-    // neither subnets nor a router, so both reads are no-ops.
     "GET /v2.0/subnets": () => ({ status: 200, body: { subnets: [] } }),
     "GET /v2.0/routers": () => ({ status: 200, body: { routers: [] } }),
     "DELETE /v2.0/networks/net-1": (request) => {
@@ -115,7 +104,6 @@ const _fakeOpenStack = (timeline: Array<string>, networkDelete: RouteHandler) =>
 
 const _deleted: RouteHandler = () => ({ status: 204 })
 
-/** Neutron's answer to a network that still has ports on it (`NetworkInUse`). */
 const _inUse: RouteHandler = () => ({
   status: 409,
   body: { NeutronError: { message: "There are one or more ports still in use on the network." } }
@@ -153,16 +141,12 @@ it.effect("delete tears down cluster, then LB, then floating IP, then network", 
   Effect.gen(function*() {
     const { server, timeline } = yield* _runDelete()
     assert.isFalse(server.clusters.has("kube-1"))
-    // Every ordered step happened, exactly once, in R17's order.
     assert.deepStrictEqual(
       timeline.filter((entry) => !_polls.has(entry)),
       ["cluster", "lb", "floating-ip", "network"]
     )
   }))
 
-// Without a wait, OVH's asynchronous node teardown leaves ports on the network
-// and the Neutron delete 409s on every real run — T5.3's loud failure would
-// become the normal path.
 it.effect("delete waits for the cluster to be gone before touching the network", () =>
   Effect.gen(function*() {
     const { timeline } = yield* _runDelete()
@@ -173,8 +157,6 @@ it.effect("delete waits for the cluster to be gone before touching the network",
     assert.isBelow(polledAfter, timeline.indexOf("lb"))
   }))
 
-// Same defect, one resource over: Octavia's DELETE only starts the teardown,
-// and the VIP port sits on the load-balancers subnet until it finishes.
 it.effect("delete waits for the load balancer to be gone before touching the network", () =>
   Effect.gen(function*() {
     const { timeline } = yield* _runDelete()
@@ -183,23 +165,13 @@ it.effect("delete waits for the load balancer to be gone before touching the net
     assert.isBelow(polledAfter, timeline.indexOf("network"))
   }))
 
-// T5.3. A half-torn network reported as success is the worst outcome here: the
-// operator believes the teardown ran and pays for the leftovers. The one-line
-// way to lose this forever is an `Effect.ignore`/`catchAll` around the delete
-// step "to make delete robust" — this test is what turns that red.
-//
-// `it.live`, not `it.effect`: DELETE is idempotent, so `OpenStackHttpLive`
-// replays a 409 with exponential backoff before it surfaces (~6s). Under
-// `it.effect`'s TestClock those sleeps never elapse and the test would hang
-// rather than fail. The retry is wanted — a port that is merely slow to
-// disappear resolves itself — so this waits it out instead of disabling it.
+// guards against a silent Effect.ignore/catchAll around the delete step masking a half-torn network as success
 it.live("a network delete blocked by a remaining port fails the command loudly", () =>
   Effect.gen(function*() {
     const failure = yield* Effect.flip(_runDelete(_inUse))
     expect(failure).toMatchObject({
       _tag: "ResourceConflict",
       kind: "network-in-use",
-      // Names the network and the remedy, not the endpoint path.
       ref: expect.stringContaining("net-1")
     })
   }), 30_000)

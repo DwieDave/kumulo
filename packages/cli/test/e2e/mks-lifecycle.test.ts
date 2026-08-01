@@ -90,16 +90,12 @@ it.effect("yaml → plan → apply → nodepool scale-update → kubeconfig → 
     const info = yield* applyMksEffect({ config }).pipe(Effect.provide(mksEnvLayer), Effect.provide(dnsNoopLive), Effect.provide(cloudProviderNever))
     assert.strictEqual(info.status, "READY")
 
-    // Re-plan against the now-populated fake API: everything exists -> all NoOp.
     const after = yield* lookupMksInventory(config).pipe(Effect.provide(mksEnvLayer), Effect.provide(cloudProviderNever))
-    // Guards the NoOp assertion below against going vacuous again: it only
-    // means "converged" if the fake really replayed the stamped template.
     assert.ok(after.poolHashes?.get("workers"), "fake must replay the pool template's config-hash annotation")
     const replan = buildMksPlan({ config, inventory: { ...after, volumeNames: new Set() } })
     assert.deepStrictEqual(replan.actions.map((a) => a._tag), ["NoOp", "NoOp"])
     assert.strictEqual([...(server.pools.get(info.id)?.values() ?? [])][0]?.desiredNodes, 3)
 
-    // scale: re-run apply with a bumped worker count — same reconcile.
     const [firstPool] = config.worker_pools
     assert.ok(firstPool, "fixture must define a worker pool")
     const scaledConfig = { ...config, worker_pools: [{ ...firstPool, count: 5 }] }
@@ -109,8 +105,6 @@ it.effect("yaml → plan → apply → nodepool scale-update → kubeconfig → 
     const kubeconfig = yield* kubeconfigMks(config).pipe(Effect.provide(mksEnvLayer))
     assert.match(kubeconfig.content, /kind: Config/)
 
-    // `cloudProviderNever` dies on every verb: this config declares no
-    // `network`, so teardown must reach no OpenStack call at all (R5).
     yield* deleteMksEffect(config).pipe(Effect.provide(mksEnvLayer), Effect.provide(dnsNoopLive), Effect.provide(cloudProviderNever))
     assert.strictEqual(server.clusters.has(info.id), false)
   }).pipe(Effect.provide(_fsTestLayer)))

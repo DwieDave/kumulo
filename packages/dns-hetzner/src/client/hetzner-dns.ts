@@ -1,9 +1,3 @@
-/**
- * Thin hand-written client over the Hetzner Cloud API's DNS zone/RRset
- * endpoints (D1 — no confirmed official OpenAPI spec exists to codegen
- * against; mirrors dns-ovh's generated client shape — matchStatus +
- * schemaBodyJson — without the codegen pipeline behind it).
- */
 import { Effect } from "effect"
 import type { SchemaError } from "effect/Schema"
 import * as Schema from "effect/Schema"
@@ -70,10 +64,6 @@ const _unexpectedStatus = (response: HttpClientResponse.HttpClientResponse): Eff
       )
   )
 
-// kumulo: plain status-range check instead of `HttpClientResponse.matchStatus` —
-// its `Unify`-based case-object inference collapses this file's precise
-// per-schema error unions down to `unknown`; a ternary keeps each branch's
-// type intact.
 const _isOk = (response: HttpClientResponse.HttpClientResponse): boolean => response.status >= 200 && response.status < 300
 
 const _decodeOn2xx = <A, I>(schema: Schema.Codec<A, I>) =>
@@ -103,9 +93,7 @@ const _listPage = (
     Effect.map((r) => ({ rrsets: r.rrsets, nextPage: r.meta?.pagination?.next_page ?? null }))
   )
 
-// kumulo: Hetzner Cloud API list endpoints paginate (50/page here) —
-// removeClusterRecords's ownership scan needs every rrset in the zone, not
-// just the first page, so this walks pages via `meta.pagination.next_page`.
+// Hetzner list endpoints paginate 50/page; walks all pages via meta.pagination.next_page.
 const _listAllRRsets = (
   httpClient: HttpClient.HttpClient,
   zoneIdOrName: string,
@@ -120,7 +108,6 @@ const _listAllRRsets = (
     )
   )
 
-/** Hand-written client (D1) over `/zones` + `/zones/{id}/rrsets*`. */
 export const makeHetznerDnsClient = (httpClient: HttpClient.HttpClient): HetznerDns => ({
   getZone: (idOrName) =>
     httpClient.execute(HttpClientRequest.get(`/zones/${encodeURIComponent(idOrName)}`)).pipe(

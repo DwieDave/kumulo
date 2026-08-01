@@ -67,14 +67,9 @@ const _oneBucketYaml = `  module: ovh
 const _noBucketsYaml = `  module: none
   buckets: []`
 
-// `ovh` module with nothing currently desired — distinct from `module: none`,
-// which this reconcile code treats as "don't touch buckets at all" (module
-// switched off, not "every desired bucket was removed").
 const _emptyBucketsOvhYaml = `  module: ovh
   buckets: []`
 
-// in-memory FileSystem covering just `exists`/`readFileString`/`writeFileString`
-// against a `Map`, seeded with an outputs file for the bucket-outputs path.
 const _fakeFs = (seed: Record<string, string> = {}) => {
   const store = new Map(Object.entries(seed))
   return layerNoop({
@@ -97,8 +92,6 @@ interface FakeProviderCalls {
   readonly ensureBucket: Array<BucketSpec>
   readonly deleteBucket: Array<BucketRef>
   readonly ensureCredentialsCalls: Array<ClusterTag>
-  // Buckets that "exist on OVH" before the test runs — plan existence checks
-  // and heal behavior read live state through listBuckets.
   readonly live?: Array<BucketRef>
 }
 
@@ -306,7 +299,6 @@ it.effect("bucketPlanActions plans Create for a recorded bucket deleted out-of-b
       cluster: "staging",
       buckets: [{ name: "staging-eu-backups", region: "DE1", versioning: false, encryption: false, retain: true }]
     })
-    // No `live` seeding: OVH no longer has the bucket.
     const layer = Layer.merge(_fakeFs(seed), _fakeProviderLayer({ ensureBucket: [], deleteBucket: [], ensureCredentialsCalls: [] }))
     const actions = yield* bucketPlanActions({ config, configDir: "." }).pipe(Effect.provide(layer))
     assert.deepStrictEqual(actions, [{ _tag: "Create", name: "bucket/staging-eu-backups" }])
@@ -325,7 +317,6 @@ it.effect("convergeBuckets re-ensures recorded (noop) buckets so out-of-band del
 
     yield* convergeBuckets({ config, configDir: "." }).pipe(Effect.provide(layer))
 
-    // The diff says noop, but the bucket still goes through ensureBucket.
     assert.deepStrictEqual(calls.ensureBucket.map((b) => b.name), ["staging-eu-backups"])
   }))
 

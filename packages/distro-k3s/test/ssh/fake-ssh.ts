@@ -3,10 +3,6 @@ import { SshCommandError } from "../../src/ssh/errors.ts"
 import { Ssh } from "../../src/ssh/port.ts"
 import type { SshHost } from "../../src/ssh/port.ts"
 
-// Scriptable in-memory `Ssh` fake — each hook is a plain function so a test
-// can close over its own mutable state (e.g. a call counter) to simulate
-// "not ready yet, then ready" sequences without a shared queue abstraction.
-// Reused across readiness-gate and bootstrap-exec tests.
 export interface SshScript {
   readonly exec?: (host: SshHost, command: string) => Effect.Effect<string, SshCommandError>
   readonly readFile?: (host: SshHost, path: string) => Effect.Effect<string, SshCommandError>
@@ -28,10 +24,7 @@ export const flakyThenOk = (
   failures: number
 ): (host: SshHost, command: string) => Effect.Effect<string, SshCommandError> => {
   let calls = 0
-  // kumulo: WHY Effect.suspend — the returned Effect is re-run once per
-  // repeat/retry iteration (that's the whole point of testing a retry
-  // schedule); without `suspend` deferring the JS closure to run-time, the
-  // call counter would only tick once, at description-construction time.
+  // kumulo: Effect.suspend is required — without it the call counter ticks once at construction, not per retry.
   return (host, command) =>
     Effect.suspend(() => {
       calls += 1

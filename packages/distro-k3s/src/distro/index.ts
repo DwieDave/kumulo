@@ -23,12 +23,7 @@ export interface MakeSelfManagedDistroArgs {
   readonly apiDnsName?: string
 }
 
-// Assembles the k3s `SelfManagedDistroShape`, wiring SSH/readiness,
-// bootstrap orchestration, and kubeconfig/releases/drain into the one port
-// core drives. Dependencies are closed over here (not requested via Effect
-// context) because the port's
-// method signatures carry no `R` — a Layer-provided service can't leak into
-// a `Effect.Effect<A, E>` return type.
+// Dependencies are closed over here, not requested via Effect context: the port's methods carry no `R`.
 export const makeSelfManagedDistro = (args: MakeSelfManagedDistroArgs): SelfManagedDistroShape => {
   const releases = Effect.runSync(makeReleaseCache())
   const provideSsh = Effect.provideService(Ssh, args.ssh)

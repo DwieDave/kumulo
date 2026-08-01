@@ -1,10 +1,4 @@
-/**
- * Hand-written client (D1) over `/1.3/storage` (R1). D3: WRAPPED envelopes —
- * a single storage is `{"storage": {...}}`, a list is
- * `{"storages": {"storage": [...]}}`, and request bodies wrap the same way.
- * Do not model this on `uks.ts` (bare) — transcribed from `upcloud-go-api`'s
- * `storage.go` per D3, not inferred from a sibling client.
- */
+// /1.3/storage envelopes are WRAPPED ({"storage":{...}}), unlike uks.ts's bare shape
 import { Effect } from "effect"
 import * as Schema from "effect/Schema"
 import type * as HttpClient from "effect/unstable/http/HttpClient"
@@ -21,9 +15,6 @@ export type StorageState = typeof StorageState.Type
 export const Storage = Schema.Struct({
   uuid: Schema.String,
   size: Schema.Number,
-  // kumulo: absent on non-disk storages — `GET /1.3/storage` lists the whole
-  // account, and templates/backups can carry neither tier nor zone (live
-  // probe 2026-08-01). kumulo-labeled disks always have both.
   tier: Schema.optionalKey(StorageTier),
   zone: Schema.optionalKey(Schema.String),
   title: Schema.String,
@@ -39,7 +30,6 @@ const _StoragesResponse = Schema.Struct({ storages: Schema.Struct({ storage: Sch
 const _decodeStorage = decodeOn2xx(_StorageResponse)
 const _decodeStorages = decodeOn2xx(_StoragesResponse)
 
-/** `POST /1.3/storage` body (R1) — `size`/`zone`/`title` required, wrapped as `{"storage": {...}}`. */
 export interface StorageCreateInput {
   readonly size: number
   readonly zone: string
@@ -49,7 +39,6 @@ export interface StorageCreateInput {
   readonly encrypted?: boolean
 }
 
-/** `PUT /1.3/storage/{uuid}` — tier and zone are immutable at the API, so only these are accepted. */
 export interface StoragePatchInput {
   readonly title?: string
   readonly size?: number
@@ -61,13 +50,11 @@ export interface StorageClient {
   readonly get: (uuid: string) => Effect.Effect<Storage, UpcloudRawError>
   readonly create: (body: StorageCreateInput) => Effect.Effect<Storage, UpcloudRawError>
   readonly modify: (uuid: string, body: StoragePatchInput) => Effect.Effect<Storage, UpcloudRawError>
-  /** R1: deletes with `?backups=delete` — kumulo owns no separate backup lifecycle. */
   readonly delete: (uuid: string) => Effect.Effect<void, UpcloudRawError>
 }
 
 const _base = "/1.3/storage"
 
-/** Hand-written client (D1) over `/1.3/storage*`. */
 export const makeStorageClient = (httpClient: HttpClient.HttpClient): StorageClient => ({
   list: () => httpClient.execute(HttpClientRequest.get(_base)).pipe(Effect.flatMap(_decodeStorages), Effect.map((r) => r.storages.storage)),
   get: (uuid) =>

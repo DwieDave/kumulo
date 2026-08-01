@@ -15,14 +15,11 @@ interface RawCluster {
   readonly url?: string
   readonly version?: string
   readonly region?: string
-  /** `null` is OVH's "no private network"; distinct from a field it never sent. */
   readonly privateNetworkId?: string | null
-  /** Subnet ids OVH stamped at creation — the identity R8 compares against. */
   readonly nodesSubnetId?: string | null
   readonly loadBalancersSubnetId?: string | null
 }
 
-/** `ManagedClusterInfo` plus the cluster-scoped fields drift detection compares (§`cluster-drift.ts`). */
 export type MksClusterInfo = ManagedClusterInfo & MksClusterState
 
 const _toInfo = (cluster: RawCluster): MksClusterInfo => ({
@@ -36,7 +33,6 @@ const _toInfo = (cluster: RawCluster): MksClusterInfo => ({
   loadBalancersSubnetId: cluster.loadBalancersSubnetId
 })
 
-/** Resolves the cluster by name only — never creates one: a missing cluster is a no-op, not a provisioning trigger. */
 export const findClusterByName = (
   { mks, config }: { readonly mks: Mks; readonly config: MksDriverConfig }
 ): Effect.Effect<MksClusterInfo | undefined, MksError> =>
@@ -91,17 +87,10 @@ const _awaitReady = (
     ref: kubeId
   })
 
-/**
- * Cluster-level drift, converged before anything is written: a supported
- * version bump becomes OVH's own `NEXT_MINOR` update, and an immutable field
- * (region) fails here — the single point every write routes through, so a
- * refusal costs zero mutations. Never destroys a cluster to converge.
- */
+// Cluster drift never destroys a cluster to converge; an immutable field (region) fails here before anything is written.
 const _convergeCluster = (
   { cluster, mks, config }: { readonly mks: Mks; readonly config: MksDriverConfig; readonly cluster: RawCluster }
 ): Effect.Effect<void, MksError> => {
-  // By here the network reconcile has run, so a configured network means a
-  // resolved `privateNetworkId` — the presence flag needs no separate source.
   const desired = { ...config, privateNetwork: config.privateNetworkId !== undefined }
   const drift = clusterDrift({ desired, actual: _toInfo(cluster) })
   if (drift._tag === "None") return Effect.void
@@ -113,7 +102,6 @@ const _convergeCluster = (
   })
 }
 
-/** Create-or-update the MKS control plane, then poll to `READY`. */
 export const ensureCluster = (
   { mks, config }: { readonly mks: Mks; readonly config: MksDriverConfig }
 ): Effect.Effect<MksClusterInfo, MksError> =>

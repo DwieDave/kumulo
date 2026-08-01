@@ -7,20 +7,13 @@ import { Ssh } from "./port.ts"
 import type { SshHost } from "./port.ts"
 import { shellQuote } from "./shell.ts"
 
-// kumulo: WHY root@key-only — user "root", pubkey-auth only, no password
-// fallback.
 const SSH_USER = "root"
-// `withDefault` only leaves the (never-reachable, `Schema.String` accepts any
-// string) validation-error branch of `ConfigError` — `orDie` documents that.
 const _privateKeyPath: Effect.Effect<string> = Config.string("KUMULO_SSH_PRIVATE_KEY_PATH").pipe(
   Config.withDefault(`${homedir()}/.ssh/id_ed25519`),
   Effect.orDie
 )
 
-// One-shot connect-exec-disconnect per call — no pooling.
-// ponytail: fine for bootstrap's low call volume (readiness gates + a
-// handful of install commands per node); add a connection cache if a
-// future task fans this out to many commands per node.
+// no connection pooling, add a cache if this fans out to many commands per node
 const _withSession = <A>(
   host: SshHost,
   command: string,
@@ -28,9 +21,6 @@ const _withSession = <A>(
 ): Effect.Effect<A, SshCommandError> =>
   Effect.gen(function*() {
     const privateKeyPath = yield* _privateKeyPath
-    // Read the key *outside* the callback: a throw inside `Effect.callback`
-    // is a defect that bypasses the CLI's error rendering, so a missing key
-    // has to surface as a typed failure like every other SSH failure.
     const privateKey = yield* Effect.try({
       try: () => readFileSync(privateKeyPath),
       catch: (cause) =>
@@ -50,11 +40,7 @@ const _withSession = <A>(
           port: host.port,
           username: SSH_USER,
           privateKey,
-          // ponytail: trust-on-first-use — nodes are created seconds earlier by
-          // this same run and no known_hosts store exists yet, so there is
-          // nothing to verify against. Made explicit rather than relying on
-          // ssh2's silent accept-all default. Upgrade path: pin the host key
-          // reported by the provider's console output / cloud-init and compare.
+          // trust-on-first-use, no known_hosts yet; pin the provider's reported host key if that's ever needed
           hostVerifier: () => true
         })
       return Effect.sync(() => client.end())

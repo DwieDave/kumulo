@@ -5,12 +5,6 @@ import { CloudProvider } from "../../src/ports/cloud-provider.ts"
 import { FakeCloudProviderLive } from "../fakes/cloud-provider.ts"
 import type { ServerSpec } from "../../src/domain/types.ts"
 
-// kumulo: test-local decorator over the shared fake — blocks on `Effect.never`
-// (no `Clock`/wall-time dependency, so it's unaffected by `it.effect`'s
-// virtual `TestClock`) the first time a 2nd distinct server would be
-// created. That gives this one test a deterministic "genuinely mid-apply"
-// window to interrupt into, without changing the shared fake's behavior for
-// every other test that reuses it.
 const _blockOnSecondServerLive: Layer.Layer<CloudProvider> = Layer.effect(
   CloudProvider,
   Effect.gen(function*() {
@@ -48,11 +42,6 @@ describe("applyServers", () => {
     Effect.gen(function*() {
       const cloudProvider = yield* CloudProvider
       const fiber = yield* Effect.forkChild(applyServers({ specs, concurrency: 1 }))
-      // `_blockOnSecondServerLive` blocks on `Effect.never` the first time a
-      // 2nd distinct server would be created — yielding gives the forked
-      // fiber a chance to run into that block, guaranteeing the interrupt
-      // below lands genuinely mid-apply (1 server committed, not 0 and not
-      // all 4), with no wall-clock race.
       yield* Effect.yieldNow
       yield* Effect.yieldNow
       yield* Fiber.interrupt(fiber)

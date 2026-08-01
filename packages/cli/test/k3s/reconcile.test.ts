@@ -8,10 +8,6 @@ import { CloudCredentialEnv } from "../../src/k3s/env.ts"
 import { applyK3sEffect, deleteK3sEffect, k3sStatusEffect, orphanedWorkers } from "../../src/k3s/reconcile.ts"
 import { decodeK3sTestConfig } from "../fixtures.ts"
 
-// Item 3 — the injectable K8sClient seam: a fake `K8sClient` Layer proves
-// the drain phase takes its client from context instead of a real
-// kubeconfig/HTTP round-trip. Just enough behavior for `drainAndRemove`
-// (cordon=apply, drain=list+evict, delete=delete) to succeed.
 const _isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null
 const _emptyManifests: ReadonlyArray<K8sManifest> = []
 
@@ -87,8 +83,6 @@ const CloudCredentialEnvFake = Layer.succeed(CloudCredentialEnv, {
   applicationCredentialSecret: ""
 })
 
-// Tracking fakes (not no-ops) so create/delete can assert DNS + retained
-// volume + reverse-teardown-order behavior, not just that the calls compile.
 interface VolumeCalls {
   readonly ensured: Array<string>
   readonly deleted: Array<string>
@@ -114,8 +108,7 @@ const _trackingDnsProvider = (calls: DnsCalls) =>
     removeClusterRecords: (_zone: string, cluster: string) => Effect.sync(() => calls.removed.push(cluster))
   })
 
-// ponytail: local, minimal fakes (not reused across packages) — a
-// package doesn't import a sibling's test/ fixtures.
+// local, minimal fakes only, not reused across packages.
 const _fakeCloudProviderLive = (deletedServers: Array<string> = []): Layer.Layer<CloudProvider> => Layer.effect(
   CloudProvider,
   Effect.gen(function*() {
@@ -151,8 +144,6 @@ const _fakeCloudProviderLive = (deletedServers: Array<string> = []): Layer.Layer
   })
 )
 
-// Records every command actually executed via `Ssh.exec` (not merely
-// rendered), plus how many times each readiness gate fires.
 interface SshLog {
   readonly executed: Array<{ readonly host: string; readonly command: string }>
   readonly cloudInitGates: Array<string>
@@ -199,32 +190,25 @@ describe("k3s CLI composition root", () => {
       expect(result.apiEndpoint).toBe("10.0.0.100")
       expect(result.kubeconfigPath).toBe("/tmp/test-k3s.kubeconfig")
 
-      // 3 masters + 2 workers, every one's install script actually executed
-      // (not merely rendered) over the fake `Ssh`.
       expect(log.executed).toHaveLength(5)
       expect(log.executed.filter((e) => e.command.includes("--cluster-init"))).toHaveLength(1)
       expect(log.executed.filter((e) => e.command.includes("agent"))).toHaveLength(2)
 
-      // Readiness gates: cloud-init+ssh before every node, cluster-info once for master 1.
       expect(log.cloudInitGates).toHaveLength(5)
       expect(log.clusterInfoGates).toHaveLength(1)
 
-      // TLS SANs: every master IP + the LB VIP + the DNS api record FQDN.
       const masterScripts = log.executed.filter((e) => e.command.includes("--cluster-init") || e.command.includes("--server https://10.0.0."))
       for (const { command } of masterScripts) {
-        expect(command).toContain("--tls-san='10.0.0.100'") // LB VIP (shell-quoted)
-        expect(command).toContain("--tls-san='api.test-k3s.example.com'") // DNS api record (shell-quoted)
+        expect(command).toContain("--tls-san='10.0.0.100'")
+        expect(command).toContain("--tls-san='api.test-k3s.example.com'")
       }
 
-      // DNS: the api_server target record was ensured against the LB VIP, with
-      // the TXT ownership record that lets the next apply recognise it as ours.
       expect(dnsCalls.ensured).toHaveLength(1)
       expect(dnsCalls.ensured[0]).toEqual([
         { name: "api.test-k3s", target: "10.0.0.100" },
         { name: "api.test-k3s", target: "kumulo.cluster=test-k3s" }
       ])
 
-      // Volumes: the retained volume was ensured (created).
       expect(volumeCalls.ensured).toEqual(["pg-data"])
     }))
 
@@ -244,11 +228,9 @@ describe("k3s CLI composition root", () => {
         )
 
       yield* provide(applyK3sEffect({ config: _configWithWorkerCount(2), configDir: "/tmp" }))
-      expect(log.executed).toHaveLength(5) // 3 masters + 2 workers
+      expect(log.executed).toHaveLength(5)
 
       yield* provide(applyK3sEffect({ config: _configWithWorkerCount(3), configDir: "/tmp" }))
-      // Every apply re-runs bootstrap against the full current inventory (the
-      // install script itself is idempotent shell) — 3 masters + 3 workers this time.
       expect(log.executed).toHaveLength(5 + 6)
       expect(deletedServers).toEqual([])
     }))
@@ -264,11 +246,7 @@ describe("k3s CLI composition root", () => {
       expect(deletedServers).toEqual(["kumulo-test-k3s-worker-general-2"])
       expect(cordonedNodes).toEqual(["kumulo-test-k3s-worker-general-2"])
     }).pipe(
-      // `CloudProvider` state (which servers exist) must persist across both
-      // applies to prove the second one detects worker-2 as orphaned — one
-      // `Effect.provide` for the whole sequence, not per-apply (a fresh
-      // `Effect.provide` per call rebuilds the fake Layer, i.e. a fresh
-      // in-memory store, each time).
+      // one Effect.provide for the whole sequence: per-apply would rebuild the fake Layer's in-memory store each time.
       Effect.provide(_FakeSshLive(log)),
       Effect.provide(_trackingVolumeProvider({ ensured: [], deleted: [] })),
       Effect.provide(_trackingDnsProvider({ ensured: [], removed: [] })),
@@ -282,7 +260,6 @@ describe("k3s CLI composition root", () => {
       { id: "1", name: "kumulo-test-k3s-worker-general-1", ip: "10.0.0.4" },
       { id: "2", name: "kumulo-test-k3s-worker-general-2", ip: "10.0.0.5" }
     ]
-    // scaled down to count: 1 -> only "-general-1" remains desired.
     expect(orphanedWorkers({ config: _configWithWorkerCount(1), workerInfos }).map((w) => w.name))
       .toEqual(["kumulo-test-k3s-worker-general-2"])
     expect(orphanedWorkers({ config: _configWithWorkerCount(2), workerInfos })).toEqual([])
@@ -299,9 +276,7 @@ describe("k3s CLI composition root", () => {
         Effect.provide(_fakeCloudProviderLive())
       )
 
-      // `retain: true` -> never deleted.
       expect(volumeCalls.deleted).toEqual([])
-      // Owned DNS records for this cluster's zone are removed.
       expect(dnsCalls.removed).toEqual(["test-k3s"])
     }))
 })

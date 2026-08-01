@@ -11,15 +11,7 @@ export interface StatusPollOptions<Status> {
   readonly ref: string
 }
 
-/**
- * Polls async cluster/nodepool provisioning statuses until `isDone` or
- * `timeout` (surfaced as `ProvisioningTimeout`).
- *
- * kumulo: a local re-implementation of core's `reconcile/poll.ts`
- * `pollUntil` — that helper isn't re-exported from `@kumulo/core`'s package
- * root, and dep-lint's `no-deep-package-imports` rule forbids reaching into
- * core's `src` internals from a sibling package. Small enough to duplicate.
- */
+// Local re-implementation of core's pollUntil: dep-lint forbids reaching into core's src internals from a sibling package.
 export const pollUntil = <Status>(options: StatusPollOptions<Status>): Effect.Effect<Status, MksError> =>
   Effect.gen(function*() {
     const last = yield* Ref.make<Status | undefined>(undefined)

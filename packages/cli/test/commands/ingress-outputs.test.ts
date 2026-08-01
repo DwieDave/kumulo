@@ -21,23 +21,16 @@ const _store = () => {
   }
 }
 
-// R13 — the id a consumer annotates a Service with
-// (`loadbalancer.openstack.org/load-balancer-id`) and the address DNS points at
-// land beside the volume ids, in the same file.
 it.effect("records the LB id and floating IP in <cluster>.outputs.yaml", () => {
   const store = _store()
   return Effect.gen(function*() {
     yield* recordIngressOutputs({ config: _config, configDir: "/cfg", ingress: _ingress })
     const text = store.read()
     assert.deepStrictEqual((yield* parseOutputsYaml(text)).ingress, _ingress)
-    // N6 — this file is not encrypted: ids and addresses only.
     for (const secret of ["accessKey", "secretKey", "password", "token"]) assert.notInclude(text, secret)
   }).pipe(Effect.provide(store.layer))
 })
 
-// The distro apply runs concurrently with `convergeManagedVolumes`, which
-// read-modify-writes the same file, and `stringifyOutputs` rebuilds it from a
-// fixed literal — so volume ids already on disk must survive this write.
 it.effect("preserves volume ids the volumes step already recorded", () => {
   const store = _store()
   return Effect.gen(function*() {

@@ -21,8 +21,6 @@ const _bothRecords = _configWith([{ name: "api", target: "api_server" }, { name:
 const _OWNER = ownershipTarget("prod-eu")
 
 describe("desiredRecords", () => {
-  // N1/scope §5: k3s supplies an `api_server` target and nothing else, so
-  // `ingress` must still reach the provider as the literal string it is today.
   it("substitutes api_server and passes an unresolved ingress through literally", () => {
     expect(desiredRecords({ config: _bothRecords, targets: { api_server: { kind: "ip", value: "10.0.0.100" } } })).toEqual([
       { name: "api", target: "10.0.0.100" },
@@ -44,11 +42,6 @@ describe("desiredRecords", () => {
     ])
   })
 
-  // The `DnsProvider` contract keys ownership off a `kumulo.cluster=<tag>` TXT
-  // record at the same name. Without one, every record kumulo wrote looks
-  // foreign on the next apply (`ResourceConflict`) and `removeClusterRecords`
-  // finds nothing to delete — emitting it here is what makes a second apply
-  // converge, and it is the same tag `removeDns` deletes by (`config.name`).
   it.prop("emits exactly one ownership TXT record per distinct name", [
     fc.array(fc.record({ name: fc.constantFrom("api", "www", "lb"), target: fc.constantFrom("api_server", "ingress", "10.0.0.5") }), {
       minLength: 1,
@@ -64,10 +57,6 @@ describe("desiredRecords", () => {
     expect(out).toHaveLength(records.length + owners.length)
   })
 
-  // Pinned deliberately, not inherited: nothing rejects a target that resolves
-  // to nothing, so `api-server` is written as a CNAME to the hostname
-  // `api-server`. That silence is the cost of R15's pass-through, and it is the
-  // same mechanism that leaves `ingress` literal with no LB to point at.
   it("writes a mistyped placeholder literally rather than failing", () => {
     const config = _configWith([{ name: "api", target: "api-server" }, { name: "www", target: "Ingress" }])
     expect(desiredRecords({
@@ -81,10 +70,7 @@ describe("desiredRecords", () => {
     ])
   })
 
-  // Totality: every target either names a supplied placeholder and becomes its
-  // value, or survives untouched. No third outcome, for any input.
   it.prop("a record takes its placeholder's value, or stays exactly as written", [
-    // The schema already rejects an empty target, so every case here decodes.
     fc.constantFrom("api_server", "ingress", "api-server", "ingres", "INGRESS", "www.example.com", "203.0.113.7"),
     fc.boolean()
   ], ([target, withIngress]) => {

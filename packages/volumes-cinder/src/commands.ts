@@ -4,7 +4,6 @@ import { upsertVolume } from "./outputs.ts"
 import type { PvcBinding } from "./manifests.ts"
 import { staticVolumeManifests } from "./manifests.ts"
 
-// kumulo: `kumulo volumes list` — pure projection of the outputs file.
 export const listVolumes = (file: OutputsFile): ReadonlyArray<OutputsVolume> => file.volumes
 
 export interface AdoptResult {
@@ -12,10 +11,7 @@ export interface AdoptResult {
   readonly manifests: ReadonlyArray<K8sManifest>
 }
 
-// kumulo: `kumulo volumes adopt` — re-binds an existing volume ID into a
-// new cluster's generated PVs by recording it in that cluster's outputs
-// file and regenerating the static PV(+PVC) manifests against the pinned
-// `csi.volumeHandle` — no Cinder call needed, the volume already exists.
+// no Cinder call needed, re-binds an existing volume id into a new cluster's generated PVs
 export const adoptVolume = (
   { file, volumeId, spec, pvc }: {
     readonly file: OutputsFile

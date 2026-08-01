@@ -1,9 +1,3 @@
-/**
- * The k3s cluster-config variant. Shared building blocks come from
- * `@kumulo/core`; everything only k3s carries (self-managed control plane,
- * ssh, masters, addons, k3s passthrough) is defined here. The `ClusterConfig`
- * union over all variants is assembled in `@kumulo/cli`.
- */
 import { Schema } from "effect"
 import {
   Cidr,
@@ -22,8 +16,6 @@ const isOddCount = Schema.makeFilter((count: number) =>
 const PublicAccess = Schema.Literals(["bastionless", "nat"])
 const Cni = Schema.Literals(["flannel", "cilium"])
 
-// kumulo: version format is distro-dependent — k3s embeds a `+k3sN` build
-// suffix. Structural so the pattern lands in the generated JSON schema.
 const K3sVersion = Schema.String.check(
   Schema.isPattern(/^v\d+\.\d+\.\d+\+k3s\d+$/, { message: "must be a k3s version like v1.31.4+k3s1" })
 )
@@ -71,8 +63,7 @@ const K3sPassthrough = Schema.Struct({
   extra_agent_args: Schema.Array(Schema.String)
 })
 
-// kumulo: hcloud_csi/cinder_csi are provider-specific addons — enabling the
-// wrong one for the active provider is a config error, not a silent no-op
+// wrong provider addon enabled is a config error, not a silent no-op
 const isAddonsConsistentWithProvider = Schema.makeFilter(
   (config: {
     provider: string
@@ -93,7 +84,6 @@ export const K3sClusterConfig = Schema.Struct({
   distro: Schema.Literal("k3s"),
   version: K3sVersion,
   dns: Dns,
-  // Required: the k3s path provisions its own control plane, network and nodes.
   network: Network,
   api_server: ApiServer,
   ssh: Ssh,

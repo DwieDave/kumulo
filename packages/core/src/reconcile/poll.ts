@@ -9,16 +9,10 @@ export interface PollOptions<Status, E, R> {
   readonly timeout: Duration.Input
   readonly kind: string
   readonly ref: string
-  /** Renders the last observed status for the timeout error — pass one when `Status` is an object. */
   readonly describe?: (status: Status) => string
 }
 
-// Async OpenStack/OVH provisioning statuses are polled on a fixed
-// Schedule until `isDone`, bounded by `timeout`. Timing out fails with
-// `ProvisioningTimeout` carrying the last observed status, never a bare
-// "timed out".
-// ponytail: String(object) is "[object Object]" — a timeout that hides the
-// status it timed out on. JSON is the least-wrong default for objects.
+// String(object) is "[object Object]", JSON.stringify is the least-wrong default
 const _describe = (status: unknown): string => typeof status === "object" && status !== null ? JSON.stringify(status) : String(status)
 
 export const pollUntil = <Status, E, R>(

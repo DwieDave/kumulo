@@ -9,11 +9,6 @@ import type { OutputsInvalid as StorageOutputsInvalid } from "@kumulo/storage-ov
 import type { OutputsInvalid as VolumesOutputsInvalid } from "@kumulo/volumes-cinder"
 import type { DistroNotWired } from "./distro-not-wired.ts"
 
-/**
- * The one formatting convention for every multi-part error: a title line,
- * then each detail indented two spaces (details may themselves be
- * multi-line). No details → just the title.
- */
 const _block = (
   { details, title }: { readonly title: string; readonly details: ReadonlyArray<string> }
 ): string =>
@@ -21,11 +16,6 @@ const _block = (
     ? title
     : [`${title}:`, ...details.flatMap((detail) => detail.split("\n")).map((line) => `  ${line}`)].join("\n")
 
-/**
- * Prettify a raw message: unwrap provider JSON bodies (`{"message": "..."}`),
- * strip `[Tag] 400:` prefixes, and put a trailing `(request ID: x)` on its
- * own line.
- */
 const _messageDetails = (text: string): ReadonlyArray<string> => {
   if (text === "") return []
   let message = text
@@ -35,7 +25,6 @@ const _messageDetails = (text: string): ReadonlyArray<string> => {
       message = parsed.message
     }
   } catch {
-    // not JSON — show as-is
   }
   const match = message.match(/^(.*?)\s*\(request ID: ([^)]+)\)\s*$/s)
   const body = (match?.[1] ?? message).replace(/^\[\w+\] \d+: /, "")
@@ -43,7 +32,6 @@ const _messageDetails = (text: string): ReadonlyArray<string> => {
   return requestId === undefined ? [body] : [body, `request ID: ${requestId}`]
 }
 
-/** Detail lines for an unknown cause — HTTP errors get request/status lines, everything else its message. */
 const _causeDetails = (cause: unknown): ReadonlyArray<string> => {
   if (HttpClientError.isHttpClientError(cause)) {
     const status = cause.response?.status
@@ -59,12 +47,6 @@ const _causeDetails = (cause: unknown): ReadonlyArray<string> => {
   return _messageDetails(String(cause))
 }
 
-/**
- * Full renderer registry — `RendererRegistry`'s mapped type requires every
- * tag in `KumuloErrorTag`, not just the ones the ovh-mks path can currently
- * raise, so unreached tags get a plain generic message rather than being
- * left unimplemented.
- */
 export const cliErrorRegistry: RendererRegistry = {
   HttpTransportError: (error) => _block({ title: "Provider API request failed", details: _causeDetails(error.cause) }),
   ResponseDecodeError: (error) =>
@@ -98,12 +80,6 @@ export const cliErrorRegistry: RendererRegistry = {
 
 export type CliDomainError = KumuloError | DistroNotWired | VolumesOutputsInvalid | StorageOutputsInvalid | PlatformError
 
-/**
- * `_tag ===` checks narrow the union without a cast: once `PlatformError`,
- * `DistroNotWired` and `OutputsInvalid` (shared tag, volumes and storage both
- * carry the same `{ message }` shape) are ruled out, TypeScript narrows
- * `error` to `KumuloError` for the final `renderError` call.
- */
 export const renderCliError = (error: CliDomainError): string => {
   if (error._tag === "PlatformError") return `File error: ${error.message}`
   if (error._tag === "DistroNotWired") return `distro "${error.distro}" is not wired into the CLI yet`

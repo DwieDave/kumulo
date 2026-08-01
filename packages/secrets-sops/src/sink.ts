@@ -1,26 +1,4 @@
-/**
- * Sops-backed `CredentialsSink` (R9/R10): encrypts credential entries into
- * `<dir>/<cluster>.credentials.yaml` via `sops --encrypt`, piping plaintext
- * only through the child process's stdin — plaintext is never written to
- * disk, only the ciphertext `sops` prints to stdout is.
- *
- * Output file schema — the stable contract `konfig.ts`'s `SecretSource` will
- * consume. Canonical source: .docs/workflows/ovh-object-storage/requirements.md
- * R10 ("Contract" subsection) — keep both in sync on change.
- *
- *   cluster: <cluster tag>
- *   s3:
- *     user: <s3 user name>
- *     accessKey: <sops-encrypted>
- *     secretKey: <sops-encrypted>
- *     buckets:
- *       - name: <bucket name>
- *         region: <region>
- *         endpoint: <s3 endpoint>
- *
- * Built from flat, dot-path `CredentialEntry` keys (e.g. `"s3.accessKey"`,
- * `"s3.buckets.0.name"`) — see `entries.ts`.
- */
+// kumulo: plaintext is piped only through sops's stdin, never written to disk — only the ciphertext sops prints to stdout is.
 import { Effect, Layer, Stream } from "effect"
 import type { FileSystem } from "effect/FileSystem"
 import type { PlatformError } from "effect/PlatformError"
@@ -31,10 +9,6 @@ import { CredentialsSink, SinkUnavailable } from "@kumulo/core"
 import type { CredentialEntry } from "@kumulo/core"
 import { buildCredentialsPayload } from "./entries.ts"
 
-// kumulo: `effect/unstable/process` exports the `ChildProcessSpawner` *tag*
-// nested inside its own barrel namespace (re-exported via `export * as`),
-// not as a top-level named export — only its `Service` shape is needed here
-// (callers pass an already-resolved instance, see `sopsCredentialsSinkLive`).
 type ChildProcessSpawnerService = (typeof ChildProcessSpawnerNS.ChildProcessSpawner)["Service"]
 
 export const credentialsPath = ({ dir, cluster }: { readonly dir: string; readonly cluster: string }): string =>
@@ -87,7 +61,6 @@ const _write = (
     yield* fs.writeFileString(credentialsPath({ dir, cluster }), ciphertext)
   }).pipe(Effect.catchTag("PlatformError", (cause) => Effect.fail(new SinkUnavailable({ hint: cause.message }))))
 
-/** `CredentialsSink` Layer backed by `sops --encrypt`. `spawner`/`fs` are resolved by the caller (composition root) — this package stays runtime-agnostic. */
 export const sopsCredentialsSinkLive = (
   { dir, ageRecipient, spawner, fs }: {
     readonly dir: string

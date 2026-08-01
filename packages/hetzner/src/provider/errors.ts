@@ -13,10 +13,6 @@ import {
   ResponseDecodeError
 } from "@kumulo/core"
 
-/**
- * Exactly the tags this package can actually raise — a subset of both
- * `CloudError` and `VolumeError`, so neither port needs a narrowing step.
- */
 export type HcloudError =
   | AuthenticationFailed
   | QuotaExceeded
@@ -27,7 +23,6 @@ export type HcloudError =
   | ResponseDecodeError
   | HttpTransportError
 
-/** Failure channel of every generated-client operation. */
 export type HcloudCause = HttpClientError.HttpClientError | SchemaError
 
 export interface ErrorContext {
@@ -43,18 +38,10 @@ interface Classified extends ErrorContext {
   readonly retryAfter: string | undefined
 }
 
-// hcloud reports a genuine quota exhaustion with a machine-readable `code` in
-// the error body (a plain 403 without it is a credential problem, and a 422
-// without it is bad input) — `QuotaExceeded` is raised only on that signal,
-// and without the fabricated `limit`/`requested` zeroes it used to carry.
+// QuotaExceeded only fires on a machine-readable quota code; plain 403 is a credential problem, 422 is bad input
 const _QUOTA_CODES = ["resource_limit_exceeded", "quota_exceeded"]
 const _isQuota = (body: string): boolean => _QUOTA_CODES.some((code) => body.includes(code))
 
-// Status -> tagged error, keyed by code (no `switch`, per project lint rule).
-// 423 (`locked`/`protected`) is Hetzner's "an Action is already running on
-// this resource", i.e. a conflict. Anything unlisted — notably 422 (validation)
-// and every 5xx — falls through to `ProviderApiError`, which carries the real
-// status and body instead of guessing.
 const _byStatus: Record<number, (c: Classified) => HcloudError> = {
   401: (c) => new AuthenticationFailed({ hint: `${_op(c)}: hcloud rejected the API token` }),
   403: (c) => new AuthenticationFailed({ hint: `${_op(c)}: hcloud API token lacks permission` }),
@@ -72,15 +59,12 @@ const _classify = (c: Classified): HcloudError => {
     : mapped(c)
 }
 
-// `Retry-After` (relative seconds) is preferred over `RateLimit-Reset` (an
-// absolute UNIX timestamp) — both are passed through verbatim, undecorated.
 const _retryAfter = (response: HttpClientResponse.HttpClientResponse): string | undefined =>
   response.headers["retry-after"] ?? response.headers["ratelimit-reset"]
 
 const _bodyText = (response: HttpClientResponse.HttpClientResponse): Effect.Effect<string> =>
   Effect.orElseSucceed(response.text, () => "")
 
-/** Maps a generated-client failure (`HttpClientError | SchemaError`) onto `HcloudError`. */
 export const toHcloudError = (
   { cause, ctx }: { readonly cause: HcloudCause; readonly ctx: ErrorContext }
 ): Effect.Effect<HcloudError> => {
@@ -100,12 +84,10 @@ export const mapHcloudError = <A, R>(
 ): Effect.Effect<A, HcloudError, R> =>
   Effect.catch(self, (cause) => Effect.flatMap(toHcloudError({ cause, ctx }), Effect.fail))
 
-/** Several hcloud create/get payloads mark their sole resource field optional. */
 export const required = <A>(
   { kind, ref, value }: { readonly value: A | undefined; readonly kind: string; readonly ref: string }
 ): Effect.Effect<A, ResourceNotFound> =>
   value === undefined ? Effect.fail(new ResourceNotFound({ kind, ref })) : Effect.succeed(value)
 
-/** Deleting an already-gone resource is a success, not a failure. */
 export const ignoreMissing = <A, R>(self: Effect.Effect<A, HcloudError, R>): Effect.Effect<void, HcloudError, R> =>
   Effect.asVoid(Effect.catchTag(self, "ResourceNotFound", () => Effect.void))

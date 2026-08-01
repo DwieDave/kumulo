@@ -15,10 +15,6 @@ const _rawHttpClient = (handle: (request: HttpClientRequest.HttpClientRequest) =
 
 const _fixtureHttpClient = (status: number, body: unknown) => _rawHttpClient(() => new Response(JSON.stringify(body), { status }))
 
-// Copied from developers.upcloud.com's own response samples, shape-for-shape:
-// lists wrap twice, `ip_networks` wraps its array, and `dhcp` is "yes"/"no".
-// The earlier fixtures were invented to match the client, so the client's wrong
-// guess and the test's wrong guess agreed and CI stayed green.
 const _network = {
   uuid: "net-1",
   name: "kumulo-demo",
@@ -73,7 +69,7 @@ it.effect("POST /1.3/router decodes {router: {...}}", () =>
     assert.deepStrictEqual(router, _router)
   }))
 
-it.effect("R4: a missing ip_networks field surfaces as a decode failure", () =>
+it.effect("a missing ip_networks field surfaces as a decode failure", () =>
   Effect.gen(function*() {
     const client = makeNetworkClient(_fixtureHttpClient(200, { network: { uuid: "net-1", name: "x", zone: "de-fra1" } }))
     const failure = yield* Effect.flip(client.get("net-1"))
@@ -86,8 +82,7 @@ it.effect("GET /1.3/router decodes the double-wrapped {routers: {router: [...]}}
     assert.deepStrictEqual(yield* client.list(), [_router])
   }))
 
-// The exact failure seen against the live API: a singly-wrapped list decoded
-// clean under the old schema and produced garbage under the real one.
+// landmine: a singly-wrapped list decoded clean under the old (wrong) schema and produced garbage
 it.effect("a singly-wrapped list is a decode failure, not an empty list", () =>
   Effect.gen(function*() {
     const result = yield* Effect.result(makeNetworkClient(_fixtureHttpClient(200, { networks: [_network] })).list())

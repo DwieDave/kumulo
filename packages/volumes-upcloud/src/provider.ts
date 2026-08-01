@@ -11,7 +11,6 @@ export type VolumeError = UpcloudError
 
 export interface VolumeProviderOptions {
   readonly tag: ClusterTag
-  /** Zone new storages are created in — `VolumeSpec` carries no zone (D5: it's a per-cluster, not per-volume, setting). */
   readonly zone: string
 }
 
@@ -40,14 +39,8 @@ const _awaitOnline = ({ client, uuid }: { readonly client: StorageClient; readon
       })
   })
 
-// kumulo: config validation (M1) restricts `type` to UpCloud's closed tier
-// set (D5) before it ever reaches this port — total narrowing keeps the
-// function honest without a cast; the fallback branch is unreachable.
 const _tier = (type: string): StorageTier => (type === "standard" || type === "hdd" ? type : "maxiops")
 
-// kumulo: list-then-create, identified by label not title (D4/R4).
-// Idempotent across whole-call retries — a retried POST after a successful
-// create would duplicate, so this never wraps the create in a retry policy.
 export const ensureVolume = (
   { client, options, spec }: {
     readonly client: StorageClient
@@ -82,10 +75,7 @@ export const listClusterVolumes = (
     Effect.map((all) => all.filter((storage) => hasClusterLabel({ labels: storage.labels, tag })).map(_volumeInfo))
   )
 
-// kumulo: caller (core delete flow) never invokes this for `retain: true`
-// volumes — that policy lives one layer up, not here (R6). An attached
-// volume surfaces UpCloud's 409 as `ResourceConflict` untouched — never
-// force-detach. Deleting an already-gone volume is a success.
+// never force-detach: an attached volume's 409 surfaces as ResourceConflict untouched; deleting an already-gone volume succeeds
 export const deleteVolume = (
   { client, ref }: { readonly client: StorageClient; readonly ref: VolumeRef }
 ): R<void> => ignoreMissing(mapUpcloudError({ self: client.delete(ref.id), ctx: { kind: "storage", ref: ref.id } }))

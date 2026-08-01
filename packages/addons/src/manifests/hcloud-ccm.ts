@@ -2,15 +2,9 @@ import type { K8sManifest } from "@kumulo/core"
 import { HCLOUD_NAMESPACE, HCLOUD_SECRET_NAME, hcloudSecretManifest, type HcloudCredential } from "../hcloud-secret.ts"
 
 const SERVICE_ACCOUNT = "hcloud-cloud-controller-manager"
-// kumulo: pinned >= v1.30.1 (R10) — the 2026-07-01 `server.datacenter` field
-// removal breaks <= v1.30.0, and upstream deleted `:latest` as broken on
-// 2026-07-07 — never pin `:latest`.
+// kumulo: pinned >= v1.30.1 (2026-07-01 removed `server.datacenter`, breaks <= v1.30.0); never pin `:latest`.
 const IMAGE = "hetznercloud/hcloud-cloud-controller-manager:v1.34.0"
 
-// Static manifests (no Helm), the `-networks` variant (R10): always wires
-// HCLOUD_NETWORK from the shared `hcloud` Secret's optional `network` key
-// alongside HCLOUD_TOKEN — a DaemonSet on control-plane nodes, per upstream's
-// recommended install (github.com/hetznercloud/hcloud-cloud-controller-manager).
 export const hcloudCcmManifests = (credential: HcloudCredential): ReadonlyArray<K8sManifest> => [
   hcloudSecretManifest(credential),
   {

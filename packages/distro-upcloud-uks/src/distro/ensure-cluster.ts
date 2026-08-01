@@ -1,10 +1,3 @@
-/**
- * `ensureCluster` (T5.3, R8, R9, AC1, AC6, N6): find by name, create when
- * absent, poll to `running` (bounded, `ProvisioningTimeout` on breach), and
- * reconcile the two patchable fields (`control_plane_ip_filter`, `labels`).
- * Creation-time drift (D8's immutable fields) is `clusterDrift`'s job (T4.3)
- * and refuses here rather than mutating anything.
- */
 import { Effect } from "effect"
 import { mapUpcloudError } from "@kumulo/upcloud"
 import type { UksCluster } from "@kumulo/upcloud"
@@ -15,13 +8,9 @@ import { ownershipLabels } from "./ownership.ts"
 import { pollUntil } from "./status.ts"
 import type { UksClients, UksClusterConfig } from "./types.ts"
 
-/** `ManagedClusterInfo` plus the cluster-scoped fields `clusterDrift` compares (T4.3). */
 export type UksClusterInfo = ManagedClusterInfo & UksClusterState & { readonly uuid: string; readonly name: string }
 
-// kumulo: UpCloud's cluster response carries no API endpoint field (intent.md
-// documents no such field) — the kubeconfig UpCloud hands back is the real
-// connection info (`fetchKubeconfig`/R12), so `apiEndpoint` stays empty here
-// rather than fabricated.
+// kumulo: UpCloud's cluster response has no API endpoint field; fetchKubeconfig is the real connection info, so apiEndpoint stays empty here
 const _toInfo = (cluster: UksCluster): UksClusterInfo => ({
   id: cluster.uuid,
   uuid: cluster.uuid,
@@ -35,7 +24,6 @@ const _toInfo = (cluster: UksCluster): UksClusterInfo => ({
   privateNodeGroups: cluster.private_node_groups
 })
 
-/** Resolves the cluster by name only — never creates one: a missing cluster is a no-op, not a provisioning trigger. */
 export const findClusterByName = (
   { clients, name }: { readonly clients: UksClients; readonly name: string }
 ): Effect.Effect<UksClusterInfo | undefined, MksError> =>
@@ -44,10 +32,6 @@ export const findClusterByName = (
     Effect.map((cluster) => cluster && _toInfo(cluster))
   )
 
-// kumulo: `storage_encryption` is a boolean on the config (D11) but UpCloud's
-// wire representation is a string (scope.md Q2: `"data-at-rest"`, unconfirmed
-// by a live probe). `true` maps to that literal; `false`/absent omits the
-// field, matching how the config already treats it as an opt-in flag.
 const _storageEncryption = (enabled: boolean | undefined): string | undefined => (enabled ? "data-at-rest" : undefined)
 
 const _create = (
@@ -85,10 +69,6 @@ const _awaitRunning = (
     ref: uuid
   })
 
-/**
- * The two mutable fields (D8) — patched unconditionally when they diverge, no
- * confirmation gate (unlike node-group replaces): neither is destructive.
- */
 const _reconcilePatchable = (
   { clients, cluster, config, owner }: {
     readonly clients: UksClients
@@ -108,11 +88,7 @@ const _reconcilePatchable = (
   }).pipe(Effect.asVoid)
 }
 
-/**
- * Creation-time-only fields (D8/D11) never move under a patch — `clusterDrift`
- * refuses before anything is written, the single point every write routes
- * through (R9/AC6).
- */
+// creation-time-only fields never move under a patch; clusterDrift refuses before anything is written
 const _refuseCreationDrift = (
   { cluster, config }: { readonly cluster: UksCluster; readonly config: UksClusterConfig }
 ): Effect.Effect<void, MksError> => {
@@ -123,7 +99,6 @@ const _refuseCreationDrift = (
   return drift._tag === "None" ? Effect.void : Effect.fail(driftConflict(drift))
 }
 
-/** Create-or-update the UKS control plane, then poll to `running` (R8/AC1). */
 export const ensureCluster = (
   { clients, config, networkUuid, owner }: {
     readonly clients: UksClients

@@ -1,14 +1,4 @@
-/**
- * `ensureNodePools` (T5.4, R10, AC4, AC5, N6): applies T4.2's diff, with D9's
- * create-then-delete replace ordering, polling each affected group to
- * `running`.
- *
- * kumulo: does `DELETE /node-groups/{name}` drain pods first? Undocumented
- * (plan.md Q7, needs a live probe) — this implements the documented
- * behaviour (a bare delete, no explicit drain step) and leaves the question
- * open rather than guessing at an API `distro-upcloud-uks` has never
- * observed.
- */
+// landmine: DELETE /node-groups/{name} is undocumented whether it drains pods first — assume bare delete
 import { Effect } from "effect"
 import { CONFIG_HASH_KEY } from "@kumulo/core"
 import { mapUpcloudError } from "@kumulo/upcloud"
@@ -33,12 +23,6 @@ const _labels = ({ pool, owner }: { readonly pool: UksWorkerPoolConfig; readonly
   { key: KUMULO_POOL_LABEL_KEY, value: pool.name }
 ]
 
-// kumulo: the config's `taints` is a flat string list (schema.ts) but
-// UpCloud's node-group taint is `{key, value, effect}` — the exact split is
-// undocumented (no live probe), so each entry is treated as a bare key with
-// an empty value and `NoSchedule`, k8s's own default effect. Likewise
-// `storage` is a plain string in config; it maps to the `tier` field of
-// `NodeGroupStorage`, leaving `size` to UpCloud's default for that tier.
 const _createPayload = ({ pool, owner }: { readonly pool: UksWorkerPoolConfig; readonly owner: string }) => ({
   name: uksPoolName(pool),
   count: pool.count,
@@ -92,14 +76,7 @@ const _awaitRunning = (
     ref: name
   }).pipe(Effect.asVoid)
 
-/**
- * D9: the new generation is created (and reaches `running`) BEFORE the old
- * one is deleted — the opposite order from MKS's replace, since UKS node
- * group names can't be reused while an old group of that name still exists,
- * but the live name already embeds the immutable-field hash (`uksPoolName`),
- * so create-then-delete never collides. The two generations coexist for the
- * length of the replace (D9's double-billing window).
- */
+// order matters: new generation must reach running before the old is deleted — double-billing window during overlap
 const _replace = (
   { clients, ref, liveName, pool, owner }: {
     readonly clients: UksClients
@@ -120,7 +97,6 @@ const _applyDiff = (
     yield* Effect.forEach(diff.toDelete, (name) => _delete({ clients, ref, name }), { discard: true })
   })
 
-/** Read-only node-group listing — powers real plan diffs without converging anything. */
 export const listNodeGroups = (
   { clients, ref }: { readonly clients: UksClients; readonly ref: UksClusterRef }
 ): Effect.Effect<ReadonlyArray<ExistingNodeGroup>, MksError> =>
@@ -128,7 +104,6 @@ export const listNodeGroups = (
     Effect.map((groups) => groups.map(_toExisting))
   )
 
-/** Converges UKS node groups onto `worker_pools` (create/update/replace/delete, by `kumulo-pool` label); `replace` gates the destructive branch. */
 export const ensureNodePools = (
   { clients, ref, pools, owner, replace }: {
     readonly clients: UksClients

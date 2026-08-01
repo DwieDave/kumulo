@@ -19,9 +19,6 @@ const _ids = {
   loadBalancersSubnetId: "subnet-lb-1"
 } as const
 
-// R6 — MKS networking is a creation-time input (`Cloud_ProjectKubeUpdate` is
-// `{ name?, updatePolicy? }`), so an id the CLI resolves but never posts is an
-// id the cluster can never be given.
 it.effect("posts all three network ids in the creation payload", () =>
   Effect.gen(function*() {
     const server = makeFakeMksServer({ readyAfterPolls: 0 })
@@ -32,8 +29,6 @@ it.effect("posts all three network ids in the creation payload", () =>
     assert.strictEqual(created?.loadBalancersSubnetId, _ids.loadBalancersSubnetId)
   }))
 
-// R5 — a config with no `network` block must keep posting nothing, so a
-// project without a vRack still provisions exactly as it does today.
 it.effect("omits the network ids entirely when the config carries none", () =>
   Effect.gen(function*() {
     const server = makeFakeMksServer({ readyAfterPolls: 0 })

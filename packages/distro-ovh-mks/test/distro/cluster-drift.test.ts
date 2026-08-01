@@ -13,9 +13,7 @@ const _drift = (
     actual: { region: _region, privateNetworkId: actual }
   })
 
-// `Cloud_ProjectKubeUpdate` is `{ name?, updatePolicy? }` — a cluster's network
-// identity is fixed at creation, so any difference is `Blocked`, never `Upgrade`.
-describe("clusterDrift — network identity (R8)", () => {
+describe("clusterDrift — network identity", () => {
   it.prop(
     "never claims drift from a network OVH did not report",
     [fc.option(fc.boolean(), { nil: undefined })],
@@ -42,15 +40,11 @@ describe("clusterDrift — network identity (R8)", () => {
     expect(drift._tag === "Blocked" && drift.reason).toMatch(/recreate/)
   })
 
-  // An empty string is the shape `_subnetIdOf` exists to keep out of `NetworkInfo`;
-  // treat it the same way here, as "no network", not as an id.
   it("treats an empty privateNetworkId as no network at all", () => {
     expect(_drift({ actual: "", wants: false })._tag).toBe("None")
     expect(_drift({ actual: "", wants: true })._tag).toBe("Blocked")
   })
 
-  // A caller that models no networking at all (existing plan fixtures) must not
-  // start reading as drift.
   it.prop(
     "makes no claim when the config says nothing about networking",
     [fc.constantFrom<string | null | undefined>(null, "net-1", undefined)],
@@ -58,12 +52,7 @@ describe("clusterDrift — network identity (R8)", () => {
   )
 })
 
-// R8 closed at the subnet level. Presence drift only catches adding or dropping
-// the whole block; editing `nodes_subnet`/`load_balancers_subnet` keeps the same
-// tag-named network, so the network id is unchanged and only the resolved subnet
-// ids differ. MKS fixes both at creation (`Cloud_ProjectKubeUpdate` is
-// `{ name?, updatePolicy? }`), so this is `Blocked`, never `Upgrade`.
-describe("clusterDrift — subnet identity (R8)", () => {
+describe("clusterDrift — subnet identity", () => {
   const _subnets = (
     { actual, desired }: {
       readonly actual: { readonly nodes?: string; readonly lbs?: string }
@@ -102,8 +91,6 @@ describe("clusterDrift — subnet identity (R8)", () => {
       .toBe("None")
   })
 
-  // An unresolvable CIDR is not evidence of drift: the network may simply not
-  // exist yet. Absent means "can't tell", the same stance every other field takes.
   it("claims nothing when a subnet id is unknown on either side", () => {
     expect(_subnets({ actual: { nodes: "sub-a" }, desired: { nodes: undefined } })._tag).toBe("None")
     expect(_subnets({ actual: {}, desired: { nodes: "sub-b" } })._tag).toBe("None")

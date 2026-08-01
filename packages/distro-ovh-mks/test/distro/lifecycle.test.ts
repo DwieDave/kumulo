@@ -33,12 +33,7 @@ const _pool = (overrides: Partial<MksWorkerPoolConfig> = {}): MksWorkerPoolConfi
 
 it.effect("full lifecycle: create → poll ready → converge pools → kubeconfig → upgrade → delete", () =>
   Effect.gen(function*() {
-    // ponytail: `readyAfterPolls: 0` — `ensureCluster`'s poll loop itself is
-    // a thin reimplementation of core's already-unit-tested `pollUntil`
-    // (see errors.ts/status.ts comments); this test exercises the
-    // create/converge/kubeconfig/upgrade/delete lifecycle, not real-time
-    // polling cadence, so it shouldn't burn wall-clock seconds waiting on
-    // the (production) 3-second poll interval.
+    // readyAfterPolls: 0, skips real poll cadence to avoid burning wall-clock seconds
     const server = makeFakeMksServer({ readyAfterPolls: 0 })
     const mks = makeMksClient(server.httpClient)
 
@@ -46,13 +41,9 @@ it.effect("full lifecycle: create → poll ready → converge pools → kubeconf
     assert.strictEqual(info.status, "READY")
     const ref = { serviceName: _config.serviceName, kubeId: info.id }
 
-    // create a pool, then converge again with a scaled-up desired count —
-    // proves update (not a spurious replace) for a mutable-only change.
     yield* ensureNodePools({ mks, ref, pools: [_pool()] })
     const created = [...(server.pools.get(info.id)?.values() ?? [])][0]
     assert.strictEqual(created?.desiredNodes, 3)
-    // the drift stamp must actually reach the API (and round-trip back) —
-    // without it every re-plan reads as "no stamped hash" and silently NoOps.
     assert.strictEqual(created?.template?.metadata?.annotations?.[CONFIG_HASH_KEY], mksPoolHash(_pool()))
 
     yield* ensureNodePools({ mks, ref, pools: [_pool({ desiredNodes: 5 })] })
@@ -60,8 +51,6 @@ it.effect("full lifecycle: create → poll ready → converge pools → kubeconf
     assert.strictEqual(poolsAfterUpdate.length, 1)
     assert.strictEqual(poolsAfterUpdate[0]?.desiredNodes, 5)
 
-    // flavor change is immutable → replace (delete+recreate), not update —
-    // and only once the operator confirmed that pool by name.
     yield* ensureNodePools({ mks, ref, pools: [_pool({ flavor: "b2-15", desiredNodes: 5 })] })
     assert.strictEqual([...(server.pools.get(info.id)?.values() ?? [])][0]?.flavor, "b2-7")
 
@@ -70,7 +59,6 @@ it.effect("full lifecycle: create → poll ready → converge pools → kubeconf
     assert.strictEqual(poolsAfterReplace.length, 1)
     assert.strictEqual(poolsAfterReplace[0]?.flavor, "b2-15")
 
-    // dropping the pool from desired converges to zero pools.
     yield* ensureNodePools({ mks, ref, pools: [] })
     assert.strictEqual(server.pools.get(info.id)?.size, 0)
 

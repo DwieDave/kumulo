@@ -16,10 +16,6 @@ export const OS_ENV_KEYS = [
 
 export const OS_SECRET_ENV_KEYS = ["OS_APPLICATION_CREDENTIAL_SECRET", "OS_PASSWORD"] as const
 
-// `Schema.String`/`Schema.Redacted(Schema.String)` accept any string, so the
-// only way `Config.option` here fails is missing data — already folded into
-// `None` — `orDie` just documents that the remaining `ConfigError` channel is
-// unreachable, keeping this read (like `DoctorCheck.run`) never-failing.
 const _optionalEnv = (name: string): Effect.Effect<readonly [string, string | undefined]> =>
   Config.option(Config.string(name)).pipe(
     Effect.map((value) => [name, Option.getOrUndefined(value)] as const),
@@ -32,7 +28,6 @@ const _optionalSecretEnv = (name: string): Effect.Effect<readonly [string, strin
     Effect.orDie
   )
 
-/** All `OS_*` env vars `loadCredentials` reads, sourced from `Config` instead of raw `process.env`. */
 const _readOsEnv: Effect.Effect<Readonly<Record<string, string | undefined>>> = Effect.gen(function*() {
   const entries = yield* Effect.all([
     ...OS_ENV_KEYS.map(_optionalEnv),
@@ -47,15 +42,9 @@ export interface OpenStackEnvShape {
   readonly unavailableReason: string | undefined
 }
 
-/** Holds the OpenStack Keystone auth + region for whichever distro needs it (k3s, M7; OpenStack doctor checks now). */
 export class OpenStackEnv extends Context.Service<OpenStackEnv, OpenStackEnvShape>()("@kumulo/cli/OpenStackEnv") {}
 
-/**
- * Never-failing (mirrors the `DoctorCheck.run` contract): missing OS_* env
- * vars / clouds.yaml must not break the `ovh-mks` command paths that share
- * this same Layer graph in `main.ts` — the gap surfaces as an
- * `openstack-keystone-auth` doctor-check failure instead of a boot crash.
- */
+// Never fails: missing OS_* env/clouds.yaml surfaces as an openstack-keystone-auth doctor-check failure, not a boot crash.
 export const OpenStackEnvLive: Layer.Layer<OpenStackEnv, never, HttpClient.HttpClient> = Layer.effect(
   OpenStackEnv,
   Effect.gen(function*() {

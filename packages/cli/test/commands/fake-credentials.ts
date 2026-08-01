@@ -1,17 +1,6 @@
 import { ConfigProvider, Layer } from "effect"
 
-/**
- * Credentials for command tests that inject `MksEnv`/`CloudProvider` directly.
- *
- * Those tests already assert "the environment is wired"; before
- * `requireCredentials` nothing checked, so they relied on the absence of a
- * check rather than on saying so. A `ConfigProvider` states it explicitly and
- * is the same mechanism `--secrets-file` uses, so the tests exercise the real
- * credential path instead of bypassing it.
- *
- * Deliberately NOT `...process.env`: a developer with real OVH credentials
- * exported must get the same result as CI with none.
- */
+// Deliberately NOT `...process.env`: real exported OVH creds must not leak into tests.
 export const fakeCredentials = Layer.succeed(
   ConfigProvider.ConfigProvider,
   ConfigProvider.fromEnv({

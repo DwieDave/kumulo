@@ -4,16 +4,9 @@ import { Effect } from "effect"
 import { decodeConfig } from "../../src/cluster-config.ts"
 import { validUpcloudUksConfig } from "./fixtures.ts"
 
-// T1.3 — UpCloud CIDR validator (prefix /8-/29, outside 100.64.0.0/10,
-// 127.0.0.0/8, 224.0.0.0/4, 169.254.0.0/16) and pool-name validator
-// (lowercase/digits/-, no leading/trailing -, <=54 chars) (R15, R20, N2).
-
 const octet = fc.integer({ min: 0, max: 255 })
 const okPrefix = fc.integer({ min: 8, max: 29 })
-// The rule is overlap between MASKED ranges, not a look at the leading octets:
-// `100.146.91.251/8` masks to `100.0.0.0/8`, which contains the excluded
-// `100.64.0.0/10`. A generator that only inspects `a`/`b` calls that address
-// acceptable and then fails against a validator that is behaving correctly.
+// exclusion check is masked-range overlap, not leading-octet inspection
 const _EXCLUDED: ReadonlyArray<readonly [string, number]> = [
   ["100.64.0.0", 10],
   ["127.0.0.0", 8],

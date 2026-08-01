@@ -4,7 +4,6 @@ import type { PlatformError } from "effect/PlatformError"
 import { parse, stringify } from "yaml"
 import type { ClusterTag, OutputsFormat } from "@kumulo/core"
 
-// kumulo: stable volume IDs written to `<cluster>.outputs.yaml`.
 export const OutputsVolume = Schema.Struct({
   name: Schema.NonEmptyString,
   id: Schema.NonEmptyString,
@@ -12,9 +11,6 @@ export const OutputsVolume = Schema.Struct({
 })
 export type OutputsVolume = Schema.Schema.Type<typeof OutputsVolume>
 
-// kumulo: the ingress load balancer a consumer annotates a Service with
-// (`loadbalancer.openstack.org/load-balancer-id`) plus the address DNS points
-// at. Ids and addresses only — N6: this file is not encrypted.
 export const OutputsIngress = Schema.Struct({
   load_balancer_id: Schema.NonEmptyString,
   floating_ip: Schema.NonEmptyString
@@ -41,16 +37,11 @@ export const decodeOutputs = (input: unknown): Effect.Effect<OutputsFile, Output
     Effect.mapError((cause) => new OutputsInvalid({ message: String(cause) }))
   )
 
-// YAML is a superset of JSON, so this parses both formats.
 export const parseOutputsYaml = (text: string): Effect.Effect<OutputsFile, OutputsInvalid> =>
   Effect.try({ try: () => parse(text), catch: (cause) => new OutputsInvalid({ message: String(cause) }) }).pipe(
     Effect.flatMap(decodeOutputs)
   )
 
-// kumulo: stable key ordering (cluster, volumes, ingress) — regenerating from
-// unchanged state is a byte-identical diff. Rebuilding the object from this
-// literal is also what keeps the file a closed allowlist: any key not named
-// here is dropped rather than written out (N6).
 export const stringifyOutputs = (
   { file, format = "yaml" }: { readonly file: OutputsFile; readonly format?: OutputsFormat }
 ): string => {
@@ -66,10 +57,6 @@ export const stringifyOutputsYaml = (file: OutputsFile): string => stringifyOutp
 
 export const emptyOutputs = (tag: ClusterTag): OutputsFile => ({ cluster: tag, volumes: [] })
 
-// kumulo: missing file reads as "no volumes recorded yet", not an error —
-// first `ensureVolume` on a fresh cluster always starts from an empty file.
-// The configured format's path is tried first, then the other extension, so
-// switching `outputs.format` picks up the previously written file.
 export const readOutputs = (
   { dir, format = "yaml", tag }: { readonly dir: string; readonly tag: ClusterTag; readonly format?: OutputsFormat }
 ): Effect.Effect<OutputsFile, OutputsInvalid | PlatformError, FileSystem> =>
@@ -91,7 +78,6 @@ export const writeOutputs = (
     yield* fs.writeFileString(outputsPath({ dir, tag: file.cluster, format }), stringifyOutputs({ file, format }))
   })
 
-// Pure merge: create-or-update by volume name (used after `ensureVolume`).
 export const upsertVolume = (
   { file, volume }: { readonly file: OutputsFile; readonly volume: OutputsVolume }
 ): OutputsFile => ({
@@ -99,12 +85,10 @@ export const upsertVolume = (
   volumes: [...file.volumes.filter((existing: OutputsVolume) => existing.name !== volume.name), volume]
 })
 
-// Pure merge: records the ingress LB beside the volume ids (R13).
 export const setIngress = (
   { file, ingress }: { readonly file: OutputsFile; readonly ingress: OutputsIngress }
 ): OutputsFile => ({ cluster: file.cluster, volumes: file.volumes, ingress })
 
-// Pure remove (only called for volumes actually deleted — never `retain: true`).
 export const removeVolume = ({ file, name }: { readonly file: OutputsFile; readonly name: string }): OutputsFile => ({
   cluster: file.cluster,
   volumes: file.volumes.filter((existing: OutputsVolume) => existing.name !== name)

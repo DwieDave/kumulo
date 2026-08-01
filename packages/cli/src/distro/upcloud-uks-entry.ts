@@ -21,7 +21,6 @@ const _upcloudDoctorChecks = Effect.fn(function*({ config }: { readonly config: 
     controlPlanePlanCheck({ uks: clients.uks, plan: config.plan }),
     nodeGroupPlansCheck({ pools: config.worker_pools.map((pool) => ({ plan: pool.flavor })) }),
     versionSupportedCheck({ version: config.version }),
-    // T6.3/R15: only meaningful (and only run) when the corresponding module is configured.
     ...(managedUpcloudVolumes(config).length > 0 ? [upcloudStorageReachCheck(storage), csiDevicePermissionCheck] : []),
     ...(config.object_storage.module === "upcloud"
       ? [upcloudObjectStorageReachCheck(objectStorage), objectStorageRegionCheck({ objectStorage, region: config.object_storage.region })]
@@ -31,11 +30,6 @@ const _upcloudDoctorChecks = Effect.fn(function*({ config }: { readonly config: 
 
 export const upcloudUksEntry: DistroEntry<UpcloudUksClusterConfig> = {
   kind: "upcloud-uks",
-  // T6.1: object storage IS expressible on this distro now
-  // (`object_storage.module: "upcloud"`) — but its wiring is self-contained
-  // inside `upcloud/storage.ts`, converged as part of `apply`/`delete`
-  // themselves, not through the generic ovh-shaped `storageLayers`/
-  // `commands.ts` bucket path this flag gates. It stays `false`.
   supportsObjectStorage: false,
   plan: (config) =>
     lookupUpcloudInventory(config).pipe(Effect.map((inventory) => buildUpcloudPlan({ config, inventory }))),
@@ -47,7 +41,6 @@ export const upcloudUksEntry: DistroEntry<UpcloudUksClusterConfig> = {
   delete: deleteUpcloudUks,
   kubeconfig: kubeconfigUpcloudUks,
   deletedLabel: "uks-cluster",
-  // Router/network are converged inside `applyUpcloudUksEffect` too, ahead of the cluster (mirrors mks-entry.ts's note).
   appliedPrefixes: ["router/", "network/", "uks-cluster/", "uks-pool/", "volume/", "bucket/"],
   selfProgress: true,
   status: statusUpcloudUks,

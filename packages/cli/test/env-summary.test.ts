@@ -55,11 +55,7 @@ describe("renderEnvSummary", () => {
   })
 })
 
-// An unset credential used to surface as `GET /cloud/project//kube` — the empty
-// path segment being the only hint that OVH_SERVICE_NAME was missing. The
-// fallback MksEnv attaches a hint to a failing HttpClient, but that hint is
-// unreachable: with no credentials there is no base-URL mapping either, so the
-// request stays relative and dies as InvalidUrlError before the handler runs.
+// missing OVH_SERVICE_NAME used to surface only as GET /cloud/project//kube (empty path segment)
 describe("missingCredentials", () => {
   const _present = (set: ReadonlyArray<string>) => (name: string) => set.includes(name)
 
@@ -81,8 +77,6 @@ describe("missingCredentials", () => {
     expect(missing).toContain("HETZNER_DNS_TOKEN")
   })
 
-  // The OS_* set is auth-method dependent (`loadCredentials` picks a path from
-  // what is present), so requiring all of them would reject valid setups.
   it("never demands the auth-method-dependent OS_* vars", () => {
     const missing = missingCredentials({
       config: _mksConfig({ volumes: { module: "cinder", managed: [] } }),

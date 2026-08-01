@@ -18,17 +18,11 @@ interface ErrorContext {
   readonly ref: string
 }
 
-// OVH signals over-quota with a 402/403 whose message names the quota; the
-// numeric limit/requested pair is not recoverable from that body, so those
-// fields stay absent rather than being fabricated as `0`.
 const _quotaMessage = /quota|over ?limit/i
 
 const _retryAfter = (cause: HttpClientError.HttpClientError): string | undefined => cause.response?.headers["retry-after"]
 
-// One tag per observed status — nothing is reclassified: 401/403 → auth,
-// 404 → not-found, 409 → genuine conflict, 402/403 naming a quota → quota,
-// 413/429 → rate-limited, everything else (notably 5xx) → ProviderApiError
-// carrying the real status and body.
+// 401/403 -> auth, 404 -> not-found, 409 -> conflict, 402/403+quota -> quota, 413/429 -> rate-limited, else ProviderApiError.
 const _byStatus = (
   { cause, ctx, status }: {
     readonly cause: HttpClientError.HttpClientError
@@ -46,7 +40,6 @@ const _byStatus = (
   return new ProviderApiError({ operation: `${ctx.kind} ${ctx.ref}`, status, body: cause.message })
 }
 
-/** Maps a generated-client failure (`HttpClientError | SchemaError`) onto the `MksError` union. */
 export const toMksError = (
   { cause, ctx }: { readonly cause: HttpClientError.HttpClientError | SchemaError; readonly ctx: ErrorContext }
 ): MksError => {
@@ -54,7 +47,6 @@ export const toMksError = (
     return new ResponseDecodeError({ endpoint: `${ctx.kind}/${ctx.ref}`, issue: cause.issue })
   }
   const status = cause.response?.status
-  // No response at all: network/TLS/encode failure — keep the raw cause.
   return status === undefined ? new HttpTransportError({ cause }) : _byStatus({ cause, ctx, status })
 }
 

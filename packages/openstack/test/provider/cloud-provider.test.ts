@@ -21,7 +21,6 @@ import {
 import { makeFakeOpenStack, requestJson } from "./fake-openstack.ts"
 import type { RouteHandler } from "./fake-openstack.ts"
 
-// Glance validates its image ids against the UUID pattern.
 const IMG_1 = "11111111-1111-4111-8111-111111111111"
 const IMG_2 = "22222222-2222-4222-8222-222222222222"
 
@@ -32,9 +31,6 @@ const options: CloudProviderOptions = {
   imageAliases: { "ubuntu-24.04": "Ubuntu 24.04" }
 }
 
-// `provisioning_status` drives the teardown wait, and the DELETE flips it:
-// a fake that answers 204 and keeps listing the LB unchanged cannot tell a
-// synchronous delete from Octavia's asynchronous one.
 const _octaviaRoutes = (
   { deleted, lb, onDelete }: {
     readonly deleted: Array<string>
@@ -53,8 +49,6 @@ const _octaviaRoutes = (
   }
 })
 
-// Narrows the `unknown` a route handler receives down to `subnet.cidr`. Written
-// as a guard chain rather than a cast — `as` is banned repo-wide.
 const _postedCidr = (payload: unknown): string =>
   typeof payload === "object" && payload !== null && "subnet" in payload &&
     typeof payload.subnet === "object" && payload.subnet !== null && "cidr" in payload.subnet &&
@@ -62,12 +56,6 @@ const _postedCidr = (payload: unknown): string =>
     ? payload.subnet.cidr
     : ""
 
-// A Neutron that remembers what it created: the network shows up in
-// `GET /networks` once POSTed, and every subnet POST is echoed by
-// `GET /subnets`. Subnet ids embed their CIDR so an assertion proves which
-// subnet landed in which field rather than relying on creation order.
-// `seeded` are the subnets a live network already carries; a non-empty seed
-// therefore also means the network itself already exists — the re-apply case.
 const _fakeNeutron = (seeded: ReadonlyArray<{ readonly id: string; readonly cidr: string }> = []) => {
   const networks: Array<{ readonly id: string }> = seeded.length === 0 ? [] : [{ id: "net-1" }]
   const subnets: Array<{ readonly id: string; readonly cidr: string }> = [...seeded]
@@ -87,8 +75,6 @@ const _fakeNeutron = (seeded: ReadonlyArray<{ readonly id: string; readonly cidr
   })
 }
 
-// Narrows the posted `{ floatingip: {...} }` body down to its string fields.
-// Guard chain rather than a cast — `as` is banned repo-wide.
 const _postedFloatingIp = (payload: unknown): Record<string, string> => {
   const wrapper = typeof payload === "object" && payload !== null && "floatingip" in payload
     ? payload.floatingip
@@ -99,8 +85,6 @@ const _postedFloatingIp = (payload: unknown): Record<string, string> => {
   )
 }
 
-// Narrows the posted `{ subnet_id }` interface body. Guard chain, not a cast —
-// `as` is banned repo-wide.
 const _postedSubnetId = (payload: unknown): string =>
   typeof payload === "object" && payload !== null && "subnet_id" in payload &&
     typeof payload.subnet_id === "string"
@@ -110,11 +94,6 @@ const _postedSubnetId = (payload: unknown): string =>
 const _route = (call: { readonly method: string; readonly url: string }) => `${call.method} ${new URL(call.url).pathname}`
 
 describe("openstack CloudProvider", () => {
-  // N1, pinned at the wire. `{ cidr }` alone is exactly what the k3s reconciler
-  // passes (`packages/cli/src/k3s/reconcile.ts`), so this sequence IS the k3s
-  // path: one create, one idempotent re-apply. The only difference from the
-  // pre-M1 provider is the added `GET /v2.0/subnets` read-back — every mutation
-  // stays on the create path, and the re-apply issues none.
   it.effect("ensureNetwork creates then reuses by name, and re-applying mutates nothing", () => {
     const fake = _fakeNeutron()
     return Effect.gen(function*() {
@@ -133,12 +112,6 @@ describe("openstack CloudProvider", () => {
     }).pipe(Effect.provide(fake.layer))
   })
 
-  // An apply that dies between the network POST and its subnet POSTs leaves a
-  // network with no subnets, and every re-apply used to skip subnet creation
-  // (subnets were POSTed only into a network the call had just created), report
-  // no ids, and fail with "delete and recreate". A network carrying ZERO subnets
-  // is unambiguously half-created, so completing it is the only way it can
-  // converge — and is exactly what the operator meant the first time.
   const _halfCreated = () => {
     const subnets: Array<{ readonly id: string; readonly cidr: string }> = []
     const posted: Array<string> = []
@@ -171,10 +144,6 @@ describe("openstack CloudProvider", () => {
     }).pipe(Effect.provide(fake.layer))
   })
 
-  // The case the original guard exists for, and it must keep holding: a live
-  // network whose subnets simply do not match the config is an EDIT, which MKS
-  // cannot apply. Writing here would strand a second subnet on a running
-  // network, so nothing is posted and the caller refuses with "recreate".
   it.effect("ensureNetwork writes nothing to a network whose subnets do not match", () => {
     const posted: Array<string> = []
     const fake = makeFakeOpenStack({
@@ -231,7 +200,6 @@ describe("openstack CloudProvider", () => {
           expect(typeof id).toBe("string")
           expect(id).not.toBe("")
         }
-        // The second call adopts what the first created — nothing is made twice.
         const posts = fake.calls().filter((call) => call.method === "POST")
         expect(posts.filter((call) => call.url.includes("/v2.0/networks")).length).toBe(1)
         expect(posts.filter((call) => call.url.includes("/v2.0/subnets")).length).toBe(2)
@@ -239,17 +207,10 @@ describe("openstack CloudProvider", () => {
     }
   )
 
-  // N1. `ensureNetwork` is shared with the k3s distro, in production. An operator
-  // editing `network.cidr` on a live cluster must leave the provider read-only:
-  // POSTing the new CIDR either strands a second subnet on a running network
-  // (nodes then get a non-deterministic IP, since servers are created with
-  // `networks: "auto"`) or hard-fails the whole apply on Neutron's overlap 400 —
-  // which `_ignoreConflict` does not catch, it only swallows 409.
   it.effect("an existing network is never mutated when its subnets no longer match the config", () => {
     const fake = _fakeNeutron([{ id: "sub-old", cidr: "10.0.0.0/16" }])
     return Effect.gen(function*() {
       const info = yield* ensureNetwork({ options, spec: { cidr: "10.0.0.0/24", loadBalancersSubnet: "10.9.0.0/24" } })
-      // No id is invented for a subnet the read-back did not find: absent, never "".
       expect(info).toStrictEqual({ id: "net-1", cidr: "10.0.0.0/24" })
       expect(fake.calls().filter((call) => call.method === "POST")).toEqual([])
     }).pipe(Effect.provide(fake.layer))
@@ -275,8 +236,6 @@ describe("openstack CloudProvider", () => {
     const fake = makeFakeOpenStack({
       "GET /v2.0/security-groups": () => ({ status: 200, body: { security_groups: [{ id: "sg-1" }] } })
     })
-    // The rules reach the port from untyped config, so the runtime decode still
-    // guards even though `SecGroupRule` rejects this shape at compile time.
     const spec: SecGroupSpec = { rules: JSON.parse(`[{"nonsense":true}]`) }
     return Effect.gen(function*() {
       const exit = yield* Effect.flip(ensureSecurityGroups({ options, spec }))
@@ -303,8 +262,6 @@ describe("openstack CloudProvider", () => {
       expect(exit).toBeInstanceOf(CapabilityMissing)
     }).pipe(Effect.provide(fake.layer))
   })
-
-  // ---- Load balancer placement + floating IP (R10, R14, D4) ---------------
 
   const _lbFake = (
     { loadbalancers, posted }: {
@@ -354,22 +311,15 @@ describe("openstack CloudProvider", () => {
         }
       })
       expect(info).toEqual({ id: "lb-1", vip: "10.0.2.7", floatingIp: "203.0.113.1" })
-      // D4: placement and flavor are set by kumulo at creation, not annotated later.
       expect(posted).toEqual([{
         loadbalancer: { name: "kumulo-prod", vip_subnet_id: "sub-lb", vip_network_id: "net-1", flavor_id: "flavor-1" }
       }])
-      // R9's core clause: the FIP is allocated on the external network and
-      // associated with THIS LB's `vip_port_id` — not its id — in one POST.
       expect(fake.postedFips).toEqual([
         { floating_network_id: "ext-net", port_id: "port-vip", description: "kumulo-prod" }
       ])
     }).pipe(Effect.provide(fake.layer))
   })
 
-  // Q1: MKS Standard names an Octavia flavor by UUID, MKS Free by size name
-  // (`small`/`medium`/`large`). Only the UUID was expressible, so a Free-plan
-  // cluster could not ask for a flavor at all. A name is resolved against
-  // Octavia's own flavor list, so both vocabularies reach the same `flavor_id`.
   it.effect("ensureLoadBalancer resolves a flavor name to its Octavia id", () => {
     const posted: Array<unknown> = []
     const fake = _lbFake({ loadbalancers: [], posted })
@@ -381,8 +331,6 @@ describe("openstack CloudProvider", () => {
     }).pipe(Effect.provide(fake.layer))
   })
 
-  // A name Octavia does not offer must not silently fall through to "no flavor":
-  // the operator asked for a size and would get the default without being told.
   it.effect("ensureLoadBalancer fails, listing what exists, when a flavor name is unknown", () => {
     const posted: Array<unknown> = []
     const fake = _lbFake({ loadbalancers: [], posted })
@@ -397,9 +345,6 @@ describe("openstack CloudProvider", () => {
     }).pipe(Effect.provide(fake.layer))
   })
 
-  // N1 + R14/D4: `spec.members` never reaches the wire. Members live on a pool
-  // the cloud-controller-manager owns, and `{ members: [] }` is exactly what the
-  // k3s reconciler passes — its payload must stay byte-identical to pre-M3.
   it.effect("ensureLoadBalancer sends no members and, without a floating-IP request, returns none", () => {
     const posted: Array<unknown> = []
     const fake = _lbFake({ loadbalancers: [], posted })
@@ -414,12 +359,6 @@ describe("openstack CloudProvider", () => {
     }).pipe(Effect.provide(fake.layer))
   })
 
-  // ---- R14/D2: inert against CCM-owned children ---------------------------
-
-  // What the cloud-controller-manager leaves on an adopted load balancer: one
-  // listener and pool per Service port, its own tags, and an
-  // `operating_status` that moves as members come and go. kumulo created none
-  // of it and must neither prune, diff nor report it.
   const _ccmChild = fc.record({ id: fc.stringMatching(/^[a-z0-9-]{1,12}$/) })
   const _adoptedLb = fc.record({
     listeners: fc.array(_ccmChild, { minLength: 1, maxLength: 4 }),
@@ -453,19 +392,14 @@ describe("openstack CloudProvider", () => {
           body: { floatingips: [{ id: "fip-1", floating_ip_address: "203.0.113.1", port_id: "port-vip" }] }
         })
       })
-      // The spec asks for a DIFFERENT flavor and subnet than the live LB has:
-      // creation-time attributes on an existing LB are not kumulo's to converge.
       const spec = { members: [], floatingIp: true, vipSubnetId: "sub-other", flavorId: "flavor-other" }
       return Effect.gen(function*() {
         const first = yield* ensureLoadBalancer({ options, spec })
         const second = yield* ensureLoadBalancer({ options, spec })
         expect(first).toEqual({ id: "lb-1", vip: "10.0.2.7", floatingIp: "203.0.113.1" })
         expect(second).toEqual(first)
-        // No mutation of any kind: the CCM's listeners and pools survive because
-        // nothing was written, not because something chose to skip them.
         expect(fake.calls().filter((call) => call.method !== "GET")).toEqual([])
         expect(posted).toEqual([])
-        // Nothing about the children leaks into what the reconciler reports.
         expect(Object.keys(first).toSorted()).toEqual(["floatingIp", "id", "vip"])
       }).pipe(Effect.provide(fake.layer))
     }
@@ -517,9 +451,7 @@ describe("openstack CloudProvider", () => {
     const deleted: Array<string> = []
     const lb = { status: "ACTIVE" }
     const fake = makeFakeOpenStack({
-      // The amphora teardown finishes while the DELETE is in flight.
       ..._octaviaRoutes({ deleted, lb, onDelete: "DELETED" }),
-      // R17: released after the LB that owned its port, before the network.
       "GET /v2.0/floatingips": () => ({ status: 200, body: { floatingips: [{ id: "fip-1" }] } }),
       "DELETE /v2.0/floatingips/fip-1": () => {
         deleted.push("floating-ip")
@@ -545,9 +477,6 @@ describe("openstack CloudProvider", () => {
         return { status: 204 }
       },
       "GET /v2.0/networks": () => ({ status: 200, body: { networks: [{ id: "net-1" }] } }),
-      // Teardown reads the network's subnets and looks for a gateway to detach
-      // before deleting the network (R17). These fixtures have neither, so the
-      // gateway step is a no-op read.
       "GET /v2.0/subnets": () => ({ status: 200, body: { subnets: [] } }),
       "GET /v2.0/routers": () => ({ status: 200, body: { routers: [] } }),
       "DELETE /v2.0/networks/net-1": () => {
@@ -561,12 +490,7 @@ describe("openstack CloudProvider", () => {
     }).pipe(Effect.provide(fake.layer))
   })
 
-  // T5.3/R17. Octavia's DELETE returns the moment it is accepted; the VIP port
-  // stays on the load-balancers subnet until PENDING_DELETE resolves. Deleting
-  // the network in between is a guaranteed `NetworkInUse` 409 — T5.3's
-  // exceptional failure turned into the normal path for every cluster with an
-  // LB. The teardown blocks on the status instead, exactly as
-  // `_waitClusterGone` blocks on the cluster's node ports.
+  // landmine: Octavia DELETE returns immediately, VIP port stays until PENDING_DELETE resolves; teardown must block on status
   it.effect("deleteByTag waits out a PENDING_DELETE load balancer before deleting the network", () => {
     const deleted: Array<string> = []
     const lb = { status: "ACTIVE" }
@@ -577,9 +501,6 @@ describe("openstack CloudProvider", () => {
       "GET /v2.1/os-server-groups": () => ({ status: 200, body: { server_groups: [] } }),
       "GET /v2.0/security-groups": () => ({ status: 200, body: { security_groups: [] } }),
       "GET /v2.0/networks": () => ({ status: 200, body: { networks: [{ id: "net-1" }] } }),
-      // Teardown reads the network's subnets and looks for a gateway to detach
-      // before deleting the network (R17). These fixtures have neither, so the
-      // gateway step is a no-op read.
       "GET /v2.0/subnets": () => ({ status: 200, body: { subnets: [] } }),
       "GET /v2.0/routers": () => ({ status: 200, body: { routers: [] } }),
       "DELETE /v2.0/networks/net-1": () => {
@@ -590,7 +511,6 @@ describe("openstack CloudProvider", () => {
     return Effect.gen(function*() {
       const fiber = yield* deleteByTag({ options }).pipe(Effect.provide(fake.layer), Effect.forkChild)
       yield* TestClock.adjust("2 minutes")
-      // The amphorae are still holding the VIP port: nothing may touch the network.
       expect(deleted).toEqual(["lb"])
       lb.status = "DELETED"
       yield* TestClock.adjust("10 seconds")
@@ -599,12 +519,6 @@ describe("openstack CloudProvider", () => {
     })
   })
 
-  // T5.3/R17. Neutron answers a network that still has ports with 409
-  // (`NetworkInUse`). Swallowing it — an `_ignoreConflict` here, or an
-  // `Effect.ignore` around the teardown — leaves a half-torn network behind and
-  // reports success, so the failure must propagate AND say which network and
-  // what to do about it. The bare tag alone renders as "network conflict:
-  // v2.0/networks", which is loud but unactionable.
   it.effect("a network still holding ports fails loudly, naming the network and the remedy", () => {
     const fake = makeFakeOpenStack({
       "GET /v2/lbaas/loadbalancers": () => ({ status: 200, body: { loadbalancers: [] } }),
@@ -613,9 +527,6 @@ describe("openstack CloudProvider", () => {
       "GET /v2.1/os-server-groups": () => ({ status: 200, body: { server_groups: [] } }),
       "GET /v2.0/security-groups": () => ({ status: 200, body: { security_groups: [] } }),
       "GET /v2.0/networks": () => ({ status: 200, body: { networks: [{ id: "net-1" }] } }),
-      // Teardown reads the network's subnets and looks for a gateway to detach
-      // before deleting the network (R17). These fixtures have neither, so the
-      // gateway step is a no-op read.
       "GET /v2.0/subnets": () => ({ status: 200, body: { subnets: [] } }),
       "GET /v2.0/routers": () => ({ status: 200, body: { routers: [] } }),
       "DELETE /v2.0/networks/net-1": () => ({
@@ -641,9 +552,6 @@ describe("openstack CloudProvider", () => {
         body: { servers: [{ id: "srv-1", name: "master-1", addresses: {}, metadata: { "kumulo-config-hash": "abc" } }] }
       }),
       "GET /v2.0/networks": () => ({ status: 200, body: { networks: [{ id: "net-1" }] } }),
-      // Teardown reads the network's subnets and looks for a gateway to detach
-      // before deleting the network (R17). These fixtures have neither, so the
-      // gateway step is a no-op read.
       "GET /v2.0/subnets": () => ({ status: 200, body: { subnets: [] } }),
       "GET /v2.0/routers": () => ({ status: 200, body: { routers: [] } }),
       "GET /v2.0/security-groups": () => ({ status: 200, body: { security_groups: [{ id: "sg-1" }] } }),
@@ -675,8 +583,6 @@ describe("openstack CloudProvider", () => {
     }).pipe(Effect.provide(fake.layer))
   })
 
-  // Regression: a server that boots to ERROR used to be re-adopted by name on
-  // every later apply, so the cluster could never be repaired.
   it.effect("ensureServer deletes an existing ERROR-state server and recreates it", () => {
     let deleted = false
     const fake = makeFakeOpenStack({
@@ -757,18 +663,10 @@ describe("openstack CloudProvider", () => {
     }).pipe(Effect.provide(fake.layer))
   })
 
-  // ---- Floating IPs (R9) --------------------------------------------------
-
-  // A Neutron that remembers what it allocated, including each FIP's `port_id`.
-  // The external network is only returned under the `router:external` filter, so
-  // a lookup that skipped the filter would allocate on the cluster's own private
-  // network — which the `floating_network_id` assertion catches.
   const _fakeFloatingIps = (tag: string) => {
     const fips: Array<Record<string, string>> = []
     return {
       fips,
-      // Neutron nulls `port_id` when the port a FIP points at is deleted —
-      // exactly what happens when the load balancer is recreated.
       orphan: () => fips.forEach((fip) => delete fip["port_id"]),
       ...makeFakeOpenStack({
         "GET /v2.0/networks": (request) =>
@@ -803,8 +701,6 @@ describe("openstack CloudProvider", () => {
     return Effect.gen(function*() {
       const info = yield* ensureFloatingIp({ options, portId: "port-vip" })
       expect(info).toEqual({ id: "fip-1", address: "203.0.113.1" })
-      // R9: allocated on the external network AND associated to the VIP port, in
-      // the one POST — dropping either field leaves an unreachable address.
       expect(fake.fips).toEqual([{
         id: "fip-1",
         floating_ip_address: "203.0.113.1",
@@ -816,17 +712,12 @@ describe("openstack CloudProvider", () => {
     }).pipe(Effect.provide(fake.layer))
   })
 
-  // The `description`-as-key choice exists to survive the LB's deletion — so the
-  // adopted FIP is exactly the one whose `port_id` Neutron has already nulled.
-  // Returning its address without re-associating publishes an address (to
-  // `<cluster>.outputs.yaml`, and to DNS in M4) that routes nowhere.
   it.effect("ensureFloatingIp re-associates an adopted floating IP orphaned by a recreated load balancer", () => {
     const fake = _fakeFloatingIps("prod")
     return Effect.gen(function*() {
       yield* ensureFloatingIp({ options, portId: "port-vip" })
       fake.orphan()
       const info = yield* ensureFloatingIp({ options, portId: "port-vip-2" })
-      // Same allocation, same address — re-pointed rather than re-allocated.
       expect(info).toEqual({ id: "fip-1", address: "203.0.113.1" })
       expect(fake.fips[0]?.["port_id"]).toBe("port-vip-2")
       expect(fake.calls().filter((call) => call.method === "POST").length).toBe(1)
@@ -835,9 +726,6 @@ describe("openstack CloudProvider", () => {
 
   const _tagArb = fc.stringMatching(/^[a-z][a-z0-9-]{0,12}$/)
 
-  // Floating IPs carry no `name` and Neutron's create body has no `tags`, so
-  // `description` is the only create-time handle — this pins that the key is
-  // both written on create and used as the lookup filter.
   it.effect.prop(
     "ensureFloatingIp is idempotent: the second call adopts the first's allocation, keyed by description",
     [_tagArb],
@@ -863,7 +751,6 @@ describe("openstack CloudProvider", () => {
       yield* ensureFloatingIp({ options, portId: "port-vip" })
       yield* releaseFloatingIp({ options })
       expect(fake.calls().filter((call) => call.method === "DELETE").length).toBe(1)
-      // Released for real: a re-release finds nothing left to delete.
       yield* releaseFloatingIp({ options })
       expect(fake.calls().filter((call) => call.method === "DELETE").length).toBe(1)
     }).pipe(Effect.provide(fake.layer))
@@ -881,24 +768,13 @@ describe("openstack CloudProvider", () => {
   })
 })
 
-// A floating IP only routes if its subnet hangs off a router with an external
-// gateway — Neutron refuses the association otherwise. On a private network
-// kumulo created there is no such router until it makes one, so the LB's
-// floating IP (R9) is unreachable without this. OVH sells the same thing as
-// "Public Cloud Gateway"; in Neutron terms it is a router.
-// Regression, twice over: OVH sends `ipv4_address_scope`/`ipv6_address_scope`
-// as null and `l2_adjacency` as a boolean, all three typed `string` by the
-// Neutron spec. Each killed a real apply AFTER the network had been created —
-// once on the create response, once on the list. kumulo reads only `id` and
-// `name` here, so the fixture sends the wrong-typed shape on BOTH routes.
+// landmine: OVH sends ipv4/ipv6_address_scope as null and l2_adjacency as boolean, all typed string by the Neutron spec
 const _OVH_NETWORK = {
   id: "net-1",
   name: "kumulo-prod",
   ipv4_address_scope: null,
   ipv6_address_scope: null,
   l2_adjacency: true,
-  // Nullable in the spec already, but the generator dropped the null because
-  // the field also carries `format: uuid` — see the patch file's note.
   qos_policy_id: null
 }
 
@@ -910,7 +786,6 @@ it.effect("decodes the network shape OVH actually returns, on create and on list
     "POST /v2.0/subnets": () => ({ status: 201, body: { subnet: { id: "sub-1", cidr: "10.0.0.0/24" } } })
   })
   return Effect.gen(function*() {
-    // The list route is what `apply` hits first, before anything is created.
     const found = yield* findNetwork({ options, spec: { cidr: "10.0.0.0/24" } })
     expect(found?.id).toBe("net-1")
     const info = yield* ensureNetwork({ options, spec: { cidr: "10.0.0.0/24" } })
@@ -922,9 +797,6 @@ describe("hasGateway", () => {
   const _routersFake = (routers: ReadonlyArray<{ readonly id: string; readonly name: string }>) =>
     makeFakeOpenStack({ "GET /v2.0/routers": () => ({ status: 200, body: { routers } }) })
 
-  // An OVH gateway IS a Neutron router, so existence is answerable here even
-  // though creation is not — only OVH's own API carries the tier. This read is
-  // what keeps that create idempotent.
   it.effect("reports an existing gateway by the cluster's router name", () =>
     Effect.gen(function*() {
       expect(yield* hasGateway({ options, name: "kumulo-prod" })).toBe(true)

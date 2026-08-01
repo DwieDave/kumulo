@@ -1,14 +1,4 @@
-/**
- * Hand-written client (D1) over `/1.3/network` and `/1.3/router` (R3, D10).
- * kumulo creates and owns the SDN network/router a UKS cluster requires.
- *
- * Envelopes here are the observed ones (Q8, closed) and they are DOUBLE on
- * lists: `{"networks": {"network": [...]}}`, `{"routers": {"router": [...]}}`,
- * and `ip_networks` is itself `{"ip_network": [...]}` rather than an array.
- * Booleans are the strings `"yes"`/`"no"` on the wire. Nothing about this
- * matches the UKS endpoints in `uks.ts`, which are bare — the two halves of
- * UpCloud's API genuinely disagree, so neither can be modelled on the other.
- */
+// list envelopes here are DOUBLE-nested ({"networks":{"network":[...]}}), unlike the bare UKS endpoints in uks.ts
 import { Effect } from "effect"
 import * as Schema from "effect/Schema"
 import type * as HttpClient from "effect/unstable/http/HttpClient"
@@ -16,7 +6,6 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
 import { decodeOn2xx, decodeVoid } from "./common.ts"
 import type { UpcloudRawError } from "./common.ts"
 
-/** `"yes"`/`"no"` — UpCloud's wire spelling for a boolean on these endpoints. */
 export const UpcloudBool = Schema.Literals(["yes", "no"])
 export type UpcloudBool = typeof UpcloudBool.Type
 
@@ -58,7 +47,6 @@ const _decodeNetworks = decodeOn2xx(_NetworksResponse)
 const _decodeRouter = decodeOn2xx(_RouterResponse)
 const _decodeRouters = decodeOn2xx(_RoutersResponse)
 
-/** `POST /1.3/network` body (intent.md's networking section). */
 export interface NetworkCreateInput {
   readonly name: string
   readonly zone: string
@@ -80,7 +68,6 @@ export interface RouterClient {
   readonly delete: (uuid: string) => Effect.Effect<void, UpcloudRawError>
 }
 
-/** Hand-written client (D1) over `/1.3/network*`. */
 export const makeNetworkClient = (httpClient: HttpClient.HttpClient): NetworkClient => ({
   list: () => httpClient.execute(HttpClientRequest.get("/1.3/network")).pipe(Effect.flatMap(_decodeNetworks), Effect.map((r) => r.networks.network)),
   get: (uuid) =>
@@ -93,7 +80,6 @@ export const makeNetworkClient = (httpClient: HttpClient.HttpClient): NetworkCli
   delete: (uuid) => httpClient.execute(HttpClientRequest.delete(`/1.3/network/${uuid}`)).pipe(Effect.flatMap(decodeVoid))
 })
 
-/** Hand-written client (D1) over `/1.3/router*`. */
 export const makeRouterClient = (httpClient: HttpClient.HttpClient): RouterClient => ({
   list: () => httpClient.execute(HttpClientRequest.get("/1.3/router")).pipe(Effect.flatMap(_decodeRouters), Effect.map((r) => r.routers.router)),
   get: (uuid) =>

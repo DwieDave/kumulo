@@ -5,9 +5,7 @@ import type { HttpTransportError, ProvisioningTimeout, ResourceNotFound } from "
 import type { K8sManifest } from "../domain/types.ts"
 import type { ResourceRef } from "./client.ts"
 
-// kumulo: lenient decode — a manifest missing/malformed `status`
-// (not yet populated by the controller, e.g. a brand-new Node) decodes to
-// `undefined` conditions rather than failing, same as before.
+// Missing/malformed status (e.g. brand-new Node) decodes to undefined conditions rather than failing.
 const _ConditionsShape = Schema.Struct({
   status: Schema.optional(Schema.Struct({
     conditions: Schema.optional(Schema.Array(Schema.Struct({ type: Schema.String, status: Schema.String })))
@@ -27,8 +25,6 @@ export interface WaitOptions {
   readonly timeout: Duration.Input
 }
 
-// Readiness helper — polls a Deployment until its "Available"
-// condition is "True".
 export const waitForDeploymentAvailable = (
   options: WaitOptions
 ): Effect.Effect<K8sManifest, ResourceNotFound | HttpTransportError | ProvisioningTimeout> =>
@@ -41,8 +37,6 @@ export const waitForDeploymentAvailable = (
     ref: options.ref.path
   })
 
-// Readiness helper — polls a Node until its "Ready" condition is
-// "True".
 export const waitForNodeReady = (
   options: WaitOptions
 ): Effect.Effect<K8sManifest, ResourceNotFound | HttpTransportError | ProvisioningTimeout> =>

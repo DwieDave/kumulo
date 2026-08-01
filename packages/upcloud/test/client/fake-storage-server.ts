@@ -11,8 +11,6 @@ interface FakeLabel {
 interface FakeStorage {
   uuid: string
   size: number
-  // Live quirk: templates/backups in the account-wide list can carry
-  // neither tier nor zone.
   tier?: string
   zone?: string
   title: string
@@ -55,18 +53,11 @@ const _notFound = (message: string): Response => new Response(JSON.stringify({ m
 const _ok = (body: unknown): Response => new Response(JSON.stringify(body), { status: 200 })
 const _empty = (): Response => new Response(null, { status: 200 })
 
-/**
- * Minimal in-memory fixture-replay stand-in for UpCloud's `/1.3/storage` API
- * (N4) — enforces the D3 wrapped envelope on every response and the documented
- * `maintenance -> online` create transition.
- */
 export const makeFakeStorageServer = (options: { readonly readyAfterPolls?: number } = {}) => {
   const readyAfterPolls = options.readyAfterPolls ?? 1
   const storages = new Map<string, FakeStorage>()
   let nextId = 1
-  // Live quirk (2026-08-01): GET /1.3/storage lists the WHOLE account —
-  // public templates and backups appear alongside disks and carry no `tier`.
-  // Seeding one forces every list decode to tolerate tier-less entries.
+  // live quirk: GET /1.3/storage lists the WHOLE account, templates/backups carry no tier — decode must tolerate that
   storages.set("template-0", {
     uuid: "01000000-0000-4000-8000-000030060200",
     size: 4,
@@ -128,7 +119,6 @@ export const makeFakeStorageServer = (options: { readonly readyAfterPolls?: numb
 
   const _handle = (request: HttpClientRequest.HttpClientRequest): Response => {
     const parts = new URL(request.url, "https://fixture.invalid").pathname.split("/").filter(Boolean)
-    // ["1.3", "storage", uuid?]
     if (parts[1] !== "storage") return _badRequest("unhandled fixture route")
     const uuid = parts[2]
     return uuid === undefined ? _handleCollection(request) : _handleOne(request, uuid)

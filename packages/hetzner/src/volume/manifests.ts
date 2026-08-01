@@ -1,14 +1,8 @@
 import type { K8sManifest, VolumeInfo, VolumeSpec } from "@kumulo/core"
 
-// kumulo: matches hcloud-csi's provisioner name (R10) — same driver both this
-// static-PV path and the self-installed `hcloud-csi` addon reference.
 const _hcloudCsiDriver = "csi.hetzner.cloud"
 
-// kumulo: VolumeProvider port method — pins `csi.volumeHandle` to the stable
-// hcloud volume ID, `persistentVolumeReclaimPolicy: Retain` so deleting the
-// PV/PVC never deletes the backing volume (mirrors `@kumulo/volumes-cinder`'s
-// `staticPvManifest`, duplicated not imported per dependency-cruiser's
-// `no-sibling-package-imports`).
+// persistentVolumeReclaimPolicy Retain so PV/PVC delete never deletes the backing volume
 export const staticPvManifest = (
   { vol, spec }: { readonly vol: VolumeInfo; readonly spec: VolumeSpec }
 ): K8sManifest => ({
@@ -33,10 +27,6 @@ export interface PvcBinding {
   readonly accessModes: ReadonlyArray<string>
 }
 
-// kumulo: PVC binding needs namespace/accessModes from the cluster config's
-// `volumes.managed[].pvc` block, not part of the frozen
-// `VolumeProvider.staticPvManifest(vol, spec)` port signature — exposed
-// separately for the CLI orchestrator to call alongside it.
 export const staticPvcManifest = (
   { vol, spec, pvc }: { readonly vol: VolumeInfo; readonly spec: VolumeSpec; readonly pvc: PvcBinding }
 ): K8sManifest => ({

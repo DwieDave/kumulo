@@ -12,8 +12,6 @@ const cloudCredential = {
   applicationCredentialSecret: "app-secret"
 }
 
-// Records the (kind, name) of every applied manifest in call order — enough
-// to prove install order without a real k8s server.
 const _nameOf = (manifest: K8sManifest): string => {
   const metadata = manifest.metadata
   return typeof metadata === "object" && metadata !== null && "name" in metadata && typeof metadata.name === "string"
@@ -50,9 +48,6 @@ it.effect("installs addon manifests in registry order, addon-by-addon", () =>
 
     yield* installAddons({ k8sClient: _fakeK8sClient(log), addons, ctx: { clusterName: "test", capabilities: ["cilium"] } })
 
-    // cilium's manifests land fully before openstack-ccm's, whose Secret
-    // lands before cinder-csi's (shared name, re-applied — SSA is
-    // idempotent), and system-upgrade-controller lands last.
     assert.deepStrictEqual(log, [
       "ServiceAccount:cilium",
       "DaemonSet:cilium",

@@ -9,8 +9,6 @@ type ChildProcessSpawnerService = (typeof ChildProcessSpawnerNS.ChildProcessSpaw
 
 type Invocation = { readonly command: string; readonly args: ReadonlyArray<string> }
 
-// In-memory `ChildProcessSpawner` standing in for a real `sops` binary: records
-// every invocation and replays canned stdout/stderr/exit code.
 const _fakeSpawner = (
   { stdout = "", stderr = "", exitCode = 0 }: { readonly stdout?: string; readonly stderr?: string; readonly exitCode?: number }
 ): { readonly spawner: ChildProcessSpawnerService; readonly invocations: Array<Invocation> } => {
@@ -143,9 +141,6 @@ describe("sopsConfigProvider", () => {
       expect(yield* _read(provider, "B")).toBe("from-sops")
     }))
 
-  // kumulo: `fc.asyncProperty` rather than `it.prop`, because provider reads are
-  // effectful and `it.prop`'s callback must run synchronously (see entries.test.ts
-  // for the synchronous `it.prop` shape used where the subject is pure).
   const _pairs = fc.uniqueArray(
     fc.tuple(fc.string({ minLength: 1, maxLength: 12 }).filter((s) => /^[A-Z_]+$/.test(s)), fc.string({ maxLength: 20 })),
     { selector: ([key]: readonly [string, string]) => key }

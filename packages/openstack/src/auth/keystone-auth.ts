@@ -26,8 +26,6 @@ interface CachedToken {
   readonly catalog: ServiceCatalog
 }
 
-// kumulo: Keystone's identity/scope request shape per credential method —
-// mechanical translation only, no judgment calls.
 const _authBody = (credentials: OpenStackCredentials): AuthTokensPostRequest =>
   credentials.method === "application_credential"
     ? {
@@ -62,16 +60,12 @@ const _authBody = (credentials: OpenStackCredentials): AuthTokensPostRequest =>
       }
     }
 
-// A missing/malformed `expires_at` is not a hard failure — it falls back to
-// "expires now", so the next caller simply re-issues.
 const _expiresAtMs = (raw: string | undefined): number => {
   const parsed = raw === undefined ? NaN : Date.parse(raw)
   return Number.isNaN(parsed) ? Date.now() : parsed
 }
 
-// kumulo: THE on-call bug lived here — every non-2xx used to become
-// `AuthenticationFailed`, so a Keystone 429 or 503 paged the operator as "bad
-// credentials". The shared status taxonomy now owns that decision.
+// landmine: don't map every non-2xx to AuthenticationFailed — a 429/503 must not page as "bad credentials"
 const _tokenRef = { kind: "keystone-token", ref: "/v3/auth/tokens" }
 
 const _issueToken = (options: {
@@ -100,8 +94,6 @@ export interface KeystoneAuthLiveOptions {
   readonly skewMs?: number
 }
 
-// kumulo: token cache with expiry skew — a fresh token is only
-// issued once per skew window, every other caller shares the cached result.
 export const KeystoneAuthLive = (
   options: KeystoneAuthLiveOptions
 ): Layer.Layer<KeystoneAuth, never, HttpClient.HttpClient> =>
@@ -118,8 +110,6 @@ export const KeystoneAuthLive = (
       )
 
       const current: Effect.Effect<CachedToken, OpenStackError> = Effect.gen(function*() {
-        // kumulo: real wall-clock time — token expiry is a real-world concept
-        // that must not be virtualized by Effect's TestClock in tests.
         const now = Date.now()
         const cached = yield* Ref.get(cache)
         if (Option.isSome(cached) && cached.value.expiresAtMs > now) return cached.value

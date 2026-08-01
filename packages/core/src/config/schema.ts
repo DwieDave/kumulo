@@ -1,15 +1,5 @@
-/**
- * Shared config building blocks. Distro-specific variants live in their
- * distro packages (`@kumulo/distro-k3s`, `@kumulo/distro-ovh-mks`,
- * `@kumulo/distro-upcloud-uks`); the `ClusterConfig` union is assembled in
- * `@kumulo/cli`, the only layer that knows every distro. Core only owns what
- * more than one distro shares: primitives, the common field set, and the
- * provider-level cross-field rules.
- */
 import { Schema } from "effect"
 
-// kumulo: dotted-quad CIDR check bounding octets to 0-255 and prefix to 0-32
-// (format + range only, no reachability/route checks — out of scope for schema)
 const octet = "(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)"
 const prefix = "(3[0-2]|[12]?\\d)"
 const isCidr = Schema.isPattern(new RegExp(`^${octet}\\.${octet}\\.${octet}\\.${octet}/${prefix}$`), {
@@ -18,8 +8,6 @@ const isCidr = Schema.isPattern(new RegExp(`^${octet}\\.${octet}\\.${octet}\\.${
 
 export const Cidr = Schema.String.check(isCidr)
 
-// kumulo: an IPv4 CIDR as the inclusive [first, last] address range it covers,
-// with the host bits masked off (`10.0.1.5/16` is the same range as `10.0.0.0/16`)
 export const cidrRange = (cidr: string): readonly [number, number] => {
   const [address = "", bits = "0"] = cidr.split("/")
   const size = 2 ** (32 - Number(bits))
@@ -37,8 +25,7 @@ export const AccessMode = Schema.Literals(["ReadWriteOnce", "ReadWriteMany", "Re
 export type Provider = typeof Provider.Type
 export type AuthMethod = typeof AuthMethod.Type
 
-// kumulo: object storage buckets carry secrets, so ANY real module requires a
-// real sink — the rule predates upcloud and used to name ovh alone.
+// kumulo: any real object_storage.module requires a real secrets.sink
 export const isSecretsRequiredForObjectStorage = Schema.makeFilter(
   (config: { object_storage: { module: string }; secrets: { sink: string } }) =>
     config.object_storage.module !== "none" && config.secrets.sink === "none"
@@ -46,8 +33,6 @@ export const isSecretsRequiredForObjectStorage = Schema.makeFilter(
       : undefined
 )
 
-// kumulo: hetzner and upcloud each use a static API token; ovh and generic
-// use an OpenStack-style auth method — the two vocabularies never mix (D5).
 export const authMethodsByProvider: Record<Provider, ReadonlyArray<AuthMethod>> = {
   hetzner: ["api_token"],
   upcloud: ["api_token"],
@@ -62,8 +47,6 @@ export const isAuthMethodConsistentWithProvider = Schema.makeFilter(
       : `auth.method must be one of ${authMethodsByProvider[config.provider].join(", ")} for provider ${config.provider}`
 )
 
-// kumulo: hcloud volumes only exist on hetzner; cinder volumes only exist on
-// the OpenStack-family providers — cross-wiring either is a config error
 export const isVolumesModuleConsistentWithProvider = Schema.makeFilter(
   (config: { provider: string; volumes: { module: string } }) => {
     if (config.volumes.module === "hcloud" && config.provider !== "hetzner")
@@ -99,8 +82,6 @@ const DnsRecord = Schema.Struct({
   target: Schema.NonEmptyString
 })
 
-// kumulo: zone/ttl/records only mean something for a real dns module, so
-// `module: none` is its own variant instead of demanding dead fields.
 export const Dns = Schema.Union([
   Schema.Struct({ module: Schema.Literal("none") }),
   Schema.Struct({
@@ -134,11 +115,8 @@ export const HcloudVolumes = Schema.Struct({
   managed: Schema.Array(ManagedVolume)
 })
 export const Volumes = Schema.Union([NoVolumes, CinderVolumes, HcloudVolumes])
-// kumulo: the mks variant fixes provider to ovh, so hcloud is not expressible
 export const OpenStackVolumes = Schema.Union([NoVolumes, CinderVolumes])
 
-// kumulo: S3 bucket naming rules — 3-63 chars, lowercase alphanumeric/dots/hyphens,
-// must start and end with an alphanumeric character
 const isS3BucketName = Schema.isPattern(/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/, {
   message: "must be 3-63 chars, lowercase alphanumeric/dots/hyphens, and start/end alphanumeric"
 })
@@ -147,9 +125,7 @@ export const BucketName = Schema.String.check(isS3BucketName)
 
 const Bucket = Schema.Struct({
   name: BucketName,
-  // Required on purpose: OVH's S3 regions ("DE", "GRA", ...) are a different
-  // namespace than compute regions ("DE1", ...), so defaulting from
-  // auth.region would manufacture 404s.
+  // required: OVH S3 regions are a different namespace than compute regions, defaulting from auth.region would manufacture 404s
   region: Schema.NonEmptyString,
   versioning: Schema.Boolean,
   encryption: Schema.Boolean,
@@ -184,15 +160,10 @@ export const Secrets = Schema.Union([
 export const OutputsFormat = Schema.Literals(["yaml", "json"])
 export type OutputsFormat = typeof OutputsFormat.Type
 
-// Format of the files kumulo itself writes next to the config
-// (`<cluster>.outputs.*`, `<cluster>.buckets.*`). Defaults to yaml.
 export const Outputs = Schema.Struct({
   format: OutputsFormat
 })
 
-// Fields every distro carries; the distro variants spread these and add their
-// distro-specific blocks so `distro` narrows a decoded config to exactly what
-// that path needs.
 export const commonClusterFields = {
   name: Schema.NonEmptyString,
   outputs: Schema.optionalKey(Outputs),

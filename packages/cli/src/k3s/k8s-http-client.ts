@@ -4,14 +4,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient"
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
 import type { KubeconfigAuth } from "@kumulo/core"
 
-// An authenticated `HttpClient` for the freshly-bootstrapped cluster (k3s's own
-// client-cert kubeconfig, or a bearer token if some future distro's kubeconfig
-// uses one). The node:http client takes an `https.Agent`, which accepts
-// `cert`/`key`/`ca` directly — no bespoke HttpClient constructor needed.
-//
-// The kubeconfig CA is passed in BOTH auth modes: a k3s API server presents a
-// self-signed cert, so the default trust store would reject it for a token
-// kubeconfig too.
+// kubeconfig CA is passed in both auth modes: k3s API server uses a self-signed cert.
 const _agentOptions = (
   { auth, caPem }: { readonly auth: KubeconfigAuth; readonly caPem: string | undefined }
 ) =>

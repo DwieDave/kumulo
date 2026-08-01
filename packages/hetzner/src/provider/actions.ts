@@ -16,11 +16,6 @@ const _getAction = (
     ctx: { kind: "action", ref: String(actionId) }
   }).pipe(Effect.map((response) => response.action))
 
-// kumulo: hcloud operations (server/volume create, LB target add/remove, ...)
-// return an `Action` to poll (N2) — bounded spaced polling via `@kumulo/core`'s
-// `pollUntil` (shared with the OpenStack path's server-status polling),
-// `ProvisioningTimeout` on cap, the `error` status surfaced with Hetzner's own
-// error message rather than a bare "timed out".
 export const waitForAction = (
   { actionId, client }: { readonly client: HcloudClient; readonly actionId: number }
 ): Effect.Effect<void, HcloudError | ProvisioningTimeout> =>

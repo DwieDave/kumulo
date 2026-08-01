@@ -1,26 +1,11 @@
 #!/usr/bin/env bun
-/**
- * Generates kumulo.schema.json (JSON Schema draft 2020-12) from the
- * ClusterConfig Effect schema, for IDE type hinting:
- *   - json configs: `"$schema": "./kumulo.schema.json"`
- *   - yaml configs: `# yaml-language-server: $schema=./kumulo.schema.json`
- * Run via `bun scripts/generate-schema.ts`; commit the result.
- */
 import { writeFileSync } from "node:fs"
 import { JsonSchema, Schema } from "effect"
 import { authMethodsByProvider } from "@kumulo/core"
 import { ClusterConfig } from "../packages/cli/src/cluster-config.ts"
 
-// Mirrors the cross-field `.check(...)` filters in core's schema.ts (the
-// Effect->JSON-Schema conversion cannot express them) — keep in sync. The
-// distro rules are derived from the union's variants, as are the per-module
-// field rules (dns zone/ttl/records, secrets sops block, object_storage
-// buckets, mks volumes), so those live here no longer. What is left spans two
-// independent unions: provider->auth/volumes/addons and object_storage->secrets.
+// Mirrors the cross-field `.check(...)` filters in core's schema.ts — keep in sync.
 const crossFieldConstraints = [
-  // Derived from core's authMethodsByProvider so a new provider can't drift
-  // out of sync (upcloud once did: the hand-written rule said api_token was
-  // hetzner-only).
   ...Object.entries(authMethodsByProvider).map(([provider, methods]) => ({
     if: { properties: { provider: { const: provider } }, required: ["provider"] },
     then: { properties: { auth: { properties: { method: { enum: [...methods] } } } } }
@@ -47,8 +32,6 @@ const crossFieldConstraints = [
     },
     then: { properties: { secrets: { properties: { sink: { not: { const: "none" } } } } } }
   },
-  // `isIngressPlaceable`: an ingress LB's VIP has to sit on the network's
-  // load_balancers_subnet, so `ingress` is meaningless without `network`.
   {
     if: { required: ["ingress"] },
     then: { required: ["network"] }

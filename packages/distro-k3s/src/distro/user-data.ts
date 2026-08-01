@@ -7,12 +7,7 @@ export interface RenderUserDataArgs {
   readonly sshPublicKey: string
 }
 
-// Cloud-init only (hostname, packages, SSH hardening); k3s install
-// happens over SSH afterward (bootstrap/install-script.ts), so `ctx`'s
-// token/apiEndpoint aren't needed at this layer — same split the cloud-init
-// renderer itself documents. Hostname is `ctx.name` (the node's own unique
-// name, e.g. `master-1`) — a role-wide template collides across every
-// master/worker of a role, and k3s derives node identity from the hostname.
+// cloud-init only; k3s install happens over SSH afterward via bootstrap/install-script.ts
 export const renderUserData = (
   args: RenderUserDataArgs
 ) =>

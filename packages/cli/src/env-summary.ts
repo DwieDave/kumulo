@@ -13,14 +13,8 @@ export interface ProviderSection {
 
 const _ovhVars = distroRegistry["ovh-mks"].requiredEnvVars
 const _upcloudVars = distroRegistry["upcloud-uks"].requiredEnvVars
-// The full OS_* set `loadCredentials` reads — same keys the OpenStack doctor
-// checks source. Only some are required (depends on auth.method); presence is
-// shown for all so the operator sees which auth path will be picked.
 const _osVars = [...OS_ENV_KEYS, ...OS_SECRET_ENV_KEYS] as const
 
-// Per-module env vars. Adding a module literal breaks compilation here until
-// its vars are listed (empty = no section). `dns: ovh` deliberately omits
-// OVH_SERVICE_NAME — the DNS API is account-scoped, not project-scoped.
 const _dnsVars: Record<ClusterConfig["dns"]["module"], ReadonlyArray<string>> = {
   none: [],
   ovh: ["OVH_CLIENT_ID", "OVH_CLIENT_SECRET"],
@@ -45,7 +39,6 @@ const _moduleSection = (
   vars: ReadonlyArray<string>
 ): ReadonlyArray<ProviderSection> => vars.length === 0 ? [] : [{ title, vars }]
 
-/** Which providers this config wires and the env vars each one reads (sourced from the distro/provider registries). */
 export const providerSections = (config: ClusterConfig): ReadonlyArray<ProviderSection> => [
   providerFor(config).credentialsFromDistro
     ? {
@@ -58,7 +51,6 @@ export const providerSections = (config: ClusterConfig): ReadonlyArray<ProviderS
   ..._moduleSection(`object_storage: ${config.object_storage.module}`, _objectStorageVars[config.object_storage.module])
 ]
 
-/** Pure render given each var's presence — value display is always Effect `Redacted` (never the raw value). */
 export const renderEnvSummary = (
   { present, sections }: {
     readonly sections: ReadonlyArray<ProviderSection>
@@ -75,42 +67,20 @@ export const renderEnvSummary = (
     ])
   ].join("\n")
 
-/**
- * The vars a run genuinely cannot proceed without, as opposed to the fuller set
- * `providerSections` displays. The OS_* set is deliberately excluded: which of
- * them is required depends on the auth path `loadCredentials` picks, so
- * demanding all of them would reject valid setups.
- */
 const _requiredVars = (config: ClusterConfig): ReadonlyArray<string> => [
   ...new Set([
-    // OVH's OAuth2 client-credentials trio has no alternative source, so its
-    // absence is always fatal. k3s's OS_* set deliberately is not listed here:
-    // `loadCredentials` accepts several shapes (clouds.yaml, OS_CLOUD,
-    // application-credential or password), so no single variable is required.
     ...(config.distro === "ovh-mks" ? distroRegistry["ovh-mks"].requiredEnvVars : []),
-    // UpCloud's static bearer token has no alternative source either (mirrors the OVH trio above).
     ...(config.distro === "upcloud-uks" ? _upcloudVars : []),
     ..._dnsVars[config.dns.module],
     ..._objectStorageVars[config.object_storage.module]
   ])
 ]
 
-/**
- * Required-but-unset credentials (pure; presence is the caller's to supply).
- *
- * Without this a missing var surfaces as whatever the first doomed request
- * happens to look like — `GET /cloud/project//kube`, whose empty path segment
- * is the only clue that `OVH_SERVICE_NAME` is unset. `main.ts` does attach a
- * hint to the fallback client, but that hint is unreachable: with no
- * credentials there is no base-URL mapping either, so the request stays
- * relative and fails as `InvalidUrlError` before the handler that carries it
- * ever runs.
- */
+// Without this, a missing OVH_SERVICE_NAME silently produces `GET /cloud/project//kube` instead of a clear error.
 export const missingCredentials = (
   { config, present }: { readonly config: ClusterConfig; readonly present: (name: string) => boolean }
 ): ReadonlyArray<string> => _requiredVars(config).filter((name) => !present(name))
 
-/** `missingCredentials` against the real environment, as the failure every command path refuses with. */
 export const requireCredentials = (config: ClusterConfig): Effect.Effect<void, AuthenticationFailed> =>
   Effect.gen(function*() {
     const names = _requiredVars(config)
@@ -131,7 +101,6 @@ export const requireCredentials = (config: ClusterConfig): Effect.Effect<void, A
     )
   })
 
-/** Env-var presence for `renderEnvSummary`, read via `Config` (not raw `process.env`), redacted end to end. */
 export const envSummary = (config: ClusterConfig): Effect.Effect<string> =>
   Effect.gen(function*() {
     const sections = providerSections(config)

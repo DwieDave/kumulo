@@ -34,9 +34,6 @@ const _toExisting = (pool: RawPool): ExistingNodePool => ({
   configHash: pool.template?.metadata?.annotations?.[CONFIG_HASH_KEY]
 })
 
-// The pool template is OVH's native nodepool metadata mechanism (it lands on
-// the nodes as k8s annotations) — the same `CONFIG_HASH_KEY` the hcloud/Nova
-// providers stamp their servers with, so drift is read back the same way.
 const _template = (pool: MksWorkerPoolConfig) => ({
   metadata: { annotations: { [CONFIG_HASH_KEY]: mksPoolHash(pool) }, finalizers: [], labels: {} },
   spec: { taints: [], unschedulable: false }
@@ -85,11 +82,7 @@ const _update = (
     ctx: { kind: "nodepool", ref: id }
   })
 
-/**
- * A replace only creates once the old pool is really gone — OVH's DELETE is
- * accepted asynchronously, and creating while the old pool still exists
- * either collides on the name or leaves both alive.
- */
+// Replace only creates once the old pool is really gone: OVH's DELETE is async, and creating too early collides or leaves both alive.
 const _awaitGone = (
   { mks, ref, id }: { readonly mks: Mks; readonly ref: MksClusterRef; readonly id: string }
 ): Effect.Effect<void, MksError> =>
@@ -119,7 +112,6 @@ const _applyDiff = (
     yield* Effect.forEach(diff.toUpdate, ({ id, pool }) => _update({ mks, ref, id, pool }), { discard: true })
   })
 
-/** Read-only nodepool listing — powers real plan diffs without converging anything. */
 export const listNodePools = (
   { mks, ref }: { readonly mks: Mks; readonly ref: MksClusterRef }
 ): Effect.Effect<ReadonlyArray<ExistingNodePool>, MksError> =>
@@ -131,7 +123,6 @@ export const listNodePools = (
     (raw) => raw.map(_toExisting)
   )
 
-/** Converges MKS nodepools onto `worker_pools` (create/update/replace/delete, by name); `replace` gates the destructive branch. */
 export const ensureNodePools = (
   { mks, ref, pools, replace }: {
     readonly mks: Mks

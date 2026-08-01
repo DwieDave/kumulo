@@ -28,7 +28,6 @@ interface FakeBucket {
   total_objects: number
   total_size_bytes: number
   deleted: boolean
-  // async delete: kept for one poll with deleted:true before disappearing
   pollsUntilGone: number
 }
 
@@ -53,12 +52,6 @@ const _conflict = (message: string): Response => new Response(JSON.stringify({ m
 const _ok = (body: unknown): Response => new Response(JSON.stringify(body), { status: 200 })
 const _empty = (): Response => new Response(null, { status: 200 })
 
-/**
- * Minimal in-memory fixture-replay stand-in for UpCloud's `/object-storage-2`
- * API (N4). Enforces D3's bare shapes, the `setup-* -> running` operational
- * ladder, once-only access-key secrets, async bucket delete, and the
- * service-delete-409-unless-empty-or-force rule.
- */
 export const makeFakeObjectStorageServer = () => {
   const services = new Map<string, FakeService>()
   const buckets = new Map<string, Map<string, FakeBucket>>()
@@ -124,10 +117,7 @@ export const makeFakeObjectStorageServer = () => {
       if (!service) return _notFound("service not found")
       const nonDeletedBuckets = [...(buckets.get(uuid)?.values() ?? [])].filter((bucket) => !bucket.deleted)
       if (nonDeletedBuckets.length > 0 && !force) return _conflict("service has buckets: pass ?force=true")
-      // Live quirk (2026-08-01): deletion is async — the service lingers in a
-      // delete-* operational_state and still holds its private network
-      // attachment, so callers must poll GET to 404 before touching the
-      // network. One extra GET returns the deleting service, then it is gone.
+      // Live quirk: deletion is async, service still holds its network attachment — poll GET to 404 before touching the network.
       service.operational_state = "delete-service"
       service.pollsUntilGone = 1
       return _empty()
@@ -139,7 +129,6 @@ export const makeFakeObjectStorageServer = () => {
     const serviceBuckets = buckets.get(serviceUuid)
     if (!serviceBuckets) return _notFound("service not found")
     if (request.method === "GET") {
-      // one poll of aging: async-deleting buckets vanish after their grace poll
       for (const [name, bucket] of serviceBuckets) {
         if (bucket.deleted) {
           if (bucket.pollsUntilGone <= 0) serviceBuckets.delete(name)
@@ -169,7 +158,6 @@ export const makeFakeObjectStorageServer = () => {
     if (request.method === "DELETE") {
       const bucket = serviceBuckets.get(name)
       if (!bucket) return _notFound("bucket not found")
-      // R11/N4: async delete — one more poll shows deleted:true before it's gone.
       bucket.deleted = true
       bucket.pollsUntilGone = 1
       return _empty()
@@ -210,7 +198,6 @@ export const makeFakeObjectStorageServer = () => {
     const keys = accessKeys.get(_keyOf(serviceUuid, username))
     if (!keys) return _notFound("user not found")
     if (request.method === "GET") {
-      // D7: list/get omit the secret entirely — only the create response ever carries it.
       return _ok([...keys.values()].map(({ secret_access_key: _secret, ...rest }) => rest))
     }
     if (request.method === "POST") {
@@ -252,9 +239,6 @@ export const makeFakeObjectStorageServer = () => {
   const _handle = (request: HttpClientRequest.HttpClientRequest): Response => {
     const url = new URL(request.url, "https://fixture.invalid")
     const parts = url.pathname.split("/").filter(Boolean)
-    // ["1.3", "object-storage-2", ...rest] — the /1.3 prefix is enforced: the
-    // live API 404s without it (live probe 2026-08-01, the client shipped
-    // prefix-less and every service lookup "not found"-ed).
     if (parts[0] !== "1.3" || parts[1] !== "object-storage-2") return _notFound("unknown path")
     const rest = parts.slice(2)
 

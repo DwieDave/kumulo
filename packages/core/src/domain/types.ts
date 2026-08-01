@@ -1,7 +1,3 @@
-// Domain types shared by port interfaces. Structural and
-// minimal on purpose — the full config schema lives in a sibling package
-// under concurrent development; only the shapes ports need are defined here.
-
 import type { Redacted } from "effect"
 
 export type ClusterTag = string
@@ -10,17 +6,11 @@ export type DistroKind = "k3s" | "ovh-mks" | "upcloud-uks"
 export type Capability = "octavia" | "floatingIps" | "cilium"
 export type Version = string
 
-// kumulo: the subnet fields are optional because they are not universal.
-// Hetzner networks carry one subnet and expose no subnet id at all, and the
-// k3s caller passes `cidr` alone. Absent means today's single-subnet behaviour.
 export interface NetworkSpec {
   readonly cidr: string
-  /** Defaults to `cidr` when omitted. */
   readonly nodesSubnet?: string
-  /** Omitted means no load-balancer subnet is created. */
   readonly loadBalancersSubnet?: string
 }
-/** A gateway by the name kumulo gives it — enough to answer "does one exist?". */
 export interface GatewayRef {
   readonly name: string
 }
@@ -32,22 +22,11 @@ export interface NetworkInfo {
   readonly loadBalancersSubnetId?: string
 }
 
-/**
- * Provider-neutral ingress rule — the intersection of what Neutron
- * security-group-rules and Hetzner firewall rules actually need. Egress is
- * not modelled (both providers default to allow-all out).
- */
 export interface SecGroupRule {
   readonly protocol: "tcp" | "udp" | "icmp" | "any"
-  /** Omitted port range means "all ports" for tcp/udp. */
   readonly portMin?: number
   readonly portMax?: number
-  /** Ingress source; omitted when `remoteGroupSelf` is set. */
   readonly remoteCidr?: string
-  /**
-   * Source is the cluster's own members. Providers without a self-reference
-   * concept (Hetzner) resolve this to the cluster network CIDR.
-   */
   readonly remoteGroupSelf?: boolean
 }
 
@@ -58,37 +37,18 @@ export interface SecGroupInfo {
   readonly id: string
 }
 
-/**
- * kumulo creates an EMPTY load balancer. `members` is carried for the ports
- * that model one (Hetzner) but is never sent to Octavia: once a Kubernetes
- * Service adopts the LB by id, its listeners, pools and members belong to the
- * cloud-controller-manager, and kumulo neither creates, prunes nor diffs them.
- * Everything the LB's shape depends on is therefore set at creation.
- *
- * Every field but `members` is optional: `LbSpec` is shared with the k3s distro
- * and the Hetzner adapter, both of which pass `{ members: [] }`.
- */
+// kumulo: LB is created EMPTY — once a Service adopts it by id, listeners/pools/members belong to the CCM; kumulo never diffs them again.
 export interface LbSpec {
   readonly members: ReadonlyArray<string>
-  /** VIP placement. Required for MKS — cluster and LB must share a network. */
   readonly vipSubnetId?: string
   readonly vipNetworkId?: string
-  /** Octavia flavor id — MKS Standard's vocabulary. */
   readonly flavorId?: string
-  /**
-   * Octavia flavor *name* (`small`/`medium`/`large`/`xl`) — the only vocabulary
-   * the MKS Free plan accepts; MKS Standard also takes a UUID. Resolved against
-   * Octavia's own flavor list, so both reach the same `flavor_id`. Mutually
-   * exclusive with `flavorId`.
-   */
   readonly flavorName?: string
-  /** Allocate a floating IP and associate it with the LB's VIP port. */
   readonly floatingIp?: boolean
 }
 export interface LbInfo {
   readonly id: string
   readonly vip: string
-  /** Present only when `LbSpec.floatingIp` asked for one. */
   readonly floatingIp?: string
 }
 
@@ -103,9 +63,6 @@ export interface ServerInfo {
   readonly id: string
   readonly name: string
   readonly ip: string
-  // Hash of the `ServerSpec` the server was created from, read back from the
-  // provider (hcloud label / Nova metadata). `undefined` = the provider records
-  // none (server predates the stamping) — unknown drift, not drift.
   readonly configHash?: string | undefined
 }
 
@@ -200,8 +157,6 @@ export interface BucketRef {
   readonly region: string
 }
 
-// One S3 user per cluster (R7); `accessKey`/`secretKey` are `Redacted` end to
-// end (N4) — never logged, never in plan output.
 export interface S3Credentials {
   readonly user: string
   readonly accessKey: Redacted.Redacted<string>
@@ -209,18 +164,11 @@ export interface S3Credentials {
   readonly buckets: ReadonlyArray<BucketInfo>
 }
 
-// Resource-agnostic secret entry for `CredentialsSink` (D5+D6) — object
-// storage is the first producer, other secret-bearing resources (e.g.
-// postgres) reuse the same shape without the sink knowing about buckets.
 export interface CredentialEntry {
   readonly key: string
   readonly value: Redacted.Redacted<string>
 }
 
-// Minimal structural slice of ClusterConfig needed for cross-distro
-// validation rules (§5, §9) — field names match the real config schema
-// (packages/core/src/config/schema.ts) so any `ClusterConfig.Type` value
-// satisfies this shape structurally, with no adapter/cast required.
 export interface AutoscalingRule {
   readonly enabled: boolean
 }
@@ -232,11 +180,6 @@ export interface ClusterConfigShape {
   readonly distro: DistroKind
   readonly worker_pools: ReadonlyArray<WorkerPoolShape>
   readonly addons: { readonly cni: "flannel" | "cilium" }
-  // kumulo: region for per-region capability checks, HA flag for the
-  // Octavia-fallback rule, retained volume types for the volume-type
-  // allowlist rule. Real
-  // ClusterConfig (config/schema.ts) is a structural superset, so any
-  // decoded config satisfies this shape with no adapter.
   readonly auth?: { readonly region: string }
   readonly api_server?: { readonly high_availability: boolean }
   readonly volumes?: { readonly managed: ReadonlyArray<{ readonly type: string }> }

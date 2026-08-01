@@ -8,14 +8,6 @@ import { DistroNotWired } from "../src/distro-not-wired.ts"
 import type { CliExitError } from "../src/exit-codes.ts"
 import { exitCodeFor } from "../src/exit-codes.ts"
 
-// The point of per-family exit codes is that CI can branch on the failure
-// kind without parsing messages. Two distinct error classes collapsing onto
-// one code (a copy-paste in `_codeByTag`, or a new tag silently falling
-// through to the `_defaultCode` of 1) destroys exactly that property, and
-// nothing else in the suite would notice.
-
-// `Record<KumuloErrorTag, ...>` — adding a tag to `KumuloError` fails to
-// compile here until it is represented, same convention as `cliErrorRegistry`.
 const _samples: Record<KumuloErrorTag, KumuloError> = {
   HttpTransportError: new HttpTransportError({ cause: "ECONNRESET" }),
   ResponseDecodeError: new ResponseDecodeError({
@@ -54,8 +46,6 @@ it("never reports a failure as success, nor falls back to the generic code", () 
   for (const error of _allErrors) {
     const code = exitCodeFor(error)
     assert.notStrictEqual(code, 0, `${error._tag} exits 0`)
-    // 1 is the escape hatch for defects only — a known tag reaching it means
-    // it is missing from `_codeByTag`.
     assert.notStrictEqual(code, 1, `${error._tag} has no dedicated exit code`)
   }
 })

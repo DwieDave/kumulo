@@ -1,8 +1,3 @@
-/**
- * `ObjectStorageProvider` over UpCloud's `/object-storage-2` (R8-R11, D6-D8).
- * One service per cluster, deterministic name `<cluster>-objsto` — every
- * bucket, and the single `<cluster>-kumulo` IAM user, live inside it.
- */
 import { Effect, Layer, Redacted } from "effect"
 import type { Duration } from "effect"
 import { BucketNotEmpty, ObjectStorageProvider, pollUntil, ProviderApiError, ResourceNotFound } from "@kumulo/core"
@@ -14,9 +9,7 @@ export interface UpcloudObjectStorageOptions {
   readonly client: ObjectStorageClient
   readonly cluster: ClusterTag
   readonly region: string
-  /** SDN network uuid for the cluster's private attachment (D6) — the CLI wires this, optional here. */
   readonly privateNetworkUuid?: string
-  /** Service-ready poll interval (N2) — defaults to 3s; tests shrink this to avoid real multi-poll waits. */
   readonly pollInterval?: Duration.Input
 }
 
@@ -34,8 +27,6 @@ const _findService = (
     (services) => services.find((s) => s.name === _serviceName(cluster))
   )
 
-// D6: one public attachment always, plus one private attachment when the
-// cluster's SDN network uuid is known.
 const _networks = (options: UpcloudObjectStorageOptions) => [
   { name: "public", type: "public" as const, family: "IPv4" },
   ...(options.privateNetworkUuid === undefined
@@ -55,8 +46,6 @@ const _awaitRunning = (
     check: mapUpcloudError({ self: client.services.get(uuid), ctx: { kind: "object-storage-service", ref: cluster } }),
     isDone: (service) => service.operational_state === "running",
     interval: pollInterval,
-    // Live probe 2026-08-01: certificate provisioning on UpCloud's side can
-    // hold a fresh service in setup-* for 10+ minutes.
     timeout: "20 minutes",
     describe: (service) => service.operational_state,
     kind: "object-storage-service",
@@ -66,7 +55,6 @@ const _awaitRunning = (
       Effect.fail(new ProviderApiError({ operation: `object-storage-service ${cluster}`, status: 0, body: `not running after 20 minutes (last operational_state: ${e.lastStatus}) — UpCloud certificate provisioning can be slow; re-run apply to keep waiting` })))
   )
 
-/** Get-or-create the D6 service, awaited to `operational_state: "running"`. */
 const _ensureService = (
   options: UpcloudObjectStorageOptions
 ): Effect.Effect<ObjectStorageService, ObjectStorageError> =>
@@ -91,7 +79,6 @@ const _ensureBucketInService = (
 ): Effect.Effect<void, ObjectStorageError> =>
   Effect.gen(function*() {
     const ctx = { kind: "bucket", ref: `${serviceUuid}/${spec.name}` }
-    // R11: async delete leaves `deleted: true` entries for one poll — filter them out.
     const buckets = yield* mapUpcloudError({ self: client.buckets.list(serviceUuid), ctx })
     if (buckets.some((b) => b.name === spec.name && !b.deleted)) return
     yield* mapUpcloudError({ self: client.buckets.create(serviceUuid, spec.name), ctx })
@@ -118,7 +105,7 @@ export const ensureBucket = (options: UpcloudObjectStorageOptions) =>
       return { name: spec.name, region: options.region, endpoint: _publicEndpoint(service) }
     })
 
-/** Refuses (`BucketNotEmpty`) when the API reports the bucket still holds objects (R10) — no force in v1. */
+// refuses BucketNotEmpty when the API reports objects still in it — no force in v1
 export const deleteBucket = (options: UpcloudObjectStorageOptions) =>
   (ref: BucketRef): Effect.Effect<void, ObjectStorageError> =>
     Effect.gen(function*() {
@@ -148,10 +135,6 @@ const _ensureUser = (
     yield* mapUpcloudError({ self: client.users.create(serviceUuid, username), ctx })
   })
 
-// D7: the secret exists only in the create response. A prior access key with
-// no recoverable secret (this run has no cached one — the reconcile layer
-// only calls `ensureCredentials` when the sink is empty) is rotated: delete,
-// then create fresh.
 const _rotateAccessKey = (
   { client, serviceUuid, username }: { readonly client: ObjectStorageClient; readonly serviceUuid: string; readonly username: string }
 ): Effect.Effect<AccessKey, ObjectStorageError> =>

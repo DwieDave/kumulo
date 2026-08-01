@@ -16,8 +16,6 @@ interface StoredUser {
   id: number
   username: string
   description: string
-  // Mirrors OVH's async user provisioning: POST answers "creating", a later
-  // GET observes "ok".
   status: "creating" | "ok"
 }
 
@@ -51,11 +49,6 @@ const _containerJson = (c: StoredContainer) => ({
   objectsCount: c.objectCount
 })
 
-/**
- * Zero-network in-memory OVH cloud project: storage containers + users +
- * s3Credentials, driving the real generated client through `Storage`
- * (fixture-replay, same shape as dns-ovh's `makeFakeZone`).
- */
 export const makeFakeProject = (serviceName: string) => {
   let nextUserId = 1
   const containers = new Map<string, StoredContainer>()
@@ -124,7 +117,7 @@ export const makeFakeProject = (serviceName: string) => {
   const _handleUser = (request: HttpClientRequest.HttpClientRequest, userId: number): Response => {
     const user = users.get(userId)
     if (request.method !== "GET" || user === undefined) return new Response(null, { status: 404 })
-    // The async provisioning completes by the time anyone polls.
+    // landmine: OVH POST answers "creating", GET observes "ok" async — this fixture settles immediately on poll
     const settled: StoredUser = { ...user, status: "ok" }
     users.set(userId, settled)
     return new Response(JSON.stringify(settled), { status: 200 })

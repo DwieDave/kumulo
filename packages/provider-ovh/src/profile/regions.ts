@@ -1,8 +1,4 @@
-// kumulo: Octavia (OVH's managed load balancer) is not available in
-// every OVH Public Cloud region. This table is best-effort from OVH's
-// published region capability matrix at time of writing; extend as OVH
-// rolls Octavia out further (ponytail: flat data table, revisit if OVH
-// exposes a live capability-discovery API worth calling instead).
+// flat data table from OVH's region capability matrix, revisit if a live discovery API shows up
 export const octaviaRegions: ReadonlySet<string> = new Set([
   "GRA5",
   "GRA7",

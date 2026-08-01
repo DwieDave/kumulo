@@ -1,10 +1,3 @@
-/**
- * Shared test fixture: an `UpcloudEnv` backed by a failing `HttpClient`
- * (mirrors `main.ts`'s own fallback wiring). The distro service set is
- * shared across distros (`distro/types.ts`'s `DistroServices`), so every
- * `ovh-mks`/`k3s` test that exercises the full command pipeline now carries
- * `UpcloudEnv` in its requirements too, even though it must never reach it.
- */
 import { Effect, Layer } from "effect"
 import * as HttpClient from "effect/unstable/http/HttpClient"
 import { HttpClientError, TransportError } from "effect/unstable/http/HttpClientError"

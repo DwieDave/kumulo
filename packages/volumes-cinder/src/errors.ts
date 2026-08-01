@@ -14,18 +14,13 @@ import type { SchemaError } from "effect/Schema"
 import * as HttpClientError from "effect/unstable/http/HttpClientError"
 import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
 
-// kumulo: the honest error channel of this provider. Wider than core's
-// `VolumeError` until that union gains the new provider tags.
 export type CinderError = VolumeError | RateLimited | ProviderApiError | ResponseDecodeError | HttpTransportError
 
-/** Failure channel of every generated-client operation. */
 export type CinderCause = HttpClientError.HttpClientError | SchemaError
 
 const _kind = "volume"
 const _BODY_LIMIT = 512
 
-// Cinder reports over-quota as a 403 whose body names the quota. The real
-// limit/requested pair is not recoverable from it, so those fields stay absent.
 const _quotaBody = /quota|over ?limit/i
 
 interface Classified {
@@ -35,9 +30,6 @@ interface Classified {
   readonly retryAfter: string | undefined
 }
 
-// One tag per observed status — a 429 storm or a Cinder outage must never read
-// as "bad credentials". Anything unlisted (notably every 5xx) falls through to
-// `ProviderApiError`, which carries the real status and body.
 const _classify = ({ body, ref, retryAfter, status }: Classified): CinderError => {
   if (status === 404) return new ResourceNotFound({ kind: _kind, ref })
   if (status === 409) return new ResourceConflict({ kind: _kind, ref })
@@ -50,18 +42,14 @@ const _classify = ({ body, ref, retryAfter, status }: Classified): CinderError =
 const _bodyText = (response: HttpClientResponse.HttpClientResponse): Effect.Effect<string> =>
   Effect.orElseSucceed(response.text, () => "")
 
-/** Maps a generated-client failure (`HttpClientError | SchemaError`) onto the `CinderError` union. */
 export const toCinderError = (
   { cause, ref }: { readonly cause: CinderCause; readonly ref: string }
 ): Effect.Effect<CinderError> => {
-  // A malformed body is a decode failure and nothing else — never an auth error,
-  // and never swallowed into an empty list (that made `ensureVolume` create a
-  // duplicate billed volume).
+  // A malformed body must decode-error, never silently become an empty list (ensureVolume would create a duplicate billed volume).
   if (!HttpClientError.isHttpClientError(cause)) {
     return Effect.succeed(new ResponseDecodeError({ endpoint: ref, issue: cause.issue }))
   }
   const response = cause.response
-  // No response at all: network/TLS/encode failure — keep the raw cause.
   if (response === undefined) return Effect.succeed(new HttpTransportError({ cause }))
   return Effect.map(
     _bodyText(response),

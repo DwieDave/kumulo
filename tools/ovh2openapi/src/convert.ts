@@ -20,7 +20,6 @@ const _primitiveSchema = Match.type<string>().pipe(
   Match.orElse(() => undefined)
 )
 
-/** Mechanically resolves an OVH `fullType` string to an OpenAPI schema (primitive, array, or model $ref). */
 export function typeToSchema(args: {
   readonly fullType: string
   readonly models: Record<string, OvhModel>
@@ -31,8 +30,6 @@ export function typeToSchema(args: {
       Effect.map((items): OpenApiSchema => ({ type: "array", items }))
     )
   }
-  // kumulo: OVH's `map[K]V` fullType syntax denotes a string-keyed dictionary
-  // (K is always "string" in practice) — model as an open object.
   const [, mapValueType] = /^map\[[^\]]+\](.+)$/.exec(fullType) ?? []
   if (mapValueType !== undefined) {
     return typeToSchema({ fullType: mapValueType, models }).pipe(
@@ -68,7 +65,6 @@ function _objectModelSchema(
   ).pipe(Effect.map((props): OpenApiSchema => ({ type: "object", properties: props, required })))
 }
 
-/** Converts one named OVH model (object or enum) to its OpenAPI schema. */
 export function modelToSchema(args: {
   readonly model: OvhModel
   readonly models: Record<string, OvhModel>
@@ -77,7 +73,6 @@ export function modelToSchema(args: {
   return isEnumModel(model) ? _enumModelSchema(model.enumType, model.enum) : _objectModelSchema(model.properties, models)
 }
 
-/** Converts the full `models` map to `components/schemas`, sorted for stable output. */
 export function convertModels(
   models: Record<string, OvhModel>
 ): Effect.Effect<Record<string, OpenApiSchema>, ConversionUnsupported> {
@@ -114,14 +109,13 @@ function _requestBodyFor(
 }
 
 function _responses(responseType: string, models: Record<string, OvhModel>): Effect.Effect<OpenApiOperation["responses"], ConversionUnsupported> {
-  // OVH's schema says "void" but the API answers 200 or 204 depending on the route.
+  // OVH's schema says "void" but the API answers 200 or 204 depending on the route
   if (responseType === "void") return Effect.succeed({ "200": { description: "OK" }, "204": { description: "No Content" } })
   return typeToSchema({ fullType: responseType, models }).pipe(
     Effect.map((schema) => ({ "200": { description: "OK", content: { "application/json": { schema } } } }))
   )
 }
 
-/** Converts one OVH operation (method + params + response) to an OpenAPI operation object. */
 export function operationToOpenApi(args: {
   readonly path: string
   readonly op: OvhOperation
@@ -153,7 +147,6 @@ function _apiToPathItem(api: OvhApi, models: Record<string, OvhModel>): Effect.E
   ).pipe(Effect.map((pathItem) => [api.path, pathItem] as const))
 }
 
-/** Converts an OVH proprietary v1 schema document (e.g. `cloud.json`) to an OpenAPI 3.1 document. */
 export function convert(schema: OvhSchema): Effect.Effect<OpenApiDocument, ConversionUnsupported> {
   const sortedApis = schema.apis.toSorted((a, b) => a.path.localeCompare(b.path))
   return Effect.all([

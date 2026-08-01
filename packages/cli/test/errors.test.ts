@@ -5,10 +5,6 @@ import { AddonInstallFailed, AuthenticationFailed, BootstrapFailed, BucketNotEmp
 import { DistroNotWired } from "../src/distro-not-wired.ts"
 import { renderCliError } from "../src/errors.ts"
 
-// Every `KumuloError` tag has a renderer (compile-enforced by
-// `RendererRegistry`'s mapped type) and at least one test asserting its
-// message here.
-
 it("renders a core KumuloError via the shared registry", () => {
   const message = renderCliError(new AuthenticationFailed({ hint: "bad token" }))
   assert.match(message, /Authentication failed: bad token/)
@@ -105,13 +101,7 @@ it("renders a CLI-only DistroNotWired error", () => {
   assert.match(message, /k3s.*not wired/)
 })
 
-// A missing credential must name the variable. `_mksLive` deliberately keeps
-// MksEnv available with an empty serviceName so a hetzner-only k3s run does not
-// die on OVH vars it never needs — the price is that the OVH path then fails on
-// a request instead of at layer build, and the hint carried on that request is
-// the only thing telling the operator what is unset. Without it the whole
-// message is `GET /cloud/project//kube`, where an empty path segment is the
-// sole clue.
+// landmine: empty MksEnv.serviceName fails at request time, not layer build — the request's hint is the only clue what's unset
 it("renders the credential hint carried by a TransportError, not just the URL", () => {
   const request = HttpClientRequest.make("GET")("/cloud/project//kube")
   const cause = new HttpClientError.HttpClientError({

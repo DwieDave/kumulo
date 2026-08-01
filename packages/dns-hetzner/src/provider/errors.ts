@@ -10,9 +10,6 @@ interface ErrorContext {
 
 const _ref = (ctx: ErrorContext): string => `${ctx.zone}/${ctx.name}`
 
-// Status → tagged-error constructor, keyed by code (no switch, per project
-// lint rule). Anything not listed (incl. retry-exhausted 429/5xx) falls
-// through to `_fallback` — same table shape as dns-ovh/src/provider/errors.ts.
 const _byStatus: Record<number, (ctx: ErrorContext) => DnsError> = {
   401: (ctx) => new AuthenticationFailed({ hint: `${_ref(ctx)}: Hetzner rejected the request credentials` }),
   403: (ctx) => new AuthenticationFailed({ hint: `${_ref(ctx)}: Hetzner rejected the request credentials` }),
@@ -20,16 +17,12 @@ const _byStatus: Record<number, (ctx: ErrorContext) => DnsError> = {
   409: (ctx) => new ResourceConflict({ kind: "dns-record", ref: _ref(ctx) })
 }
 
-// ponytail: no status code in `DnsError`'s union maps cleanly onto
-// transport/decode failures or a retry-exhausted 429/5xx — fall back to
-// `ResourceConflict` describing the raw failure (D5). Revisit if a caller
-// needs to distinguish those from a real 409.
+// no DnsError variant maps transport/decode/retry-exhausted failures, fall back to ResourceConflict
 const _fallback = (ctx: ErrorContext): DnsError => new ResourceConflict({ kind: "dns-record", ref: _ref(ctx) })
 
 const _statusOf = (cause: HttpClientError.HttpClientError | SchemaError): number | undefined =>
   HttpClientError.isHttpClientError(cause) ? cause.response?.status : undefined
 
-/** Maps a client-call failure (`HttpClientError | SchemaError`) onto the `DnsError` union. */
 export const toDnsError = (
   { cause, zone, name }: { readonly cause: HttpClientError.HttpClientError | SchemaError; readonly zone: string; readonly name: string }
 ): DnsError => {

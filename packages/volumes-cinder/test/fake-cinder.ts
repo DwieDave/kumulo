@@ -11,11 +11,7 @@ export interface FakeCinder {
   readonly calls: () => ReadonlyArray<{ readonly method: string; readonly url: string }>
 }
 
-// Fixture-replay fake: routes `${METHOD} ${pathname}` (query string
-// stripped) through a caller-supplied handler map — offline, no real
-// network, mirrors @kumulo/openstack's fake-openstack.ts test harness.
-// A real client appends `request.urlParams` at execution time; the fake has to
-// do the same or handlers would never see `?limit=…&marker=…`.
+// fake must append urlParams itself, or handlers never see ?limit=…&marker=…
 const _fullUrl = (request: HttpClientRequest.HttpClientRequest): string => {
   const query = UrlParams.toString(request.urlParams)
   return query === "" ? request.url : `${request.url}?${query}`

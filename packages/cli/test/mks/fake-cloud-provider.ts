@@ -9,15 +9,6 @@ export const defaultNetworkInfo: NetworkInfo = {
   loadBalancersSubnetId: "subnet-lb-1"
 }
 
-/**
- * A `CloudProvider` the MKS path may only ever call `ensureNetwork` on — every
- * other verb dies rather than returning a plausible value, so a reconciler that
- * starts creating servers or security groups on this path fails the test that
- * happened to run it instead of quietly passing.
- *
- * `specs` records what `ensureNetwork` was asked for, in order; an empty array
- * is the assertion that no network was touched at all.
- */
 const _unused = () => Effect.die("the mks path must not reach this CloudProvider verb")
 
 export const defaultLbInfo = { id: "lb-1", vip: "10.0.2.7", floatingIp: "203.0.113.1" }
@@ -30,8 +21,6 @@ export const fakeCloudProvider = (info: NetworkInfo = defaultNetworkInfo) => {
       specs.push(spec)
       return Effect.succeed(info)
     },
-    // Read-only: deliberately does NOT record into `specs`, so a test asserting
-    // "no network was created" still means exactly that (R8 reads at plan time).
     findNetwork: (_spec: NetworkSpec) => Effect.succeed(info),
     hasGateway: () => Effect.succeed(false),
     ensureLoadBalancer: (spec: LbSpec) => {
@@ -49,5 +38,4 @@ export const fakeCloudProvider = (info: NetworkInfo = defaultNetworkInfo) => {
   return { layer, specs, lbSpecs }
 }
 
-/** The common case: a `CloudProvider` no test in this file expects to be reached. */
 export const cloudProviderNever: Layer.Layer<CloudProvider> = fakeCloudProvider().layer

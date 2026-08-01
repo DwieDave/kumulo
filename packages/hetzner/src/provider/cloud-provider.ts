@@ -30,10 +30,6 @@ export interface CloudProviderOptions {
 type Deps = HttpClient.HttpClient
 type R<A> = Effect.Effect<A, CloudError, Deps>
 
-// kumulo: one flat label (`kumulo-cluster=<tag>`) drives idempotent lookup,
-// bulk teardown, and inventory listing uniformly across every resource kind
-// (R7 — simpler than OpenStack's three separate tagging mechanisms since
-// hcloud's `label_selector` works the same way on every list endpoint).
 const _name = (options: CloudProviderOptions, suffix?: string): string =>
   suffix === undefined ? `kumulo-${options.tag}` : `kumulo-${options.tag}-${suffix}`
 const _clusterLabel = (options: CloudProviderOptions): Record<string, string> => ({ "kumulo-cluster": options.tag })
@@ -41,18 +37,11 @@ const _labelSelector = (options: CloudProviderOptions): string => `kumulo-cluste
 
 const _ctx = (kind: string, ref: string): ErrorContext => ({ kind, ref })
 
-// ---- Network ----------------------------------------------------------
-
 const _findNetwork = (client: HcloudClient, name: string) =>
   mapHcloudError({ self: client.Networks.listNetworks({ query: { name } }), ctx: _ctx("network", name) }).pipe(
     Effect.map((response) => response.networks[0])
   )
 
-/**
- * Read-only counterpart of `ensureNetwork` (R8). hcloud subnets carry no id of
- * their own, so — exactly as `ensureNetwork` does — the result reports the
- * network only and leaves the subnet-id slots absent.
- */
 export const findNetwork = (
   { options, spec }: { readonly options: CloudProviderOptions; readonly spec: NetworkSpec }
 ): R<NetworkInfo | undefined> =>
@@ -68,8 +57,6 @@ export const ensureNetwork = ({ options, spec }: { readonly options: CloudProvid
     const name = _name(options)
     const existing = yield* _findNetwork(client, name)
     if (existing !== undefined) return { id: String(existing.id), cidr: spec.cidr }
-    // kumulo: network zone derived from the location internally (D2) — no
-    // `NetworkSpec` change for one provider's constraint.
     const network_zone = networkZoneForLocation(options.location) ?? ""
     const created = yield* mapHcloudError({
       self: client.Networks.createNetwork({
@@ -86,12 +73,6 @@ export const ensureNetwork = ({ options, spec }: { readonly options: CloudProvid
     return { id: String(decoded.id), cidr: spec.cidr }
   })
 
-// ---- Security groups (Hetzner Firewalls) --------------------------------
-
-// kumulo: hcloud Firewalls speak `direction`/`port`/`source_ips` and know no
-// `any` protocol nor a security-group self-reference, so core's neutral
-// `SecGroupRule` is translated here (the two shapes it cannot express are
-// rejected rather than silently widened).
 const _portRange = (rule: SecGroupRule): string | undefined => {
   if (rule.protocol === "icmp" || rule.portMin === undefined) return undefined
   const max = rule.portMax ?? rule.portMin
@@ -144,16 +125,12 @@ export const ensureSecurityGroups = (
     const translated = yield* Effect.forEach(spec.rules, _toHcloudRule)
     const rules = translated.map(_toHcloudWire)
     const id = yield* _ensureFirewallId({ client, options, rules })
-    // kumulo: heal drifted rules on every re-run (N1) — hcloud's set_rules
-    // action is a full replace, no per-rule diff endpoint to reuse instead.
     yield* mapHcloudError({
       self: client["Firewall Actions"].setFirewallRules({ params: { id }, payload: { rules } }),
       ctx: _ctx("firewall", String(id))
     })
     return { id: String(id) }
   })
-
-// ---- Load balancer (native Hetzner product) -----------------------------
 
 const _findLoadBalancer = (client: HcloudClient, name: string) =>
   mapHcloudError({ self: client["Load Balancers"].listLoadBalancers({ query: { name } }), ctx: _ctx("load-balancer", name) }).pipe(
@@ -175,10 +152,6 @@ export const ensureLoadBalancer = (
           load_balancer_type: "lb11",
           location: options.location,
           labels: _clusterLabel(options),
-          // kumulo: target-by-label (R7's uniform label_selector) instead of
-          // `spec.members` — every server labeled `kumulo-cluster=<tag>` is
-          // added/removed automatically as it comes and goes, no explicit
-          // add/remove-target call needed (unlike OpenStack's Octavia members).
           targets: [{ type: "label_selector", label_selector: { selector: _labelSelector(options) } }]
         }
       }),
@@ -187,11 +160,9 @@ export const ensureLoadBalancer = (
     return { id: String(created.load_balancer.id), vip: created.load_balancer.public_net.ipv4.ip ?? "" }
   })
 
-// ---- Servers -------------------------------------------------------------
-
 export type ServerGroupRole = "master" | "worker"
 
-// ponytail: granularity is masters-vs-workers only (`ServerSpec` carries no
+// granularity is masters-vs-workers only (`ServerSpec` carries no
 // pool id) — split per worker pool once the port grows one, same limitation
 // `@kumulo/openstack`'s `ensureServerGroups` already documents.
 export const ensurePlacementGroup = (
@@ -206,9 +177,7 @@ export const ensurePlacementGroup = (
     })
     const existing = found.placement_groups[0]
     if (existing !== undefined) return existing.id
-    // ponytail: the 10-server-per-group hard cap (R9/D7) isn't enforced here —
-    // D7 is an OPEN design choice (hard-fail vs auto-split) out of this task's
-    // scope; add the pre-flight check once that's decided.
+    // 10-server-per-group cap unenforced, add pre-flight check if it bites
     const created = yield* mapHcloudError({
       self: client["Placement Groups"].createPlacementGroup({ payload: { name, type: "spread", labels: _clusterLabel(options) } }),
       ctx: _ctx("placement-group", name)
@@ -224,7 +193,6 @@ interface ServerRecord {
   readonly labels?: { readonly [key: string]: string | undefined } | undefined
 }
 
-// Servers created before hash stamping carry no label -> `undefined` (unknown), not "".
 const _hashOf = (server: ServerRecord): string | undefined => server.labels?.[CONFIG_HASH_KEY]
 
 const _serverIp = (server: ServerRecord): string => server.public_net.ipv4?.ip ?? ""
@@ -285,9 +253,6 @@ export const ensureServer = ({ options, spec }: { readonly options: CloudProvide
     return { id: String(created.server.id), name: spec.name, ip: _serverIp(created.server) }
   })
 
-// kumulo: deletes a single server and waits until its (async) delete Action
-// completes, for scale-down's per-worker teardown — whole-cluster
-// `deleteByTag` doesn't wait per-server (bulk teardown, see `_deleteServersByTag`).
 export const deleteServer = (ref: ServerInfo): R<void> =>
   Effect.gen(function*() {
     const client = yield* makeHcloudClient
@@ -297,8 +262,6 @@ export const deleteServer = (ref: ServerInfo): R<void> =>
     )
     if (deleted?.action !== undefined) yield* waitForAction({ client, actionId: deleted.action.id })
   })
-
-// ---- Inventory + delete --------------------------------------------------
 
 const _labeledServers = ({ client, options }: { readonly client: HcloudClient; readonly options: CloudProviderOptions }): R<ReadonlyArray<ServerRecord>> =>
   listAll((query) =>
@@ -364,7 +327,7 @@ const _findFirewall = (client: HcloudClient, name: string) =>
     Effect.map((response) => response.firewalls[0])
   )
 
-// kumulo: reverse dependency order — LB, servers, placement groups, firewall, network.
+// teardown order matters — LB, servers, placement groups, firewall, network
 export const deleteByTag = ({ options }: { readonly options: CloudProviderOptions }): R<void> =>
   Effect.gen(function*() {
     const client = yield* makeHcloudClient
@@ -392,8 +355,6 @@ export const deleteByTag = ({ options }: { readonly options: CloudProviderOption
     })
   })
 
-// ---- Image / flavor resolution: exact name -> fuzzy (+warn) -------------
-
 interface NamedRecord {
   readonly id: number
   readonly name: string | null
@@ -410,9 +371,6 @@ const _resolved = <A extends NamedRecord>(
   return Effect.logWarning(`${kind} "${ref}" matched by fuzzy lookup: "${fuzzy.name}"`).pipe(Effect.as(String(fuzzy.id)))
 }
 
-// kumulo: restricted to `type=system` — the only image kind this port
-// resolves (OS base images for cluster nodes), and the only kind whose
-// `name` is reliably non-null (snapshots/backups can have a null `name`).
 export const resolveImage = ({ ref }: { readonly ref: string }): R<string> =>
   Effect.gen(function*() {
     const client = yield* makeHcloudClient
@@ -442,8 +400,6 @@ export const resolveFlavor = ({ ref }: { readonly ref: string }): R<string> =>
     return yield* _resolved({ entries: all, kind: "flavor", ref })
   })
 
-// ---- Layer ---------------------------------------------------------------
-
 export const CloudProviderLive = (options: CloudProviderOptions): Layer.Layer<CloudProvider, never, Deps> =>
   Layer.effect(
     CloudProvider,
@@ -453,9 +409,6 @@ export const CloudProviderLive = (options: CloudProviderOptions): Layer.Layer<Cl
       return {
         ensureNetwork: (spec: NetworkSpec) => run(ensureNetwork({ options, spec })),
         findNetwork: (spec: NetworkSpec) => run(findNetwork({ options, spec })),
-        // hcloud networks reach the internet through each server's own public
-        // interface and floating IPs attach straight to a server — there is no
-        // gateway object, so there is never one to find.
         hasGateway: () => Effect.succeed(false),
         ensureSecurityGroups: (spec: SecGroupSpec) => run(ensureSecurityGroups({ options, spec })),
         ensureLoadBalancer: (spec: LbSpec) => run(ensureLoadBalancer({ options, spec })),

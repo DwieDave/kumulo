@@ -11,17 +11,9 @@ import { SshCommandError } from "../../src/ssh/errors.ts"
 import type { SshHost } from "../../src/ssh/port.ts"
 import { FakeSshLive } from "../ssh/fake-ssh.ts"
 
-// Full create lifecycle for `distro: k3s`: HA 3-master control plane
-// + 2 worker pools, provisioned through the real `applyServers` reconcile
-// step (core) against an in-memory `CloudProvider` fake,
-// bootstrapped via the real token/orchestration/install-script logic over a
-// fake `Ssh`, and a kubeconfig fetched + rewritten via the real k3s distro
-// assembly.
 const TAG = "e2e-cluster"
 
-// ponytail: a minimal local fake, not core's — cross-package imports of a
-// sibling package's test/ dir aren't a pattern used anywhere else in this
-// repo (dep-lint scopes test/ per-package); this is a handful of lines.
+// minimal local fake, cross-package test/ imports aren't a pattern used elsewhere in this repo.
 const FakeCloudProviderLive: Layer.Layer<CloudProvider> = Layer.effect(
   CloudProvider,
   Effect.gen(function*() {
@@ -107,10 +99,8 @@ describe("k3s full lifecycle", () => {
         _workerSpec("pool-b", 1)
       ]
 
-      // 1. Nodes phase, through the real reconcile apply.
       const runNodesPhase = applyServers({ specs, concurrency: 6 })
       yield* runNodesPhase
-      // Re-running must stay idempotent (create-if-missing by tag+name).
       yield* runNodesPhase
 
       const cloudProvider = yield* CloudProvider
@@ -118,7 +108,6 @@ describe("k3s full lifecycle", () => {
       expect(inventory.servers).toHaveLength(6)
       expect(new Set(inventory.servers.map((s) => s.name))).toEqual(new Set(specs.map((s) => s.name)))
 
-      // 2. Bootstrap: real token resolution + orchestration + install scripts.
       const masterHosts: NonEmptyMasters = [
         { ip: "10.0.0.1", port: 22 },
         { ip: "10.0.0.2", port: 22 },
@@ -183,7 +172,6 @@ describe("k3s full lifecycle", () => {
       expect(renderedWorkerScripts).toHaveLength(2)
       for (const script of renderedWorkerScripts) expect(script).toContain(`K3S_TOKEN='${token}'`)
 
-      // 3. Kubeconfig: fetch via SSH from master1 + rewrite (LB VIP precedence).
       const lb = yield* cloudProvider.ensureLoadBalancer({ members: [] })
       const distro = makeSelfManagedDistro({
         clusterName: "e2e-cluster",
@@ -198,8 +186,6 @@ describe("k3s full lifecycle", () => {
       expect(kubeconfig.content).toContain(`server: https://${lb.vip}:6443`)
       expect(kubeconfig.content).toContain("name: e2e-cluster")
 
-      // 4. Scale-down: drainAndRemove via the k8s client, before
-      // the reconciler would call CloudProvider.deleteByTag/ensureServer diff.
       yield* distro.drainAndRemove({ name: "pool-b-1", role: "worker" })
     }).pipe(Effect.provide(FakeCloudProviderLive)))
 })

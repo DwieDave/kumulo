@@ -22,10 +22,6 @@ const _ref = (ctx: ErrorContext): string => `${ctx.zone}/${ctx.name}`
 
 const _retryAfter = (cause: HttpClientError.HttpClientError): string | undefined => cause.response?.headers["retry-after"]
 
-// One tag per observed status — a DNS outage or a rate limit must never read
-// as a record conflict: 401/403 → auth, 404 → not-found, 409 → genuine
-// conflict, 413/429 → rate-limited, everything else (notably 5xx) →
-// ProviderApiError carrying the real status and body.
 const _byStatus = (
   { cause, ctx, status }: {
     readonly cause: HttpClientError.HttpClientError
@@ -41,7 +37,6 @@ const _byStatus = (
   return new ProviderApiError({ operation: `${_kind} ${ref}`, status, body: cause.message })
 }
 
-/** Maps a generated-client failure (`HttpClientError | SchemaError`) onto the `DnsError` union. */
 export const toDnsError = (
   { cause, name, zone }: {
     readonly cause: HttpClientError.HttpClientError | SchemaError
@@ -54,6 +49,5 @@ export const toDnsError = (
     return new ResponseDecodeError({ endpoint: `${_kind}/${_ref(ctx)}`, issue: cause.issue })
   }
   const status = cause.response?.status
-  // No response at all: network/TLS/encode failure — keep the raw cause.
   return status === undefined ? new HttpTransportError({ cause }) : _byStatus({ cause, ctx, status })
 }

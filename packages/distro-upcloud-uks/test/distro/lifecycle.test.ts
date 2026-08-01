@@ -21,8 +21,6 @@ const _clients = (httpClient: ReturnType<typeof makeFakeUksServer>["httpClient"]
   router: makeRouterClient(httpClient)
 })
 
-// Named separately so the drift cases below can spread it without indexing
-// back into `_config.worker_pools` (which is optional-typed at every index).
 const _pool = { name: "workers", plan: "1xCPU-2GB", count: 2 }
 
 const _config: UksClusterConfig = {
@@ -37,8 +35,8 @@ const _config: UksClusterConfig = {
 
 const _owner = "kumulo"
 
-describe("upcloud-uks distro driver (fake server, D13)", () => {
-  it.effect("ensures network, cluster and node pools, then fetches a kubeconfig and deletes everything (AC1, AC3)", () =>
+describe("upcloud-uks distro driver (fake server)", () => {
+  it.effect("ensures network, cluster and node pools, then fetches a kubeconfig and deletes everything", () =>
     Effect.gen(function*() {
       const server = makeFakeUksServer({ readyAfterPolls: 0 })
       const clients = _clients(server.httpClient)
@@ -51,8 +49,6 @@ describe("upcloud-uks distro driver (fake server, D13)", () => {
       expect(info.status).toBe("running")
       expect(info.networkCidr).toBe(_config.network.cidr)
       expect(info.storageEncryption).toBe(true)
-      // D7: the configured version must reach UpCloud. Asserted against what the
-      // server stored, not against the config — the fake echoes what it was sent.
       const created = yield* clients.uks.get(info.uuid)
       expect(created.version).toBe(_config.version)
 
@@ -82,7 +78,7 @@ describe("upcloud-uks distro driver (fake server, D13)", () => {
       expect(server.routers.size).toBe(0)
     }))
 
-  it.effect("re-running ensureNetwork/ensureCluster/ensureNodePools converges (N5 re-entrancy, AC2)", () =>
+  it.effect("re-running ensureNetwork/ensureCluster/ensureNodePools converges (re-entrancy)", () =>
     Effect.gen(function*() {
       const server = makeFakeUksServer({ readyAfterPolls: 0 })
       const clients = _clients(server.httpClient)
@@ -92,8 +88,6 @@ describe("upcloud-uks distro driver (fake server, D13)", () => {
       const ref1: UksClusterRef = { uuid: info1.uuid, name: info1.name }
       yield* ensureNodePools({ clients, ref: ref1, pools: _config.worker_pools, owner: _owner })
 
-      // Simulate an interrupted run resumed from scratch: re-derive everything
-      // by name instead of reusing the ids/refs from the first pass.
       const network2 = yield* ensureNetwork({ clients, clusterName: _config.name, zone: _config.zone, cidr: _config.network.cidr })
       expect(network2).toEqual(network1)
       expect(server.networks.size).toBe(1)
@@ -112,7 +106,7 @@ describe("upcloud-uks distro driver (fake server, D13)", () => {
       expect(found?.uuid).toBe(info1.uuid)
     }))
 
-  it.effect("ensureNodePools scales a pool as an Update, no replace (AC4)", () =>
+  it.effect("ensureNodePools scales a pool as an Update, no replace", () =>
     Effect.gen(function*() {
       const server = makeFakeUksServer({ readyAfterPolls: 0 })
       const clients = _clients(server.httpClient)
@@ -131,7 +125,7 @@ describe("upcloud-uks distro driver (fake server, D13)", () => {
       expect(after[0]?.count).toBe(5)
     }))
 
-  it.effect("ensureNodePools replaces (create-then-delete) only when the pool is confirmed (D9, AC5)", () =>
+  it.effect("ensureNodePools replaces (create-then-delete) only when the pool is confirmed", () =>
     Effect.gen(function*() {
       const server = makeFakeUksServer({ readyAfterPolls: 0 })
       const clients = _clients(server.httpClient)
@@ -144,13 +138,11 @@ describe("upcloud-uks distro driver (fake server, D13)", () => {
 
       const drifted = [{ ..._pool, plan: "2xCPU-4GB" }]
 
-      // Unconfirmed: left strictly alone.
       yield* ensureNodePools({ clients, ref, pools: drifted, owner: _owner })
       const unconfirmed = yield* listNodeGroups({ clients, ref })
       expect(unconfirmed).toHaveLength(1)
       expect(unconfirmed[0]?.name).toBe(oldLiveName)
 
-      // Confirmed: create-then-delete, new generation live before the old is gone.
       yield* ensureNodePools({ clients, ref, pools: drifted, owner: _owner, replace: new Set(["workers"]) })
       const replaced = yield* listNodeGroups({ clients, ref })
       expect(replaced).toHaveLength(1)

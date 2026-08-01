@@ -1,7 +1,3 @@
-// Proves each port is a usable Effect service: a fake implementation can be
-// built and provided as a Layer, and a consumer can resolve + call it. This
-// is the compile+runtime proof that the interfaces in src/ports are honest
-// contracts, not just types.
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Layer, Redacted } from "effect"
 import { CloudProvider } from "../../src/ports/cloud-provider.ts"
@@ -50,7 +46,6 @@ describe("ports", () => {
         fake
       )
       expect(result).toBe("img-1")
-      // Both subnet CIDRs go in, both subnet ids come back out.
       const network = yield* Effect.provide(
         CloudProvider.pipe(
           Effect.flatMap((cp) =>

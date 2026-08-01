@@ -33,8 +33,6 @@ const _statusK3s = Effect.fn(function*(config: K3sClusterConfig) {
   )
 })
 
-// `--dry-run` just renders the Plan CRs (the SUC plan for a new k3s
-// version) without touching the cluster.
 const _renderK3s = (
   { config, workerConcurrency }: { readonly config: K3sClusterConfig; readonly workerConcurrency: number }
 ) =>
@@ -48,7 +46,6 @@ const SUC_DEPLOYMENT_REF: ResourceRef = {
   kind: "Deployment"
 }
 
-/** Builds a `K8sClient` against the already-provisioned cluster's own kubeconfig (ports-only, see `reconcile.ts`'s identical split). */
 const _k8sClientForUpgradeEffect = (
   config: K3sClusterConfig
 ): Effect.Effect<K8sClient["Service"], K3sError, CloudProvider | Ssh | HttpClient.HttpClient> =>
@@ -59,7 +56,6 @@ const _k8sClientForUpgradeEffect = (
     return makeK8sClient({ client, server: parsed.server })
   })
 
-/** `_k8sClientForUpgradeEffect` wired to its live Layers. */
 const _k8sClientForUpgrade = (
   config: K3sClusterConfig
 ): Effect.Effect<K8sClient["Service"], K3sError, OpenStackEnv | CinderAuth | HttpClient.HttpClient> =>
@@ -68,10 +64,6 @@ const _k8sClientForUpgrade = (
     Effect.provide(providerFor(config).cloudProviderLayer(config))
   )
 
-// The Plan CRD is owned by the SUC controller — apply its manifests
-// (idempotent SSA, no-op if the addon was already installed at create time)
-// and only wait for the Deployment to become ready if this call is the one
-// that just installed it.
 const _ensureSucReady = (k8sClient: K8sClient["Service"]) =>
   Effect.gen(function*() {
     const alreadyInstalled = yield* k8sClient.get(SUC_DEPLOYMENT_REF).pipe(
@@ -93,9 +85,7 @@ const _ensureSucReady = (k8sClient: K8sClient["Service"]) =>
     }
   })
 
-// Applies the SUC Plan CRs through the in-house k8s SSA client:
-// masters first (workers' `prepare` step polls the masters Plan by name, so
-// applying it second would only cost an extra reconcile loop, not correctness).
+// masters first: workers' `prepare` step polls the masters Plan by name.
 export const applyK3sUpgradeWith = (
   { config, workerConcurrency, k8sClient }: {
     readonly config: K3sClusterConfig
@@ -128,10 +118,6 @@ const _upgradeK3s = ({ config, dryRun, workerConcurrency }: DistroUpgradeArgs<K3
 const _plannedInstanceCount = (config: K3sClusterConfig): number =>
   config.masters.count + config.worker_pools.reduce((total, pool) => total + pool.count, 0)
 
-// ponytail: only the checks constructible from `OpenStackEnv` + config.
-// `octaviaCapabilityCheck` needs a `ProviderProfile` and
-// `resourceResolutionCheck` a live `CloudProvider` — neither is in
-// `DistroServices`; add them here once an entry carries them.
 const _k3sDoctorChecks = Effect.fn(function*({ config }: { readonly config: K3sClusterConfig }) {
   const env = yield* OpenStackEnv
   const client = yield* HttpClient.HttpClient
@@ -156,7 +142,6 @@ const _k3sDoctorChecks = Effect.fn(function*({ config }: { readonly config: K3sC
 
 export const k3sEntry: DistroEntry<K3sClusterConfig> = {
   kind: "k3s",
-  // Object storage is only wired for the ovh-mks path (scope.md).
   supportsObjectStorage: false,
   plan: (config: K3sClusterConfig) =>
     k3sPlanEffect(config).pipe(Effect.provide(providerFor(config).cloudProviderLayer(config))),
@@ -171,15 +156,11 @@ export const k3sEntry: DistroEntry<K3sClusterConfig> = {
   delete: deleteK3s,
   kubeconfig: kubeconfigK3s,
   deletedLabel: "cluster",
-  // `applyK3s` reconciles volumes internally and logs nothing per-row.
   appliedPrefixes: [],
   selfProgress: true,
   status: _statusK3s,
   upgrade: _upgradeK3s,
   credentialsLabel: "openstack",
-  // The full OS_* set `loadCredentials` reads — only some are required
-  // (depends on auth.method); presence is shown for all so the operator sees
-  // which auth path will be picked.
   requiredEnvVars: [...OS_ENV_KEYS, ...OS_SECRET_ENV_KEYS],
   doctorChecks: _k3sDoctorChecks
 }

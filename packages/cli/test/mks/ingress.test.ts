@@ -61,10 +61,6 @@ const _run = (
 
 const _withYaml = (yaml: string) => Effect.provide(layerNoop({ readFileString: () => Effect.succeed(yaml) }))
 
-// R12/R10 — the LB shares the cluster's network and sits on the subnet MKS was
-// told to use for load balancers, and everything that shapes it is set at
-// creation (D4). `members` stays empty: the CCM owns pools once a Service
-// adopts the LB (R14/D2).
 it.effect("creates an ingress load balancer on the cluster's load-balancer subnet, with a floating IP", () =>
   Effect.gen(function*() {
     const server = makeFakeMksServer()
@@ -80,8 +76,6 @@ it.effect("creates an ingress load balancer on the cluster's load-balancer subne
       flavorId: "flavor-uuid-1"
     }])
     assert.strictEqual(server.clusters.size, 1)
-    // R13 — the ids travel back out so the caller can record them in
-    // `<cluster>.outputs.yaml` once every converge step has finished.
     assert.deepStrictEqual(info.ingress, defaultLbInfo)
   }).pipe(_withYaml(_yaml(`${_NETWORK}ingress:\n  flavor_id: flavor-uuid-1\n`))))
 
@@ -99,11 +93,6 @@ it.effect("omits the flavor when the ingress block names none", () =>
     }])
   }).pipe(_withYaml(_yaml(`${_NETWORK}ingress: {}\n`))))
 
-// R14/N2 — re-applying a config whose LB an ingress controller has already
-// adopted asks for exactly the same thing again. Nothing about the CCM's
-// listeners or pools is in the spec, so nothing about them can drift; the
-// provider-side proof that this converges to a pure read lives in
-// `packages/openstack/test/provider/cloud-provider.test.ts`.
 it.effect("re-applying an adopted ingress LB asks for the identical spec and returns the identical info", () =>
   Effect.gen(function*() {
     const cloud = fakeCloudProvider()
@@ -118,8 +107,6 @@ it.effect("re-applying an adopted ingress LB asks for the identical spec and ret
     assert.strictEqual(server.clusters.size, 1)
   }).pipe(_withYaml(_yaml(`${_NETWORK}ingress: {}\n`))))
 
-// Absent `ingress` is today's behaviour: no Octavia call at all, so a config
-// that never asked for a load balancer never needs Octavia in its region.
 it.effect("touches no load balancer when the config declares no ingress", () =>
   Effect.gen(function*() {
     const cloud = fakeCloudProvider()
@@ -129,9 +116,6 @@ it.effect("touches no load balancer when the config declares no ingress", () =>
     assert.deepStrictEqual(cloud.lbSpecs, [])
   }).pipe(_withYaml(_yaml(_NETWORK))))
 
-// R15, the seam: an apply that creates the LB must hand its floating IP to the
-// DNS phase in the same run. Each half is covered on its own (`ingress.test.ts`
-// above, `mks/dns.test.ts`), so only this asserts the join between them.
 it.effect("an apply points a target: ingress record at the floating IP it just allocated", () =>
   Effect.gen(function*() {
     const dns = spyDnsLayer()
@@ -144,8 +128,6 @@ it.effect("an apply points a target: ingress record at the floating IP it just a
     ]])
   }).pipe(_withYaml(_yaml(`${_NETWORK}ingress: {}\n`, _INGRESS_DNS))))
 
-// R10 — placement is required on MKS: an LB Octavia places wherever it likes is
-// unreachable from the cluster. Rejected at decode, not discovered at apply.
 it.effect("rejects an ingress block on a config that declares no network", () =>
   Effect.gen(function*() {
     const failure = yield* Effect.flip(loadConfig("cluster.yaml"))

@@ -17,7 +17,7 @@ interface FakeCluster {
   version: string
   plan: string
   state: string
-  // Live quirk: the API sends `null`, never an absent key, when no filter is set.
+  // quirk: control_plane_ip_filter is null (not absent) when no filter is set
   control_plane_ip_filter: ReadonlyArray<string> | null
   storage_encryption?: string
   private_node_groups?: boolean
@@ -33,8 +33,6 @@ interface FakeNodeGroup {
   labels?: ReadonlyArray<FakeLabel>
   taints?: ReadonlyArray<{ readonly key: string; readonly value: string; readonly effect: string }>
   ssh_keys?: ReadonlyArray<string>
-  // Live quirk: create accepts `{tier, size}` but reads return the resolved
-  // storage-template UUID as a bare string.
   storage?: string
   anti_affinity?: boolean
   utility_network_access?: boolean
@@ -119,17 +117,6 @@ const _conflict = (message: string): Response => new Response(JSON.stringify({ m
 const _ok = (body: unknown): Response => new Response(JSON.stringify(body), { status: 200 })
 const _empty = (): Response => new Response(null, { status: 200 })
 
-/**
- * Minimal in-memory fixture-replay stand-in for UpCloud's UKS + network/router
- * API (D13) — enough surface for a network+router -> cluster ->
- * poll-to-running -> node-group converge -> kubeconfig -> upgrade -> delete
- * lifecycle test, zero real network (per project test policy).
- *
- * Cluster and node-group `state` starts `pending` and flips to `running`
- * after `readyAfterPolls` reads, mirroring the documented UpCloud transition
- * (D13/plan.md). Network and router carry no `state` field on UpCloud's API
- * (unlike the OVH gateway) so they are created synchronously here too.
- */
 export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number } = {}) => {
   const readyAfterPolls = options.readyAfterPolls ?? 2
   const clusters = new Map<string, FakeCluster>()
@@ -147,9 +134,6 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number }
     if (request.method === "POST") {
       const payload = _bodyOf<CreateClusterBody>(request)
       if (payload === undefined) return _badRequest("cluster create sent an empty body")
-      // kumulo: `version` is checked as strictly as `zone`/`network` on purpose.
-      // An earlier fake echoed a hardcoded "1.31" — the config's own value — so a
-      // client that never sent `version` still passed every lifecycle assertion.
       if (payload.zone === undefined || payload.network === undefined || payload.version === undefined) {
         return _badRequest("cluster create is missing a required field")
       }
@@ -226,7 +210,6 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number }
         pollsRemaining: readyAfterPolls
       }
       groups.set(group.name, group)
-      // Live quirk: the POST response carries no `state` — only GET/list do.
       const { state: _state, ...createResponse } = group
       return _ok(createResponse)
     }
@@ -319,8 +302,7 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number }
     }
     if (request.method === "DELETE") {
       if (!router) return _notFound("router not found")
-      // Live quirk (2026-08-01 probe): a router with an attached network
-      // 409s — the network must be deleted (detached) first.
+      // quirk: a router with an attached network 409s, network must be detached first
       const attached = [...networks.values()].some((network) => network.router === uuid)
       if (attached) return _conflict(`router conflict: ${uuid}`)
       routers.delete(uuid)
@@ -350,7 +332,6 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number }
 
   const _handle = (request: HttpClientRequest.HttpClientRequest): Response => {
     const parts = new URL(request.url, "https://fixture.invalid").pathname.split("/").filter(Boolean)
-    // ["1.3", "kubernetes"|"network"|"router", ...rest]
     const resource = parts[1]
     const rest = parts.slice(2)
 
@@ -367,7 +348,6 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number }
         const name = rest[2]
         if (name === undefined) return _badRequest("unhandled fixture route")
         if (rest.length === 3) return _handleNodeGroupOne(request, uuid, name)
-        // single-node delete: /node-groups/{name}/{nodeName}
         if (rest.length === 4 && request.method === "DELETE") return _empty()
       }
       return _handleUpgrade(request, uuid)

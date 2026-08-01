@@ -1,6 +1,5 @@
 import type { BucketRef, BucketSpec } from "@kumulo/core"
 
-/** Bucket state as read back for reconcile (§R5/R7), by-name-keyed — `retain` carries over from the last recorded desired state, not the OVH API. */
 export interface ExistingBucket {
   readonly name: string
   readonly region: string
@@ -11,8 +10,7 @@ export interface ExistingBucket {
 
 export interface BucketDiff {
   readonly toCreate: ReadonlyArray<BucketSpec>
-  // region/encryption are immutable on OVH's side — a change there can only
-  // be realized as delete-then-recreate.
+  // region/encryption drift is realized as delete-then-recreate (immutable on OVH's side)
   readonly toReplace: ReadonlyArray<{ readonly ref: BucketRef; readonly spec: BucketSpec }>
   readonly toUpdate: ReadonlyArray<{ readonly ref: BucketRef; readonly spec: BucketSpec }>
   readonly toDelete: ReadonlyArray<BucketRef>
@@ -26,11 +24,6 @@ const _isMutableDiff = (bucket: BucketSpec, existing: ExistingBucket): boolean =
 
 const _toRef = (bucket: ExistingBucket): BucketRef => ({ name: bucket.name, region: bucket.region })
 
-// kumulo: `object_storage.buckets` converge onto OVH containers by name:
-// missing → create, present-with-immutable-drift → replace,
-// present-with-mutable-drift → update, present-and-matching → noop,
-// present-but-undesired → delete (unless retained, R6). Pure and total: same
-// inputs always produce the same plan (idempotent re-run, property-tested).
 export const diffBuckets = (
   { desired, existing }: {
     readonly desired: ReadonlyArray<BucketSpec>

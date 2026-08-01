@@ -33,10 +33,6 @@ import { configArgument, kumulo } from "./root.ts"
 
 export { kumulo }
 
-/**
- * Interactive confirm on a TTY; otherwise print `fallback` (the --yes hint)
- * and answer no. Ctrl-C / quit counts as no.
- */
 const _confirm = (
   { fallback, message }: { readonly message: string; readonly fallback: string }
 ): Effect.Effect<boolean, never, Prompt.Environment> =>
@@ -44,7 +40,6 @@ const _confirm = (
     ? Prompt.run(Prompt.confirm({ message })).pipe(Effect.catch(() => Effect.succeed(false)))
     : Console.log(fallback).pipe(Effect.as(false))
 
-/** The provider's `ProviderProfile` — OVH's capabilities are per-region, so it takes `auth.region`. */
 const _profileLayer = (config: ClusterConfig): Layer.Layer<ProviderProfile> =>
   config.provider === "ovh"
     ? ovhProfileLive(config.auth.region)
@@ -52,26 +47,15 @@ const _profileLayer = (config: ClusterConfig): Layer.Layer<ProviderProfile> =>
     ? hetznerProfileLive
     : genericProfileLive
 
-/**
- * `ClusterConfigShape` slice for `validate`: mks configs carry no
- * `addons`/`api_server` block and `module: "none"` carries no `managed` list,
- * so the optional parts are filled in explicitly instead of cast.
- */
 const _profileShape = (config: ClusterConfig): ClusterConfigShape => ({
   distro: config.distro,
   worker_pools: config.worker_pools,
   auth: { region: config.auth.region },
-  // OVH fixes MKS's CNI, so the cilium rule can only ever trip on k3s.
   addons: config.distro === "k3s" ? config.addons : { cni: "flannel" },
   ...(config.distro === "k3s" ? { api_server: { high_availability: config.api_server.high_availability } } : {}),
   ...(config.volumes.module === "none" ? {} : { volumes: { managed: config.volumes.managed } })
 })
 
-/**
- * Provider-specific config rules (HA in a region without Octavia, unknown
- * hcloud location, unsupported volume type) — rejected before anything is
- * planned or touched.
- */
 const _validateForProvider = (config: ClusterConfig): Effect.Effect<void, ConfigInvalid> =>
   Effect.gen(function*() {
     const profile = yield* ProviderProfile
@@ -88,10 +72,8 @@ const _planPhrases: ReadonlyArray<string> = [
   "Rehearsing the plan..."
 ]
 
-/** Progress line for non-TTY output only — the live plan view covers it on a TTY. */
 const _ciLine = (message: string): Effect.Effect<void> => process.stdout.isTTY ? Effect.void : logLine(message)
 
-/** Live-view rows in `renderPlan`'s display order; NoOp rows stay static. */
 const _viewRows = (plan: Plan): ReadonlyArray<{ name: string; text: string; active: boolean }> =>
   orderedActions(plan).map((action) => ({
     name: action.name,
@@ -106,11 +88,6 @@ const _appliedVerb: Record<string, string> = {
   ReplaceNeedsConfirm: yellow("Replaced")
 }
 
-/**
- * One line per non-NoOp plan row whose name matches `prefixes`, logged after
- * the corresponding converge step succeeded. Non-TTY only — on a TTY the live
- * plan view checks the rows off in place instead.
- */
 const _logApplied = (
   { plan, prefixes }: { readonly plan: Plan; readonly prefixes: ReadonlyArray<string> }
 ): Effect.Effect<void> =>
@@ -122,16 +99,8 @@ const _logApplied = (
     { discard: true }
   )
 
-/**
- * The ingress LB's ids into `<cluster>.outputs.yaml` (R13), so a consumer can
- * annotate a Service with `loadbalancer.openstack.org/load-balancer-id`.
- *
- * Deliberately NOT written from inside the distro's apply: that runs
- * concurrently with `convergeManagedVolumes`, which read-modify-writes the same
- * file, and `stringifyOutputs` rebuilds it from a fixed literal — so an
- * interleaved write loses one side's data silently. Sequencing it after every
- * converge step is the whole fix.
- */
+// Must run after every converge step, not inside the distro's concurrent apply — interleaving with convergeManagedVolumes' read-modify-write
+// silently drops data.
 export const recordIngressOutputs = (
   { config, configDir, ingress }: {
     readonly config: ClusterConfig
@@ -146,12 +115,6 @@ export const recordIngressOutputs = (
     yield* writeOutputs({ dir: configDir, file: setIngress({ file, ingress }), format })
   })
 
-/**
- * Cluster+pools, volumes, and buckets have no dependencies on each other
- * (pools depend on the cluster, sequenced inside the distro's `apply`;
- * credentials depend on buckets, sequenced inside `convergeBuckets`) —
- * converge all three concurrently.
- */
 const _convergeAll = Effect.fn(function*(
   { apply, appliedPrefixes, config, configDir, plan, selfProgress, storageLayer }: {
     readonly apply: Effect.Effect<DistroApplyResult, DistroFailure, DistroServices>
@@ -163,19 +126,12 @@ const _convergeAll = Effect.fn(function*(
     readonly storageLayer: Layer.Layer<ObjectStorageProvider | CredentialsSink> | undefined
   }
 ) {
-  // A self-progress entry marks its own rows stage by stage — re-wrapping
-  // here would flip them all to "running" at once and defeat the point.
   const clusterStep = (selfProgress ? apply : withRowProgress({
     match: (name) => appliedPrefixes.some((prefix) => name.startsWith(prefix)),
     effect: apply
   })).pipe(
     Effect.tap(() => _logApplied({ plan, prefixes: appliedPrefixes }))
   )
-  // Same Cinder-backed volumes as the k3s path's `_reconcileVolumes`
-  // (`k3s/reconcile.ts`), just no cluster-side manifest apply yet — see
-  // `convergeManagedVolumes`'s doc comment.
-  // The generic converge only handles cinder — it must not claim (and
-  // instantly "✓") volume rows another module owns.
   const genericVolumes = config.volumes.module === "cinder"
   const volumesStep = withRowProgress({
     match: (name) => genericVolumes && name.startsWith("volume/"),
@@ -196,11 +152,7 @@ const _convergeAll = Effect.fn(function*(
   return result
 })
 
-/**
- * Declining a plan (a non-TTY answers no, see `_confirm`) is a no-op for
- * creates — but a plan that would replace nodes fails closed, so drift is
- * never silently skipped in CI.
- */
+// Declining a plan that would replace nodes fails closed instead of silently skipping drift in CI.
 export const rejectUnconfirmedReplace = (plan: Plan): Effect.Effect<void, PlanRejected> =>
   namesToReplace(plan).size === 0
     ? Effect.void
@@ -210,7 +162,6 @@ export const rejectUnconfirmedReplace = (plan: Plan): Effect.Effect<void, PlanRe
       })
     )
 
-/** Config → plan → present → apply, shared by `apply` and `scale`. */
 const _applyFlow = Effect.fn(function*({ config: configPath }: { readonly config: string }) {
   const root = yield* kumulo
   const config = yield* loadConfig(configPath)
@@ -238,20 +189,13 @@ const _applyFlow = Effect.fn(function*({ config: configPath }: { readonly config
     const proceed = yield* _confirm({ message: "Apply these changes?", fallback: "Re-run with --yes to apply." })
     if (!proceed) return yield* rejectUnconfirmedReplace(plan)
   }
-  // Replaces only ever execute past the confirm gate above (`--yes` or an
-  // answered prompt); the distro never re-derives them from the inventory.
   const replace = namesToReplace(plan)
-  // The distro's config-taking members, bound to this config's variant once.
   const applyStep = onDistro(config)(({ config: cfg, entry }) => entry.apply({ config: cfg, configDir, replace }))
 
-  // Trailing blank line, plus the confirm prompt's submitted line if we asked.
   const view = {
     rows: _viewRows(plan),
     offset: decision._tag === "NeedsConfirm" ? 2 : 1
   }
-  // An entry with no applied prefixes converges everything itself (k3s
-  // reconciles volumes inside `applyK3s`); with `selfProgress` its stages
-  // mark their own rows, otherwise all rows spin as one opaque apply.
   const selfProgress = distroFor(config).selfProgress === true
   const result = yield* withPlanView({
     ...view,
@@ -280,17 +224,13 @@ export const kubeconfig = Command.make(
   })
 ).pipe(Command.withDescription("Print the cluster's kubeconfig"))
 
-// Delete plan: cluster + non-retained volumes as Delete rows; retained
-// volumes as NoOp "(retained)"; buckets from the recorded outputs. Volume
-// rows only appear for volumes that actually exist on Cinder right now.
 const _deletePlan = Effect.fn(function*(config: ClusterConfig, configDir: string) {
   const [clusterActions, liveVolumes, bucketActions] = yield* Effect.all([
     onDistro(config)(({ config: cfg, entry }) => entry.deletePlanActions(cfg)),
     lookupManagedVolumeNames(config),
     bucketDeletePlanActions({ config, configDir })
   ], { concurrency: 3 })
-  // The upcloud module plans its own volume rows inside `deletePlanActions` —
-  // emitting generic ones too duplicated every row.
+  // upcloud module plans its own volume rows in deletePlanActions; emitting generic ones too duplicates every row.
   const genericVolumeModule = config.volumes.module === "cinder" || config.volumes.module === "hcloud"
   const volumeActions = (genericVolumeModule ? managedVolumes(config) : [])
     .map((entry) =>
@@ -327,12 +267,8 @@ export const del = Command.make(
       })
       if (!proceed) return
     }
-    // Volumes must wait for the cluster (attachments); buckets don't — the
-    // bucket teardown runs concurrently with cluster+volume teardown.
     const selfProgress = distroFor(config).selfProgress === true
     const clusterAndVolumesStep = Effect.gen(function*() {
-      // Self-progress entries mark their own rows stage by stage (bucket and
-      // volume teardown included) — re-wrapping would spin everything at once.
       yield* withRowProgress({
         match: (name) => !selfProgress && !name.startsWith("volume/") && !name.startsWith("bucket/"),
         effect: onDistro(config)(({ config: cfg, entry }) => entry.delete(cfg))
@@ -340,8 +276,6 @@ export const del = Command.make(
       yield* _ciLine(`${red("Deleted")} ${deletedLabel}/${config.name}`)
       yield* _logApplied({ plan, prefixes: ["mks-pool/"] })
 
-      // Retained volumes (`volumes.managed[].retain: true`) survive `delete`;
-      // anything else recorded there is torn down alongside the cluster.
       const volumesResult = yield* withRowProgress({
         match: (name) => config.volumes.module === "cinder" && name.startsWith("volume/"),
         effect: reconcileVolumesOnDelete(config)
@@ -350,8 +284,6 @@ export const del = Command.make(
       if (volumesResult.kept.length > 0) yield* _ciLine(`${dim("Retained volumes (kept):")} ${volumesResult.kept.join(", ")}`)
     })
 
-    // Same retain semantics for buckets (R6/R11) — a non-empty, non-retained
-    // bucket surfaces `BucketNotEmpty` as-is, nothing else here rolls back.
     const bucketsStep = Effect.gen(function*() {
       if (!wantsObjectStorage(config)) return
       const env = yield* StorageEnv

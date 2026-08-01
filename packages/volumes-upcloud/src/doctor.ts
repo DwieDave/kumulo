@@ -1,12 +1,4 @@
-/**
- * R7/Q1: the CSI sub-account device-permission grant UpCloud's block-storage
- * CSI driver needs before a PV backed by a sub-account-created volume is
- * usable has no confirmed API (plan.md Q1, needs a live probe). Until that
- * probe lands, R7 degrades to this doctor-surfaced manual step instead of an
- * automated grant call — exported plainly (not as a `DoctorCheck`, a `cli`
- * package type this lower-level package must not depend on) for the CLI's
- * doctor module to wrap.
- */
+// No confirmed API exists yet for the CSI sub-account device-permission grant, so this degrades to a doctor-surfaced manual step.
 export interface DoctorNote {
   readonly name: string
   readonly message: string

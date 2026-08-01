@@ -1,9 +1,3 @@
-/**
- * Hand-written client (D1) over `/1.3/kubernetes/{uuid}/node-groups*` (R2).
- * D8: `PATCH` accepts only `count` — every other creation-time field is
- * immutable and drift on it is `distro-upcloud-uks`'s job, not this
- * client's.
- */
 import { Effect } from "effect"
 import * as Schema from "effect/Schema"
 import type * as HttpClient from "effect/unstable/http/HttpClient"
@@ -32,16 +26,13 @@ export const NodeGroup = Schema.Struct({
   name: Schema.String,
   count: Schema.Number,
   plan: Schema.String,
-  // kumulo: absent on the POST create response — the live API only includes
-  // `state` on GET/list. Pollers treat missing as not-yet-running.
+  // kumulo: absent on the POST create response, live API only includes state on GET/list.
   state: Schema.optionalKey(NodeGroupState),
   labels: Schema.optionalKey(Schema.Array(UpcloudLabel)),
   taints: Schema.optionalKey(Schema.Array(NodeGroupTaint)),
   kubelet_args: Schema.optionalKey(Schema.Array(Schema.String)),
   ssh_keys: Schema.optionalKey(Schema.Array(Schema.String)),
-  // kumulo: create ACCEPTS a `{tier, size}` object, but list/get RETURN the
-  // resolved storage-template UUID as a bare string — accept both. Nothing
-  // reads this back (drift keys on the config-hash label, not this field).
+  // kumulo: create accepts {tier, size}, but list/get return the resolved storage-template UUID as a bare string.
   storage: Schema.optionalKey(Schema.Union([Schema.String, NodeGroupStorage])),
   anti_affinity: Schema.optionalKey(Schema.Boolean),
   utility_network_access: Schema.optionalKey(Schema.Boolean),
@@ -49,12 +40,10 @@ export const NodeGroup = Schema.Struct({
 })
 export type NodeGroup = typeof NodeGroup.Type
 
-// Bare array, like every other UKS list (see uks.ts's note on Q8).
 const _NodeGroupsResponse = Schema.Array(NodeGroup)
 const _decodeNodeGroup = decodeOn2xx(NodeGroup)
 const _decodeNodeGroups = decodeOn2xx(_NodeGroupsResponse)
 
-/** Fields accepted by `POST .../node-groups` (intent.md's create table). */
 export interface NodeGroupCreateInput {
   readonly name: string
   readonly count: number
@@ -69,7 +58,6 @@ export interface NodeGroupCreateInput {
   readonly storage_encryption?: string
 }
 
-/** D8: the only mutable field. */
 export interface NodeGroupPatchInput {
   readonly count: number
 }
@@ -86,7 +74,6 @@ export interface NodeGroupsClient {
 const _base = (clusterUuid: string): string => `/1.3/kubernetes/${clusterUuid}/node-groups`
 const _one = (clusterUuid: string, name: string): string => `${_base(clusterUuid)}/${name}`
 
-/** Hand-written client (D1) over `/1.3/kubernetes/{uuid}/node-groups*`. */
 export const makeNodeGroupsClient = (httpClient: HttpClient.HttpClient): NodeGroupsClient => ({
   list: (clusterUuid) =>
     httpClient.execute(HttpClientRequest.get(_base(clusterUuid))).pipe(
@@ -102,8 +89,7 @@ export const makeNodeGroupsClient = (httpClient: HttpClient.HttpClient): NodeGro
       Effect.flatMap(_decodeNodeGroup)
     ),
   delete: (clusterUuid, name) => httpClient.execute(HttpClientRequest.delete(_one(clusterUuid, name))).pipe(Effect.flatMap(decodeVoid)),
-  // kumulo: does DELETE drain the node first? plan.md Q7 is unanswered
-  // without a live probe — `distro-upcloud-uks` must not assume it does.
+  // kumulo: unknown whether DELETE drains the node first; distro-upcloud-uks must not assume it does.
   deleteNode: (clusterUuid, name, nodeName) =>
     httpClient.execute(HttpClientRequest.delete(`${_one(clusterUuid, name)}/${nodeName}`)).pipe(Effect.flatMap(decodeVoid))
 })

@@ -7,12 +7,6 @@ import { makeStorageClient } from "../../src/client/storage.ts"
 
 const _fixtureBaseUrl = "https://fixture.invalid"
 
-/**
- * Fixture-replay HttpClient (zero network) — asserts request shape, replays
- * canned OVH v1 responses. `prependUrl` gives the generated client's relative
- * request paths an absolute origin, same as `ovhHttpClientLive` does at the
- * real composition root (provider-ovh).
- */
 const _rawHttpClient = (handle: (request: HttpClientRequest.HttpClientRequest) => Response) =>
   HttpClient.make((request) => Effect.succeed(HttpClientResponse.fromWeb(request, handle(request)))).pipe(
     HttpClient.mapRequest(HttpClientRequest.prependUrl(_fixtureBaseUrl))

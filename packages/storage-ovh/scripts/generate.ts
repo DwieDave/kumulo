@@ -1,13 +1,3 @@
-/**
- * Regenerates `src/generated/client.ts` from the vendored OVH v1 `cloud.json`
- * schema. Run with `bun run scripts/generate.ts` from this package's
- * directory; output is committed, not built at CI time.
- *
- * See `packages/distro-ovh-mks/scripts/generate.ts` for the pipeline order
- * and the "why trim before convert" rationale (same shape, different
- * allowlist over the same spec — kept duplicated rather than shared: two
- * call sites, no shared tool owns this package pair yet).
- */
 import { readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { Effect } from "effect"
@@ -65,13 +55,9 @@ interface AllowlistFile {
   readonly operations: ReadonlyArray<AllowlistOp>
 }
 
-// kumulo: `no-type-assertion` forbids `as` — JSON.parse already returns `any`,
-// so assigning straight into an explicitly-typed binding narrows it without
-// a cast (same trick used by tools/ovh2openapi and tools/codegen).
 const _isOpenApiSpec = (value: unknown): value is OpenAPISpec =>
   typeof value === "object" && value !== null && !Array.isArray(value) && "openapi" in value && "paths" in value
 
-/** Pure regeneration (allowlist trim -> convert -> patch -> generate) — reused by `scripts/generate.ts`'s CLI writer and by `codegen:check`'s regen-noop CI gate. */
 export const generate = () =>
   Effect.gen(function* () {
     const allowlist: AllowlistFile = JSON.parse(readFileSync(join(pkgRoot, "allowlist.json"), "utf8"))

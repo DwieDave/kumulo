@@ -33,11 +33,6 @@ const _encoded: K3sClusterConfigEncoded = {
 }
 const _config = decodeK3sTestConfig(_encoded)
 
-// kumulo: local fixture-replay fake, same precedent as
-// `core/test/k8s/fake-http-client.ts` (dep-lint scopes `test/` per-package).
-// `sucDeploymentExists` gates the *first* GET only (the pre-apply existence
-// check) — every GET after that reports Available so a "just installed"
-// test doesn't need to sleep through the readiness poll's interval.
 const _fakeHttpClient = (sucDeploymentExists: boolean) => {
   const requests: Array<HttpClientRequest.HttpClientRequest> = []
   let gets = 0
@@ -99,7 +94,6 @@ describe("upgrade command — SUC Plan apply", () => {
 
       yield* applyK3sUpgradeWith({ config: _config, workerConcurrency: 1, k8sClient })
 
-      // 1 pre-apply existence check (404) + at least 1 readiness poll (200/Available).
       expect(gets()).toBeGreaterThanOrEqual(2)
     }))
 })

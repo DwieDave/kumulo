@@ -5,10 +5,6 @@ import { HttpTransportError, ResourceConflict, ResourceNotFound } from "../error
 import type { K8sManifest } from "../domain/types.ts"
 
 export interface ResourceRef {
-  // kumulo: caller supplies the full REST path (e.g. "/api/v1/nodes/foo",
-  // "/apis/apps/v1/namespaces/default/deployments/bar") — a GVK->path
-  // mapper is unneeded complexity when every caller already knows its own
-  // resource's path (distro-k3s, addons, cli status all target fixed kinds).
   readonly path: string
   readonly kind: string
 }
@@ -21,8 +17,7 @@ export class K8sClient extends Context.Service<K8sClient, {
     manifest: K8sManifest
   ) => Effect.Effect<K8sManifest, ResourceConflict | HttpTransportError>
   readonly delete: (ref: ResourceRef) => Effect.Effect<void, ResourceNotFound | HttpTransportError>
-  // kumulo: eviction is its own subresource POST (not a generic PATCH/DELETE),
-  // per the Eviction API k8s drain uses instead of a bare pod delete.
+  // eviction is its own subresource POST, per the k8s Eviction API drain uses instead of a bare delete
   readonly evict: (
     namespace: string,
     pod: string
@@ -34,11 +29,6 @@ const _transportError = (cause: unknown): HttpTransportError => new HttpTranspor
 const _statusError = (ref: ResourceRef, status: number): ResourceNotFound | HttpTransportError =>
   status === 404 ? new ResourceNotFound({ kind: ref.kind, ref: ref.path }) : _transportError(`status ${status}`)
 
-// kumulo: lenient decode — apiVersion/kind are the only fields any
-// caller relies on structurally; every other field is passed through
-// untouched via the trailing `Record` so node-ops/addons/readiness can read
-// arbitrary manifest fields (metadata, status, spec) without a schema per
-// resource kind.
 const K8sManifestSchema = Schema.StructWithRest(
   Schema.Struct({ apiVersion: Schema.String, kind: Schema.String }),
   [Schema.Record(Schema.String, Schema.Unknown)]
@@ -50,19 +40,12 @@ const K8sListSchema = Schema.Struct({
 const _emptyListing: { items?: ReadonlyArray<unknown> } = { items: [] }
 
 export interface K8sClientOptions {
-  // kumulo: `client` is expected to already be authenticated (bearer token
-  // header, or an https.Agent carrying client-cert material) — building
-  // that from a parsed `KubeconfigContext` is the composition root's job
-  // (platform-specific TLS Agent wiring isn't reachable from core, see
-  // dep-lint's core-only-imports-effect rule).
   readonly client: HttpClient.HttpClient
   readonly server: string
 }
 
 const _url = (server: string, path: string): URL => new URL(path, server)
 
-// kumulo: `undefined` on a malformed body (missing apiVersion/kind) signals
-// "not a manifest" to callers, who turn that into a tagged error.
 const _decodeManifest = (
   body: unknown
 ): Effect.Effect<K8sManifest, HttpTransportError> =>
@@ -93,9 +76,6 @@ export const makeK8sClient = (options: K8sClientOptions): K8sClient["Service"] =
       )
       if (response.status !== 200) return yield* Effect.fail(_transportError(`status ${response.status}`))
       const body = yield* response.json.pipe(Effect.mapError(_transportError))
-      // kumulo: a body with no/malformed `items` yields an empty list rather
-      // than a transport error — same lenient "not a manifest -> skip it"
-      // semantics as `_decodeManifest`, just per-item instead of whole-body.
       const listing = yield* Schema.decodeUnknownEffect(K8sListSchema)(body).pipe(
         Effect.orElseSucceed(() => _emptyListing)
       )
@@ -103,10 +83,7 @@ export const makeK8sClient = (options: K8sClientOptions): K8sClient["Service"] =
       return decoded.flatMap(Option.toArray)
     })
 
-  // kumulo: server-side apply — PATCH with
-  // application/apply-patch+yaml, fieldManager=kumulo, force=true (last
-  // writer wins on field-manager conflict, since kumulo owns these
-  // resources wholesale, no shared ownership to negotiate).
+  // server-side apply with force=true — last writer wins on field-manager conflict, kumulo owns these resources wholesale
   const apply: K8sClient["Service"]["apply"] = (ref, manifest) =>
     Effect.gen(function*() {
       const request = HttpClientRequest.patch(_url(server, `${ref.path}?fieldManager=kumulo&force=true`)).pipe(
@@ -148,8 +125,4 @@ export const makeK8sClient = (options: K8sClientOptions): K8sClient["Service"] =
   return { get, list, apply, delete: deleteResource, evict }
 }
 
-// kumulo: manifests are plain JSON-compatible objects, and YAML is a
-// superset of JSON — sending `JSON.stringify` output as the apply-patch
-// body avoids pulling the `yaml` stringifier through a hot path for no
-// behavioral difference.
 const _toYaml = (manifest: K8sManifest): string => JSON.stringify(manifest)

@@ -2,19 +2,12 @@ import { Effect, Layer, Ref } from "effect"
 import { CloudProvider } from "../../src/ports/cloud-provider.ts"
 import type { ClusterTag, LbInfo, NetworkInfo, SecGroupInfo, ServerInfo } from "../../src/domain/types.ts"
 
-// Shared fake `CloudProvider` (in-memory, tagged store), create-if-missing
-// by tag+name. Network/security-group/LB are process-wide singletons (the
-// port doesn't thread a cluster tag through those `ensure*` calls); only
-// servers are tracked per-tag, which is all `deleteByTag`/
-// `listClusterResources` need.
 interface ServerRecord {
   readonly info: ServerInfo
   readonly tag: ClusterTag
 }
 
-// ponytail: no fixture-replay/network simulation here — just enough state
-// to prove idempotent apply + interruption-safety for the reconcile
-// pipeline. Extend when a richer provider behavior is needed.
+// no fixture-replay/network simulation, extend when a richer provider behavior is needed.
 export const FakeCloudProviderLive: Layer.Layer<CloudProvider> = Layer.effect(
   CloudProvider,
   Effect.gen(function*() {

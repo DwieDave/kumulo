@@ -1,15 +1,5 @@
-/**
- * `<cluster>.buckets.yaml` — kumulo's own record of the buckets it last
- * converged for a cluster, keyed by cluster tag. Mirrors
- * `volumes-cinder/src/outputs.ts`'s shape/behavior (missing file reads as
- * empty, not an error).
- *
- * This is the "existing" side of `diffBuckets` (see `diff.ts`): OVH's API
- * has no concept of `retain` and doesn't expose `encryption` on the list
- * endpoint, so a bucket removed from `object_storage.buckets` but marked
- * `retain: true` can only survive future reconciles if kumulo remembers it
- * here — the OVH API alone can't answer "should this orphaned bucket stay".
- */
+// OVH's API has no concept of `retain` and doesn't expose `encryption` on the list endpoint — this file is the only place a retained bucket's
+// fate survives reconciles.
 import { Data, Effect, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import type { PlatformError } from "effect/PlatformError"
@@ -44,14 +34,11 @@ export const decodeOutputs = (input: unknown): Effect.Effect<OutputsFile, Output
     Effect.mapError((cause) => new OutputsInvalid({ message: String(cause) }))
   )
 
-// YAML is a superset of JSON, so this parses both formats.
 export const parseOutputsYaml = (text: string): Effect.Effect<OutputsFile, OutputsInvalid> =>
   Effect.try({ try: () => parse(text), catch: (cause) => new OutputsInvalid({ message: String(cause) }) }).pipe(
     Effect.flatMap(decodeOutputs)
   )
 
-// kumulo: stable key ordering (cluster, buckets) — regenerating from
-// unchanged state is a byte-identical diff.
 export const stringifyOutputs = (
   { file, format = "yaml" }: { readonly file: OutputsFile; readonly format?: OutputsFormat }
 ): string => {
@@ -63,10 +50,7 @@ export const stringifyOutputsYaml = (file: OutputsFile): string => stringifyOutp
 
 export const emptyOutputs = (tag: ClusterTag): OutputsFile => ({ cluster: tag, buckets: [] })
 
-// kumulo: missing file reads as "no buckets recorded yet", not an error —
-// first converge on a fresh cluster always starts from an empty file.
-// The configured format's path is tried first, then the other extension, so
-// switching `outputs.format` picks up the previously written file.
+// Missing file reads as "no buckets recorded yet", not an error.
 export const readOutputs = (
   { dir, format = "yaml", tag }: { readonly dir: string; readonly tag: ClusterTag; readonly format?: OutputsFormat }
 ): Effect.Effect<OutputsFile, OutputsInvalid | PlatformError, FileSystem> =>
@@ -88,7 +72,4 @@ export const writeOutputs = (
     yield* fs.writeFileString(outputsPath({ dir, tag: file.cluster, format }), stringifyOutputs({ file, format }))
   })
 
-// `OutputsBucket` is structurally identical to `BucketSpec` — kept as a
-// distinct schema (own decode/validation) rather than reusing the type, same
-// precedent as core's `AutoscalingRule`/`WorkerPoolShape` structural slices.
 export const toOutputsBucket = (spec: BucketSpec): OutputsBucket => ({ ...spec })

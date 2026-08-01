@@ -56,15 +56,12 @@ const _config = decodeK3sTestConfig(_encoded)
 const _withWorkerFlavor = (flavor: string) => decodeK3sTestConfig({ ..._encoded, worker_pools: [{ name: "general", flavor, count: 2 }] })
 const _withMasterFlavor = (flavor: string) => decodeK3sTestConfig({ ..._encoded, masters: { ..._encoded.masters, flavor } })
 
-// ---- Recording fake CloudProvider ---------------------------------------
-
 type Event = { readonly kind: "create" | "delete"; readonly name: string }
 interface Store {
   readonly events: Array<Event>
   readonly servers: Ref.Ref<ReadonlyMap<string, ServerInfo>>
 }
 
-/** Stamps `configHash(spec)` on create, exactly like the hcloud/Nova providers do. */
 const _recordingCloudProvider = (store: Store): Layer.Layer<CloudProvider> =>
   Layer.succeed(CloudProvider, {
     ensureNetwork: (spec) => Effect.succeed({ id: "net-1", cidr: spec.cidr }),
@@ -158,7 +155,6 @@ describe("confirmed replace actually executes", () => {
 
       yield* _run(store, applyK3sEffect({ config: drifted, configDir: "/tmp", replace }))
 
-      // delete before create, for every replaced node.
       expect(store.events.filter((e) => e.name === WORKER_1).map((e) => e.kind)).toEqual(["delete", "create"])
       const after = yield* Ref.get(store.servers)
       const expected = configHash(buildK3sNodes(drifted).find((n) => n.spec.name === WORKER_1)?.spec)
@@ -184,7 +180,6 @@ describe("confirmed replace actually executes", () => {
       store.events.length = 0
 
       const drifted = _withWorkerFlavor("b3-32")
-      // No `replace` — exactly what the CLI passes when the operator declines.
       yield* _run(store, applyK3sEffect({ config: drifted, configDir: "/tmp" }))
       expect(store.events).toEqual([])
     }))
@@ -197,7 +192,6 @@ describe("confirmed replace actually executes", () => {
 
       const error = yield* Effect.flip(rejectUnconfirmedReplace(plan))
       expect(error._tag).toBe("PlanRejected")
-      // A plan with no replaces still declines quietly.
       const noReplace = yield* _run(store, _planFor(_config, store))
       expect(yield* rejectUnconfirmedReplace(noReplace).pipe(Effect.as("ok"))).toBe("ok")
     }))
@@ -206,7 +200,6 @@ describe("confirmed replace actually executes", () => {
     Effect.gen(function*() {
       const store = yield* _makeStore
       yield* _run(store, applyK3sEffect({ config: _config, configDir: "/tmp" }))
-      // Pre-hashing cluster: strip every stamp.
       yield* Ref.update(store.servers, (map) =>
         new Map([...map].map(([name, info]) => [name, { id: info.id, name: info.name, ip: info.ip }])))
       store.events.length = 0

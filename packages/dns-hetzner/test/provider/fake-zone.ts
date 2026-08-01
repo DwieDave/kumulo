@@ -20,13 +20,6 @@ const _bodyOf = (request: HttpClientRequest.HttpClientRequest): { ttl?: number; 
 
 const _key = (name: string, type: string): string => `${name}|${type}`
 
-/**
- * Zero-network in-memory Hetzner Cloud API DNS zone: a mutable rrset store
- * driving the real hand-written client through `HetznerDns`, replaying
- * GET/PUT/DELETE against the store instead of the network. Used both for
- * fixture-replay assertions and as the reusable substrate for the port-contract
- * suite (mirrors dns-ovh's `fake-zone.ts`).
- */
 export const makeFakeZone = (zoneName: string) => {
   const rrsets = new Map<string, StoredRRset>()
 
@@ -72,7 +65,6 @@ export const makeFakeZone = (zoneName: string) => {
 
   return {
     dns: makeHetznerDnsClient(httpClient),
-    /** direct store inspection for assertions, bypassing the client under test */
     peek: (name: string): StoredRRset | undefined =>
       [...rrsets.values()].find((r) => r.name === name && r.type !== "TXT"),
     peekAll: (): ReadonlyArray<StoredRRset> => [...rrsets.values()],

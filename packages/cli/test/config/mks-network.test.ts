@@ -11,7 +11,7 @@ const _without = (field: (typeof _fields)[number]) => {
   return rest
 }
 
-describe("MksClusterConfig — network (R5, D1)", () => {
+describe("MksClusterConfig — network", () => {
   it.effect("decodes without a network block — absent means today's behaviour", () =>
     Effect.gen(function*() {
       const decoded = yield* decodeConfig(validMksConfig)
@@ -25,9 +25,6 @@ describe("MksClusterConfig — network (R5, D1)", () => {
       expect(decoded.distro === "ovh-mks" && decoded.network).toEqual(validMksNetwork)
     }))
 
-  // The k3s block is `{ cidr, public_access }`: no subnets, and a bastion
-  // concept a managed control plane has no use for. Sharing the struct would
-  // ship a dead field on MKS, so the two must not be interchangeable.
   it.effect("rejects the k3s-shaped network block", () =>
     Effect.gen(function*() {
       const failure = yield* Effect.flip(
@@ -44,10 +41,6 @@ describe("MksClusterConfig — network (R5, D1)", () => {
       })
     ))
 
-  // `cidr` is the network's declared address space and nothing else reads it —
-  // Neutron only ever sees the two subnet CIDRs. Unchecked it is a required
-  // field that does nothing, and a subnet outside the network an operator
-  // believes they declared decodes clean.
   it.prop(
     "rejects a subnet that falls outside the declared cidr",
     [
@@ -78,10 +71,7 @@ describe("MksClusterConfig — network (R5, D1)", () => {
   )
 })
 
-// Q1: MKS Standard names an Octavia flavor by UUID, MKS Free by size name.
-// Before this, only the UUID was expressible, so a Free-plan cluster could not
-// ask for a load-balancer size at all.
-describe("MksIngress — flavor vocabulary (Q1)", () => {
+describe("MksIngress — flavor vocabulary", () => {
   const _withIngress = (ingress: Record<string, string>) => ({
     ...validMksConfig,
     network: validMksNetwork,
@@ -100,8 +90,6 @@ describe("MksIngress — flavor vocabulary (Q1)", () => {
       expect(decoded.distro === "ovh-mks" && decoded.ingress?.flavor_id).toBe("0b1e-uuid")
     }))
 
-  // Both name the same Octavia field. Honouring one and dropping the other
-  // would be a silent choice, so the config has to pick.
   it.effect("refuses both at once rather than silently preferring one", () =>
     Effect.gen(function*() {
       const failure = yield* Effect.flip(decodeConfig(_withIngress({ flavor: "small", flavor_id: "0b1e-uuid" })))

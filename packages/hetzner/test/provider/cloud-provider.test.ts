@@ -44,10 +44,6 @@ describe("hetzner CloudProvider", () => {
     }).pipe(Effect.provide(fake.layer))
   })
 
-  // The cluster label is what `deleteByTag`/`listClusterResources` find
-  // resources by, and the generated request schema types `labels` as an
-  // empty struct — a payload encoding that dropped it would orphan every
-  // resource this provider creates.
   it.effect("ensureNetwork sends the cluster label on create", () => {
     let payload: unknown
     const fake = makeFakeHcloud({
@@ -80,8 +76,6 @@ describe("hetzner CloudProvider", () => {
     }).pipe(Effect.provide(fake.layer))
   })
 
-  // hcloud Firewalls have neither an `any` protocol nor a security-group
-  // self-reference, so those two neutral rules cannot be translated.
   it.effect("ensureSecurityGroups fails on rules hcloud cannot express", () => {
     const fake = makeFakeHcloud({
       "GET /firewalls": () => ({ status: 200, body: { firewalls: [fixture.firewall({ id: 5, name: "kumulo-prod" })], meta: fixture.meta() } })

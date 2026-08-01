@@ -19,12 +19,6 @@ import { StorageEnv } from "../../src/storage/env.ts"
 import { makeFakeMksServer } from "../e2e/fake-mks-server.ts"
 import { makeFakeCinder } from "./fake-cinder.ts"
 
-// R13, end to end. `ingress-outputs.test.ts` pins `recordIngressOutputs` in
-// isolation and `mks/ingress.test.ts` pins the reconciler's `LbInfo`; neither
-// joins them, so the seam `mksEntry.apply` -> `DistroApplyResult.ingress` ->
-// `<cluster>.outputs.yaml` could be cut without a red test. This drives the
-// real `apply` command over fake OVH + OpenStack APIs and reads the file back.
-
 const _yaml = `
 name: staging
 provider: ovh
@@ -54,7 +48,6 @@ const _configDir = mkdtempSync(join(tmpdir(), "kumulo-apply-ingress-"))
 const _configPath = join(_configDir, "cluster.yaml")
 writeFileSync(_configPath, _yaml)
 
-// `commands.ts` reads `process.stdout.isTTY` at call time; pin the CI branch.
 process.stdout.isTTY = false
 
 const _storageLayer = Layer.succeed(StorageEnv, {
@@ -62,9 +55,6 @@ const _storageLayer = Layer.succeed(StorageEnv, {
   serviceName: ""
 })
 
-// The real OpenStack `CloudProvider` is built from this env (see
-// `mksCloudProviderLayer`), so the apply exercises the actual Neutron/Octavia
-// calls against the fake HTTP client below rather than a stubbed provider.
 const _openStackEnvLayer = Layer.succeed(OpenStackEnv, {
   keystone: {
     token: Effect.succeed("tok"),
@@ -75,7 +65,6 @@ const _openStackEnvLayer = Layer.succeed(OpenStackEnv, {
   unavailableReason: undefined
 })
 
-/** The JSON body a route handler received, or `undefined` for a bodyless request. */
 const _json = (request: HttpClientRequest.HttpClientRequest): Record<string, unknown> =>
   request.body._tag === "Uint8Array" ? JSON.parse(new TextDecoder().decode(request.body.body)) : {}
 
@@ -90,8 +79,6 @@ const _postedCidr = (request: HttpClientRequest.HttpClientRequest): string => {
     : ""
 }
 
-// A Neutron + Octavia that remembers what it created, on the same fake HTTP
-// client the Cinder harness provides (routing is by method + pathname).
 const _fakeOpenStack = () => {
   const networks: Array<{ readonly id: string }> = []
   const subnets: Array<{ readonly id: string; readonly cidr: string }> = []
@@ -105,14 +92,11 @@ const _fakeOpenStack = () => {
       return { status: 201, body: { network: { id: "net-1" } } }
     },
     "GET /v2.0/subnets": () => ({ status: 200, body: { subnets } }),
-    // The gateway (Neutron router) a floating IP needs before it can route.
     "GET /v2.0/routers": () => ({ status: 200, body: { routers: [] } }),
     "POST /v2.0/routers": () => ({ status: 201, body: { router: { id: "router-1", name: "kumulo-staging" } } }),
     "PUT /v2.0/routers/router-1/add_router_interface": () => ({ status: 200, body: { id: "router-1" } }),
     "POST /v2.0/subnets": (request) => {
       const cidr = _postedCidr(request)
-      // Real Neutron subnet ids are UUIDs; a `/` from the CIDR would split the
-      // gateway create path — a fixture artefact, not a product bug.
       const subnet = { id: `sub-${cidr.replace("/", "-")}`, cidr }
       subnets.push(subnet)
       return { status: 201, body: { subnet } }
@@ -144,6 +128,5 @@ it.effect("apply records the ingress LB it created in <cluster>.outputs.yaml", (
     )
     assert.strictEqual(server.clusters.size, 1)
     const outputs = yield* parseOutputsYaml(readFileSync(join(_configDir, "staging.outputs.yaml"), "utf8"))
-    // The id a consumer annotates a Service with, and the address DNS points at.
     assert.deepStrictEqual(outputs.ingress, { load_balancer_id: "lb-1", floating_ip: "203.0.113.1" })
   }))

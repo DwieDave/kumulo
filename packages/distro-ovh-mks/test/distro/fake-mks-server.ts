@@ -11,14 +11,11 @@ interface FakeCluster {
   status: string
   url: string
   pollsRemaining: number
-  // Creation-time only, and read back verbatim — OVH's update payload cannot
-  // change any of them (`Cloud_ProjectKubeUpdate`).
   privateNetworkId?: string
   nodesSubnetId?: string
   loadBalancersSubnetId?: string
 }
 
-/** Mirrors `Cloud_kube_NodePoolTemplate` in the generated client (metadata + spec, same casing). */
 interface FakeTemplate {
   readonly metadata: {
     readonly annotations: { readonly [key: string]: string }
@@ -28,7 +25,6 @@ interface FakeTemplate {
   readonly spec: { readonly taints: ReadonlyArray<unknown>; readonly unschedulable: boolean }
 }
 
-/** The node pool as OVH really reads it back (`Cloud_kube_NodePool`). */
 interface FakePool {
   id: string
   name: string
@@ -40,8 +36,6 @@ interface FakePool {
   autoscale: boolean
   antiAffinity: boolean
   monthlyBilled: boolean
-  // Every field on `Cloud_kube_NodePool` is optional, including these
-  // server-side ones — a pool created outside kumulo may carry none of them.
   projectId?: string
   status?: string
   sizeStatus?: string
@@ -82,11 +76,7 @@ interface UpdatePoolBody {
   readonly autoscale?: boolean
 }
 
-/**
- * `undefined` means the request carried no body at all. The live `apply`
- * found an empty-request-body bug that every fake missed because they only
- * asserted on responses — here that is a 400, not a silent success.
- */
+// undefined here is a 400, not a silent success — the empty-body case every prior fake missed
 const _bodyOf = <Body>(request: HttpClientRequest.HttpClientRequest): Body | undefined => {
   const body = request.body
   if (body._tag !== "Uint8Array") return undefined
@@ -98,11 +88,6 @@ const _bodyOf = <Body>(request: HttpClientRequest.HttpClientRequest): Body | und
 
 const _badRequest = (message: string): Response => new Response(JSON.stringify({ message }), { status: 400 })
 
-/**
- * Minimal in-memory fixture-replay stand-in for the OVH MKS API — enough
- * surface for a create→poll-ready→nodepool-converge→kubeconfig→upgrade→
- * delete lifecycle test, zero real network (per project test policy).
- */
 export const makeFakeMksServer = (options: { readonly readyAfterPolls?: number } = {}) => {
   const readyAfterPolls = options.readyAfterPolls ?? 2
   const clusters = new Map<string, FakeCluster>()
@@ -212,7 +197,6 @@ export const makeFakeMksServer = (options: { readonly readyAfterPolls?: number }
 
   const _handle = (request: HttpClientRequest.HttpClientRequest): Response => {
     const parts = new URL(request.url, "https://fixture.invalid").pathname.split("/").filter(Boolean)
-    // ["cloud","project",svc,"kube", ...rest]
     const kubeId = parts[4]
     const rest = parts.slice(5)
 

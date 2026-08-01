@@ -6,10 +6,6 @@ const cidr = fc.stringMatching(/^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\
 const cidrs = fc.uniqueArray(cidr, { maxLength: 5 })
 const cni = fc.constantFrom("flannel", "cilium")
 
-// Property: every SSH CIDR appears in exactly one port-22 rule, and every API
-// CIDR in exactly one port-6443 rule (N9) — no CIDR dropped, none duplicated.
-// Checked per-port (not "appears in exactly one rule overall") since the same
-// CIDR value can legitimately be passed for both SSH and API allowlists.
 it.prop("every input SSH/API CIDR appears in exactly one rule for its port", [cidrs, cidrs, cidr, cni], ([sshCidrs, apiCidrs, networkCidr, cniKind]) => {
   const rules = buildHetznerSecGroupRules({ allowedSshCidrs: sshCidrs, allowedApiCidrs: apiCidrs, networkCidr, cni: cniKind })
   const countFor = (target: string, port: number) =>
@@ -32,8 +28,7 @@ it("uses the CNI-specific wireguard port (flannel 51820, cilium 51871)", () => {
   assert.isDefined(cilium.find((rule) => rule.protocol === "udp" && rule.portMin === 51871))
 })
 
-// Hetzner Firewalls know neither `protocol: "any"` nor a security-group
-// self-reference — the builder must have resolved both away already.
+// Hetzner Firewalls support neither protocol:"any" nor a self-reference.
 it("emits no `any` protocol and no remoteGroupSelf", () => {
   const rules = buildHetznerSecGroupRules({ allowedSshCidrs: [], allowedApiCidrs: [], networkCidr: "10.0.0.0/16", cni: "flannel" })
   assert.isFalse(rules.some((rule) => rule.protocol === "any" || rule.remoteGroupSelf === true))

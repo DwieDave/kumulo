@@ -15,9 +15,6 @@ export interface VolumeProviderOptions {
 type Deps = CinderAuth | HttpClient.HttpClient
 type R<A> = Effect.Effect<A, CinderError, Deps>
 
-// kumulo: Cinder volume metadata carries no first-class "cluster" concept —
-// this key is our own tagging convention, mirroring the CloudProvider's
-// ensure-by-tag+name scheme.
 const _tagMetadataKey = "kumulo_cluster"
 
 const _listRef = "volumes/detail"
@@ -29,13 +26,9 @@ const _volumeInfo = (record: VolumeRecord): VolumeInfo => ({
 
 const _metadataTag = (record: VolumeRecord): string => record.metadata?.kumulo_cluster ?? ""
 
-// ponytail: fixed page size, marker-paged. Cinder caps the page at its own
-// `osapi_max_limit` anyway; raise only if a cluster ever holds more volumes
-// than round-trips are worth.
+// fixed page size, raise only if a cluster ever holds more volumes than round-trips are worth
 const _pageSize = 100
 
-// kumulo: Cinder paginates `volumes/detail` — `volumes_links` carries a
-// rel:"next" href whose `marker` query param is the last seen volume id.
 export const nextMarker = (list: VolumesDetailResponse): string | undefined => {
   const next = list.volumes_links?.find((link) => link.rel === "next")
   if (next === undefined) return undefined
@@ -61,8 +54,7 @@ const _listFrom = (
   _listPage({ client, marker }).pipe(Effect.flatMap((page) => {
     const acc = [...seen, ...page.volumes]
     const next = nextMarker(page)
-    // kumulo: stop on no-next, on an empty page, and on a marker that does
-    // not advance — a stuck marker would otherwise loop forever.
+    // also stops on a non-advancing marker — otherwise loops forever
     return next === undefined || page.volumes.length === 0 || next === marker
       ? Effect.succeed(acc)
       : _listFrom({ client, marker: next, seen: acc })
@@ -70,10 +62,7 @@ const _listFrom = (
 
 const _listAll = (client: CinderClient) => _listFrom({ client, marker: undefined, seen: [] })
 
-// kumulo: list-then-create. Idempotent across whole-call retries (the
-// tag+name lookup finds the earlier volume), but Cinder offers no
-// idempotency key, so a retry of the POST itself would duplicate — never
-// wrap only the create in a retry policy.
+// Cinder has no idempotency key — never wrap only the create POST in a retry policy, it would duplicate
 export const ensureVolume = (
   { options, spec }: { readonly options: VolumeProviderOptions; readonly spec: VolumeSpec }
 ): R<VolumeInfo> =>
@@ -102,9 +91,6 @@ export const listClusterVolumes = (tag: ClusterTag): R<ReadonlyArray<VolumeInfo>
   Effect.flatMap(makeCinderClient, (client) =>
     Effect.map(_listAll(client), (all) => all.filter((record) => _metadataTag(record) === tag).map(_volumeInfo)))
 
-// kumulo: caller (core delete flow) never invokes this for retain: true
-// volumes — the retention policy is enforced one layer up, not here.
-// Deleting an already-gone volume is a success, not a failure.
 export const deleteVolume = (ref: VolumeRef): R<void> =>
   Effect.flatMap(makeCinderClient, (client) =>
     mapCinderError({ self: client.volumes.volumesIdDelete({ params: { id: ref.id } }), ref: ref.id }).pipe(

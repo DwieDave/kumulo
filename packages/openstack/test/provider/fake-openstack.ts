@@ -2,7 +2,6 @@ import { Effect, Layer } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { KeystoneAuth } from "../../src/auth/keystone-auth.ts"
 
-/** The JSON payload a route handler received, or `undefined` for a bodyless request. */
 export const requestJson = (request: HttpClientRequest.HttpClientRequest): unknown =>
   request.body._tag === "Uint8Array" ? JSON.parse(new TextDecoder().decode(request.body.body)) : undefined
 
@@ -15,15 +14,12 @@ export interface FakeOpenStack {
   readonly calls: () => ReadonlyArray<{ readonly method: string; readonly url: string }>
 }
 
-// Fixture-replay fake: routes `${METHOD} ${pathname}` (query string stripped)
-// through a caller-supplied handler map — offline, no real network.
 export const makeFakeOpenStack = (
   routes: Record<string, RouteHandler>
 ): FakeOpenStack => {
   const calls: Array<{ method: string; url: string }> = []
   const client = HttpClient.make((request) => {
-    // kumulo: `HttpClientRequest` keeps the query in `urlParams`, not in `.url` —
-    // a real HttpClient merges them when it sends, so the fake must too.
+    // HttpClientRequest keeps the query in urlParams, not .url; merge like a real client does
     const url = new URL(request.url)
     for (const [key, value] of request.urlParams) url.searchParams.append(key, value)
     calls.push({ method: request.method, url: url.toString() })
@@ -33,8 +29,6 @@ export const makeFakeOpenStack = (
       return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("not found", { status: 404 })))
     }
     const result = handler(HttpClientRequest.setUrl(request, url.toString()))
-    // kumulo: the WHATWG `Response` constructor rejects any body (even "")
-    // on null-body statuses.
     const nullBodyStatus = result.status === 204 || result.status === 304
     const responseBody = nullBodyStatus || result.body === undefined ? null : JSON.stringify(result.body)
     return Effect.succeed(

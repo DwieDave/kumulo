@@ -1,7 +1,4 @@
-// k3s install-over-SSH scripts, plain string interpolation — no template
-// engine dependency needed for a handful of substitutions. Every
-// config-derived value goes through `shellQuote`; only `extra*Args` stay raw,
-// because those are deliberately verbatim k3s flags.
+// every config-derived value goes through shellQuote; extra*Args stay raw as verbatim k3s flags
 import { shellQuote } from "../ssh/shell.ts"
 
 export interface AddonDisableFlags {
@@ -43,7 +40,6 @@ const _labelArgs = (labels: Readonly<Record<string, string>>): string =>
 
 const _taintArgs = (taints: ReadonlyArray<string>): string => taints.map((taint) => `--node-taint ${shellQuote(taint)}`).join(" ")
 
-/** Render the k3s server-node install script (`--cluster-init` or `--server` join). */
 export const renderServerInstallScript = (args: ServerInstallArgs): string => {
   const server = args.isFirstMaster ? "--cluster-init" : `--server https://${args.firstMasterIp}:6443`
   const disableCcm = args.addons.cloudControllerManager ? "" : "--disable-cloud-controller"
@@ -68,7 +64,6 @@ curl -sfL https://get.k3s.io | \\
 `
 }
 
-/** Render the k3s agent-node install script (join via master 1). */
 export const renderAgentInstallScript = (args: AgentInstallArgs): string =>
   `#!/bin/bash
 set -euo pipefail

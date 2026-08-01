@@ -1,13 +1,3 @@
-/**
- * Subprocess smoke test (N4): runs the real `main.ts` under node (type
- * stripping) with a fake
- * `sops` on PATH, proving `--secrets-file` is a real parser-known shared flag
- * (visible in `--help`) and that the sops `ConfigProvider` installed via
- * `Command.provide` actually feeds the credential layer builds. The success
- * path (values served from the file) is covered in-process by
- * `secrets-file.test.ts` — here the broken-file path is used instead, since it
- * fails during layer build, before any network call.
- */
 import { spawnSync } from "node:child_process"
 import { mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -26,7 +16,6 @@ const _fixture = (sopsScript: string): { readonly dir: string; readonly secretsF
   return { dir, secretsFile }
 }
 
-// Inherited credentials would mask what the secrets file provides.
 const _cleanEnv = (): Record<string, string | undefined> =>
   Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(OVH_|HCLOUD_|OS_|KUMULO_)/.test(key)))
 
@@ -42,14 +31,14 @@ const _run = (
   return `${result.stdout}${result.stderr}`
 }
 
-describe("kumulo --secrets-file subprocess smoke (N4)", () => {
+describe("kumulo --secrets-file subprocess smoke", () => {
   it("is a parser-known flag, listed in --help", () => {
     const output = _run(["apply", "--help"], _cleanEnv())
     assert.notInclude(output, "Unrecognized flag")
     assert.include(output, "--secrets-file")
   })
 
-  it("feeds credential layer builds from the sops provider (broken file surfaces the sops error, R6)", () => {
+  it("feeds credential layer builds from the sops provider (broken file surfaces the sops error)", () => {
     const { dir, secretsFile } = _fixture("#!/bin/sh\necho 'Error: no key could decrypt' >&2\nexit 1\n")
     const env = _cleanEnv()
     const output = _run(
