@@ -55,12 +55,15 @@ const _awaitRunning = (
     check: mapUpcloudError({ self: client.services.get(uuid), ctx: { kind: "object-storage-service", ref: cluster } }),
     isDone: (service) => service.operational_state === "running",
     interval: pollInterval,
-    timeout: "5 minutes",
+    // Live probe 2026-08-01: certificate provisioning on UpCloud's side can
+    // hold a fresh service in setup-* for 10+ minutes.
+    timeout: "20 minutes",
+    describe: (service) => service.operational_state,
     kind: "object-storage-service",
     ref: cluster
   }).pipe(
     Effect.catchTag("ProvisioningTimeout", (e) =>
-      Effect.fail(new ProviderApiError({ operation: `object-storage-service ${cluster}`, status: 0, body: `timed out: ${e.lastStatus}` })))
+      Effect.fail(new ProviderApiError({ operation: `object-storage-service ${cluster}`, status: 0, body: `not running after 20 minutes (last operational_state: ${e.lastStatus}) — UpCloud certificate provisioning can be slow; re-run apply to keep waiting` })))
   )
 
 /** Get-or-create the D6 service, awaited to `operational_state: "running"`. */
