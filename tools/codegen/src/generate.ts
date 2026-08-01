@@ -49,10 +49,7 @@ const _isFormatOnlyBranch = (branch: unknown): boolean =>
 const _isUnvalidatedFormatUnion = (key: string, nested: unknown): boolean =>
   key === "oneOf" && Array.isArray(nested) && nested.length > 0 && nested.every(_isFormatOnlyBranch)
 
-// kumulo: effect's isPattern reviver rejects any pattern where `new RegExp(p).source !== p`
-// (JS canonicalizes, e.g. unescaped `/` becomes `\/`); OpenStack specs write unescaped
-// slashes in `pattern` values AND `patternProperties` keys, which crashed generation.
-// Canonicalize through RegExp before handing the spec to the generator.
+// kumulo: effect's isPattern reviver rejects patterns where `new RegExp(p).source !== p`
 const _canonicalPattern = (pattern: string): string => {
   try {
     return new RegExp(pattern).source
