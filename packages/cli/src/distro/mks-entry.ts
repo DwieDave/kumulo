@@ -161,6 +161,7 @@ export const mksEntry: DistroEntry<MksClusterConfig> = {
   // cluster) — a row whose prefix is missing here renders and then never
   // checks off.
   appliedPrefixes: ["network/", "subnet/", "gateway/", "mks-cluster/", "mks-pool/", "load-balancer/", "floating-ip/"],
+  selfProgress: true,
   status: _statusMks,
   upgrade: _upgradeMksEntry,
   credentialsLabel: "ovh api",

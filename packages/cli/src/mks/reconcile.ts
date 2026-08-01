@@ -23,6 +23,7 @@ import {
 } from "@kumulo/distro-ovh-mks"
 import type { OpenStackEnv } from "../doctor-openstack/env.ts"
 import { mksCloudProviderLayer } from "../provider/registry.ts"
+import { withRowProgress } from "../spinner.ts"
 import { MksEnv } from "./env.ts"
 import type { MksInventory } from "./plan.ts"
 import { mksClusterRow, mksPoolRow, toMksPool } from "./plan.ts"
@@ -326,12 +327,26 @@ export const applyMksEffect = (
     const pools = yield* _poolsToReplace({ config, replace })
     const { mks, serviceName } = yield* MksEnv
     const version = yield* parseKubeVersion(config.version)
-    const network = yield* _ensureMksNetwork({ config, mks, serviceName })
+    // Each stage marks its own plan rows (spinner.ts's shared view) — the
+    // network is done long before the cluster reaches READY.
+    const network = yield* withRowProgress({
+      match: (name) => name.startsWith("network/") || name.startsWith("subnet/") || name.startsWith("gateway/"),
+      effect: _ensureMksNetwork({ config, mks, serviceName })
+    })
     const mksConfig: MksDriverConfig = { ..._toMksConfig({ config, serviceName }), version, ...network }
-    const info = yield* ensureCluster({ mks, config: mksConfig })
+    const info = yield* withRowProgress({
+      match: (name) => name.startsWith("mks-cluster/"),
+      effect: ensureCluster({ mks, config: mksConfig })
+    })
     const ref: MksClusterRef = { serviceName, kubeId: info.id }
-    yield* ensureNodePools({ mks, ref, pools: mksConfig.worker_pools, replace: pools })
-    const ingress = yield* _ensureMksIngress({ config, network })
+    yield* withRowProgress({
+      match: (name) => name.startsWith("mks-pool/"),
+      effect: ensureNodePools({ mks, ref, pools: mksConfig.worker_pools, replace: pools })
+    })
+    const ingress = yield* withRowProgress({
+      match: (name) => name.startsWith("load-balancer/") || name.startsWith("floating-ip/"),
+      effect: _ensureMksIngress({ config, network })
+    })
     yield* reconcileMksDns({ config, apiEndpoint: info.apiEndpoint, ingress })
     return { ...info, ...(ingress === undefined ? {} : { ingress }) }
   })
@@ -412,12 +427,22 @@ export const deleteMksEffect = (config: ClusterConfig): Effect.Effect<void, MksE
     const { mks, serviceName } = yield* MksEnv
     const mksConfig = _toMksConfig({ config, serviceName })
     yield* removeDns(config)
-    const info = yield* findClusterByName({ mks, config: mksConfig })
-    if (info !== undefined) {
-      yield* deleteCluster({ mks, ref: { serviceName, kubeId: info.id } })
-      yield* _waitClusterGone({ config, mks, serviceName })
-    }
-    yield* _deleteMksInfra(config)
+    yield* withRowProgress({
+      match: (name) => name.startsWith("mks-cluster/") || name.startsWith("mks-pool/"),
+      effect: Effect.gen(function*() {
+        const info = yield* findClusterByName({ mks, config: mksConfig })
+        if (info !== undefined) {
+          yield* deleteCluster({ mks, ref: { serviceName, kubeId: info.id } })
+          yield* _waitClusterGone({ config, mks, serviceName })
+        }
+      })
+    })
+    yield* withRowProgress({
+      match: (name) =>
+        name.startsWith("network/") || name.startsWith("subnet/") || name.startsWith("gateway/") ||
+        name.startsWith("load-balancer/") || name.startsWith("floating-ip/"),
+      effect: _deleteMksInfra(config)
+    })
   })
 
 /** `deleteMksEffect` wired to its live `DnsProvider` and `CloudProvider` (mirrors `applyMks`). */
