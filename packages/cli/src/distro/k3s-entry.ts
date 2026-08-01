@@ -7,7 +7,7 @@ import { refForPlan, renderMastersPlan, renderUpgradePlan, renderWorkersPlan } f
 import { refFor, systemUpgradeControllerManifests } from "@kumulo/addons"
 import type { Ssh} from "@kumulo/distro-k3s";
 import { SshLive } from "@kumulo/distro-k3s"
-import { k3sPlanEffect } from "../k3s/plan.ts"
+import { k3sDeletePlanActions, k3sPlanEffect } from "../k3s/plan.ts"
 import { providerFor } from "../provider/registry.ts"
 import { k8sHttpClientLayer } from "../k3s/k8s-http-client.ts"
 import { applyK3s, deleteK3s, k3sStatus, kubeconfigK3s, kubeconfigK3sEffect } from "../k3s/reconcile.ts"
@@ -161,7 +161,7 @@ export const k3sEntry: DistroEntry<K3sClusterConfig> = {
   plan: (config: K3sClusterConfig) =>
     k3sPlanEffect(config).pipe(Effect.provide(providerFor(config).cloudProviderLayer(config))),
   deletePlanActions: (config: K3sClusterConfig) =>
-    Effect.succeed([{ _tag: "Delete" as const, name: `cluster/${config.name}` }]),
+    k3sDeletePlanActions(config).pipe(Effect.provide(providerFor(config).cloudProviderLayer(config))),
   apply: (a) =>
     applyK3s(a).pipe(
       Effect.map((result) => ({
@@ -173,6 +173,7 @@ export const k3sEntry: DistroEntry<K3sClusterConfig> = {
   deletedLabel: "cluster",
   // `applyK3s` reconciles volumes internally and logs nothing per-row.
   appliedPrefixes: [],
+  selfProgress: true,
   status: _statusK3s,
   upgrade: _upgradeK3s,
   credentialsLabel: "openstack",

@@ -38,6 +38,7 @@ import {
 } from "./env.ts"
 import { k8sHttpClientLayer } from "./k8s-http-client.ts"
 import { buildK3sServerSpecs } from "./plan.ts"
+import { withRowProgress } from "../spinner.ts"
 import { dnsProviderLayerFor, reconcileDns, removeDns } from "../dns.ts"
 
 export interface K3sApplyResult {
@@ -130,9 +131,17 @@ const _provisionInfra = (
 ): Effect.Effect<Infra, CloudError | PlanRejected, CloudProvider> =>
   Effect.gen(function*() {
     const cloudProvider = yield* CloudProvider
-    yield* cloudProvider.ensureNetwork({ cidr: config.network.cidr })
-    yield* cloudProvider.ensureSecurityGroups({ rules: secGroupRules(config) })
-    const lb = yield* cloudProvider.ensureLoadBalancer({ members: [] })
+    // Shared infra marks its own plan rows (spinner.ts) — it is done long
+    // before the nodes finish bootstrapping.
+    const lb = yield* withRowProgress({
+      match: (name) =>
+        name.startsWith("network/") || name.startsWith("security-group/") || name.startsWith("load-balancer/"),
+      effect: Effect.gen(function*() {
+        yield* cloudProvider.ensureNetwork({ cidr: config.network.cidr })
+        yield* cloudProvider.ensureSecurityGroups({ rules: secGroupRules(config) })
+        return yield* cloudProvider.ensureLoadBalancer({ members: [] })
+      })
+    })
 
     const specs = buildK3sServerSpecs(config)
     yield* _refuseMasterReplace(specs, replace)
@@ -302,16 +311,31 @@ export const applyK3sEffect = (
   }
 ): Effect.Effect<K3sApplyResult, K3sError, CloudProvider | Ssh | DnsProvider | VolumeProvider | CloudCredentialEnv> =>
   Effect.gen(function*() {
-    const infra = yield* _provisionInfra(config, replace)
-    const master1 = yield* _bootstrap(config, infra)
-    yield* Effect.gen(function*() {
-      yield* _installAddons(config)
-      yield* _drainOrphanedWorkers(config)
-    }).pipe(Effect.provide(k8sClientLayer({ config, master1 })))
+    // A node row is "done" when the node is bootstrapped and addons are in —
+    // not when its server merely exists — so the node span covers all three.
+    const nodeRow = (name: string): boolean => name.startsWith(`kumulo-${config.name}-`)
+    const { infra, master1 } = yield* withRowProgress({
+      match: nodeRow,
+      effect: Effect.gen(function*() {
+        const infra = yield* _provisionInfra(config, replace)
+        const master1 = yield* _bootstrap(config, infra)
+        yield* Effect.gen(function*() {
+          yield* _installAddons(config)
+          yield* _drainOrphanedWorkers(config)
+        }).pipe(Effect.provide(k8sClientLayer({ config, master1 })))
+        return { infra, master1 }
+      })
+    })
     // k3s supplies no ingress target (scope §5): `target: ingress` keeps
     // reaching the provider literally, as it does today.
-    yield* reconcileDns({ config, targets: { api_server: { kind: "ip", value: infra.lbVip } } })
-    yield* _reconcileVolumes(config)
+    yield* withRowProgress({
+      match: (name) => name.startsWith("dns/"),
+      effect: reconcileDns({ config, targets: { api_server: { kind: "ip", value: infra.lbVip } } })
+    })
+    yield* withRowProgress({
+      match: (name) => name.startsWith("volume/"),
+      effect: _reconcileVolumes(config)
+    })
     const kubeconfigPath = yield* _writeKubeconfig(config, master1, infra.lbVip, configDir)
     return { apiEndpoint: infra.lbVip, kubeconfigPath }
   })
@@ -335,15 +359,28 @@ export const deleteK3sEffect = (
   Effect.gen(function*() {
     const volumeProvider = yield* VolumeProvider
     const cloudProvider = yield* CloudProvider
-    if (config.volumes.module !== "none") {
-      const existing = yield* volumeProvider.listClusterVolumes(config.name)
-      for (const vol of existing) {
-        const retained = config.volumes.managed.find((r) => r.name === vol.name)?.retain ?? false
-        if (!retained) yield* volumeProvider.deleteVolume({ id: vol.id })
-      }
+    const volumes = config.volumes
+    if (volumes.module !== "none") {
+      yield* withRowProgress({
+        match: (name) => name.startsWith("volume/"),
+        effect: Effect.gen(function*() {
+          const existing = yield* volumeProvider.listClusterVolumes(config.name)
+          for (const vol of existing) {
+            const retained = volumes.managed.find((r) => r.name === vol.name)?.retain ?? false
+            if (!retained) yield* volumeProvider.deleteVolume({ id: vol.id })
+          }
+        })
+      })
     }
     yield* removeDns(config)
-    yield* cloudProvider.deleteByTag(config.name)
+    // The tag sweep takes nodes and shared infra down together — their rows
+    // genuinely complete as one step.
+    yield* withRowProgress({
+      match: (name) =>
+        name.startsWith(`kumulo-${config.name}-`) || name.startsWith("network/") ||
+        name.startsWith("security-group/") || name.startsWith("load-balancer/"),
+      effect: cloudProvider.deleteByTag(config.name)
+    })
   })
 
 /** `deleteK3sEffect` wired to its live Layers. */

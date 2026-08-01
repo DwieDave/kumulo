@@ -140,7 +140,7 @@ const _observed = (store: Store): Effect.Effect<ReadonlyArray<TaggedResource>> =
   Ref.get(store.servers).pipe(Effect.map((map) => [...map.values()].map((s) => ({ name: s.name, configHash: s.configHash }))))
 
 const _planFor = (config: K3sClusterConfig, store: Store) =>
-  _observed(store).pipe(Effect.map((observed) => k3sPlanFor({ config, observed })))
+  _observed(store).pipe(Effect.map((observed) => k3sPlanFor({ config, observed, infra: { network: true, securityGroups: true, loadBalancer: true } })))
 
 const WORKER_1 = "kumulo-test-k3s-worker-general-1"
 

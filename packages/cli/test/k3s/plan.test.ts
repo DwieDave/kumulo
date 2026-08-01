@@ -35,6 +35,10 @@ const _encoded: K3sClusterConfigEncoded = {
   k3s: { extra_server_args: [], extra_agent_args: [] }
 }
 
+// Converged-cluster fixtures observe the shared infra as present, so the
+// three infra rows plan NoOp alongside the node rows.
+const LIVE_INFRA = { network: true, securityGroups: true, loadBalancer: true }
+
 const _config = decodeK3sTestConfig(_encoded)
 
 it("builds one ServerSpec per master and per worker-pool index, per-index named (Appendix B)", () => {
@@ -52,7 +56,7 @@ it("builds one ServerSpec per master and per worker-pool index, per-index named 
 
 it("plans one Create action per desired node when nothing is provisioned yet", () => {
   const plan = buildK3sPlan(_config)
-  assert.strictEqual(plan.actions.length, 5)
+  assert.strictEqual(plan.actions.length, 8)
   assert.ok(plan.actions.every((a) => a._tag === "Create"))
 })
 
@@ -75,19 +79,19 @@ const _variant = (
   })
 
 it("a converged cluster plans all NoOp", () => {
-  const plan = k3sPlanFor({ config: _config, observed: _observedFor(_config) })
+  const plan = k3sPlanFor({ config: _config, observed: _observedFor(_config), infra: LIVE_INFRA })
   assert.ok(plan.actions.every((a) => a._tag === "NoOp"), JSON.stringify(plan.actions))
 })
 
 it("adding a node plans exactly one Create, the rest NoOp", () => {
-  const plan = k3sPlanFor({ config: _variant({ workers: 3 }), observed: _observedFor(_config) })
+  const plan = k3sPlanFor({ config: _variant({ workers: 3 }), observed: _observedFor(_config), infra: LIVE_INFRA })
   assert.deepStrictEqual(plan.actions.filter((a) => a._tag !== "NoOp"), [
     { _tag: "Create", name: "kumulo-prod-eu-worker-general-3" }
   ])
 })
 
 it("removing a node from config plans a Delete", () => {
-  const plan = k3sPlanFor({ config: _variant({ workers: 1 }), observed: _observedFor(_config) })
+  const plan = k3sPlanFor({ config: _variant({ workers: 1 }), observed: _observedFor(_config), infra: LIVE_INFRA })
   assert.deepStrictEqual(plan.actions.filter((a) => a._tag !== "NoOp"), [
     { _tag: "Delete", name: "kumulo-prod-eu-worker-general-2" }
   ])
@@ -95,7 +99,7 @@ it("removing a node from config plans a Delete", () => {
 
 it("a changed node property plans a confirmed replace when the inventory carries a config hash", () => {
   const observed = buildK3sNodes(_config).map(toTaggedResource)
-  const plan = k3sPlanFor({ config: _variant({ workerFlavor: "b3-32" }), observed })
+  const plan = k3sPlanFor({ config: _variant({ workerFlavor: "b3-32" }), observed, infra: LIVE_INFRA })
   assert.deepStrictEqual(plan.actions.filter((a) => a._tag !== "NoOp").map((a) => [a._tag, a.name]), [
     ["ReplaceNeedsConfirm", "kumulo-prod-eu-worker-general-1"],
     ["ReplaceNeedsConfirm", "kumulo-prod-eu-worker-general-2"]
@@ -106,7 +110,7 @@ it.prop("observed === desired is always all-NoOp", [fc.constantFrom(1, 3, 5), fc
   [masters, workers]
 ) => {
   const config = _variant({ masters, workers })
-  return k3sPlanFor({ config, observed: _observedFor(config) }).actions.every((a) => a._tag === "NoOp")
+  return k3sPlanFor({ config, observed: _observedFor(config), infra: LIVE_INFRA }).actions.every((a) => a._tag === "NoOp")
 })
 
 // ponytail: only `listClusterResources` is on the plan path; the rest die if called.
@@ -123,7 +127,7 @@ const _inventoryOf = (servers: Inventory["servers"]): Layer.Layer<CloudProvider>
     deleteByTag: () => _unused,
     resolveImage: () => _unused,
     resolveFlavor: () => _unused,
-    listClusterResources: () => Effect.succeed({ servers, networks: [], securityGroups: [], loadBalancers: [] })
+    listClusterResources: () => Effect.succeed({ servers, networks: [{ id: "net-1", cidr: "10.0.0.0/16" }], securityGroups: [{ id: "sg-1" }], loadBalancers: [{ id: "lb-1", vip: "10.0.0.250" }] })
   })
 
 /** What a provider reports after stamping `configHash(spec)` on create. */

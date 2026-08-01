@@ -250,12 +250,14 @@ const _applyFlow = Effect.fn(function*({ config: configPath }: { readonly config
     offset: decision._tag === "NeedsConfirm" ? 2 : 1
   }
   // An entry with no applied prefixes converges everything itself (k3s
-  // reconciles volumes inside `applyK3s`) — one opaque apply, all rows spin together.
+  // reconciles volumes inside `applyK3s`); with `selfProgress` its stages
+  // mark their own rows, otherwise all rows spin as one opaque apply.
+  const selfProgress = distroFor(config).selfProgress === true
   const result = yield* withPlanView({
     ...view,
     effect: appliedPrefixes.length === 0
-      ? withRowProgress({ match: () => true, effect: applyStep })
-      : _convergeAll({ apply: applyStep, appliedPrefixes, config, configDir, plan, selfProgress: distroFor(config).selfProgress === true, storageLayer })
+      ? (selfProgress ? applyStep : withRowProgress({ match: () => true, effect: applyStep }))
+      : _convergeAll({ apply: applyStep, appliedPrefixes, config, configDir, plan, selfProgress, storageLayer })
   })
   yield* Console.log(result.summary)
 })

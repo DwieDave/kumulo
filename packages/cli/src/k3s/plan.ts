@@ -1,5 +1,5 @@
 import { CloudProvider, computePlan, resourceName } from "@kumulo/core"
-import type { CloudError, DesiredResource, Plan, ServerSpec, TaggedResource } from "@kumulo/core"
+import type { CloudError, DesiredResource, Inventory, Plan, ServerSpec, TaggedResource } from "@kumulo/core"
 import type { K3sClusterConfig } from "../cluster-config.ts"
 import { Effect } from "effect"
 import { dnsPlanActions } from "../dns-plan.ts"
@@ -57,13 +57,40 @@ export const buildK3sServerSpecs = (config: K3sClusterConfig): ReadonlyArray<Ser
  * for observed resources that carry a `configHash` (stamped by the provider on
  * create); a server created before stamping carries none and plans as `NoOp`.
  */
+/** Existence of the cluster's shared infrastructure — read off `Inventory`. */
+export interface K3sInfraObserved {
+  readonly network: boolean
+  readonly securityGroups: boolean
+  readonly loadBalancer: boolean
+}
+
+export const k3sNetworkRow = (cluster: string): string => `network/${cluster}`
+export const k3sSecurityGroupRow = (cluster: string): string => `security-group/${cluster}`
+export const k3sLbRow = (cluster: string): string => `load-balancer/${cluster}`
+
+// One row per shared-infra resource, existence-checked like the node rows —
+// present infra plans NoOp, absent plans Create (the apply always ensures all
+// three, so there is no Delete case here).
+const _infraActions = (
+  { config, infra }: { readonly config: K3sClusterConfig; readonly infra: K3sInfraObserved }
+): Plan["actions"] =>
+  ([
+    [k3sNetworkRow(config.name), infra.network],
+    [k3sSecurityGroupRow(config.name), infra.securityGroups],
+    [k3sLbRow(config.name), infra.loadBalancer]
+  ] as const).map(([name, exists]) => exists ? { _tag: "NoOp" as const, name } : { _tag: "Create" as const, name })
+
+const NO_INFRA: K3sInfraObserved = { network: false, securityGroups: false, loadBalancer: false }
+
 export const k3sPlanFor = (
-  { config, observed }: {
+  { config, observed, infra = NO_INFRA }: {
     readonly config: K3sClusterConfig
     readonly observed: ReadonlyArray<TaggedResource>
+    readonly infra?: K3sInfraObserved
   }
 ): Plan => ({
   actions: [
+    ..._infraActions({ config, infra }),
     ...computePlan({ desired: buildK3sNodes(config), actual: observed }).actions,
     // k3s points `api_server` at a master IP -> A record (see `applyK3s`), and
     // resolves no other placeholder (scope §5).
@@ -74,6 +101,12 @@ export const k3sPlanFor = (
 /** Plan with no observed state: every node is a Create. Prefer `k3sPlanEffect`. */
 export const buildK3sPlan = (config: K3sClusterConfig): Plan => k3sPlanFor({ config, observed: [] })
 
+const _observedInfra = (inventory: Inventory): K3sInfraObserved => ({
+  network: inventory.networks.length > 0,
+  securityGroups: inventory.securityGroups.length > 0,
+  loadBalancer: inventory.loadBalancers.length > 0
+})
+
 /** `k3sPlanFor` against the live inventory - an absent cluster observes nothing. */
 export const k3sPlanEffect = (
   config: K3sClusterConfig
@@ -83,6 +116,38 @@ export const k3sPlanEffect = (
     const inventory = yield* cloudProvider.listClusterResources(config.name)
     return k3sPlanFor({
       config,
-      observed: inventory.servers.map((server) => ({ name: server.name, configHash: server.configHash }))
+      observed: inventory.servers.map((server) => ({ name: server.name, configHash: server.configHash })),
+      infra: _observedInfra(inventory)
     })
+  })
+
+/**
+ * Delete-plan rows against the live inventory (same completeness rule as the
+ * mks/upcloud paths): live nodes and infra as Delete, configured-but-gone as
+ * "(already absent)" NoOps — nothing silently omitted.
+ */
+export const k3sDeletePlanActions = (
+  config: K3sClusterConfig
+): Effect.Effect<Plan["actions"], CloudError, CloudProvider> =>
+  Effect.gen(function*() {
+    const cloudProvider = yield* CloudProvider
+    const inventory = yield* cloudProvider.listClusterResources(config.name)
+    const liveNames = new Set(inventory.servers.map((server) => server.name))
+    const desiredNames = buildK3sNodes(config).map((node) => node.spec.name)
+    const nodeActions: Plan["actions"] = [
+      ...inventory.servers.map((server) => ({ _tag: "Delete" as const, name: server.name })),
+      ...desiredNames.filter((name) => !liveNames.has(name)).map((name) => ({
+        _tag: "NoOp" as const,
+        name: `${name} (already absent)`
+      }))
+    ]
+    const infra = _observedInfra(inventory)
+    const infraActions: Plan["actions"] = ([
+      [k3sNetworkRow(config.name), infra.network],
+      [k3sSecurityGroupRow(config.name), infra.securityGroups],
+      [k3sLbRow(config.name), infra.loadBalancer]
+    ] as const).map(([name, exists]) =>
+      exists ? { _tag: "Delete" as const, name } : { _tag: "NoOp" as const, name: `${name} (already absent)` }
+    )
+    return [...nodeActions, ...infraActions]
   })
