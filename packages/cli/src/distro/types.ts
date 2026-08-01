@@ -61,6 +61,8 @@ export interface DistroEntry<C extends ClusterConfig = ClusterConfig> {
   readonly deletedLabel: string
   /** Plan-row name prefixes converged by `apply` itself (empty when apply logs nothing). */
   readonly appliedPrefixes: ReadonlyArray<string>
+  /** True when `apply` marks its own plan rows stage by stage (spinner.ts) — the generic wrapper must not re-wrap them. */
+  readonly selfProgress?: boolean
   readonly status: (config: C) => Effect.Effect<void, DistroFailure, DistroServices>
   readonly upgrade: (a: DistroUpgradeArgs<C>) => Effect.Effect<void, DistroFailure, DistroServices>
   /** How the credentials this distro reads are named in the env summary (`provider: ovh (ovh api)`). */

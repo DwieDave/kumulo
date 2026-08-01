@@ -153,29 +153,35 @@ export const recordIngressOutputs = (
  * converge all three concurrently.
  */
 const _convergeAll = Effect.fn(function*(
-  { apply, appliedPrefixes, config, configDir, plan, storageLayer }: {
+  { apply, appliedPrefixes, config, configDir, plan, selfProgress, storageLayer }: {
     readonly apply: Effect.Effect<DistroApplyResult, DistroFailure, DistroServices>
     readonly appliedPrefixes: ReadonlyArray<string>
     readonly config: ClusterConfig
     readonly configDir: string
     readonly plan: Plan
+    readonly selfProgress: boolean
     readonly storageLayer: Layer.Layer<ObjectStorageProvider | CredentialsSink> | undefined
   }
 ) {
-  const clusterStep = withRowProgress({
+  // A self-progress entry marks its own rows stage by stage — re-wrapping
+  // here would flip them all to "running" at once and defeat the point.
+  const clusterStep = (selfProgress ? apply : withRowProgress({
     match: (name) => appliedPrefixes.some((prefix) => name.startsWith(prefix)),
     effect: apply
-  }).pipe(
+  })).pipe(
     Effect.tap(() => _logApplied({ plan, prefixes: appliedPrefixes }))
   )
   // Same Cinder-backed volumes as the k3s path's `_reconcileVolumes`
   // (`k3s/reconcile.ts`), just no cluster-side manifest apply yet — see
   // `convergeManagedVolumes`'s doc comment.
+  // The generic converge only handles cinder — it must not claim (and
+  // instantly "✓") volume rows another module owns.
+  const genericVolumes = config.volumes.module === "cinder"
   const volumesStep = withRowProgress({
-    match: (name) => name.startsWith("volume/"),
+    match: (name) => genericVolumes && name.startsWith("volume/"),
     effect: convergeManagedVolumes({ config, configDir })
   }).pipe(
-    Effect.tap(() => _logApplied({ plan, prefixes: ["volume/"] }))
+    Effect.tap(() => genericVolumes ? _logApplied({ plan, prefixes: ["volume/"] }) : Effect.void)
   )
   const bucketsStep = storageLayer === undefined
     ? Effect.void
@@ -249,7 +255,7 @@ const _applyFlow = Effect.fn(function*({ config: configPath }: { readonly config
     ...view,
     effect: appliedPrefixes.length === 0
       ? withRowProgress({ match: () => true, effect: applyStep })
-      : _convergeAll({ apply: applyStep, appliedPrefixes, config, configDir, plan, storageLayer })
+      : _convergeAll({ apply: applyStep, appliedPrefixes, config, configDir, plan, selfProgress: distroFor(config).selfProgress === true, storageLayer })
   })
   yield* Console.log(result.summary)
 })

@@ -19,6 +19,7 @@ import {
 import type { UksClusterConfig, UksClusterInfo } from "@kumulo/distro-upcloud-uks"
 import { toUksPool, uksClusterRow, uksPoolRow } from "./plan.ts"
 import { UpcloudEnv } from "./env.ts"
+import { withRowProgress } from "../spinner.ts"
 import { dnsProviderLayerFor, reconcileDns, removeDns } from "../dns.ts"
 import type { DistroUpgradeArgs } from "../distro/types.ts"
 import { convergeUpcloudBuckets, reconcileUpcloudObjectStorageOnDelete } from "./storage.ts"
@@ -79,14 +80,26 @@ export const applyUpcloudUksEffect = (
   Effect.gen(function*() {
     const pools = yield* _poolsToReplace({ config, replace })
     const { clients } = yield* UpcloudEnv
-    const network = yield* ensureNetwork({ clients, clusterName: config.name, zone: config.zone, cidr: config.network.cidr })
-    const info = yield* ensureCluster({ clients, config: _toUksConfig(config), networkUuid: network.networkUuid, owner: OWNER })
-    yield* ensureNodePools({
-      clients,
-      ref: { uuid: info.uuid, name: info.name },
-      pools: config.worker_pools.map(toUksPool),
-      owner: OWNER,
-      replace: pools
+    // Each stage marks its own plan rows (spinner.ts's shared view): the
+    // network/router finish in seconds while the cluster takes minutes —
+    // wrapping the whole apply as one step left every row spinning together.
+    const network = yield* withRowProgress({
+      match: (name) => name.startsWith("router/") || name.startsWith("network/"),
+      effect: ensureNetwork({ clients, clusterName: config.name, zone: config.zone, cidr: config.network.cidr })
+    })
+    const info = yield* withRowProgress({
+      match: (name) => name.startsWith("uks-cluster/"),
+      effect: ensureCluster({ clients, config: _toUksConfig(config), networkUuid: network.networkUuid, owner: OWNER })
+    })
+    yield* withRowProgress({
+      match: (name) => name.startsWith("uks-pool/"),
+      effect: ensureNodePools({
+        clients,
+        ref: { uuid: info.uuid, name: info.name },
+        pools: config.worker_pools.map(toUksPool),
+        owner: OWNER,
+        replace: pools
+      })
     })
     // D4: the DNS phase runs inside apply, as it does for mks and k3s. The
     // kubeconfig is fetched only when a zone is actually declared, or
@@ -96,11 +109,19 @@ export const applyUpcloudUksEffect = (
     if (config.dns.module !== "none" || managedVolumes.length > 0) {
       const kubeconfig = yield* fetchKubeconfig({ clients, uuid: info.uuid })
       if (config.dns.module !== "none") yield* reconcileUpcloudDns({ config, kubeconfig })
-      if (managedVolumes.length > 0) yield* convergeUpcloudVolumes({ config, kubeconfig })
+      if (managedVolumes.length > 0) {
+        yield* withRowProgress({
+          match: (name) => name.startsWith("volume/"),
+          effect: convergeUpcloudVolumes({ config, kubeconfig })
+        })
+      }
     }
     // T6.1: buckets have no dependency on the cluster/kubeconfig — the D6
     // service rides the cluster's SDN network (D6), not its k8s API.
-    yield* convergeUpcloudBuckets(config)
+    yield* withRowProgress({
+      match: (name) => name.startsWith("bucket/"),
+      effect: convergeUpcloudBuckets(config)
+    })
     return info
   })
 

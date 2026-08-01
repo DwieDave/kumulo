@@ -48,7 +48,8 @@ export const upcloudUksEntry: DistroEntry<UpcloudUksClusterConfig> = {
   kubeconfig: kubeconfigUpcloudUks,
   deletedLabel: "uks-cluster",
   // Router/network are converged inside `applyUpcloudUksEffect` too, ahead of the cluster (mirrors mks-entry.ts's note).
-  appliedPrefixes: ["router/", "network/", "uks-cluster/", "uks-pool/"],
+  appliedPrefixes: ["router/", "network/", "uks-cluster/", "uks-pool/", "volume/", "bucket/"],
+  selfProgress: true,
   status: statusUpcloudUks,
   upgrade: upgradeUpcloudUks,
   credentialsLabel: "upcloud api token",
