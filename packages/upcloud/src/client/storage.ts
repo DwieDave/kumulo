@@ -9,7 +9,7 @@ import { Effect } from "effect"
 import * as Schema from "effect/Schema"
 import type * as HttpClient from "effect/unstable/http/HttpClient"
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
-import { decodeOn2xx, decodeVoid, UpcloudLabel } from "./common.ts"
+import { decodeOn2xx, decodeVoid, UpcloudBoolean, UpcloudLabel } from "./common.ts"
 import type { UpcloudRawError } from "./common.ts"
 
 export const StorageTier = Schema.Literals(["maxiops", "standard", "hdd"])
@@ -27,7 +27,7 @@ export const Storage = Schema.Struct({
   tier: Schema.optionalKey(StorageTier),
   zone: Schema.optionalKey(Schema.String),
   title: Schema.String,
-  encrypted: Schema.optionalKey(Schema.Boolean),
+  encrypted: Schema.optionalKey(UpcloudBoolean),
   state: StorageState,
   labels: Schema.optionalKey(Schema.Array(UpcloudLabel))
 })

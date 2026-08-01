@@ -16,7 +16,7 @@ interface FakeStorage {
   tier?: string
   zone?: string
   title: string
-  encrypted?: boolean
+  encrypted?: string
   state: string
   labels?: ReadonlyArray<FakeLabel>
   pollsRemaining: number
@@ -29,7 +29,7 @@ interface CreateStorageBody {
     readonly title?: string
     readonly tier?: string
     readonly labels?: ReadonlyArray<FakeLabel>
-    readonly encrypted?: boolean
+    readonly encrypted?: string
   }
 }
 
@@ -90,7 +90,7 @@ export const makeFakeStorageServer = (options: { readonly readyAfterPolls?: numb
         tier: payload.tier ?? "maxiops",
         zone: payload.zone,
         title: payload.title,
-        encrypted: payload.encrypted,
+        encrypted: payload.encrypted === undefined ? undefined : payload.encrypted ? "yes" : "no",
         state: "maintenance",
         labels: payload.labels,
         pollsRemaining: readyAfterPolls

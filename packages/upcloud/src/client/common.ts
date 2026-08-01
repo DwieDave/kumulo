@@ -5,12 +5,23 @@
  */
 import type { SchemaError } from "effect/Schema"
 import * as Schema from "effect/Schema"
+import * as SchemaGetter from "effect/SchemaGetter"
 import * as HttpClientError from "effect/unstable/http/HttpClientError"
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
 import { Effect } from "effect"
 
 export const UpcloudLabel = Schema.Struct({ key: Schema.String, value: Schema.String })
 export type UpcloudLabel = typeof UpcloudLabel.Type
+
+// kumulo: UpCloud's legacy endpoints encode booleans as "yes"/"no" strings
+// (the Go SDK has `upcloud.Boolean` for exactly this; live probe 2026-08-01:
+// `encrypted: "no"`). Newer endpoints use real booleans — accept both.
+export const UpcloudBoolean = Schema.Union([Schema.Boolean, Schema.Literals(["yes", "no"])]).pipe(
+  Schema.decodeTo(Schema.Boolean, {
+    decode: SchemaGetter.transform((value) => value === true || value === "yes"),
+    encode: SchemaGetter.transform((value: boolean) => value)
+  })
+)
 
 export type UpcloudRawError = HttpClientError.HttpClientError | SchemaError
 
