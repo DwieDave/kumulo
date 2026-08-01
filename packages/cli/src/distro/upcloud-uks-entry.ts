@@ -1,26 +1,41 @@
 import { Effect } from "effect"
 import type { UpcloudUksClusterConfig } from "../cluster-config.ts"
 import { authValidityCheck, controlPlanePlanCheck, nodeGroupPlansCheck, versionSupportedCheck, zoneExistsCheck } from "../doctor/upcloud/index.ts"
+import {
+  csiDevicePermissionCheck,
+  objectStorageRegionCheck,
+  upcloudObjectStorageReachCheck,
+  upcloudStorageReachCheck
+} from "../doctor/upcloud/storage.ts"
 import { UpcloudEnv } from "../upcloud/env.ts"
 import { buildUpcloudPlan, lookupUpcloudInventory, upcloudDeletePlanActions } from "../upcloud/plan.ts"
 import { applyUpcloudUks, deleteUpcloudUks, kubeconfigUpcloudUks, statusUpcloudUks, upgradeUpcloudUks } from "../upcloud/reconcile.ts"
+import { managedUpcloudVolumes } from "../upcloud/volumes.ts"
 import type { DistroEntry } from "./types.ts"
 
 const _upcloudDoctorChecks = Effect.fn(function*({ config }: { readonly config: UpcloudUksClusterConfig }) {
-  const { clients, zones } = yield* UpcloudEnv
+  const { clients, zones, storage, objectStorage } = yield* UpcloudEnv
   return [
     authValidityCheck({ uks: clients.uks }),
     zoneExistsCheck({ zone: config.zone, zones }),
     controlPlanePlanCheck({ uks: clients.uks, plan: config.plan }),
     nodeGroupPlansCheck({ pools: config.worker_pools.map((pool) => ({ plan: pool.flavor })) }),
-    versionSupportedCheck({ version: config.version })
+    versionSupportedCheck({ version: config.version }),
+    // T6.3/R15: only meaningful (and only run) when the corresponding module is configured.
+    ...(managedUpcloudVolumes(config).length > 0 ? [upcloudStorageReachCheck(storage), csiDevicePermissionCheck] : []),
+    ...(config.object_storage.module === "upcloud"
+      ? [upcloudObjectStorageReachCheck(objectStorage), objectStorageRegionCheck({ objectStorage, region: config.object_storage.region })]
+      : [])
   ]
 })
 
 export const upcloudUksEntry: DistroEntry<UpcloudUksClusterConfig> = {
   kind: "upcloud-uks",
-  // UpCloud sells no object storage product this cut wires (scope.md) —
-  // `upcloud-uks` configs have no `object_storage.module: "upcloud"` variant.
+  // T6.1: object storage IS expressible on this distro now
+  // (`object_storage.module: "upcloud"`) — but its wiring is self-contained
+  // inside `upcloud/storage.ts`, converged as part of `apply`/`delete`
+  // themselves, not through the generic ovh-shaped `storageLayers`/
+  // `commands.ts` bucket path this flag gates. It stays `false`.
   supportsObjectStorage: false,
   plan: (config) =>
     lookupUpcloudInventory(config).pipe(Effect.map((inventory) => buildUpcloudPlan({ config, inventory }))),

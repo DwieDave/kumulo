@@ -1,4 +1,6 @@
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Sink, Stream } from "effect"
+import { layerNoop } from "effect/FileSystem"
+import { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/unstable/process"
 import { FastCheck as fc } from "effect/testing"
 import { assert, it } from "@effect/vitest"
 import { makeMksClient } from "@kumulo/distro-ovh-mks"
@@ -10,6 +12,35 @@ import { unavailableUpcloudEnvLayer } from "../fake-upcloud-env.ts"
 import { makeFakeMksServer } from "../e2e/fake-mks-server.ts"
 import { makeFakeCinder } from "../commands/fake-cinder.ts"
 import { baseMksEncodedConfig, decodeMksTestConfig } from "../fixtures.ts"
+
+// T6.1: the distro service set is shared across distros, so an ovh-mks plan
+// now type-carries `FileSystem`/`ChildProcessSpawner` too (the upcloud path's
+// sops-backed bucket credentials) — never reached by an ovh-mks config, but
+// still part of `DistroServices`'s shape, so the test's `Effect.provide`
+// chain needs something to satisfy it.
+const _fsLayer = layerNoop({})
+// A real (inert) spawner, not a cast: the delete plan never spawns, but the
+// layer has to satisfy the service shape honestly.
+const _spawnerLayer = Layer.succeed(
+  ChildProcessSpawnerNS.ChildProcessSpawner,
+  ChildProcessSpawnerNS.make(() =>
+    Effect.sync(() =>
+      ChildProcessSpawnerNS.makeHandle({
+        pid: ChildProcessSpawnerNS.ProcessId(1),
+        exitCode: Effect.succeed(ChildProcessSpawnerNS.ExitCode(0)),
+        isRunning: Effect.succeed(false),
+        kill: () => Effect.void,
+        stdin: Sink.drain,
+        stdout: Stream.empty,
+        stderr: Stream.empty,
+        all: Stream.empty,
+        getInputFd: () => Sink.drain,
+        getOutputFd: () => Stream.empty,
+        unref: Effect.succeed(Effect.void)
+      })
+    )
+  )
+)
 
 const _openStackEnvLayer = Layer.succeed(OpenStackEnv, {
   keystone: undefined,
@@ -46,7 +77,9 @@ const _rows = (encoded: MksClusterConfigEncoded) =>
       // `ovh-mks` config must reach neither of these.
       Effect.provide(makeFakeCinder({})),
       Effect.provide(_openStackEnvLayer),
-      Effect.provide(unavailableUpcloudEnvLayer)
+      Effect.provide(unavailableUpcloudEnvLayer),
+      Effect.provide(_fsLayer),
+      Effect.provide(_spawnerLayer)
     )
   })
 

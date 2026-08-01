@@ -1,7 +1,10 @@
 import { Console, Effect } from "effect"
 import type * as HttpClient from "effect/unstable/http/HttpClient"
+import type { FileSystem } from "effect/FileSystem"
+import type { PlatformError } from "effect/PlatformError"
+import type { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/unstable/process"
 import { ConfigInvalid, parseKubeconfig, PlanRejected, ResourceNotFound } from "@kumulo/core"
-import type { DnsError, DnsProvider, Kubeconfig, MksError } from "@kumulo/core"
+import type { CredentialsSinkError, DnsError, DnsProvider, Kubeconfig, MksError, ObjectStorageError, VolumeError } from "@kumulo/core"
 import type { UpcloudUksClusterConfig } from "../cluster-config.ts"
 import {
   deleteCluster,
@@ -18,6 +21,8 @@ import { toUksPool, uksClusterRow, uksPoolRow } from "./plan.ts"
 import { UpcloudEnv } from "./env.ts"
 import { dnsProviderLayerFor, reconcileDns, removeDns } from "../dns.ts"
 import type { DistroUpgradeArgs } from "../distro/types.ts"
+import { convergeUpcloudBuckets, reconcileUpcloudObjectStorageOnDelete } from "./storage.ts"
+import { convergeUpcloudVolumes, managedUpcloudVolumes, reconcileUpcloudVolumesOnDelete } from "./volumes.ts"
 
 // kumulo: `UksClients`'s `ensureCluster`/`ensureNodePools` stamp an `owner`
 // label (T4.5/D14). There is no multi-operator identity concept anywhere else
@@ -66,7 +71,11 @@ const _poolsToReplace = (
 /** Converge network, control plane, then node pools onto the config (create and scale share this). */
 export const applyUpcloudUksEffect = (
   { config, replace }: { readonly config: UpcloudUksClusterConfig; readonly replace: ReadonlySet<string> }
-): Effect.Effect<UksClusterInfo, MksError | PlanRejected | ConfigInvalid, UpcloudEnv | DnsProvider> =>
+): Effect.Effect<
+  UksClusterInfo,
+  MksError | PlanRejected | ConfigInvalid | VolumeError | ObjectStorageError | CredentialsSinkError | PlatformError,
+  UpcloudEnv | DnsProvider | FileSystem | ChildProcessSpawnerNS.ChildProcessSpawner | HttpClient.HttpClient
+> =>
   Effect.gen(function*() {
     const pools = yield* _poolsToReplace({ config, replace })
     const { clients } = yield* UpcloudEnv
@@ -80,20 +89,29 @@ export const applyUpcloudUksEffect = (
       replace: pools
     })
     // D4: the DNS phase runs inside apply, as it does for mks and k3s. The
-    // kubeconfig is fetched only when a zone is actually declared — it is an
-    // extra API call and a secret, neither worth handling for `module: none`.
-    if (config.dns.module !== "none") {
+    // kubeconfig is fetched only when a zone is actually declared, or
+    // T6.1's volumes need it to apply PV/PVC manifests — an extra API call
+    // and (for DNS) a secret, neither worth handling for `module: none`.
+    const managedVolumes = managedUpcloudVolumes(config)
+    if (config.dns.module !== "none" || managedVolumes.length > 0) {
       const kubeconfig = yield* fetchKubeconfig({ clients, uuid: info.uuid })
-      yield* reconcileUpcloudDns({ config, kubeconfig })
+      if (config.dns.module !== "none") yield* reconcileUpcloudDns({ config, kubeconfig })
+      if (managedVolumes.length > 0) yield* convergeUpcloudVolumes({ config, kubeconfig })
     }
+    // T6.1: buckets have no dependency on the cluster/kubeconfig — the D6
+    // service rides the cluster's SDN network (D6), not its k8s API.
+    yield* convergeUpcloudBuckets(config)
     return info
   })
 
 /** `applyUpcloudUksEffect` wired to its live `DnsProvider` (`config.dns.module`-dispatched, R6). */
 export const applyUpcloudUks = (
   args: { readonly config: UpcloudUksClusterConfig; readonly replace: ReadonlySet<string> }
-): Effect.Effect<UksClusterInfo, MksError | PlanRejected | ConfigInvalid, UpcloudEnv | HttpClient.HttpClient> =>
-  applyUpcloudUksEffect(args).pipe(Effect.provide(dnsProviderLayerFor(args.config)))
+): Effect.Effect<
+  UksClusterInfo,
+  MksError | PlanRejected | ConfigInvalid | VolumeError | ObjectStorageError | CredentialsSinkError | PlatformError,
+  UpcloudEnv | HttpClient.HttpClient | FileSystem | ChildProcessSpawnerNS.ChildProcessSpawner
+> => applyUpcloudUksEffect(args).pipe(Effect.provide(dnsProviderLayerFor(args.config)))
 
 /**
  * UKS DNS phase (D4). UpCloud's cluster response carries no endpoint field —
@@ -140,8 +158,19 @@ export const kubeconfigUpcloudUks = (
  * a no-op, never provisions one. Router+network teardown always runs (D3/T5.2:
  * fully reproducible from `cluster.json`, so there is no `retain` case).
  */
-const _deleteUpcloudUksEffect = (config: UpcloudUksClusterConfig) =>
+/**
+ * D9 ordering: object-storage service (`?force=true` only when every
+ * configured bucket is `retain: false`) → non-retained volumes (detach
+ * checked by the API's own conflict) → cluster → network → router. Retained
+ * buckets/volumes are reported by their reconcile functions, not deleted;
+ * this function itself only orders the steps, it never inspects `kept`.
+ */
+const _deleteUpcloudUksEffect = (
+  config: UpcloudUksClusterConfig
+): Effect.Effect<void, MksError | ConfigInvalid | ObjectStorageError | VolumeError, UpcloudEnv | DnsProvider> =>
   Effect.gen(function*() {
+    yield* reconcileUpcloudObjectStorageOnDelete(config)
+    yield* reconcileUpcloudVolumesOnDelete(config)
     const { clients } = yield* UpcloudEnv
     const info = yield* findClusterByName({ clients, name: config.name })
     if (info !== undefined) {
@@ -154,7 +183,7 @@ const _deleteUpcloudUksEffect = (config: UpcloudUksClusterConfig) =>
 /** `_deleteUpcloudUksEffect` wired to its live `DnsProvider`, mirroring `applyUpcloudUks`. */
 export const deleteUpcloudUks = (
   config: UpcloudUksClusterConfig
-): Effect.Effect<void, MksError | ConfigInvalid, UpcloudEnv | HttpClient.HttpClient> =>
+): Effect.Effect<void, MksError | ConfigInvalid | ObjectStorageError | VolumeError, UpcloudEnv | HttpClient.HttpClient> =>
   _deleteUpcloudUksEffect(config).pipe(Effect.provide(dnsProviderLayerFor(config)))
 
 export const statusUpcloudUks = Effect.fn(function*(config: UpcloudUksClusterConfig) {

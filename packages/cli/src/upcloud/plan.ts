@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import type { Plan, PlanAction } from "@kumulo/core"
+import type { BucketInfo, Plan, PlanAction } from "@kumulo/core"
 import {
   clusterDrift,
   findClusterByName,
@@ -9,9 +9,12 @@ import {
 } from "@kumulo/distro-upcloud-uks"
 import type { ExistingNodeGroup, UksWorkerPoolConfig } from "@kumulo/distro-upcloud-uks"
 import { mapUpcloudError } from "@kumulo/upcloud"
-import type { MksError } from "@kumulo/core"
+import type { MksError, ObjectStorageError, VolumeError } from "@kumulo/core"
 import type { UpcloudUksClusterConfig } from "../cluster-config.ts"
 import { UpcloudEnv } from "./env.ts"
+import { bucketPlanActions, configuredUpcloudBuckets, lookupUpcloudBuckets, uksBucketRow } from "./storage.ts"
+import { lookupUpcloudVolumes, managedUpcloudVolumes, uksVolumeRow, volumePlanActions } from "./volumes.ts"
+import type { LiveVolume } from "./volumes.ts"
 
 /** Plan row names — shared with the reconciler, which maps a confirmed row back to its pool. */
 export const uksClusterRow = (cluster: string): string => `uks-cluster/${cluster}`
@@ -36,6 +39,10 @@ export interface UpcloudInventory {
   readonly networkCidr?: string
   /** AC6 wants creation-time drift named at PLAN time, so the plan reads this too — not just apply. */
   readonly storageEncryption?: boolean
+  /** Live UpCloud storages labeled to this cluster (T6.1) — absent/empty for a config with no managed volumes. */
+  readonly volumes?: ReadonlyArray<LiveVolume>
+  /** Live buckets inside this cluster's D6 object-storage service (T6.1) — absent/empty when unconfigured or the service doesn't exist yet. */
+  readonly buckets?: ReadonlyArray<BucketInfo>
 }
 
 /**
@@ -45,12 +52,16 @@ export interface UpcloudInventory {
  */
 export const lookupUpcloudInventory = (
   config: UpcloudUksClusterConfig
-): Effect.Effect<UpcloudInventory, MksError, UpcloudEnv> =>
+): Effect.Effect<UpcloudInventory, MksError | ObjectStorageError | VolumeError, UpcloudEnv> =>
   Effect.gen(function*() {
     const { clients } = yield* UpcloudEnv
     const cluster = yield* findClusterByName({ clients, name: config.name })
     const nodeGroups = cluster === undefined ? [] : yield* listNodeGroups({ clients, ref: { uuid: cluster.uuid, name: cluster.name } })
     const networks = yield* mapUpcloudError({ self: clients.network.list(), ctx: { kind: "network", ref: config.name } })
+    // T6.1: volumes/buckets are only looked up live when the config actually
+    // manages some — an unconfigured module has nothing worth an extra round trip for.
+    const volumes = yield* lookupUpcloudVolumes(config)
+    const buckets = yield* lookupUpcloudBuckets(config)
     return {
       clusterExists: cluster !== undefined,
       uuid: cluster?.uuid,
@@ -59,7 +70,9 @@ export const lookupUpcloudInventory = (
       networkCidr: cluster?.networkCidr,
       storageEncryption: cluster?.storageEncryption,
       nodeGroups,
-      networkExists: networks.some((network) => network.name === networkName(config.name))
+      networkExists: networks.some((network) => network.name === networkName(config.name)),
+      volumes,
+      buckets
     }
   })
 
@@ -126,14 +139,19 @@ export const buildUpcloudPlan = (
     _createOrNoOp(inventory.networkExists, uksRouterRow(config.name)),
     _createOrNoOp(inventory.networkExists, uksNetworkRow(config.name)),
     _clusterAction({ config, inventory }),
-    ...config.worker_pools.map((pool) => _poolAction({ cluster: config.name, inventory, pool: toUksPool(pool) }))
+    ...config.worker_pools.map((pool) => _poolAction({ cluster: config.name, inventory, pool: toUksPool(pool) })),
+    // T6.1/AC5: volumes and buckets are independent of the cluster row itself
+    // (both create against the account, not against the cluster's UUID), so
+    // they're appended rather than threaded through `_clusterAction`.
+    ...volumePlanActions({ config, live: inventory.volumes ?? [] }),
+    ...bucketPlanActions({ config, live: inventory.buckets ?? [] })
   ]
 })
 
 /** Delete-plan rows (mirrors `mks-entry.ts`'s `_deletePlanActions`): cluster, its live node groups, then router+network. */
 export const upcloudDeletePlanActions = (
   config: UpcloudUksClusterConfig
-): Effect.Effect<Plan["actions"], MksError, UpcloudEnv> =>
+): Effect.Effect<Plan["actions"], MksError | ObjectStorageError | VolumeError, UpcloudEnv> =>
   Effect.gen(function*() {
     const inventory = yield* lookupUpcloudInventory(config)
     const clusterAction: PlanAction = inventory.clusterExists
@@ -146,5 +164,21 @@ export const upcloudDeletePlanActions = (
     const networkActions: ReadonlyArray<PlanAction> = inventory.networkExists
       ? [uksRouterRow(config.name), uksNetworkRow(config.name)].map((name) => ({ _tag: "Delete" as const, name }))
       : []
-    return [clusterAction, ...poolActions, ...networkActions]
+    // D9: object storage + volumes are torn down ahead of the cluster —
+    // named here in that order even though `deleteUpcloudUks` is what
+    // actually executes it, so the plan preview matches apply's order.
+    const bucketActions: ReadonlyArray<PlanAction> = configuredUpcloudBuckets(config).map((bucket) =>
+      bucket.retain
+        ? { _tag: "NoOp" as const, name: `${uksBucketRow(bucket.name)} (retained)` }
+        : { _tag: "Delete" as const, name: uksBucketRow(bucket.name) }
+    )
+    const liveVolumeNames = new Set((inventory.volumes ?? []).map((v) => v.name))
+    const volumeActions: ReadonlyArray<PlanAction> = managedUpcloudVolumes(config)
+      .filter((entry) => liveVolumeNames.has(entry.name))
+      .map((entry) =>
+        entry.retain
+          ? { _tag: "NoOp" as const, name: `${uksVolumeRow(entry.name)} (retained)` }
+          : { _tag: "Delete" as const, name: uksVolumeRow(entry.name) }
+      )
+    return [...bucketActions, ...volumeActions, clusterAction, ...poolActions, ...networkActions]
   })

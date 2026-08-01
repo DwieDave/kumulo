@@ -53,8 +53,10 @@
         "@kumulo/provider-ovh": "workspace:*",
         "@kumulo/secrets-sops": "workspace:*",
         "@kumulo/storage-ovh": "workspace:*",
+        "@kumulo/storage-upcloud": "workspace:*",
         "@kumulo/upcloud": "workspace:*",
         "@kumulo/volumes-cinder": "workspace:*",
+        "@kumulo/volumes-upcloud": "workspace:*",
       },
       "devDependencies": {
         "@effect/platform-bun": "catalog:",
@@ -259,6 +261,23 @@
         "effect": "catalog:",
       },
     },
+    "packages/storage-upcloud": {
+      "name": "@kumulo/storage-upcloud",
+      "version": "0.1.0",
+      "dependencies": {
+        "@kumulo/core": "workspace:*",
+        "@kumulo/upcloud": "workspace:*",
+      },
+      "devDependencies": {
+        "@effect/vitest": "catalog:",
+        "effect": "catalog:",
+        "fast-check": "catalog:",
+        "vitest": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
+      },
+    },
     "packages/upcloud": {
       "name": "@kumulo/upcloud",
       "version": "0.1.0",
@@ -284,6 +303,23 @@
       "devDependencies": {
         "@effect/vitest": "catalog:",
         "codegen": "workspace:*",
+        "effect": "catalog:",
+        "fast-check": "catalog:",
+        "vitest": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
+      },
+    },
+    "packages/volumes-upcloud": {
+      "name": "@kumulo/volumes-upcloud",
+      "version": "0.1.0",
+      "dependencies": {
+        "@kumulo/core": "workspace:*",
+        "@kumulo/upcloud": "workspace:*",
+      },
+      "devDependencies": {
+        "@effect/vitest": "catalog:",
         "effect": "catalog:",
         "fast-check": "catalog:",
         "vitest": "catalog:",
@@ -400,9 +436,13 @@
 
     "@kumulo/storage-ovh": ["@kumulo/storage-ovh@workspace:packages/storage-ovh"],
 
+    "@kumulo/storage-upcloud": ["@kumulo/storage-upcloud@workspace:packages/storage-upcloud"],
+
     "@kumulo/upcloud": ["@kumulo/upcloud@workspace:packages/upcloud"],
 
     "@kumulo/volumes-cinder": ["@kumulo/volumes-cinder@workspace:packages/volumes-cinder"],
+
+    "@kumulo/volumes-upcloud": ["@kumulo/volumes-upcloud@workspace:packages/volumes-upcloud"],
 
     "@msgpackr-extract/msgpackr-extract-darwin-arm64": ["@msgpackr-extract/msgpackr-extract-darwin-arm64@3.0.4", "", { "os": "darwin", "cpu": "arm64" }, "sha512-LCkGo6JDfaBhgST7UpPWgNgLINpcpabaHfyz5OBx75nUYxBsaEPxjnyNjWpeb/xBup/682QnBfRBy2/LvPutZQ=="],
 

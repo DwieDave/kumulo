@@ -1,0 +1,166 @@
+/**
+ * `volumes.module: "upcloud"` (M5/T6.1, R12/R14, AC2/AC5) — plan/apply/delete
+ * for UpCloud block storage on the `upcloud-uks` distro. Self-contained
+ * (unlike `commands/volumes.ts`'s cinder path, which is wired generically
+ * across every distro): D10 gates `volumes.module: "upcloud"` to this distro
+ * alone, so there is no cross-distro machinery worth sharing it with.
+ */
+import { Effect } from "effect"
+import * as HttpClient from "effect/unstable/http/HttpClient"
+import { makeK8sClient, parseKubeconfig, ResourceNotFound } from "@kumulo/core"
+import type { K8sClient, K8sManifest, Kubeconfig, MksError, PlanAction, VolumeError, VolumeSpec } from "@kumulo/core"
+import { mapUpcloudError } from "@kumulo/upcloud"
+import { deleteVolume, ensureVolume, hasClusterLabel, listClusterVolumes, staticVolumeManifests } from "@kumulo/volumes-upcloud"
+import type { VolumeProviderOptions } from "@kumulo/volumes-upcloud"
+import type { UpcloudUksClusterConfig } from "../cluster-config.ts"
+import { k8sHttpClientLayer } from "../k3s/k8s-http-client.ts"
+import { UpcloudEnv } from "./env.ts"
+
+/** Plan-row name for one managed volume (mirrors `uks*Row`'s `<kind>/<name>` convention). */
+export const uksVolumeRow = (name: string): string => `volume/${name}`
+
+type ManagedVolume = Exclude<UpcloudUksClusterConfig["volumes"], { readonly module: "none" }>["managed"][number]
+
+/** `volumes.managed`, empty for `module: "none"` (mirrors `commands/volumes.ts`'s `managedVolumes`). */
+export const managedUpcloudVolumes = (config: UpcloudUksClusterConfig): ReadonlyArray<ManagedVolume> =>
+  config.volumes.module === "none" ? [] : config.volumes.managed
+
+const _toSpec = (entry: ManagedVolume): VolumeSpec => ({ name: entry.name, sizeGb: entry.size_gb, type: entry.type, retain: entry.retain })
+
+/** Live volume identity + tier — enough for `volumePlanActions` to judge D5's immutable-tier drift without a `VolumeInfo`-only lookup. */
+export interface LiveVolume {
+  readonly name: string
+  readonly tier: string
+}
+
+/**
+ * Volume plan rows (AC5): existence by label, tier drift refused as
+ * `ReplaceNeedsConfirm` (D5 — tier is immutable at the API), everything else
+ * (size, unchanged tier) plans `NoOp` — UpCloud growth-in-place isn't
+ * observed here (the live storage's `size` isn't part of `LiveVolume`), so a
+ * size-only change surfaces at apply instead of a plan-time `Update` row.
+ */
+export const volumePlanActions = (
+  { config, live }: { readonly config: UpcloudUksClusterConfig; readonly live: ReadonlyArray<LiveVolume> }
+): ReadonlyArray<PlanAction> => {
+  const liveByName = new Map(live.map((v) => [v.name, v]))
+  return managedUpcloudVolumes(config).map((entry) => {
+    const name = uksVolumeRow(entry.name)
+    const match = liveByName.get(entry.name)
+    if (match === undefined) return { _tag: "Create" as const, name }
+    return match.tier === entry.type
+      ? { _tag: "NoOp" as const, name }
+      : { _tag: "ReplaceNeedsConfirm" as const, name, reason: `type: tier is immutable (${match.tier} -> ${entry.type})` }
+  })
+}
+
+/** Live storages labeled to this cluster, name+tier only (feeds `volumePlanActions`). */
+export const lookupUpcloudVolumes = (
+  config: UpcloudUksClusterConfig
+): Effect.Effect<ReadonlyArray<LiveVolume>, VolumeError, UpcloudEnv> =>
+  Effect.gen(function*() {
+    if (config.volumes.module !== "upcloud" || config.volumes.managed.length === 0) return []
+    const { storage } = yield* UpcloudEnv
+    const all = yield* mapUpcloudError({ self: storage.list(), ctx: { kind: "storage", ref: config.name } })
+    return all.filter((s) => hasClusterLabel({ labels: s.labels, tag: config.name })).map((s) => ({ name: s.title, tier: s.tier }))
+  })
+
+const _options = (config: UpcloudUksClusterConfig): VolumeProviderOptions => ({ tag: config.name, zone: config.zone })
+
+/** Builds a `K8sClient` against the UKS cluster's own kubeconfig (mirrors `distro/k3s-entry.ts`'s `_k8sClientForUpgradeEffect`). */
+const _k8sClientFor = (
+  kubeconfig: Kubeconfig
+): Effect.Effect<K8sClient["Service"], MksError, HttpClient.HttpClient> =>
+  Effect.gen(function*() {
+    const parsed = yield* parseKubeconfig(kubeconfig.content).pipe(
+      Effect.mapError((cause) => new ResourceNotFound({ kind: "kubeconfig", ref: cause.issues.map((i) => i.message).join(", ") }))
+    )
+    const client = yield* Effect.provide(HttpClient.HttpClient, k8sHttpClientLayer({ auth: parsed.auth, caPem: parsed.caPem }))
+    return makeK8sClient({ client, server: parsed.server })
+  })
+
+const _isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null
+
+const _metaField = (manifest: K8sManifest, key: "name" | "namespace"): string | undefined => {
+  const meta = manifest["metadata"]
+  if (!_isRecord(meta)) return undefined
+  const value = meta[key]
+  return typeof value === "string" ? value : undefined
+}
+
+const _refFor = (manifest: K8sManifest) => {
+  const namespace = _metaField(manifest, "namespace")
+  const name = _metaField(manifest, "name") ?? ""
+  const plural = manifest.kind === "PersistentVolumeClaim" ? "persistentvolumeclaims" : "persistentvolumes"
+  const path = namespace === undefined
+    ? `/api/v1/${plural}/${name}`
+    : `/api/v1/namespaces/${namespace}/${plural}/${name}`
+  return { path, kind: manifest.kind }
+}
+
+/** R5: applies the volume's static PV(+PVC) manifests onto the cluster via server-side apply. */
+const _applyManifests = (
+  { k8sClient, manifests }: { readonly k8sClient: K8sClient["Service"]; readonly manifests: ReadonlyArray<K8sManifest> }
+): Effect.Effect<void, MksError> =>
+  Effect.forEach(manifests, (manifest) =>
+    k8sClient.apply(_refFor(manifest), manifest).pipe(
+      Effect.mapError((cause) => new ResourceNotFound({ kind: "k8s-manifest", ref: `${cause}` }))
+    ), { discard: true })
+
+/**
+ * Converges `volumes.managed` (R4): ensures every entry via the label-scoped
+ * `VolumeProvider`, then applies its static PV(+PVC) onto the cluster
+ * (R5/AC2) — the same server-side-apply `K8sClient` the k3s path builds for
+ * its own kubeconfig-fetched Deployment checks, applied here to a UKS
+ * kubeconfig instead. No-op for `module: "none"`.
+ */
+export const convergeUpcloudVolumes = (
+  { config, kubeconfig }: { readonly config: UpcloudUksClusterConfig; readonly kubeconfig: Kubeconfig }
+): Effect.Effect<void, VolumeError | MksError, UpcloudEnv | HttpClient.HttpClient> =>
+  Effect.gen(function*() {
+    const managed = managedUpcloudVolumes(config)
+    if (managed.length === 0) return
+    const { storage } = yield* UpcloudEnv
+    const options = _options(config)
+    const k8sClient = yield* _k8sClientFor(kubeconfig)
+    yield* Effect.forEach(managed, (entry) =>
+      Effect.gen(function*() {
+        const spec = _toSpec(entry)
+        const info = yield* ensureVolume({ client: storage, options, spec })
+        const pvc = entry.pvc === undefined ? undefined : { namespace: entry.pvc.namespace }
+        yield* _applyManifests({ k8sClient, manifests: staticVolumeManifests({ vol: info, spec, pvc }) })
+      }), { concurrency: 4 })
+  })
+
+/**
+ * `delete` (R6/R14/D9): non-retained managed volumes only — retained ones
+ * are left on the account (reported, not deleted). Attached volumes surface
+ * UpCloud's conflict as-is; `ensureVolume`/apply never ran here, so nothing
+ * to roll back.
+ */
+export const reconcileUpcloudVolumesOnDelete = (
+  config: UpcloudUksClusterConfig
+): Effect.Effect<
+  { readonly kept: ReadonlyArray<string>; readonly deleted: ReadonlyArray<string> },
+  VolumeError,
+  UpcloudEnv
+> =>
+  Effect.gen(function*() {
+    const managed = managedUpcloudVolumes(config)
+    if (managed.length === 0) return { kept: [], deleted: [] }
+    const { storage } = yield* UpcloudEnv
+    const existing = yield* listClusterVolumes({ client: storage, tag: config.name })
+    const kept: Array<string> = []
+    const deleted: Array<string> = []
+    for (const entry of managed) {
+      const vol = existing.find((v) => v.name === entry.name)
+      if (vol === undefined) continue
+      if (entry.retain) {
+        kept.push(vol.name)
+        continue
+      }
+      yield* deleteVolume({ client: storage, ref: { id: vol.id } })
+      deleted.push(vol.name)
+    }
+    return { kept, deleted }
+  })

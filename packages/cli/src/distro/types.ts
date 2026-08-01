@@ -1,6 +1,9 @@
 import type { Effect } from "effect"
+import type { FileSystem } from "effect/FileSystem"
+import type { PlatformError } from "effect/PlatformError"
 import type * as HttpClient from "effect/unstable/http/HttpClient"
-import type { ConfigInvalid, DistroKind, Kubeconfig, MksError, Plan } from "@kumulo/core"
+import type { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/unstable/process"
+import type { BucketNotEmpty, ConfigInvalid, CredentialsSinkError, DistroKind, Kubeconfig, MksError, Plan } from "@kumulo/core"
 import type { ClusterConfig } from "../cluster-config.ts"
 import type { CinderAuth, OutputsIngress } from "@kumulo/volumes-cinder"
 import type { DoctorCheck } from "../doctor/types.ts"
@@ -12,8 +15,22 @@ import type { UpcloudEnv } from "../upcloud/env.ts"
 // Widened env/error channels: every distro verb already runs under `MainLive`
 // (see `main.ts`), so quantifying over the union costs nothing at runtime and
 // is what lets the registry be a plain `Record<DistroKind, DistroEntry>`.
-export type DistroServices = MksEnv | OpenStackEnv | CinderAuth | HttpClient.HttpClient | UpcloudEnv
-export type DistroFailure = MksError | K3sError | ConfigInvalid
+// `FileSystem`/`ChildProcessSpawner` are only reached on the `upcloud-uks`
+// path (T6.1's sops-backed bucket credentials, converged inside `apply`
+// itself) — main.ts's runtime already provides both platform-wide.
+export type DistroServices =
+  | MksEnv
+  | OpenStackEnv
+  | CinderAuth
+  | HttpClient.HttpClient
+  | UpcloudEnv
+  | FileSystem
+  | ChildProcessSpawnerNS.ChildProcessSpawner
+// `BucketNotEmpty`/`CredentialsSinkError`/`PlatformError` are only ever raised
+// on the `upcloud-uks` path (T6.1) — the ovh-mks/k3s bucket teardown runs
+// outside the distro entry (`storage/reconcile.ts`), where the generic
+// `commands.ts` delete flow handles it directly instead.
+export type DistroFailure = MksError | K3sError | ConfigInvalid | BucketNotEmpty | CredentialsSinkError | PlatformError
 
 export interface DistroApplyResult {
   /** The rendered "cluster is up" line, logged verbatim after apply. */

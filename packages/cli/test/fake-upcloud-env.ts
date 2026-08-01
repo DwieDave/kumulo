@@ -8,7 +8,15 @@
 import { Effect, Layer } from "effect"
 import * as HttpClient from "effect/unstable/http/HttpClient"
 import { HttpClientError, TransportError } from "effect/unstable/http/HttpClientError"
-import { makeNetworkClient, makeNodeGroupsClient, makeRouterClient, makeUksClient, makeZoneClient } from "@kumulo/upcloud"
+import {
+  makeNetworkClient,
+  makeNodeGroupsClient,
+  makeObjectStorageClient,
+  makeRouterClient,
+  makeStorageClient,
+  makeUksClient,
+  makeZoneClient
+} from "@kumulo/upcloud"
 import { UpcloudEnv } from "../src/upcloud/env.ts"
 
 const _unavailableUpcloudHttpClient = HttpClient.make((request) =>
@@ -24,5 +32,7 @@ export const unavailableUpcloudEnvLayer: Layer.Layer<UpcloudEnv> = Layer.succeed
     network: makeNetworkClient(_unavailableUpcloudHttpClient),
     router: makeRouterClient(_unavailableUpcloudHttpClient)
   },
-  zones: makeZoneClient(_unavailableUpcloudHttpClient)
+  zones: makeZoneClient(_unavailableUpcloudHttpClient),
+  storage: makeStorageClient(_unavailableUpcloudHttpClient),
+  objectStorage: makeObjectStorageClient(_unavailableUpcloudHttpClient)
 })

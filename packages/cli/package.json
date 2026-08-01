@@ -62,8 +62,10 @@
     "@kumulo/provider-ovh": "workspace:*",
     "@kumulo/secrets-sops": "workspace:*",
     "@kumulo/storage-ovh": "workspace:*",
+    "@kumulo/storage-upcloud": "workspace:*",
     "@kumulo/upcloud": "workspace:*",
-    "@kumulo/volumes-cinder": "workspace:*"
+    "@kumulo/volumes-cinder": "workspace:*",
+    "@kumulo/volumes-upcloud": "workspace:*"
   },
   "peerDependencies": {
     "effect": "catalog:",

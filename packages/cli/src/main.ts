@@ -7,7 +7,15 @@ import * as HttpClient from "effect/unstable/http/HttpClient"
 import { HttpClientError, TransportError } from "effect/unstable/http/HttpClientError"
 import { makeMksClient } from "@kumulo/distro-ovh-mks"
 import { makeStorageClient } from "@kumulo/storage-ovh"
-import { makeNetworkClient, makeNodeGroupsClient, makeRouterClient, makeUksClient, makeZoneClient } from "@kumulo/upcloud"
+import {
+  makeNetworkClient,
+  makeNodeGroupsClient,
+  makeObjectStorageClient,
+  makeRouterClient,
+  makeStorageClient as makeUpcloudStorageClient,
+  makeUksClient,
+  makeZoneClient
+} from "@kumulo/upcloud"
 import { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/unstable/process"
 import { kumuloCli } from "./commands.ts"
 import { resolveSecretsFile, secretsConfigProvider } from "./secrets-file.ts"
@@ -55,7 +63,9 @@ const _upcloudLive = Layer.catchCause(
         network: makeNetworkClient(_unavailable(UPCLOUD_HINT)),
         router: makeRouterClient(_unavailable(UPCLOUD_HINT))
       },
-      zones: makeZoneClient(_unavailable(UPCLOUD_HINT))
+      zones: makeZoneClient(_unavailable(UPCLOUD_HINT)),
+      storage: makeUpcloudStorageClient(_unavailable(UPCLOUD_HINT)),
+      objectStorage: makeObjectStorageClient(_unavailable(UPCLOUD_HINT))
     })
 )
 
