@@ -32,12 +32,17 @@ export const NodeGroup = Schema.Struct({
   name: Schema.String,
   count: Schema.Number,
   plan: Schema.String,
-  state: NodeGroupState,
+  // kumulo: absent on the POST create response — the live API only includes
+  // `state` on GET/list. Pollers treat missing as not-yet-running.
+  state: Schema.optionalKey(NodeGroupState),
   labels: Schema.optionalKey(Schema.Array(UpcloudLabel)),
   taints: Schema.optionalKey(Schema.Array(NodeGroupTaint)),
   kubelet_args: Schema.optionalKey(Schema.Array(Schema.String)),
   ssh_keys: Schema.optionalKey(Schema.Array(Schema.String)),
-  storage: Schema.optionalKey(NodeGroupStorage),
+  // kumulo: create ACCEPTS a `{tier, size}` object, but list/get RETURN the
+  // resolved storage-template UUID as a bare string — accept both. Nothing
+  // reads this back (drift keys on the config-hash label, not this field).
+  storage: Schema.optionalKey(Schema.Union([Schema.String, NodeGroupStorage])),
   anti_affinity: Schema.optionalKey(Schema.Boolean),
   utility_network_access: Schema.optionalKey(Schema.Boolean),
   storage_encryption: Schema.optionalKey(Schema.String)

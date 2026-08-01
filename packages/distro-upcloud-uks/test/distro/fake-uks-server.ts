@@ -17,7 +17,8 @@ interface FakeCluster {
   version: string
   plan: string
   state: string
-  control_plane_ip_filter?: ReadonlyArray<string>
+  // Live quirk: the API sends `null`, never an absent key, when no filter is set.
+  control_plane_ip_filter: ReadonlyArray<string> | null
   storage_encryption?: string
   private_node_groups?: boolean
   labels?: ReadonlyArray<FakeLabel>
@@ -32,7 +33,9 @@ interface FakeNodeGroup {
   labels?: ReadonlyArray<FakeLabel>
   taints?: ReadonlyArray<{ readonly key: string; readonly value: string; readonly effect: string }>
   ssh_keys?: ReadonlyArray<string>
-  storage?: { readonly tier?: string; readonly size?: number }
+  // Live quirk: create accepts `{tier, size}` but reads return the resolved
+  // storage-template UUID as a bare string.
+  storage?: string
   anti_affinity?: boolean
   utility_network_access?: boolean
   pollsRemaining: number
@@ -159,7 +162,7 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number }
         version: payload.version,
         plan: payload.plan ?? "dev-md",
         state: "pending",
-        control_plane_ip_filter: payload.control_plane_ip_filter,
+        control_plane_ip_filter: payload.control_plane_ip_filter ?? null,
         storage_encryption: payload.storage_encryption,
         private_node_groups: payload.private_node_groups,
         labels: payload.labels,
@@ -216,13 +219,15 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number }
         labels: payload.labels,
         taints: payload.taints,
         ssh_keys: payload.ssh_keys,
-        storage: payload.storage,
+        storage: payload.storage === undefined ? undefined : "01000000-0000-4000-8000-000160070100",
         anti_affinity: payload.anti_affinity,
         utility_network_access: payload.utility_network_access,
         pollsRemaining: readyAfterPolls
       }
       groups.set(group.name, group)
-      return _ok(group)
+      // Live quirk: the POST response carries no `state` — only GET/list do.
+      const { state: _state, ...createResponse } = group
+      return _ok(createResponse)
     }
     return _badRequest(`unsupported method ${request.method}`)
   }

@@ -188,3 +188,25 @@ Every item here shipped green in CI first, which is the point.
 came up. The root `build` script now seeds the order with `core` then
 `upcloud`. If another sibling-to-sibling edge is ever added, that list is
 where it has to be reflected.
+
+## Live-apply shape drift the fake never caught (2026-08-01)
+
+The first real `apply` surfaced three response-shape mismatches, all cases
+where the fake server echoed our own request shape back instead of what the
+live API sends:
+
+- `control_plane_ip_filter` is `null` when unset, never an absent key.
+- `POST .../node-groups` returns the group WITHOUT `state`; only GET/list
+  include it. Pollers must treat missing state as not-yet-running.
+- Node-group `storage`: create accepts `{tier, size}`, but reads return the
+  resolved storage-template UUID as a bare string.
+
+Client schemas in `packages/upcloud/src/client/{uks,node-groups}.ts` now
+accept the live shapes, and `fake-uks-server.ts` reproduces all three quirks
+so future drift of this class fails in tests. Rule of thumb: when the fake
+constructs a response, model it from developers.upcloud.com's response
+samples, never by echoing the request payload.
+
+Separately, `scripts/generate-schema.ts` hand-mirrored "api_token iff
+hetzner" from before upcloud existed; the auth cross-field constraint is now
+derived from core's `authMethodsByProvider` so new providers can't desync it.

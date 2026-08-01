@@ -8,7 +8,7 @@
  */
 import { writeFileSync } from "node:fs"
 import { JsonSchema, Schema } from "effect"
-import { ClusterConfig } from "@kumulo/core"
+import { authMethodsByProvider, ClusterConfig } from "@kumulo/core"
 
 // Mirrors the cross-field `.check(...)` filters in core's schema.ts (the
 // Effect->JSON-Schema conversion cannot express them) — keep in sync. The
@@ -17,18 +17,23 @@ import { ClusterConfig } from "@kumulo/core"
 // buckets, mks volumes), so those live here no longer. What is left spans two
 // independent unions: provider->auth/volumes/addons and object_storage->secrets.
 const crossFieldConstraints = [
+  // Derived from core's authMethodsByProvider so a new provider can't drift
+  // out of sync (upcloud once did: the hand-written rule said api_token was
+  // hetzner-only).
+  ...Object.entries(authMethodsByProvider).map(([provider, methods]) => ({
+    if: { properties: { provider: { const: provider } }, required: ["provider"] },
+    then: { properties: { auth: { properties: { method: { enum: [...methods] } } } } }
+  })),
   {
     if: { properties: { provider: { const: "hetzner" } }, required: ["provider"] },
     then: {
       properties: {
-        auth: { properties: { method: { const: "api_token" } } },
         volumes: { properties: { module: { enum: ["hcloud", "none"] } } },
         addons: { properties: { cinder_csi: { properties: { enabled: { const: false } } } } }
       }
     },
     else: {
       properties: {
-        auth: { properties: { method: { not: { const: "api_token" } } } },
         volumes: { properties: { module: { not: { const: "hcloud" } } } },
         addons: { properties: { hcloud_csi: { properties: { enabled: { const: false } } } } }
       }

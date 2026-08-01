@@ -3,7 +3,7 @@
   "name": "staging-de",
   "provider": "upcloud",
   "distro": "upcloud-uks",
-  "version": "1.31",
+  "version": "1.35",
   "auth": {
     "method": "api_token",
     "region": "de-fra1"

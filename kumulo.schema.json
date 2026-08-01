@@ -665,10 +665,107 @@
           "auth": {
             "properties": {
               "method": {
-                "const": "api_token"
+                "enum": [
+                  "api_token"
+                ]
               }
             }
-          },
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "provider": {
+            "const": "upcloud"
+          }
+        },
+        "required": [
+          "provider"
+        ]
+      },
+      "then": {
+        "properties": {
+          "auth": {
+            "properties": {
+              "method": {
+                "enum": [
+                  "api_token"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "provider": {
+            "const": "ovh"
+          }
+        },
+        "required": [
+          "provider"
+        ]
+      },
+      "then": {
+        "properties": {
+          "auth": {
+            "properties": {
+              "method": {
+                "enum": [
+                  "application_credential",
+                  "clouds_yaml",
+                  "env"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "provider": {
+            "const": "generic"
+          }
+        },
+        "required": [
+          "provider"
+        ]
+      },
+      "then": {
+        "properties": {
+          "auth": {
+            "properties": {
+              "method": {
+                "enum": [
+                  "application_credential",
+                  "clouds_yaml",
+                  "env"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "provider": {
+            "const": "hetzner"
+          }
+        },
+        "required": [
+          "provider"
+        ]
+      },
+      "then": {
+        "properties": {
           "volumes": {
             "properties": {
               "module": {
@@ -694,15 +791,6 @@
       },
       "else": {
         "properties": {
-          "auth": {
-            "properties": {
-              "method": {
-                "not": {
-                  "const": "api_token"
-                }
-              }
-            }
-          },
           "volumes": {
             "properties": {
               "module": {

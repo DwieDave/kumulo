@@ -32,7 +32,8 @@ export const UksCluster = Schema.Struct({
   version: Schema.String,
   plan: Schema.String,
   state: UksState,
-  control_plane_ip_filter: Schema.optionalKey(Schema.Array(Schema.String)),
+  // kumulo: live API sends `null` (not absent) when no filter is set
+  control_plane_ip_filter: Schema.optionalKey(Schema.NullOr(Schema.Array(Schema.String))),
   storage_encryption: Schema.optionalKey(Schema.String),
   private_node_groups: Schema.optionalKey(Schema.Boolean),
   labels: Schema.optionalKey(Schema.Array(UpcloudLabel))
