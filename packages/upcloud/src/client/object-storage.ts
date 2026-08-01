@@ -62,7 +62,10 @@ export type BucketMetrics = typeof BucketMetrics.Type
 export const ObjectStorageUser = Schema.Struct({ username: Schema.String })
 export type ObjectStorageUser = typeof ObjectStorageUser.Type
 
-export const AccessKeyStatus = Schema.Literals(["active", "inactive"])
+// kumulo: capitalized on the wire — go-api's AccessKeyStatusActive is
+// "Active" and the live API agrees (probe 2026-08-01), unlike every other
+// lowercase status vocabulary in this API.
+export const AccessKeyStatus = Schema.Literals(["Active", "Inactive"])
 export type AccessKeyStatus = typeof AccessKeyStatus.Type
 
 export const AccessKey = Schema.Struct({

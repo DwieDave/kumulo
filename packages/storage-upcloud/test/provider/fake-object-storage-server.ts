@@ -206,7 +206,7 @@ export const makeFakeObjectStorageServer = () => {
     if (request.method === "POST") {
       const key: FakeAccessKey = {
         access_key_id: `AK${nextId++}`,
-        status: "active",
+        status: "Active",
         secret_access_key: `secret-${Math.random().toString(36).slice(2)}`
       }
       keys.set(key.access_key_id, key)
