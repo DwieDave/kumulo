@@ -11,9 +11,10 @@ interface FakeLabel {
 interface FakeStorage {
   uuid: string
   size: number
-  // Live quirk: templates/backups in the account-wide list carry no tier.
+  // Live quirk: templates/backups in the account-wide list can carry
+  // neither tier nor zone.
   tier?: string
-  zone: string
+  zone?: string
   title: string
   encrypted?: boolean
   state: string
@@ -69,7 +70,6 @@ export const makeFakeStorageServer = (options: { readonly readyAfterPolls?: numb
   storages.set("template-0", {
     uuid: "01000000-0000-4000-8000-000030060200",
     size: 4,
-    zone: "de-fra1",
     title: "Ubuntu Server 24.04 LTS (Noble Numbat)",
     state: "online",
     pollsRemaining: 0

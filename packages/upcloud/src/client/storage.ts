@@ -22,9 +22,10 @@ export const Storage = Schema.Struct({
   uuid: Schema.String,
   size: Schema.Number,
   // kumulo: absent on non-disk storages — `GET /1.3/storage` lists the whole
-  // account, and templates/backups carry no tier (live probe 2026-08-01).
+  // account, and templates/backups can carry neither tier nor zone (live
+  // probe 2026-08-01). kumulo-labeled disks always have both.
   tier: Schema.optionalKey(StorageTier),
-  zone: Schema.String,
+  zone: Schema.optionalKey(Schema.String),
   title: Schema.String,
   encrypted: Schema.optionalKey(Schema.Boolean),
   state: StorageState,
