@@ -64,11 +64,19 @@ const _deletePlanActions = (config: ClusterConfig) =>
     const clusterAction = inventory.clusterExists
       ? { _tag: "Delete" as const, name: `mks-cluster/${config.name}` }
       : { _tag: "NoOp" as const, name: `mks-cluster/${config.name} (already absent)` }
-    // Node pools go down with the cluster — one row per live pool.
-    const poolActions = [...inventory.poolNames].toSorted().map((pool) => ({
-      _tag: "Delete" as const,
-      name: `mks-pool/${config.name}/${pool}`
-    }))
+    // Node pools go down with the cluster — one row per live pool, and an
+    // "(already absent)" NoOp for configured pools with nothing live, so the
+    // plan accounts for the whole config (same rule as the upcloud path).
+    const poolActions = [
+      ...[...inventory.poolNames].toSorted().map((pool) => ({
+        _tag: "Delete" as const,
+        name: `mks-pool/${config.name}/${pool}`
+      })),
+      ...config.worker_pools.filter((pool) => !inventory.poolNames.has(pool.name)).map((pool) => ({
+        _tag: "NoOp" as const,
+        name: `mks-pool/${config.name}/${pool.name} (already absent)`
+      }))
+    ]
     const infraActions = _infraDeleteRows(config).map((name) => ({ _tag: "Delete" as const, name }))
     return [clusterAction, ...poolActions, ...infraActions]
   }).pipe(Effect.provide(mksCloudProviderLayer(config)))

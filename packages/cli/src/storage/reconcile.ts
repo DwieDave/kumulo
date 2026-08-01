@@ -187,11 +187,18 @@ export const bucketDeletePlanActions = (
     if (config.object_storage.module !== "ovh") return []
     const file = yield* readOutputs({ dir: configDir, tag: config.name, format: config.outputs?.format })
     const diff = diffBuckets({ desired: [], existing: file.buckets })
+    const recorded = new Set(file.buckets.map((bucket) => bucket.name))
     return [
       ...diff.toDelete.map((ref) => ({ _tag: "Delete" as const, name: `bucket/${ref.name}` })),
       ...file.buckets.filter((bucket) => bucket.retain).map((bucket) => ({
         _tag: "NoOp" as const,
         name: `bucket/${bucket.name} (retained)`
+      })),
+      // Configured but never recorded (or already torn down): show it
+      // accounted for, not silently missing — same rule as volumes.
+      ...config.object_storage.buckets.filter((bucket) => !recorded.has(bucket.name)).map((bucket) => ({
+        _tag: "NoOp" as const,
+        name: `bucket/${bucket.name} (already absent)`
       }))
     ]
   })

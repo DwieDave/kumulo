@@ -288,9 +288,10 @@ const _deletePlan = Effect.fn(function*(config: ClusterConfig, configDir: string
     bucketDeletePlanActions({ config, configDir })
   ], { concurrency: 3 })
   const volumeActions = managedVolumes(config)
-    .filter((entry) => liveVolumes.has(entry.name))
     .map((entry) =>
-      entry.retain
+      !liveVolumes.has(entry.name)
+        ? { _tag: "NoOp" as const, name: `volume/${entry.name} (already absent)` }
+        : entry.retain
         ? { _tag: "NoOp" as const, name: `volume/${entry.name} (retained)` }
         : { _tag: "Delete" as const, name: `volume/${entry.name}` }
     )
