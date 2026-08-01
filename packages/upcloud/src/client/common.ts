@@ -13,9 +13,12 @@ import { Effect } from "effect"
 export const UpcloudLabel = Schema.Struct({ key: Schema.String, value: Schema.String })
 export type UpcloudLabel = typeof UpcloudLabel.Type
 
-// kumulo: UpCloud's legacy endpoints encode booleans as "yes"/"no" strings
-// (the Go SDK has `upcloud.Boolean` for exactly this; live probe 2026-08-01:
-// `encrypted: "no"`). Newer endpoints use real booleans — accept both.
+// kumulo: UpCloud's classic endpoints (storage, server, network — the
+// original /1.3 surface, still the current API for those resources) encode
+// booleans as "yes"/"no" strings; the Go SDK has `upcloud.Boolean` for
+// exactly this (live probe 2026-08-01: `encrypted: "no"`). The newer
+// endpoint families (kubernetes, object-storage-2) use real booleans —
+// accept both.
 export const UpcloudBoolean = Schema.Union([Schema.Boolean, Schema.Literals(["yes", "no"])]).pipe(
   Schema.decodeTo(Schema.Boolean, {
     decode: SchemaGetter.transform((value) => value === true || value === "yes"),
