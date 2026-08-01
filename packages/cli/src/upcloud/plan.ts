@@ -157,33 +157,46 @@ export const upcloudDeletePlanActions = (
     const clusterAction: PlanAction = inventory.clusterExists
       ? { _tag: "Delete", name: uksClusterRow(config.name) }
       : { _tag: "NoOp", name: `${uksClusterRow(config.name)} (already absent)` }
-    const poolActions: ReadonlyArray<PlanAction> = inventory.nodeGroups.map((group) => ({
-      _tag: "Delete",
-      name: uksPoolRow({ cluster: config.name, pool: group.poolLabel ?? group.name })
-    }))
-    const networkActions: ReadonlyArray<PlanAction> = inventory.networkExists
-      ? [uksRouterRow(config.name), uksNetworkRow(config.name)].map((name) => ({ _tag: "Delete" as const, name }))
-      : []
+    // Config pools with no live node group get an "(already absent)" row —
+    // same as the cluster; live groups not in the config (stale generations)
+    // still show as Delete under their pool label.
+    const livePoolLabels = new Set(inventory.nodeGroups.map((group) => group.poolLabel ?? group.name))
+    const poolActions: ReadonlyArray<PlanAction> = [
+      ...inventory.nodeGroups.map((group): PlanAction => ({
+        _tag: "Delete",
+        name: uksPoolRow({ cluster: config.name, pool: group.poolLabel ?? group.name })
+      })),
+      ...config.worker_pools.filter((pool) => !livePoolLabels.has(pool.name)).map((pool): PlanAction => ({
+        _tag: "NoOp",
+        name: `${uksPoolRow({ cluster: config.name, pool: pool.name })} (already absent)`
+      }))
+    ]
+    const networkActions: ReadonlyArray<PlanAction> = [uksRouterRow(config.name), uksNetworkRow(config.name)].map((name) =>
+      inventory.networkExists
+        ? { _tag: "Delete" as const, name }
+        : { _tag: "NoOp" as const, name: `${name} (already absent)` }
+    )
     // D9: object storage + volumes are torn down ahead of the cluster —
     // named here in that order even though `deleteUpcloudUks` is what
     // actually executes it, so the plan preview matches apply's order.
-    // Like volumes below, bucket rows reflect what exists LIVE — a config
-    // bucket whose service is already gone must not plan a phantom Delete.
+    // Every configured resource gets a row: live ones Delete (or NoOp
+    // "(retained)"), gone ones NoOp "(already absent)" — never omitted, so
+    // the plan always accounts for the whole config.
     const liveBucketNames = new Set((inventory.buckets ?? []).map((b) => b.name))
-    const bucketActions: ReadonlyArray<PlanAction> = configuredUpcloudBuckets(config)
-      .filter((bucket) => liveBucketNames.has(bucket.name))
-      .map((bucket) =>
-        bucket.retain
-          ? { _tag: "NoOp" as const, name: `${uksBucketRow(bucket.name)} (retained)` }
-          : { _tag: "Delete" as const, name: uksBucketRow(bucket.name) }
-      )
+    const bucketActions: ReadonlyArray<PlanAction> = configuredUpcloudBuckets(config).map((bucket) =>
+      !liveBucketNames.has(bucket.name)
+        ? { _tag: "NoOp" as const, name: `${uksBucketRow(bucket.name)} (already absent)` }
+        : bucket.retain
+        ? { _tag: "NoOp" as const, name: `${uksBucketRow(bucket.name)} (retained)` }
+        : { _tag: "Delete" as const, name: uksBucketRow(bucket.name) }
+    )
     const liveVolumeNames = new Set((inventory.volumes ?? []).map((v) => v.name))
-    const volumeActions: ReadonlyArray<PlanAction> = managedUpcloudVolumes(config)
-      .filter((entry) => liveVolumeNames.has(entry.name))
-      .map((entry) =>
-        entry.retain
-          ? { _tag: "NoOp" as const, name: `${uksVolumeRow(entry.name)} (retained)` }
-          : { _tag: "Delete" as const, name: uksVolumeRow(entry.name) }
-      )
+    const volumeActions: ReadonlyArray<PlanAction> = managedUpcloudVolumes(config).map((entry) =>
+      !liveVolumeNames.has(entry.name)
+        ? { _tag: "NoOp" as const, name: `${uksVolumeRow(entry.name)} (already absent)` }
+        : entry.retain
+        ? { _tag: "NoOp" as const, name: `${uksVolumeRow(entry.name)} (retained)` }
+        : { _tag: "Delete" as const, name: uksVolumeRow(entry.name) }
+    )
     return [...bucketActions, ...volumeActions, clusterAction, ...poolActions, ...networkActions]
   })
