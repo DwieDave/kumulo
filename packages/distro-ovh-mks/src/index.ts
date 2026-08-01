@@ -1,6 +1,9 @@
 /** @kumulo/distro-ovh-mks — package barrel. */
 export const packageName = "@kumulo/distro-ovh-mks"
 
+export { MksClusterConfig } from "./config.ts"
+export type { MksClusterConfigEncoded } from "./config.ts"
+
 export { makeMksClient } from "./client/mks.ts"
 export type { Mks, MksError } from "./client/mks.ts"
 
@@ -24,7 +27,7 @@ export {
 } from "./distro/index.ts"
 export type {
   ExistingNodePool,
-  MksClusterConfig,
+  MksDriverConfig,
   MksClusterDrift,
   MksClusterInfo,
   MksClusterRef,

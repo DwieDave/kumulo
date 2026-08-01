@@ -1,5 +1,6 @@
 import { CloudProvider, computePlan, resourceName } from "@kumulo/core"
-import type { CloudError, DesiredResource, K3sClusterConfig, Plan, ServerSpec, TaggedResource } from "@kumulo/core"
+import type { CloudError, DesiredResource, Plan, ServerSpec, TaggedResource } from "@kumulo/core"
+import type { K3sClusterConfig } from "../cluster-config.ts"
 import { Effect } from "effect"
 import { dnsPlanActions } from "../dns-plan.ts"
 

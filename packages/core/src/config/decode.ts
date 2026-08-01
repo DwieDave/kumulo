@@ -1,7 +1,6 @@
 import { Effect, Schema, SchemaIssue } from "effect"
 import type { SchemaError } from "effect/Schema"
 import { ConfigInvalid } from "../errors/tagged.ts"
-import { ClusterConfig, type ClusterConfig as ClusterConfigType } from "./schema.ts"
 
 const formatIssue = SchemaIssue.makeFormatterStandardSchemaV1()
 
@@ -16,12 +15,15 @@ const _toConfigInvalid = (error: SchemaError): ConfigInvalid =>
     }))
   })
 
-export const decodeConfig = (input: unknown): Effect.Effect<ClusterConfigType, ConfigInvalid> =>
-  Schema.decodeUnknownEffect(ClusterConfig)(input, { errors: "all" }).pipe(
+// kumulo: the ClusterConfig union is assembled in @kumulo/cli (core cannot
+// depend on the distro packages that own the variants) — so the codec is
+// parameterized by the schema instead of closing over a union defined here.
+export const decodeConfigWith = <S extends Schema.Top>(schema: S) => (input: unknown): Effect.Effect<S["Type"], ConfigInvalid, S["DecodingServices"]> =>
+  Schema.decodeUnknownEffect(schema)(input, { errors: "all" }).pipe(
     Effect.mapError(_toConfigInvalid)
   )
 
-export const encodeConfig = (config: ClusterConfigType): Effect.Effect<unknown, ConfigInvalid> =>
-  Schema.encodeEffect(ClusterConfig)(config).pipe(
+export const encodeConfigWith = <S extends Schema.Top>(schema: S) => (config: S["Type"]): Effect.Effect<unknown, ConfigInvalid, S["EncodingServices"]> =>
+  Schema.encodeEffect(schema)(config).pipe(
     Effect.mapError(_toConfigInvalid)
   )

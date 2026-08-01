@@ -1,7 +1,8 @@
 import { Effect, Layer } from "effect"
 import type * as HttpClient from "effect/unstable/http/HttpClient"
 import { ConfigInvalid, DnsProvider, dnsNoopLive, ownershipTarget } from "@kumulo/core"
-import type { AuthenticationFailed, ClusterConfig, DesiredRecord, DnsError } from "@kumulo/core"
+import type { AuthenticationFailed, DesiredRecord, DnsError } from "@kumulo/core"
+import type { ClusterConfig } from "./cluster-config.ts"
 import { k3sDnsProviderLayer, k3sHetznerDnsProviderLayer } from "./k3s/env.ts"
 
 /**

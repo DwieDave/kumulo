@@ -14,7 +14,7 @@
  *   major change) is refused rather than silently ignored.
  * - `auth.region` — immutable: a cluster cannot be moved between regions.
  *
- * Everything else on `MksClusterConfig` is either identity (`name` — a rename
+ * Everything else on `MksDriverConfig` is either identity (`name` — a rename
  * plans as a `Create`, the cluster is looked up by name) or OVH-derived
  * (status, url, patch level — OVH owns the patch track).
  */
@@ -32,7 +32,7 @@ export interface MksClusterState {
   readonly loadBalancersSubnetId?: string | null | undefined
 }
 
-/** The cluster-level slice of the desired config (`MksClusterConfig` satisfies it structurally). */
+/** The cluster-level slice of the desired config (`MksDriverConfig` satisfies it structurally). */
 export interface MksDesiredCluster {
   readonly region: string
   readonly version?: string | undefined

@@ -4,10 +4,10 @@ import { makeMksClient } from "../../src/client/mks.ts"
 import { ensureCluster } from "../../src/distro/ensure-cluster.ts"
 import { ensureNodePools, listNodePools } from "../../src/distro/ensure-nodepools.ts"
 import { diffNodePools, mksPoolHash } from "../../src/distro/nodepool-diff.ts"
-import type { MksClusterConfig, MksWorkerPoolConfig } from "../../src/distro/types.ts"
+import type { MksDriverConfig, MksWorkerPoolConfig } from "../../src/distro/types.ts"
 import { makeFakeMksServer } from "./fake-mks-server.ts"
 
-const _config: MksClusterConfig = { serviceName: "service-1", name: "prod-eu", region: "GRA5", version: "1.31", worker_pools: [] }
+const _config: MksDriverConfig = { serviceName: "service-1", name: "prod-eu", region: "GRA5", version: "1.31", worker_pools: [] }
 
 const _pool = (overrides: Partial<MksWorkerPoolConfig> = {}): MksWorkerPoolConfig => ({
   name: "workers",

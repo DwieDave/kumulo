@@ -1,18 +1,35 @@
-export { decodeConfig, encodeConfig } from "./decode.ts"
+export { decodeConfigWith, encodeConfigWith } from "./decode.ts"
 export {
+  AccessMode,
+  Auth,
   type AuthMethod,
+  AuthMethod as AuthMethodSchema,
   authMethodsByProvider,
-  ClusterConfig,
-  type ClusterConfigEncoded,
-  K3sClusterConfig,
-  type K3sClusterConfigEncoded,
-  MksClusterConfig,
-  type MksClusterConfigEncoded,
+  Autoscaling,
+  BucketName,
+  Cidr,
+  cidrRange,
+  CinderVolumes,
+  commonClusterFields,
+  Dns,
+  HcloudVolumes,
+  isAuthMethodConsistentWithProvider,
+  isSecretsRequiredForObjectStorage,
+  isVolumesModuleConsistentWithProvider,
+  ManagedVolume,
+  NonNegativeInt,
+  NoVolumes,
+  ObjectStorage,
+  OpenStackVolumes,
+  Outputs,
   OutputsFormat,
+  PositiveInt,
   type Provider,
-  UpcloudUksClusterConfig,
-  type UpcloudUksClusterConfigEncoded,
-  UpgradeStrategy,
-  type WorkerPool
+  Provider as ProviderSchema,
+  Pvc,
+  Secrets,
+  Volumes,
+  type WorkerPool,
+  WorkerPool as WorkerPoolSchema
 } from "./schema.ts"
-export { parseConfigYaml, stringifyConfigYaml } from "./yaml.ts"
+export { parseConfigYamlWith, stringifyConfigYaml } from "./yaml.ts"

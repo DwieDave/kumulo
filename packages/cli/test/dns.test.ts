@@ -4,7 +4,7 @@ import { recordKind } from "@kumulo/dns-hetzner"
 import { ownershipTarget } from "@kumulo/core"
 import { desiredRecords } from "../src/dns.ts"
 import type { DnsTarget } from "../src/dns.ts"
-import type { ClusterConfig } from "@kumulo/core"
+import type { ClusterConfig } from "../src/cluster-config.ts"
 import { baseEncodedConfig, decodeTestConfig } from "./fixtures.ts"
 
 const _configWith = (records: ReadonlyArray<{ name: string; target: string }>): ClusterConfig =>

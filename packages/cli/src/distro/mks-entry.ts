@@ -1,6 +1,7 @@
 import { Console, Effect } from "effect"
 import { ResourceNotFound } from "@kumulo/core"
-import type { ClusterConfig, LbInfo } from "@kumulo/core"
+import type { LbInfo } from "@kumulo/core"
+import type { ClusterConfig, MksClusterConfig } from "../cluster-config.ts"
 import { findClusterByName, upgrade as upgradeMks } from "@kumulo/distro-ovh-mks"
 import type { OutputsIngress } from "@kumulo/volumes-cinder"
 import { lookupManagedVolumeNames } from "../commands/volumes.ts"
@@ -15,7 +16,7 @@ import type { DistroEntry } from "./types.ts"
 // Live plan for the ovh-mks path: cluster/pool existence via the OVH API,
 // volume existence via Cinder — spec drift still converges through the
 // idempotent ensure* verbs without showing here (see `buildMksPlan`).
-const _mksPlanLive = (config: ClusterConfig) =>
+const _mksPlanLive = (config: MksClusterConfig) =>
   Effect.gen(function*() {
     const mks = yield* lookupMksInventory(config)
     const volumeNames = yield* lookupManagedVolumeNames(config)
@@ -133,7 +134,7 @@ const _ingressOutputs = (info: LbInfo | undefined): { readonly ingress?: Outputs
     ? {}
     : { ingress: { load_balancer_id: info.id, floating_ip: info.floatingIp } }
 
-export const mksEntry: DistroEntry = {
+export const mksEntry: DistroEntry<MksClusterConfig> = {
   kind: "ovh-mks",
   supportsObjectStorage: true,
   plan: _mksPlanLive,

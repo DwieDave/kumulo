@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { FastCheck as fc } from "effect/testing"
 import { Effect } from "effect"
-import { decodeConfig } from "../../src/config/decode.ts"
+import { decodeConfig } from "../../src/cluster-config.ts"
 import { validUpcloudUksConfig } from "./fixtures.ts"
 
 // T1.3 — UpCloud CIDR validator (prefix /8-/29, outside 100.64.0.0/10,

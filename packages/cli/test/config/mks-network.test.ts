@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
 import { FastCheck as fc } from "effect/testing"
-import { decodeConfig } from "../../src/config/decode.ts"
+import { decodeConfig } from "../../src/cluster-config.ts"
 import { validMksConfig, validMksNetwork } from "./fixtures.ts"
 
 const _fields = ["cidr", "nodes_subnet", "load_balancers_subnet"] as const

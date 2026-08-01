@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { assert, it } from "@effect/vitest"
 import { decodeUpcloudTestConfig } from "../fixtures.ts"
-import { validUpcloudUksConfig } from "../../../core/test/config/fixtures.ts"
+import { validUpcloudUksConfig } from "../config/fixtures.ts"
 import { reconcileUpcloudDns } from "../../src/upcloud/reconcile.ts"
 import { spyDnsLayer } from "../mks/spy-dns.ts"
 

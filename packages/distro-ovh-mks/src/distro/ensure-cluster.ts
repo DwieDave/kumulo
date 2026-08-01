@@ -6,7 +6,7 @@ import type { MksClusterState } from "./cluster-drift.ts"
 import { mapMksError } from "./errors.ts"
 import { pollUntil } from "./status.ts"
 import { upgrade } from "./upgrade.ts"
-import type { MksClusterConfig } from "./types.ts"
+import type { MksDriverConfig } from "./types.ts"
 
 interface RawCluster {
   readonly id?: string
@@ -38,12 +38,12 @@ const _toInfo = (cluster: RawCluster): MksClusterInfo => ({
 
 /** Resolves the cluster by name only — never creates one: a missing cluster is a no-op, not a provisioning trigger. */
 export const findClusterByName = (
-  { mks, config }: { readonly mks: Mks; readonly config: MksClusterConfig }
+  { mks, config }: { readonly mks: Mks; readonly config: MksDriverConfig }
 ): Effect.Effect<MksClusterInfo | undefined, MksError> =>
   Effect.map(_findByName({ mks, config }), (cluster) => cluster && _toInfo(cluster))
 
 const _findByName = (
-  { mks, config }: { readonly mks: Mks; readonly config: MksClusterConfig }
+  { mks, config }: { readonly mks: Mks; readonly config: MksDriverConfig }
 ): Effect.Effect<RawCluster | undefined, MksError> =>
   Effect.gen(function*() {
     const ctx = { kind: "kube", ref: config.serviceName }
@@ -61,7 +61,7 @@ const _findByName = (
   })
 
 const _create = (
-  { mks, config }: { readonly mks: Mks; readonly config: MksClusterConfig }
+  { mks, config }: { readonly mks: Mks; readonly config: MksDriverConfig }
 ): Effect.Effect<RawCluster, MksError> =>
   mapMksError({
     self: mks.postCloudProjectServiceNameKube(config.serviceName, {
@@ -78,7 +78,7 @@ const _create = (
   })
 
 const _awaitReady = (
-  { mks, config, kubeId }: { readonly mks: Mks; readonly config: MksClusterConfig; readonly kubeId: string }
+  { mks, config, kubeId }: { readonly mks: Mks; readonly config: MksDriverConfig; readonly kubeId: string }
 ): Effect.Effect<RawCluster, MksError> =>
   pollUntil({
     check: mapMksError({
@@ -98,7 +98,7 @@ const _awaitReady = (
  * refusal costs zero mutations. Never destroys a cluster to converge.
  */
 const _convergeCluster = (
-  { cluster, mks, config }: { readonly mks: Mks; readonly config: MksClusterConfig; readonly cluster: RawCluster }
+  { cluster, mks, config }: { readonly mks: Mks; readonly config: MksDriverConfig; readonly cluster: RawCluster }
 ): Effect.Effect<void, MksError> => {
   // By here the network reconcile has run, so a configured network means a
   // resolved `privateNetworkId` — the presence flag needs no separate source.
@@ -115,7 +115,7 @@ const _convergeCluster = (
 
 /** Create-or-update the MKS control plane, then poll to `READY`. */
 export const ensureCluster = (
-  { mks, config }: { readonly mks: Mks; readonly config: MksClusterConfig }
+  { mks, config }: { readonly mks: Mks; readonly config: MksDriverConfig }
 ): Effect.Effect<MksClusterInfo, MksError> =>
   Effect.gen(function*() {
     const existing = yield* _findByName({ mks, config })

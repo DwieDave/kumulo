@@ -1,7 +1,8 @@
 import { Effect, Redacted } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import type { PlatformError } from "effect/PlatformError"
-import type { BucketInfo, BucketSpec, ClusterConfig, CredentialEntry, ObjectStorageError, PlanAction, S3Credentials } from "@kumulo/core"
+import type { BucketInfo, BucketSpec, CredentialEntry, ObjectStorageError, PlanAction, S3Credentials } from "@kumulo/core"
+import type { ClusterConfig } from "../cluster-config.ts"
 import { CredentialsSink, ObjectStorageProvider } from "@kumulo/core"
 import type { CredentialsSinkError } from "@kumulo/core"
 import { diffBuckets, readOutputs, toOutputsBucket, writeOutputs } from "@kumulo/storage-ovh"
@@ -13,7 +14,7 @@ export type BucketReconcileError = ObjectStorageError | CredentialsSinkError | O
 type StorageProvider = ObjectStorageProvider["Service"]
 
 /** One configured bucket — only the `module: ovh` variant of the union carries them. */
-type ConfiguredBucket = Exclude<ClusterConfig["object_storage"], { readonly module: "none" }>["buckets"][number]
+type ConfiguredBucket = Extract<ClusterConfig["object_storage"], { readonly module: "ovh" }>["buckets"][number]
 
 /**
  * `secrets.dir` behind the union discriminant. `undefined` means `sink: none`,
@@ -32,7 +33,7 @@ const _toBucketSpec = (bucket: ConfiguredBucket): BucketSpec => ({
 })
 
 const _desiredBuckets = (config: ClusterConfig): ReadonlyArray<BucketSpec> =>
-  config.object_storage.module === "none" ? [] : config.object_storage.buckets.map(_toBucketSpec)
+  config.object_storage.module === "ovh" ? config.object_storage.buckets.map(_toBucketSpec) : []
 
 const _bucketDiff = (
   { config, configDir }: { readonly config: ClusterConfig; readonly configDir: string }

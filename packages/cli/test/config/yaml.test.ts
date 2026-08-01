@@ -1,7 +1,8 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
-import { parseConfigYaml, stringifyConfigYaml } from "../../src/config/yaml.ts"
-import { decodeConfig } from "../../src/config/decode.ts"
+import { stringifyConfigYaml } from "@kumulo/core"
+import { parseConfigYaml } from "../../src/cluster-config.ts"
+import { decodeConfig } from "../../src/cluster-config.ts"
 import { validConfig } from "./fixtures.ts"
 
 describe("YAML config", () => {

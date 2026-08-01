@@ -8,10 +8,10 @@ import { ensureCluster } from "../../src/distro/ensure-cluster.ts"
 import { ensureNodePools } from "../../src/distro/ensure-nodepools.ts"
 import { fetchKubeconfig } from "../../src/distro/kubeconfig.ts"
 import { upgrade } from "../../src/distro/upgrade.ts"
-import type { MksClusterConfig, MksWorkerPoolConfig } from "../../src/distro/types.ts"
+import type { MksDriverConfig, MksWorkerPoolConfig } from "../../src/distro/types.ts"
 import { makeFakeMksServer } from "./fake-mks-server.ts"
 
-const _config: MksClusterConfig = {
+const _config: MksDriverConfig = {
   serviceName: "service-1",
   name: "prod-eu",
   region: "GRA5",

@@ -2,10 +2,10 @@ import { Effect } from "effect"
 import { assert, it } from "@effect/vitest"
 import { makeMksClient } from "../../src/client/mks.ts"
 import { ensureCluster } from "../../src/distro/ensure-cluster.ts"
-import type { MksClusterConfig } from "../../src/distro/types.ts"
+import type { MksDriverConfig } from "../../src/distro/types.ts"
 import { makeFakeMksServer } from "./fake-mks-server.ts"
 
-const _base: MksClusterConfig = {
+const _base: MksDriverConfig = {
   serviceName: "service-1",
   name: "prod-eu",
   region: "GRA5",

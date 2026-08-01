@@ -4,7 +4,8 @@ import type { FileSystem } from "effect/FileSystem"
 import type { PlatformError } from "effect/PlatformError"
 import type { HttpClient } from "effect/unstable/http"
 import { Command, Flag } from "effect/unstable/cli"
-import type { ClusterConfig, VolumeError, VolumeSpec } from "@kumulo/core"
+import type { VolumeError, VolumeSpec } from "@kumulo/core"
+import type { ClusterConfig } from "../cluster-config.ts"
 import { ConfigInvalid, VolumeProvider } from "@kumulo/core"
 import {
   adoptVolume,

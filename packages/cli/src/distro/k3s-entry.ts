@@ -1,7 +1,8 @@
 import { Console, Effect } from "effect"
 import * as HttpClient from "effect/unstable/http/HttpClient"
 import { AuthenticationFailed, makeK8sClient, parseKubeconfig, waitForDeploymentAvailable } from "@kumulo/core"
-import type { CloudProvider, K3sClusterConfig, ResourceRef , K8sClient} from "@kumulo/core"
+import type { CloudProvider, ResourceRef, K8sClient } from "@kumulo/core"
+import type { K3sClusterConfig } from "../cluster-config.ts"
 import { refForPlan, renderMastersPlan, renderUpgradePlan, renderWorkersPlan } from "@kumulo/distro-k3s"
 import { refFor, systemUpgradeControllerManifests } from "@kumulo/addons"
 import type { Ssh} from "@kumulo/distro-k3s";

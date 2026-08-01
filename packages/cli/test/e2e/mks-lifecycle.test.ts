@@ -78,6 +78,7 @@ it.effect("yaml → plan → apply → nodepool scale-update → kubeconfig → 
 
     const config = yield* loadConfig(_configPath)
     assert.strictEqual(config.distro, "ovh-mks")
+    if (config.distro !== "ovh-mks") throw new Error("unreachable")
 
     const inventory = yield* lookupMksInventory(config).pipe(Effect.provide(mksEnvLayer), Effect.provide(cloudProviderNever))
     const plan = buildMksPlan({ config, inventory: { ...inventory, volumeNames: new Set() } })

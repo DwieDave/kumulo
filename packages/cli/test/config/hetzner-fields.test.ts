@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
-import { decodeConfig } from "../../src/config/decode.ts"
+import { decodeConfig } from "../../src/cluster-config.ts"
 import { validConfig } from "./fixtures.ts"
 
 // kumulo: a config satisfying every hetzner cross-field rule at once —

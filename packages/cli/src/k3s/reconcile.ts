@@ -1,32 +1,8 @@
 import { Effect, Layer, Redacted, Schema } from "effect"
 import * as HttpClient from "effect/unstable/http/HttpClient"
-import {
-  BootstrapFailed,
-  CloudProvider,
-  K8sClient,
-  makeK8sClient,
-  parseKubeconfig,
-  PlanRejected,
-  ResourceNotFound,
-  VolumeProvider
-} from "@kumulo/core"
-import type {
-  AddonContext,
-  AddonError,
-  AuthenticationFailed,
-  Capability,
-  CloudError,
-  K3sClusterConfig,
-  DnsError,
-  HttpTransportError,
-  K8sManifest,
-  Kubeconfig,
-  ServerInfo,
-  ServerSpec,
-  VolumeError
-,
-  ConfigInvalid,
-  DnsProvider} from "@kumulo/core"
+import { BootstrapFailed, CloudProvider, K8sClient, makeK8sClient, parseKubeconfig, PlanRejected, ResourceNotFound, VolumeProvider } from "@kumulo/core"
+import type { AddonContext, AddonError, AuthenticationFailed, Capability, CloudError, DnsError, HttpTransportError, K8sManifest, Kubeconfig, ServerInfo, ServerSpec, VolumeError, ConfigInvalid, DnsProvider } from "@kumulo/core"
+import type { K3sClusterConfig } from "../cluster-config.ts"
 
 export type K3sError =
   | CloudError

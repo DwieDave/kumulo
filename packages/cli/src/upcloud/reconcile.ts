@@ -1,7 +1,8 @@
 import { Console, Effect } from "effect"
 import type * as HttpClient from "effect/unstable/http/HttpClient"
 import { ConfigInvalid, parseKubeconfig, PlanRejected, ResourceNotFound } from "@kumulo/core"
-import type { DnsError, DnsProvider, Kubeconfig, MksError, UpcloudUksClusterConfig } from "@kumulo/core"
+import type { DnsError, DnsProvider, Kubeconfig, MksError } from "@kumulo/core"
+import type { UpcloudUksClusterConfig } from "../cluster-config.ts"
 import {
   deleteCluster,
   deleteNetwork,

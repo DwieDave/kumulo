@@ -1,6 +1,6 @@
 import { assert, it } from "@effect/vitest"
 import { decodeUpcloudTestConfig } from "../fixtures.ts"
-import { validUpcloudUksConfig } from "../../../core/test/config/fixtures.ts"
+import { validUpcloudUksConfig } from "../config/fixtures.ts"
 import { buildUpcloudPlan, uksPoolRow } from "../../src/upcloud/plan.ts"
 import type { UpcloudInventory } from "../../src/upcloud/plan.ts"
 import { uksPoolHash, uksPoolName } from "@kumulo/distro-upcloud-uks"

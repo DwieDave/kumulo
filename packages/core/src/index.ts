@@ -24,27 +24,40 @@ export { renderError } from "./errors/renderer.ts"
 export type { RendererRegistry } from "./errors/renderer.ts"
 
 export {
+  AccessMode,
+  Auth,
+  AuthMethodSchema,
   authMethodsByProvider,
-  ClusterConfig,
-  decodeConfig,
-  encodeConfig,
-  K3sClusterConfig,
-  MksClusterConfig,
+  Autoscaling,
+  BucketName,
+  Cidr,
+  cidrRange,
+  CinderVolumes,
+  commonClusterFields,
+  decodeConfigWith,
+  Dns,
+  encodeConfigWith,
+  HcloudVolumes,
+  isAuthMethodConsistentWithProvider,
+  isSecretsRequiredForObjectStorage,
+  isVolumesModuleConsistentWithProvider,
+  ManagedVolume,
+  NonNegativeInt,
+  NoVolumes,
+  ObjectStorage,
+  OpenStackVolumes,
+  Outputs,
   OutputsFormat,
-  parseConfigYaml,
+  parseConfigYamlWith,
+  PositiveInt,
+  ProviderSchema,
+  Pvc,
+  Secrets,
   stringifyConfigYaml,
-  UpcloudUksClusterConfig,
-  UpgradeStrategy
+  Volumes,
+  WorkerPoolSchema
 } from "./config/index.ts"
-export type {
-  AuthMethod,
-  ClusterConfigEncoded,
-  K3sClusterConfigEncoded,
-  MksClusterConfigEncoded,
-  Provider,
-  UpcloudUksClusterConfigEncoded,
-  WorkerPool
-} from "./config/index.ts"
+export type { AuthMethod, Provider, WorkerPool } from "./config/index.ts"
 
 export { Addon } from "./ports/addon.ts"
 export type { AddonError } from "./ports/addon.ts"

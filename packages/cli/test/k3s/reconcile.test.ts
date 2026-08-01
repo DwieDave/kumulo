@@ -1,12 +1,8 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Layer, Ref } from "effect"
-import {
-  CloudProvider,
-  DnsProvider,
-  K8sClient,
-  VolumeProvider
-} from "@kumulo/core"
-import type { K3sClusterConfigEncoded, DesiredRecord, K8sManifest, ServerInfo } from "@kumulo/core"
+import { CloudProvider, DnsProvider, K8sClient, VolumeProvider } from "@kumulo/core"
+import type { DesiredRecord, K8sManifest, ServerInfo } from "@kumulo/core"
+import type { K3sClusterConfigEncoded } from "../../src/cluster-config.ts"
 import { Ssh, SshCommandError } from "@kumulo/distro-k3s"
 import { CloudCredentialEnv } from "../../src/k3s/env.ts"
 import { applyK3sEffect, deleteK3sEffect, k3sStatusEffect, orphanedWorkers } from "../../src/k3s/reconcile.ts"

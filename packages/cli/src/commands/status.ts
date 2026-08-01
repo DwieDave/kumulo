@@ -1,7 +1,7 @@
 import { dirname } from "node:path"
 import { Console, Effect } from "effect"
 import { Command } from "effect/unstable/cli"
-import type { ClusterConfig } from "@kumulo/core"
+import type { ClusterConfig } from "../cluster-config.ts"
 import { loadConfig } from "../config.ts"
 import { onDistro, wantsObjectStorage } from "../distro/registry.ts"
 import { bucketStatus } from "../storage/reconcile.ts"

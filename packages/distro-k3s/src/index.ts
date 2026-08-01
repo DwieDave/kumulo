@@ -1,6 +1,9 @@
 /** @kumulo/distro-k3s — package barrel. */
 export const packageName = "@kumulo/distro-k3s"
 
+export { K3sClusterConfig } from "./config.ts"
+export type { K3sClusterConfigEncoded } from "./config.ts"
+
 export { cloudInitReady, controlPlaneReady, Ssh, SshCommandError, sshReady, SshLive } from "./ssh/index.ts"
 export type { SshHost } from "./ssh/index.ts"
 

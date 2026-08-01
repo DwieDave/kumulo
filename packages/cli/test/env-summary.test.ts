@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { missingCredentials, providerSections, renderEnvSummary } from "../src/env-summary.ts"
-import type { ClusterConfig, K3sClusterConfigEncoded, MksClusterConfigEncoded } from "@kumulo/core"
+import type { ClusterConfig, K3sClusterConfigEncoded, MksClusterConfigEncoded } from "../src/cluster-config.ts"
 import { baseEncodedConfig, baseMksEncodedConfig, decodeTestConfig } from "./fixtures.ts"
 
 const _config = (overrides: Partial<K3sClusterConfigEncoded>): ClusterConfig =>

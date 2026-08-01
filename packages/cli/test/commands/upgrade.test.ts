@@ -3,7 +3,7 @@ import { Effect } from "effect"
 import type { HttpClientRequest} from "effect/unstable/http";
 import { HttpClient, HttpClientResponse, UrlParams } from "effect/unstable/http"
 import { makeK8sClient } from "@kumulo/core"
-import type { K3sClusterConfigEncoded } from "@kumulo/core"
+import type { K3sClusterConfigEncoded } from "../../src/cluster-config.ts"
 import { applyK3sUpgradeWith } from "../../src/commands/upgrade.ts"
 import { decodeK3sTestConfig } from "../fixtures.ts"
 

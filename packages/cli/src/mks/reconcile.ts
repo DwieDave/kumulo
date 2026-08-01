@@ -1,16 +1,8 @@
 import { Effect } from "effect"
 import type * as HttpClient from "effect/unstable/http/HttpClient"
 import { CloudProvider, ConfigInvalid, PlanRejected, ResourceConflict, ResourceNotFound } from "@kumulo/core"
-import type {
-  ClusterConfig,
-  DnsProvider,
-  Kubeconfig,
-  LbInfo,
-  ManagedClusterInfo,
-  MksError,
-  NetworkInfo,
-  NetworkSpec
-} from "@kumulo/core"
+import type { DnsProvider, Kubeconfig, LbInfo, ManagedClusterInfo, MksError, NetworkInfo, NetworkSpec } from "@kumulo/core"
+import type { ClusterConfig } from "../cluster-config.ts"
 import {
   clusterDrift,
   deleteCluster,
@@ -26,7 +18,7 @@ import {
   requireVrack,
   type GatewayModel,
   type Mks,
-  type MksClusterConfig,
+  type MksDriverConfig,
   type MksClusterRef
 } from "@kumulo/distro-ovh-mks"
 import type { OpenStackEnv } from "../doctor-openstack/env.ts"
@@ -39,7 +31,7 @@ import type { DnsTargets } from "../dns.ts"
 
 const _toMksConfig = (
   { config, serviceName }: { readonly config: ClusterConfig; readonly serviceName: string }
-): MksClusterConfig => ({
+): MksDriverConfig => ({
   serviceName,
   name: config.name,
   region: config.auth.region,
@@ -134,7 +126,7 @@ export const reconcileMksDns = (
   })
 
 /** The creation-time network ids MKS accepts, all three or none (R6). */
-type MksNetworkIds = Pick<MksClusterConfig, "privateNetworkId" | "nodesSubnetId" | "loadBalancersSubnetId">
+type MksNetworkIds = Pick<MksDriverConfig, "privateNetworkId" | "nodesSubnetId" | "loadBalancersSubnetId">
 
 const _RECREATE = "MKS sets a cluster's networking at creation and can never change it — " +
   "delete and recreate the cluster (and its network) deliberately, or revert the change"
@@ -335,7 +327,7 @@ export const applyMksEffect = (
     const { mks, serviceName } = yield* MksEnv
     const version = yield* parseKubeVersion(config.version)
     const network = yield* _ensureMksNetwork({ config, mks, serviceName })
-    const mksConfig: MksClusterConfig = { ..._toMksConfig({ config, serviceName }), version, ...network }
+    const mksConfig: MksDriverConfig = { ..._toMksConfig({ config, serviceName }), version, ...network }
     const info = yield* ensureCluster({ mks, config: mksConfig })
     const ref: MksClusterRef = { serviceName, kubeId: info.id }
     yield* ensureNodePools({ mks, ref, pools: mksConfig.worker_pools, replace: pools })

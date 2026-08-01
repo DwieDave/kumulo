@@ -1,4 +1,5 @@
-import type { ClusterConfig, DistroKind, K3sClusterConfig, MksClusterConfig, UpcloudUksClusterConfig } from "@kumulo/core"
+import type { DistroKind } from "@kumulo/core"
+import type { ClusterConfig, K3sClusterConfig, MksClusterConfig, UpcloudUksClusterConfig } from "../cluster-config.ts"
 import { k3sEntry } from "./k3s-entry.ts"
 import { mksEntry } from "./mks-entry.ts"
 import { upcloudUksEntry } from "./upcloud-uks-entry.ts"

@@ -2,14 +2,14 @@ import { Effect, Layer } from "effect"
 import { FastCheck as fc } from "effect/testing"
 import { assert, it } from "@effect/vitest"
 import { makeMksClient } from "@kumulo/distro-ovh-mks"
-import type { MksClusterConfigEncoded } from "@kumulo/core"
+import type { MksClusterConfigEncoded } from "../../src/cluster-config.ts"
 import { mksEntry } from "../../src/distro/mks-entry.ts"
 import { MksEnv } from "../../src/mks/env.ts"
 import { OpenStackEnv } from "../../src/doctor-openstack/env.ts"
 import { unavailableUpcloudEnvLayer } from "../fake-upcloud-env.ts"
 import { makeFakeMksServer } from "../e2e/fake-mks-server.ts"
 import { makeFakeCinder } from "../commands/fake-cinder.ts"
-import { baseMksEncodedConfig, decodeTestConfig } from "../fixtures.ts"
+import { baseMksEncodedConfig, decodeMksTestConfig } from "../fixtures.ts"
 
 const _openStackEnvLayer = Layer.succeed(OpenStackEnv, {
   keystone: undefined,
@@ -40,7 +40,7 @@ const _rows = (encoded: MksClusterConfigEncoded) =>
     const server = makeFakeMksServer()
     server.clusters.set("kube-1", { id: "kube-1", name: "c1", status: "READY", url: "https://kube-1.fixture.mks.invalid" })
     server.pools.set("kube-1", new Map())
-    return yield* mksEntry.deletePlanActions(decodeTestConfig(encoded)).pipe(
+    return yield* mksEntry.deletePlanActions(decodeMksTestConfig(encoded)).pipe(
       Effect.provide(Layer.succeed(MksEnv, { mks: makeMksClient(server.httpClient), serviceName: "service-1" })),
       // The distro service set is shared across distros; a plan for an
       // `ovh-mks` config must reach neither of these.

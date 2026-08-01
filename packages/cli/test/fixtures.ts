@@ -1,6 +1,6 @@
 import { Effect } from "effect"
-import { decodeConfig } from "@kumulo/core"
-import type { ClusterConfig, ClusterConfigEncoded, K3sClusterConfig, K3sClusterConfigEncoded, MksClusterConfigEncoded, UpcloudUksClusterConfig } from "@kumulo/core"
+import { decodeConfig } from "../src/cluster-config.ts"
+import type { ClusterConfig, ClusterConfigEncoded, K3sClusterConfig, K3sClusterConfigEncoded, MksClusterConfig, MksClusterConfigEncoded, UpcloudUksClusterConfig } from "../src/cluster-config.ts"
 
 /** Same base fixture core's own tests use (see `test/k3s/plan.test.ts`), dns overridable per test. */
 export const baseEncodedConfig: K3sClusterConfigEncoded = {
@@ -54,6 +54,13 @@ export const decodeTestConfig = (encoded: ClusterConfigEncoded): ClusterConfig =
 export const decodeUpcloudTestConfig = (encoded: ClusterConfigEncoded): UpcloudUksClusterConfig => {
   const config = decodeTestConfig(encoded)
   if (config.distro !== "upcloud-uks") throw new Error(`expected an upcloud-uks config, got ${config.distro}`)
+  return config
+}
+
+/** Same decode, narrowed to the ovh-mks variant (throws if the fixture is not ovh-mks). */
+export const decodeMksTestConfig = (encoded: MksClusterConfigEncoded): MksClusterConfig => {
+  const config = decodeTestConfig(encoded)
+  if (config.distro !== "ovh-mks") throw new Error(`expected an ovh-mks config, got ${config.distro}`)
   return config
 }
 

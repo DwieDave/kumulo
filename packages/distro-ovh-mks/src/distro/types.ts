@@ -26,7 +26,7 @@ export interface MksWorkerPoolConfig {
   readonly monthlyBilled: boolean
 }
 
-export interface MksClusterConfig {
+export interface MksDriverConfig {
   readonly serviceName: string
   readonly name: string
   readonly region: string

@@ -1,4 +1,4 @@
-import type { K3sClusterConfigEncoded, MksClusterConfigEncoded, UpcloudUksClusterConfigEncoded } from "../../src/config/schema.ts"
+import type { K3sClusterConfigEncoded, MksClusterConfigEncoded, UpcloudUksClusterConfigEncoded } from "../../src/cluster-config.ts"
 
 // kumulo: mirrors the §5 design-doc sample verbatim so tests exercise the real shape
 export const validConfig: K3sClusterConfigEncoded = {

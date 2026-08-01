@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import type { UpcloudUksClusterConfig } from "@kumulo/core"
+import type { UpcloudUksClusterConfig } from "../cluster-config.ts"
 import { authValidityCheck, controlPlanePlanCheck, nodeGroupPlansCheck, versionSupportedCheck, zoneExistsCheck } from "../doctor/upcloud/index.ts"
 import { UpcloudEnv } from "../upcloud/env.ts"
 import { buildUpcloudPlan, lookupUpcloudInventory, upcloudDeletePlanActions } from "../upcloud/plan.ts"

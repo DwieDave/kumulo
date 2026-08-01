@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { FastCheck as fc } from "effect/testing"
 import { Effect } from "effect"
-import { decodeConfig, encodeConfig } from "../../src/config/decode.ts"
+import { decodeConfig, encodeConfig } from "../../src/cluster-config.ts"
 import { validConfig } from "./fixtures.ts"
 
 const oddMasterCount = fc.integer({ min: 0, max: 20 }).map((n) => n * 2 + 1)

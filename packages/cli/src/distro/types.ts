@@ -1,6 +1,7 @@
 import type { Effect } from "effect"
 import type * as HttpClient from "effect/unstable/http/HttpClient"
-import type { ClusterConfig, ConfigInvalid, DistroKind, Kubeconfig, MksError, Plan } from "@kumulo/core"
+import type { ConfigInvalid, DistroKind, Kubeconfig, MksError, Plan } from "@kumulo/core"
+import type { ClusterConfig } from "../cluster-config.ts"
 import type { CinderAuth, OutputsIngress } from "@kumulo/volumes-cinder"
 import type { DoctorCheck } from "../doctor/types.ts"
 import type { OpenStackEnv } from "../doctor-openstack/env.ts"

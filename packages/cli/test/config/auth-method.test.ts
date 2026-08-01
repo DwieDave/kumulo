@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { FastCheck as fc } from "effect/testing"
-import { authMethodsByProvider } from "../../src/config/schema.ts"
-import type { AuthMethod, Provider } from "../../src/config/schema.ts"
+import { authMethodsByProvider } from "@kumulo/core"
+import type { AuthMethod, Provider } from "@kumulo/core"
 
 // T1.2 — isAuthMethodConsistentWithProvider becomes a per-provider
 // allowed-methods map (D5, R16): hetzner and upcloud -> api_token only,

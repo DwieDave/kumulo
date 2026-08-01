@@ -1,8 +1,9 @@
 import { Effect } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import type { PlatformError } from "effect/PlatformError"
-import type { ClusterConfig, ConfigInvalid } from "@kumulo/core"
-import { parseConfigYaml } from "@kumulo/core"
+import type { ConfigInvalid } from "@kumulo/core"
+import type { ClusterConfig } from "./cluster-config.ts"
+import { parseConfigYaml } from "./cluster-config.ts"
 
 /** Loads and validates the cluster config (yaml or json — YAML is a superset of JSON, one parser reads both). */
 export const loadConfig = (

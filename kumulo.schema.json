@@ -545,10 +545,149 @@
           }
         },
         "volumes": {
-          "$ref": "#/$defs/Objects_2"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Objects_2"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "module": {
+                  "type": "string",
+                  "enum": [
+                    "upcloud"
+                  ]
+                },
+                "managed": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "allOf": [
+                          {
+                            "minLength": 1
+                          }
+                        ]
+                      },
+                      "size_gb": {
+                        "type": "integer",
+                        "allOf": [
+                          {
+                            "exclusiveMinimum": 0
+                          }
+                        ]
+                      },
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "maxiops",
+                          "standard",
+                          "hdd"
+                        ]
+                      },
+                      "retain": {
+                        "type": "boolean"
+                      },
+                      "pvc": {
+                        "type": "object",
+                        "properties": {
+                          "namespace": {
+                            "type": "string",
+                            "allOf": [
+                              {
+                                "minLength": 1
+                              }
+                            ]
+                          },
+                          "access_modes": {
+                            "$ref": "#/$defs/Arrays_1"
+                          }
+                        },
+                        "required": [
+                          "namespace",
+                          "access_modes"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "size_gb",
+                      "type",
+                      "retain"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "module",
+                "managed"
+              ],
+              "additionalProperties": false
+            }
+          ]
         },
         "object_storage": {
-          "$ref": "#/$defs/Union_"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Objects_5"
+            },
+            {
+              "$ref": "#/$defs/Objects_6"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "module": {
+                  "type": "string",
+                  "enum": [
+                    "upcloud"
+                  ]
+                },
+                "region": {
+                  "type": "string",
+                  "allOf": [
+                    {
+                      "minLength": 1
+                    }
+                  ]
+                },
+                "buckets": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "allOf": [
+                          {
+                            "pattern": "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
+                          }
+                        ]
+                      },
+                      "retain": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "retain"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "module",
+                "region",
+                "buckets"
+              ],
+              "additionalProperties": false
+            }
+          ]
         },
         "secrets": {
           "$ref": "#/$defs/Union_1"
@@ -998,6 +1137,17 @@
       ],
       "additionalProperties": false
     },
+    "Arrays_1": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "ReadWriteOnce",
+          "ReadWriteMany",
+          "ReadOnlyMany"
+        ]
+      }
+    },
     "Objects_4": {
       "type": "object",
       "properties": {
@@ -1040,15 +1190,7 @@
               ]
             },
             "access_modes": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "enum": [
-                  "ReadWriteOnce",
-                  "ReadWriteMany",
-                  "ReadOnlyMany"
-                ]
-              }
+              "$ref": "#/$defs/Arrays_1"
             }
           },
           "required": [
@@ -1088,79 +1230,85 @@
       ],
       "additionalProperties": false
     },
+    "Objects_5": {
+      "type": "object",
+      "properties": {
+        "module": {
+          "type": "string",
+          "enum": [
+            "none"
+          ]
+        }
+      },
+      "required": [
+        "module"
+      ],
+      "additionalProperties": false
+    },
+    "Objects_6": {
+      "type": "object",
+      "properties": {
+        "module": {
+          "type": "string",
+          "enum": [
+            "ovh"
+          ]
+        },
+        "buckets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "allOf": [
+                  {
+                    "pattern": "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
+                  }
+                ]
+              },
+              "region": {
+                "type": "string",
+                "allOf": [
+                  {
+                    "minLength": 1
+                  }
+                ]
+              },
+              "versioning": {
+                "type": "boolean"
+              },
+              "encryption": {
+                "type": "boolean"
+              },
+              "retain": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "name",
+              "region",
+              "versioning",
+              "encryption",
+              "retain"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "module",
+        "buckets"
+      ],
+      "additionalProperties": false
+    },
     "Union_": {
       "anyOf": [
         {
-          "type": "object",
-          "properties": {
-            "module": {
-              "type": "string",
-              "enum": [
-                "none"
-              ]
-            }
-          },
-          "required": [
-            "module"
-          ],
-          "additionalProperties": false
+          "$ref": "#/$defs/Objects_5"
         },
         {
-          "type": "object",
-          "properties": {
-            "module": {
-              "type": "string",
-              "enum": [
-                "ovh"
-              ]
-            },
-            "buckets": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "name": {
-                    "type": "string",
-                    "allOf": [
-                      {
-                        "pattern": "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
-                      }
-                    ]
-                  },
-                  "region": {
-                    "type": "string",
-                    "allOf": [
-                      {
-                        "minLength": 1
-                      }
-                    ]
-                  },
-                  "versioning": {
-                    "type": "boolean"
-                  },
-                  "encryption": {
-                    "type": "boolean"
-                  },
-                  "retain": {
-                    "type": "boolean"
-                  }
-                },
-                "required": [
-                  "name",
-                  "region",
-                  "versioning",
-                  "encryption",
-                  "retain"
-                ],
-                "additionalProperties": false
-              }
-            }
-          },
-          "required": [
-            "module",
-            "buckets"
-          ],
-          "additionalProperties": false
+          "$ref": "#/$defs/Objects_6"
         }
       ]
     },

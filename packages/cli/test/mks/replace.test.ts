@@ -1,7 +1,7 @@
 import { Effect, Layer } from "effect"
 import { assert, it } from "@effect/vitest"
 import { dnsNoopLive, namesToReplace } from "@kumulo/core"
-import type { ClusterConfig } from "@kumulo/core"
+import type { MksClusterConfig } from "../../src/cluster-config.ts"
 import { makeMksClient, mksPoolHash } from "@kumulo/distro-ovh-mks"
 import { rejectUnconfirmedReplace } from "../../src/commands.ts"
 import { MksEnv } from "../../src/mks/env.ts"
@@ -9,12 +9,12 @@ import { buildMksPlan, emptyMksInventory, mksClusterRow, mksPoolRow, toMksPool }
 import { applyMksEffect } from "../../src/mks/reconcile.ts"
 import { cloudProviderNever } from "./fake-cloud-provider.ts"
 import { makeFakeMksServer } from "../e2e/fake-mks-server.ts"
-import { baseMksEncodedConfig, decodeTestConfig } from "../fixtures.ts"
+import { baseMksEncodedConfig, decodeMksTestConfig } from "../fixtures.ts"
 
-const _config = decodeTestConfig(baseMksEncodedConfig)
+const _config = decodeMksTestConfig(baseMksEncodedConfig)
 const _poolRow = mksPoolRow({ cluster: _config.name, pool: "general" })
 
-const _withFlavor = (flavor: string): ClusterConfig => ({
+const _withFlavor = (flavor: string): MksClusterConfig => ({
   ..._config,
   worker_pools: _config.worker_pools.map((pool) => ({ ...pool, flavor }))
 })
@@ -120,7 +120,7 @@ it("a pool stamped with the desired hash plans as NoOp (re-plan after a replace)
 })
 
 it("scaling a stamped pool is not a replace", () => {
-  const scaled: ClusterConfig = { ..._config, worker_pools: _config.worker_pools.map((pool) => ({ ...pool, count: 9 })) }
+  const scaled: MksClusterConfig = { ..._config, worker_pools: _config.worker_pools.map((pool) => ({ ...pool, count: 9 })) }
   const [pool] = _config.worker_pools
   assert.ok(pool)
   const plan = buildMksPlan({

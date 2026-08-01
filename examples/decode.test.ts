@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { describe, expect, it } from "vitest"
 import { Effect } from "effect"
-import { parseConfigYaml } from "@kumulo/core"
+import { parseConfigYaml } from "../packages/cli/src/cluster-config.ts"
 
 // NFR-7/AC-1 — the example configs shipped in README/docs must actually
 // decode against the real schema, not just look plausible.

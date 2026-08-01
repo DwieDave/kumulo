@@ -9,7 +9,8 @@ import {
 } from "@kumulo/distro-upcloud-uks"
 import type { ExistingNodeGroup, UksWorkerPoolConfig } from "@kumulo/distro-upcloud-uks"
 import { mapUpcloudError } from "@kumulo/upcloud"
-import type { MksError, UpcloudUksClusterConfig } from "@kumulo/core"
+import type { MksError } from "@kumulo/core"
+import type { UpcloudUksClusterConfig } from "../cluster-config.ts"
 import { UpcloudEnv } from "./env.ts"
 
 /** Plan row names — shared with the reconciler, which maps a confirmed row back to its pool. */

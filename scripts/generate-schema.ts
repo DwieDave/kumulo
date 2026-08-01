@@ -8,7 +8,8 @@
  */
 import { writeFileSync } from "node:fs"
 import { JsonSchema, Schema } from "effect"
-import { authMethodsByProvider, ClusterConfig } from "@kumulo/core"
+import { authMethodsByProvider } from "@kumulo/core"
+import { ClusterConfig } from "../packages/cli/src/cluster-config.ts"
 
 // Mirrors the cross-field `.check(...)` filters in core's schema.ts (the
 // Effect->JSON-Schema conversion cannot express them) — keep in sync. The

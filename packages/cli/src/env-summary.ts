@@ -1,6 +1,6 @@
 import { Config, Effect, Option, Redacted } from "effect"
 import { AuthenticationFailed } from "@kumulo/core"
-import type { ClusterConfig } from "@kumulo/core"
+import type { ClusterConfig } from "./cluster-config.ts"
 import { distroFor, distroRegistry } from "./distro/registry.ts"
 import { providerFor } from "./provider/registry.ts"
 import { OS_ENV_KEYS, OS_SECRET_ENV_KEYS } from "./doctor-openstack/env.ts"
@@ -30,12 +30,14 @@ const _dnsVars: Record<ClusterConfig["dns"]["module"], ReadonlyArray<string>> = 
 const _volumesVars: Record<ClusterConfig["volumes"]["module"], ReadonlyArray<string>> = {
   none: [],
   cinder: _osVars,
-  hcloud: ["HCLOUD_TOKEN"]
+  hcloud: ["HCLOUD_TOKEN"],
+  upcloud: ["UPCLOUD_API_TOKEN"]
 }
 
 const _objectStorageVars: Record<ClusterConfig["object_storage"]["module"], ReadonlyArray<string>> = {
   none: [],
-  ovh: _ovhVars
+  ovh: _ovhVars,
+  upcloud: ["UPCLOUD_API_TOKEN"]
 }
 
 const _moduleSection = (

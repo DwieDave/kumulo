@@ -1,7 +1,7 @@
 import { describe, it } from "@effect/vitest"
 import { Effect } from "effect"
 import { FastCheck as fc } from "effect/testing"
-import { decodeConfig } from "../../src/config/decode.ts"
+import { decodeConfig } from "../../src/cluster-config.ts"
 import { validConfig } from "./fixtures.ts"
 
 const distros = ["k3s", "ovh-mks"] as const
