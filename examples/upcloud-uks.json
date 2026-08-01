@@ -33,6 +33,10 @@
     "module": "none"
   },
   "secrets": {
-    "sink": "none"
+    "sink": "sops",
+    "dir": ".",
+    "sops": {
+      "age_recipient": "age1xv0gzkxnvr08jtqyfjmcqd0qrfxlg4vu0gwnjradd4dy6ufh5v0sgd6c3t"
+    }
   }
 }
