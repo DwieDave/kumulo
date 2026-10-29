@@ -10,6 +10,7 @@ export {
   KUMULO_S3_POLICY,
   listBuckets,
   makeUpcloudObjectStorageProvider,
+  objectStorageUsername,
   upcloudObjectStorageProviderLive
 } from "./provider/object-storage-provider.ts"
 

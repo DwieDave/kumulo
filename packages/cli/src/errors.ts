@@ -9,6 +9,7 @@ import { renderError } from "@kumulo/core"
 import type { OutputsInvalid as StorageOutputsInvalid } from "@kumulo/storage-ovh"
 import type { OutputsInvalid as VolumesOutputsInvalid } from "@kumulo/volumes-cinder"
 import type { DistroNotWired } from "./distro-not-wired.ts"
+import type { UnmanagedBucketsPresent } from "./upcloud/storage.ts"
 
 const _block = (
   { details, title }: { readonly title: string; readonly details: ReadonlyArray<string> }
@@ -87,7 +88,7 @@ export const cliErrorRegistry: RendererRegistry = {
   SinkUnavailable: (error) => `Credentials sink unavailable: ${error.hint}`
 }
 
-export type CliDomainError = KumuloError | DistroNotWired | VolumesOutputsInvalid | StorageOutputsInvalid | PlatformError
+export type CliDomainError = KumuloError | DistroNotWired | VolumesOutputsInvalid | StorageOutputsInvalid | UnmanagedBucketsPresent | PlatformError
 
 export const renderCliError = (error: CliDomainError): string => {
   if (Predicate.isTagged(error, "PlatformError")) return `File error: ${error.message}`
@@ -95,6 +96,13 @@ export const renderCliError = (error: CliDomainError): string => {
   if (Predicate.isTagged(error, "DistroNotWired")) return `distro "${error.distro}" is not wired into the CLI yet`
 
   if (Predicate.isTagged(error, "OutputsInvalid")) return `Outputs file is invalid: ${error.message}`
+
+  if (Predicate.isTagged(error, "UnmanagedBucketsPresent")) {
+    return _block({
+      title: `Object storage service ${error.service} holds buckets that are not in the config; refusing to delete it`,
+      details: error.buckets.map((bucket) => `- ${bucket}`)
+    })
+  }
 
   return renderError({ registry: cliErrorRegistry, error })
 }

@@ -26,7 +26,7 @@ import { applyCdn, cdnHandleFor, cdnWarnings, pullZoneIdFor, removeCdn } from ".
 import type { CdnHandle, CdnStepError } from "../cdn.ts"
 import type { AuthenticationFailed } from "@kumulo/core"
 import type { DistroUpgradeArgs } from "../distro/types.ts"
-import { convergeUpcloudBuckets, reconcileUpcloudObjectStorageOnDelete } from "./storage.ts"
+import { convergeUpcloudBuckets, reconcileUpcloudObjectStorageOnDelete, type UnmanagedBucketsPresent } from "./storage.ts"
 import { convergeUpcloudVolumes, managedUpcloudVolumes, reconcileUpcloudVolumesOnDelete } from "./volumes.ts"
 
 const OWNER = "kumulo"
@@ -201,7 +201,7 @@ export const kubeconfigUpcloudUks = (
 // order: object-storage -> non-retained volumes -> cluster -> network -> router; retained resources are never deleted
 export const deleteUpcloudUksWithCdn = (
   { cdn, config }: { readonly config: UpcloudUksClusterConfig; readonly cdn: CdnHandle | undefined }
-): Effect.Effect<void, MksError | ConfigInvalid | ObjectStorageError | VolumeError | CdnStepError, UpcloudEnv | DnsProvider> =>
+): Effect.Effect<void, MksError | ConfigInvalid | ObjectStorageError | UnmanagedBucketsPresent | VolumeError | CdnStepError, UpcloudEnv | DnsProvider> =>
   Effect.gen(function*() {
     if (cdn !== undefined) {
       yield* withRowProgress({
@@ -241,7 +241,7 @@ export const deleteUpcloudUks = (
   { config, configDir }: { readonly config: UpcloudUksClusterConfig; readonly configDir: string }
 ): Effect.Effect<
   void,
-  MksError | ConfigInvalid | ObjectStorageError | VolumeError | CdnStepError | AuthenticationFailed | PlatformError,
+  MksError | ConfigInvalid | ObjectStorageError | UnmanagedBucketsPresent | VolumeError | CdnStepError | AuthenticationFailed | PlatformError,
   UpcloudEnv | HttpClient.HttpClient | FileSystem
 > =>
   Effect.gen(function*() {

@@ -1,5 +1,5 @@
 import { PlanAction } from "@kumulo/core"
-import { Effect, Redacted, Schema, Stream } from "effect"
+import { Data, Effect, Predicate, Redacted, Schedule, Schema, Stream } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import type { PlatformError } from "effect/PlatformError"
 import { ChildProcess, ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/process"
@@ -8,7 +8,7 @@ import type { BucketInfo, CredentialsSinkError, ObjectStorageError, S3Credential
 import { credentialsPath, sopsCredentialsSinkLive } from "@kumulo/secrets-sops"
 import { mapUpcloudError } from "@kumulo/upcloud"
 import type { ObjectStorageClient } from "@kumulo/upcloud"
-import { deleteBucket, ensureBucket, ensureCredentials, ensureService, ensureUserAccess, listBuckets } from "@kumulo/storage-upcloud"
+import { deleteBucket, ensureBucket, ensureCredentials, ensureService, ensureUserAccess, listBuckets, objectStorageUsername } from "@kumulo/storage-upcloud"
 import type { UpcloudObjectStorageOptions } from "@kumulo/storage-upcloud"
 import type { UpcloudUksClusterConfig } from "../cluster-config.ts"
 import { credentialEntries } from "../storage/credentials.ts"
@@ -127,12 +127,17 @@ export const convergeUpcloudBuckets = (
     )
   })
 
-// Force-deletes the object-storage service only when every configured bucket is retain:false.
+export class UnmanagedBucketsPresent extends Data.TaggedError("UnmanagedBucketsPresent")<{
+  readonly service: string
+  readonly buckets: ReadonlyArray<string>
+}> {}
+
+// Deletes the service only when every bucket in it is configured and retain:false; never forces.
 export const reconcileUpcloudObjectStorageOnDelete = (
   config: UpcloudUksClusterConfig
 ): Effect.Effect<
   { readonly kept: ReadonlyArray<string>; readonly deleted: ReadonlyArray<string> },
-  ObjectStorageError,
+  ObjectStorageError | UnmanagedBucketsPresent,
   UpcloudEnv
 > =>
   Effect.gen(function*() {
@@ -146,27 +151,55 @@ export const reconcileUpcloudObjectStorageOnDelete = (
       discard: true,
       concurrency: 4
     })
-    const allNonRetained = buckets.every((b) => !b.retain)
 
-    if (allNonRetained) {
-      const services = yield* mapUpcloudError({
-        self: objectStorage.services.list(),
-        ctx: { kind: "object-storage-service", ref: config.name }
+    const services = yield* mapUpcloudError({
+      self: objectStorage.services.list(),
+      ctx: { kind: "object-storage-service", ref: config.name }
+    })
+
+    const service = services.find((s) => s.name === `${config.name}-objsto`)
+
+    if (service !== undefined) {
+      const live = yield* mapUpcloudError({
+        self: objectStorage.buckets.list(service.uuid),
+        ctx: { kind: "object-storage-service", ref: service.uuid }
       })
 
-      const service = services.find((s) => s.name === `${config.name}-objsto`)
+      const configured = new Set(buckets.map((b) => b.name))
+      const unmanaged = live.filter((b) => b.deleted !== true && !configured.has(b.name)).map((b) => b.name)
 
-      if (service !== undefined) {
-        yield* mapUpcloudError({
-          self: objectStorage.services.delete(service.uuid, true),
-          ctx: { kind: "object-storage-service", ref: service.uuid }
-        })
+      if (unmanaged.length > 0) return yield* Effect.fail(new UnmanagedBucketsPresent({ service: service.uuid, buckets: unmanaged }))
+
+      if (buckets.every((b) => !b.retain)) {
+        yield* _deleteServiceWithoutForce({ objectStorage, uuid: service.uuid, username: objectStorageUsername(config.name) })
         // Network delete 409s until service deletion (async) finishes, so poll before continuing (live probe 2026-08-01).
         yield* _awaitServiceGone({ objectStorage, uuid: service.uuid })
       }
     }
 
     return { kept: buckets.filter((b) => b.retain).map((b) => b.name), deleted: toDelete.map((b) => b.name) }
+  })
+
+// Bucket cleanup is asynchronous (cleanup-deleted-buckets), so a non-force delete 409s until it finishes.
+const _deleteServiceWithoutForce = (
+  { objectStorage, uuid, username }: { readonly objectStorage: ObjectStorageClient; readonly uuid: string; readonly username: string }
+): Effect.Effect<void, ObjectStorageError> =>
+  Effect.gen(function*() {
+    yield* mapUpcloudError({
+      self: objectStorage.users.delete(uuid, username),
+      ctx: { kind: "object-storage-user", ref: username }
+    }).pipe(Effect.catchTag("ResourceNotFound", () => Effect.void))
+
+    yield* mapUpcloudError({
+      self: objectStorage.services.delete(uuid),
+      ctx: { kind: "object-storage-service", ref: uuid }
+    }).pipe(
+      Effect.retry({
+        while: Predicate.isTagged("ResourceConflict"),
+        schedule: Schedule.spaced("10 seconds"),
+        times: 60
+      })
+    )
   })
 
 const _awaitServiceGone = (

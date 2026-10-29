@@ -78,6 +78,24 @@ describe("upcloud storage-upcloud provider — service + buckets", () => {
       assert.isTrue(fake.buckets.get(service.uuid)?.get(_spec.name)?.deleted ?? true)
     }))
 
+  it.live("deleteBucket re-reads the metrics right before the DELETE and refuses when objects landed meanwhile", () =>
+    Effect.gen(function*() {
+      const { fake, provider } = _makeProvider()
+      yield* provider.ensureBucket(_spec)
+      const service = _theService(fake)
+      let lists = 0
+      fake.onBucketListed((uuid) => {
+        lists += 1
+        const bucket = fake.buckets.get(uuid)?.get(_spec.name)
+
+        if (lists >= 2 && bucket !== undefined) bucket.total_objects = 5
+      })
+      const failure = yield* Effect.flip(provider.deleteBucket({ name: _spec.name, region: _region }))
+      assert.strictEqual(failure._tag, "BucketNotEmpty")
+      assert.isFalse(fake.buckets.get(service.uuid)?.get(_spec.name)?.deleted ?? true)
+      assert.isFalse(fake.requests.some((r) => r.startsWith("DELETE") && r.includes("/buckets/")))
+    }))
+
   it.live("deleteBucket maps a non-empty bucket to BucketNotEmpty", () =>
     Effect.gen(function*() {
       const { fake, provider } = _makeProvider()

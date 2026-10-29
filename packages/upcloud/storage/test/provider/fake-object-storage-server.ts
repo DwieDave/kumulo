@@ -73,6 +73,8 @@ export const makeFakeObjectStorageServer = () => {
   const policies = new Map<string, Array<string>>()
   const requests: Array<string> = []
   let nextId = 1
+  let serviceDeleteConflicts = 0
+  let onBucketList: ((serviceUuid: string) => void) | undefined
 
 
   const _handleServices = (request: HttpClientRequest.HttpClientRequest): Response => {
@@ -172,6 +174,15 @@ export const makeFakeObjectStorageServer = () => {
       const nonDeletedBuckets = [...(buckets.get(uuid)?.values() ?? [])].filter((bucket) => !bucket.deleted)
 
       if (nonDeletedBuckets.length > 0 && !force) return _conflict("service has buckets: pass ?force=true")
+
+      if (!force && (users.get(uuid)?.size ?? 0) > 0) return _conflict("service has users: delete them first")
+
+      if (!force && serviceDeleteConflicts > 0) {
+        serviceDeleteConflicts -= 1
+
+        return _conflict("deleted buckets are still being cleaned up")
+      }
+
       service.operational_state = "delete-service"
       service.pollsUntilGone = 1
 
@@ -188,6 +199,8 @@ export const makeFakeObjectStorageServer = () => {
     if (!serviceBuckets) return _notFound("service not found")
 
     if (request.method === "GET") {
+      onBucketList?.(serviceUuid)
+
       for (const [name, bucket] of serviceBuckets) {
         if (bucket.deleted) {
           if (bucket.pollsUntilGone <= 0) serviceBuckets.delete(name)
@@ -404,5 +417,13 @@ export const makeFakeObjectStorageServer = () => {
     HttpClient.mapRequest(HttpClientRequest.prependUrl("https://fixture.invalid"))
   )
 
-  return { httpClient, services, buckets, users, accessKeys, policies, requests }
+  const failServiceDeleteWithConflict = (times: number): void => {
+    serviceDeleteConflicts = times
+  }
+
+  const onBucketListed = (hook: (serviceUuid: string) => void): void => {
+    onBucketList = hook
+  }
+
+  return { httpClient, failServiceDeleteWithConflict, onBucketListed, services, buckets, users, accessKeys, policies, requests }
 }

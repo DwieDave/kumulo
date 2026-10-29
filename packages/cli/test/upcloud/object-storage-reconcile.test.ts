@@ -1,5 +1,6 @@
 import { assert, it } from "@effect/vitest"
-import { Effect, Layer, Sink, Stream } from "effect"
+import { Effect, Fiber, Layer, Sink, Stream } from "effect"
+import { TestClock } from "effect/testing"
 import { layerNoop } from "effect/FileSystem"
 import { ChildProcess, ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/process"
 import { makeObjectStorageClient } from "@kumulo/upcloud"
@@ -7,7 +8,7 @@ import { makeFakeObjectStorageServer } from "../../../upcloud/storage/test/provi
 import { validUpcloudUksConfig } from "../config/fixtures.ts"
 import { decodeUpcloudTestConfig } from "../fixtures.ts"
 import { UpcloudEnv } from "../../src/upcloud/env.ts"
-import { convergeUpcloudBuckets } from "../../src/upcloud/storage.ts"
+import { convergeUpcloudBuckets, reconcileUpcloudObjectStorageOnDelete, UnmanagedBucketsPresent } from "../../src/upcloud/storage.ts"
 import { unavailableUpcloudEnvLayer } from "../fake-upcloud-env.ts"
 
 const _config = (bucketNames: ReadonlyArray<string>) =>
@@ -106,3 +107,85 @@ it.live("re-run with a creds file attaches the missing policy, keeps the key, an
     assert.include(last, "name: newbucket")
     assert.notInclude(last, "old.example.com")
   }), { timeout: 30_000 })
+
+const _deleteConfig = (buckets: ReadonlyArray<{ readonly name: string; readonly retain: boolean }>) =>
+  decodeUpcloudTestConfig({
+    ...validUpcloudUksConfig,
+    secrets: { sink: "sops", dir: ".secrets", sops: { age_recipient: "age1test" } },
+    object_storage: { module: "upcloud", region: "europe-1", buckets }
+  })
+
+const _seedService = (setup: ReturnType<typeof _setup>, bucketNames: ReadonlyArray<string>) =>
+  Effect.gen(function*() {
+    const client = makeObjectStorageClient(setup.fake.httpClient)
+    const service = yield* client.services.create({ name: "staging-eu-objsto", region: "europe-1", configured_status: "started", networks: [] })
+    yield* client.users.create(service.uuid, "staging-eu-kumulo")
+    yield* Effect.forEach(bucketNames, (name) => client.buckets.create(service.uuid, name), { discard: true })
+
+    return service
+  })
+
+const _requests = (setup: ReturnType<typeof _setup>, prefix: string) => setup.fake.requests.filter((r) => r.startsWith(prefix))
+
+it.live("teardown deletes configured buckets, then refuses while an unconfigured bucket is present", () =>
+  Effect.gen(function*() {
+    const setup = _setup({ credsExist: false })
+    const service = yield* _seedService(setup, ["aaa", "manual"])
+
+    const failure = yield* Effect.flip(
+      reconcileUpcloudObjectStorageOnDelete(_deleteConfig([{ name: "aaa", retain: false }])).pipe(Effect.provide(setup.layer))
+    )
+
+    assert.instanceOf(failure, UnmanagedBucketsPresent)
+
+    if (failure instanceof UnmanagedBucketsPresent) assert.deepStrictEqual(failure.buckets, ["manual"])
+    assert.isTrue(setup.fake.buckets.get(service.uuid)?.get("aaa")?.deleted)
+    assert.isTrue(setup.fake.services.has(service.uuid))
+    assert.strictEqual(_requests(setup, "DELETE /1.3/object-storage-2/objsto-1").filter((r) => !r.includes("/buckets/")).length, 0)
+  }), { timeout: 30_000 })
+
+it.live("teardown with only configured buckets deletes the user, then the service without force", () =>
+  Effect.gen(function*() {
+    const setup = _setup({ credsExist: false })
+    const service = yield* _seedService(setup, ["aaa"])
+    yield* reconcileUpcloudObjectStorageOnDelete(_deleteConfig([{ name: "aaa", retain: false }])).pipe(Effect.provide(setup.layer))
+    const deletes = _requests(setup, "DELETE ").filter((r) => !r.includes("/buckets/"))
+    assert.deepStrictEqual(deletes, [
+      `DELETE /1.3/object-storage-2/${service.uuid}/users/staging-eu-kumulo`,
+      `DELETE /1.3/object-storage-2/${service.uuid}`
+    ])
+    assert.isFalse(setup.fake.services.has(service.uuid))
+  }), { timeout: 30_000 })
+
+it.effect("teardown retries the service delete while deleted buckets are cleaned up, never forcing", () =>
+  Effect.gen(function*() {
+    const setup = _setup({ credsExist: false })
+    const service = yield* _seedService(setup, ["aaa"])
+    setup.fake.failServiceDeleteWithConflict(2)
+
+    const fiber = yield* Effect.forkChild(
+      reconcileUpcloudObjectStorageOnDelete(_deleteConfig([{ name: "aaa", retain: false }])).pipe(Effect.provide(setup.layer))
+    )
+
+    yield* TestClock.adjust("2 minutes")
+    yield* Fiber.join(fiber)
+    assert.strictEqual(_requests(setup, `DELETE /1.3/object-storage-2/${service.uuid}`).filter((r) => !r.includes("/buckets/") && !r.includes("/users/")).length, 3)
+    assert.isFalse(_requests(setup, "DELETE ").some((r) => r.includes("force")))
+    assert.isFalse(setup.fake.services.has(service.uuid))
+  }))
+
+it.effect("teardown surfaces the conflict when the service delete keeps returning 409", () =>
+  Effect.gen(function*() {
+    const setup = _setup({ credsExist: false })
+    yield* _seedService(setup, ["aaa"])
+    setup.fake.failServiceDeleteWithConflict(1000)
+
+    const fiber = yield* Effect.forkChild(
+      Effect.flip(reconcileUpcloudObjectStorageOnDelete(_deleteConfig([{ name: "aaa", retain: false }])).pipe(Effect.provide(setup.layer)))
+    )
+
+    yield* TestClock.adjust("11 minutes")
+    const failure = yield* Fiber.join(fiber)
+    assert.strictEqual(failure._tag, "ResourceConflict")
+    assert.isFalse(_requests(setup, "DELETE ").some((r) => r.includes("force")))
+  }))

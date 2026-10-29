@@ -27,6 +27,7 @@ const _codeByTag: Record<KumuloErrorTag, number> = {
 const _distroNotWiredCode = 20
 const _platformErrorCode = 21
 const _outputsInvalidCode = 22
+const _unmanagedBucketsCode = 14
 const _defaultCode = 1
 
 export const exitCodeFor = (error: CliExitError): number => {
@@ -35,6 +36,8 @@ export const exitCodeFor = (error: CliExitError): number => {
   if (Predicate.isTagged(error, "PlatformError")) return _platformErrorCode
 
   if (Predicate.isTagged(error, "OutputsInvalid")) return _outputsInvalidCode
+
+  if (Predicate.isTagged(error, "UnmanagedBucketsPresent")) return _unmanagedBucketsCode
 
   return _codeByTag[error._tag] ?? _defaultCode
 }

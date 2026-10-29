@@ -11,6 +11,7 @@ import type { OpenStackEnv } from "../doctor-openstack/env.ts"
 import type { K3sError } from "../k3s/reconcile.ts"
 import type { MksEnv } from "../mks/env.ts"
 import type { UpcloudEnv } from "../upcloud/env.ts"
+import type { UnmanagedBucketsPresent } from "../upcloud/storage.ts"
 
 export type DistroServices =
   | MksEnv
@@ -21,7 +22,7 @@ export type DistroServices =
   | FileSystem
   | ChildProcessSpawnerNS.ChildProcessSpawner
 
-export type DistroFailure = MksError | K3sError | ConfigInvalid | BucketNotEmpty | CredentialsSinkError | PlatformError
+export type DistroFailure = MksError | K3sError | ConfigInvalid | BucketNotEmpty | CredentialsSinkError | PlatformError | UnmanagedBucketsPresent
 
 export interface DistroApplyResult {
   readonly summary: string

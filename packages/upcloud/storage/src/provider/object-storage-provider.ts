@@ -14,7 +14,8 @@ export interface UpcloudObjectStorageOptions {
 }
 
 const _serviceName = (cluster: ClusterTag): string => `${cluster}-objsto`
-const _username = (cluster: ClusterTag): string => `${cluster}-kumulo`
+export const objectStorageUsername = (cluster: ClusterTag): string => `${cluster}-kumulo`
+const _username = objectStorageUsername
 
 export const KUMULO_S3_POLICY = "ECSS3FullAccess"
 
@@ -162,7 +163,8 @@ export const ensureBucket = (options: UpcloudObjectStorageOptions) =>
       return { name: spec.name, region: options.region, endpoint: _publicEndpoint(service) }
     })
 
-// refuses BucketNotEmpty when the API reports objects still in it — no force in v1
+// refuses BucketNotEmpty when the API reports objects still in it — no force in v1.
+// The metrics are re-read right before the DELETE so a recent upload is not missed.
 export const deleteBucket = (options: UpcloudObjectStorageOptions) =>
   (ref: BucketRef): Effect.Effect<void, ObjectStorageError> =>
     Effect.gen(function*() {
@@ -170,18 +172,22 @@ export const deleteBucket = (options: UpcloudObjectStorageOptions) =>
 
       if (service === undefined) return
       const ctx = { kind: "bucket", ref: `${service.uuid}/${ref.name}` }
-      const buckets = yield* mapUpcloudError({ self: options.client.buckets.list(service.uuid), ctx })
-      const bucket = buckets.find((b) => b.name === ref.name && !b.deleted)
 
-      if (bucket === undefined) return
+      const _find = Effect.map(
+        mapUpcloudError({ self: options.client.buckets.list(service.uuid), ctx }),
+        (buckets) => buckets.find((b) => b.name === ref.name && !b.deleted)
+      )
 
-      if (bucket.total_objects > 0) {
-        return yield* Effect.fail(new BucketNotEmpty({ bucket: ref.name, objectCount: bucket.total_objects }))
+      if ((yield* _find) === undefined) return
+      const fresh = yield* _find
+
+      if (fresh === undefined) return
+
+      if (fresh.total_objects > 0) {
+        return yield* Effect.fail(new BucketNotEmpty({ bucket: ref.name, objectCount: fresh.total_objects }))
       }
 
-      yield* mapUpcloudError({ self: options.client.buckets.delete(service.uuid, ref.name), ctx }).pipe(
-        Effect.catchTag("ResourceConflict", () => Effect.fail(new BucketNotEmpty({ bucket: ref.name, objectCount: bucket.total_objects })))
-      )
+      yield* mapUpcloudError({ self: options.client.buckets.delete(service.uuid, ref.name), ctx })
     })
 
 const _ensureUser = (
