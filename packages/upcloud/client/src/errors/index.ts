@@ -1,5 +1,5 @@
 // UpCloud's 4xx error body shape is unconfirmed (needs a live probe); quota detection is status-only (402), not body-sniffed.
-import { Effect, Match } from "effect"
+import { Effect, Match, Option, Schema } from "effect"
 import type { SchemaError } from "effect/Schema"
 import * as HttpClientError from "effect/http/HttpClientError"
 import type * as HttpClientResponse from "effect/http/HttpClientResponse"
@@ -39,11 +39,21 @@ export interface Classified extends ErrorContext {
   readonly retryAfter: string | undefined
 }
 
+const _ClassicBody = Schema.fromJsonString(Schema.Struct({
+  error: Schema.Struct({ error_code: Schema.String })
+}))
+
+export const upcloudErrorCode = (body: string): string | undefined =>
+  Option.getOrUndefined(Option.map(Schema.decodeUnknownOption(_ClassicBody)(body), (b) => b.error.error_code))
+
 export const statusError = (c: Classified): UpcloudError =>
   Match.value(c.status).pipe(
     Match.when(401, () => new AuthenticationFailed({ hint: `${_op(c)}: UpCloud rejected the API token` })),
     Match.when(402, () => new QuotaExceeded({ resource: c.kind })),
-    Match.when(403, () => new AuthenticationFailed({ hint: `${_op(c)}: UpCloud API token lacks permission` })),
+    Match.when(403, () =>
+      upcloudErrorCode(c.body)?.endsWith("_LIMIT_REACHED") === true
+        ? new QuotaExceeded({ resource: c.kind })
+        : new AuthenticationFailed({ hint: `${_op(c)}: UpCloud API token lacks permission` })),
     Match.when(404, () => new ResourceNotFound({ kind: c.kind, ref: c.ref })),
     Match.when(409, () => new ResourceConflict({ kind: c.kind, ref: c.ref })),
     Match.when(429, () => new RateLimited({ kind: c.kind, ref: c.ref, retryAfter: c.retryAfter })),

@@ -8,7 +8,7 @@ import {
 } from "@kumulo/core"
 import { describe, expect, it } from "@effect/vitest"
 import { Schema } from "effect"
-import { statusError } from "../../src/errors/index.ts"
+import { statusError, upcloudErrorCode } from "../../src/errors/index.ts"
 
 const _at = (status: number, retryAfter?: string) => statusError({ status, kind: "cluster", ref: "kumulo-demo", body: "", retryAfter })
 
@@ -26,6 +26,24 @@ describe("statusError", () => {
     for (const [status, tag] of _explicit.entries()) {
       expect(_at(status)).toBeInstanceOf(tag)
     }
+  })
+
+  it.each(["STORAGE_LIMIT_REACHED", "NETWORK_LIMIT_REACHED"])("reports a 403 %s as a quota error", (code) => {
+    const body = JSON.stringify({ error: { error_code: code, error_message: "x" } })
+    const error = statusError({ status: 403, kind: "storage", ref: "r", body, retryAfter: undefined })
+    expect(error).toBeInstanceOf(QuotaExceeded)
+    expect(error).toMatchObject({ resource: "storage" })
+  })
+
+  it("keeps other 403 bodies as AuthenticationFailed", () => {
+    const body = JSON.stringify({ error: { error_code: "INSUFFICIENT_PERMISSIONS" } })
+    expect(statusError({ status: 403, kind: "storage", ref: "r", body, retryAfter: undefined })).toBeInstanceOf(AuthenticationFailed)
+  })
+
+  it("upcloudErrorCode ignores bodies that are not the classic shape", () => {
+    expect(upcloudErrorCode("not json")).toBeUndefined()
+    expect(upcloudErrorCode(JSON.stringify({ type: "x", title: "y" }))).toBeUndefined()
+    expect(upcloudErrorCode(JSON.stringify({ error: { error_code: "A" } }))).toBe("A")
   })
 
   it("carries the Retry-After verbatim on a 429", () => {
