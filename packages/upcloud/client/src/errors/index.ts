@@ -1,4 +1,4 @@
-// UpCloud's 4xx error body shape is unconfirmed (needs a live probe); quota detection is status-only (402), not body-sniffed.
+// Quota: 402, or 403 with classic-body error_code ending _LIMIT_REACHED. Non-classic bodies (RFC 7807) use status only.
 import { Effect, Match, Option, Schema } from "effect"
 import type { SchemaError } from "effect/Schema"
 import * as HttpClientError from "effect/http/HttpClientError"
