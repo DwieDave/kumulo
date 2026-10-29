@@ -22,7 +22,7 @@ interface FakeStorage {
 
 interface CreateStorageBody {
   readonly storage?: {
-    readonly size?: number
+    readonly size?: string
     readonly zone?: string
     readonly title?: string
     readonly tier?: string
@@ -69,6 +69,19 @@ export const makeFakeStorageServer = (options: { readonly readyAfterPolls?: numb
     pollsRemaining: 0
   })
 
+  // GET /1.3/storage/normal?label=k=v: no templates, every label must match
+  const _handleNormalList = (request: HttpClientRequest.HttpClientRequest): Response => {
+    const wanted = new URL(request.url, "https://fixture.invalid").searchParams.getAll("label")
+
+    const storage = [...storages.values()].filter(
+      (value) =>
+        !value.uuid.startsWith("01000000") &&
+        wanted.every((label) => value.labels?.some((l) => `${l.key}=${l.value}` === label) === true)
+    )
+
+    return _ok({ storages: { storage } })
+  }
+
   const _handleCollection = (request: HttpClientRequest.HttpClientRequest): Response => {
     if (request.method === "GET") return _ok({ storages: { storage: [...storages.values()] } })
 
@@ -85,7 +98,7 @@ export const makeFakeStorageServer = (options: { readonly readyAfterPolls?: numb
 
       const storage: FakeStorage = {
         uuid,
-        size: payload.size,
+        size: Number(payload.size),
         tier: payload.tier ?? "maxiops",
         zone: payload.zone,
         title: payload.title,
@@ -145,6 +158,8 @@ export const makeFakeStorageServer = (options: { readonly readyAfterPolls?: numb
 
     if (parts[1] !== "storage") return _badRequest("unhandled fixture route")
     const uuid = parts[2]
+
+    if (uuid === "normal") return _handleNormalList(request)
 
     return uuid === undefined ? _handleCollection(request) : _handleOne(request, uuid)
   }

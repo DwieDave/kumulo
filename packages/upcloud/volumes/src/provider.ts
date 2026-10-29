@@ -3,7 +3,7 @@ import type { ClusterTag, VolumeInfo, VolumeRef, VolumeSpec } from "@kumulo/core
 import { Effect, Layer } from "effect"
 import { ignoreMissing, mapUpcloudError } from "@kumulo/upcloud"
 import type { Storage, StorageClient, StorageTier, UpcloudError } from "@kumulo/upcloud"
-import { matchesVolumeLabels, hasClusterLabel, volumeLabels } from "./labels.ts"
+import { CLUSTER_LABEL_KEY, matchesVolumeLabels, hasClusterLabel, volumeLabels } from "./labels.ts"
 import { staticPvManifest } from "./manifests.ts"
 import { pollUntil } from "./poll.ts"
 
@@ -19,10 +19,15 @@ type R<A> = Effect.Effect<A, VolumeError>
 const _volumeInfo = (storage: Storage): VolumeInfo => ({ id: storage.uuid, name: storage.title })
 
 const _findByLabel = (
-  { client, tag, name }: { readonly client: StorageClient; readonly tag: ClusterTag; readonly name: string }
+  { client, tag, name, zone }: {
+    readonly client: StorageClient
+    readonly tag: ClusterTag
+    readonly name: string
+    readonly zone: string
+  }
 ): R<Storage | undefined> =>
-  mapUpcloudError({ self: client.list(), ctx: { kind: "storage", ref: name } }).pipe(
-    Effect.map((all) => all.find((storage) => matchesVolumeLabels({ labels: storage.labels, tag, name })))
+  mapUpcloudError({ self: client.list({ labels: volumeLabels({ tag, name }) }), ctx: { kind: "storage", ref: name } }).pipe(
+    Effect.map((all) => all.find((storage) => storage.zone === zone && matchesVolumeLabels({ labels: storage.labels, tag, name })))
   )
 
 const _awaitOnline = ({ client, uuid }: { readonly client: StorageClient; readonly uuid: string }): R<Storage> =>
@@ -49,7 +54,7 @@ export const ensureVolume = (
   }
 ): R<VolumeInfo> =>
   Effect.gen(function*() {
-    const existing = yield* _findByLabel({ client, tag: options.tag, name: spec.name })
+    const existing = yield* _findByLabel({ client, tag: options.tag, name: spec.name, zone: options.zone })
 
     if (existing !== undefined) {
       const ready = existing.state === "online" ? existing : yield* _awaitOnline({ client, uuid: existing.uuid })
@@ -74,23 +79,40 @@ export const ensureVolume = (
   })
 
 export const listClusterVolumes = (
-  { client, tag }: { readonly client: StorageClient; readonly tag: ClusterTag }
+  { client, tag, zone }: { readonly client: StorageClient; readonly tag: ClusterTag; readonly zone: string }
 ): R<ReadonlyArray<VolumeInfo>> =>
-  mapUpcloudError({ self: client.list(), ctx: { kind: "storage", ref: tag } }).pipe(
-    Effect.map((all) => all.filter((storage) => hasClusterLabel({ labels: storage.labels, tag })).map(_volumeInfo))
+  mapUpcloudError({
+    self: client.list({ labels: [{ key: CLUSTER_LABEL_KEY, value: tag }] }),
+    ctx: { kind: "storage", ref: tag }
+  }).pipe(
+    Effect.map((all) =>
+      all.filter((storage) => storage.zone === zone && hasClusterLabel({ labels: storage.labels, tag })).map(_volumeInfo)
+    )
   )
 
 // never force-detach: an attached volume's 409 surfaces as ResourceConflict untouched; deleting an already-gone volume succeeds
+// a 409 on a disk that is not online (backuping, maintenance) is transient: wait for online and retry once
 export const deleteVolume = (
   { client, ref }: { readonly client: StorageClient; readonly ref: VolumeRef }
-): R<void> => ignoreMissing(mapUpcloudError({ self: client.delete(ref.id), ctx: { kind: "storage", ref: ref.id } }))
+): R<void> => {
+  const remove = mapUpcloudError({ self: client.delete(ref.id), ctx: { kind: "storage", ref: ref.id } })
+
+  const retryWhenBusy = (conflict: VolumeError): R<void> =>
+    mapUpcloudError({ self: client.get(ref.id), ctx: { kind: "storage", ref: ref.id } }).pipe(
+      Effect.flatMap((storage) =>
+        storage.state === "online" ? Effect.fail(conflict) : _awaitOnline({ client, uuid: ref.id }).pipe(Effect.andThen(remove))
+      )
+    )
+
+  return ignoreMissing(remove.pipe(Effect.catchTag("ResourceConflict", retryWhenBusy)))
+}
 
 export const VolumeProviderLive = (
   { client, options }: { readonly client: StorageClient; readonly options: VolumeProviderOptions }
 ): Layer.Layer<VolumeProvider> =>
   Layer.succeed(VolumeProvider, {
     ensureVolume: (spec: VolumeSpec) => ensureVolume({ client, options, spec }),
-    listClusterVolumes: (tag: ClusterTag) => listClusterVolumes({ client, tag }),
+    listClusterVolumes: (tag: ClusterTag) => listClusterVolumes({ client, tag, zone: options.zone }),
     deleteVolume: (ref: VolumeRef) => deleteVolume({ client, ref }),
     staticPvManifest: (vol: VolumeInfo, spec: VolumeSpec) => staticPvManifest({ vol, spec })
   })

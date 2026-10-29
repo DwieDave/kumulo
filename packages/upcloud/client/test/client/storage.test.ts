@@ -61,7 +61,7 @@ it.effect("POST create wraps the request body as {storage: {...}}", () =>
     )
 
     yield* client.create({ size: 25, zone: "de-fra1", title: "demo" })
-    assert.deepStrictEqual(captured, { storage: { size: 25, zone: "de-fra1", title: "demo" } })
+    assert.deepStrictEqual(captured, { storage: { size: "25", zone: "de-fra1", title: "demo" } })
   }))
 
 it.effect("modify only sends title/size/labels, never tier/zone", () =>
@@ -118,4 +118,45 @@ it.effect("fake server: modify updates title/size and preserves the envelope", (
     const modified = yield* client.modify(created.uuid, { title: "renamed" })
     assert.strictEqual(modified.title, "renamed")
     assert.strictEqual(modified.zone, "de-fra1")
+  }))
+
+it.effect("create sends encrypted as yes/no", () =>
+  Effect.gen(function*() {
+    let captured: unknown
+
+    const client = makeStorageClient(
+      _rawHttpClient((request) => {
+        captured = capturedJson(request)
+
+        return new Response(JSON.stringify({ storage: _storage }), { status: 200 })
+      })
+    )
+
+    yield* client.create({ size: 10, zone: "de-fra1", title: "demo", encrypted: "yes" })
+    assert.deepStrictEqual(captured, { storage: { size: "10", zone: "de-fra1", title: "demo", encrypted: "yes" } })
+  }))
+
+it.effect("list requests only normal storages and filters by label", () =>
+  Effect.gen(function*() {
+    let capturedUrl: string | undefined
+
+    const client = makeStorageClient(
+      _rawHttpClient((request) => {
+        capturedUrl = request.url
+
+        return new Response(JSON.stringify({ storages: { storage: [] } }), { status: 200 })
+      })
+    )
+
+    yield* client.list({ labels: [{ key: "kumulo-cluster", value: "c1" }] })
+    assert.strictEqual(capturedUrl, `${_fixtureBaseUrl}/1.3/storage/normal?label=kumulo-cluster%3Dc1`)
+    yield* client.list()
+    assert.strictEqual(capturedUrl, `${_fixtureBaseUrl}/1.3/storage/normal`)
+  }))
+
+it.effect("an unknown storage state still decodes", () =>
+  Effect.gen(function*() {
+    const client = makeStorageClient(_fixtureHttpClient(200, { storage: { ..._storage, state: "brand-new" } }))
+    const storage = yield* client.get("s1")
+    assert.strictEqual(storage.state, "brand-new")
   }))

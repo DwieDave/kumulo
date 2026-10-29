@@ -126,7 +126,7 @@ export const reconcileUpcloudVolumesOnDelete = (
 
     if (managed.length === 0) return { kept: [], deleted: [] }
     const { storage } = yield* UpcloudEnv
-    const existing = yield* listClusterVolumes({ client: storage, tag: config.name })
+    const existing = yield* listClusterVolumes({ client: storage, tag: config.name, zone: config.zone })
     const kept: Array<string> = []
     const deleted: Array<string> = []
 

@@ -22,7 +22,7 @@ interface FakeStorage {
 
 interface CreateStorageBody {
   readonly storage?: {
-    readonly size?: number
+    readonly size?: string
     readonly zone?: string
     readonly title?: string
     readonly tier?: string
@@ -47,10 +47,24 @@ const _ok = <Body>(body: Body): Response => new Response(JSON.stringify(body), {
 const _empty = (): Response => new Response(null, { status: 204 })
 
 // 409 on deleting a storage marked "attached" — never-force-detach path
+const _conflictBusy = (): Response =>
+  new Response(JSON.stringify({ error: { error_code: "STORAGE_STATE_ILLEGAL", error_message: "storage is busy" } }), { status: 409 })
+
 export const makeFakeStorageServer = (options: { readonly readyAfterPolls?: number } = {}) => {
   const readyAfterPolls = options.readyAfterPolls ?? 1
   const storages = new Map<string, FakeStorage>()
   let nextId = 1
+
+  // GET /1.3/storage/normal?label=k=v: every label must match
+  const _handleNormalList = (request: HttpClientRequest.HttpClientRequest): Response => {
+    const wanted = new URL(request.url, "https://fixture.invalid").searchParams.getAll("label")
+
+    const storage = [...storages.values()].filter((value) =>
+      wanted.every((label) => value.labels?.some((l) => `${l.key}=${l.value}` === label) === true)
+    )
+
+    return _ok({ storages: { storage } })
+  }
 
   const _handleCollection = (request: HttpClientRequest.HttpClientRequest): Response => {
     if (request.method === "GET") return _ok({ storages: { storage: [...storages.values()] } })
@@ -66,7 +80,7 @@ export const makeFakeStorageServer = (options: { readonly readyAfterPolls?: numb
 
       const storage: FakeStorage = {
         uuid,
-        size: payload.size,
+        size: Number(payload.size),
         tier: payload.tier ?? "maxiops",
         zone: payload.zone,
         title: payload.title,
@@ -99,6 +113,8 @@ export const makeFakeStorageServer = (options: { readonly readyAfterPolls?: numb
       if (!storage) return _notFound()
 
       if (storage.attached) return _conflict()
+
+      if (storage.state !== "online") return _conflictBusy()
       storages.delete(uuid)
 
       return _empty()
@@ -113,6 +129,8 @@ export const makeFakeStorageServer = (options: { readonly readyAfterPolls?: numb
     if (parts[1] !== "storage") return new Response(null, { status: 400 })
     const uuid = parts[2]
 
+    if (uuid === "normal") return _handleNormalList(request)
+
     return uuid === undefined ? _handleCollection(request) : _handleOne(request, uuid)
   }
 
@@ -126,5 +144,19 @@ export const makeFakeStorageServer = (options: { readonly readyAfterPolls?: numb
     if (storage) storage.attached = true
   }
 
-  return { httpClient, storages, markAttached }
+  // the disk reports `backuping` and rejects deletes until it has been read `polls` times
+  const markBusy = (uuid: string, polls: number): void => {
+    const storage = storages.get(uuid)
+
+    if (storage) {
+      storage.state = "backuping"
+      storage.pollsRemaining = polls
+    }
+  }
+
+  const addStorage = (storage: Omit<FakeStorage, "pollsRemaining">): void => {
+    storages.set(storage.uuid, { ...storage, pollsRemaining: 0 })
+  }
+
+  return { httpClient, storages, markAttached, markBusy, addStorage }
 }

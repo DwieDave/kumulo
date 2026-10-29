@@ -21,7 +21,7 @@ export const Storage = Schema.Struct({
   zone: Schema.optionalKey(Schema.String),
   title: Schema.String,
   encrypted: Schema.optionalKey(UpcloudBoolean),
-  state: StorageState,
+  state: Schema.String,
   labels: Schema.optionalKey(Schema.Array(UpcloudLabel))
 })
 
@@ -39,7 +39,11 @@ export interface StorageCreateInput {
   readonly title: string
   readonly tier?: StorageTier
   readonly labels?: ReadonlyArray<UpcloudLabel>
-  readonly encrypted?: boolean
+  readonly encrypted?: "yes" | "no"
+}
+
+export interface StorageListFilter {
+  readonly labels?: ReadonlyArray<UpcloudLabel>
 }
 
 export interface StoragePatchInput {
@@ -49,7 +53,7 @@ export interface StoragePatchInput {
 }
 
 export interface StorageClient {
-  readonly list: () => Effect.Effect<ReadonlyArray<Storage>, UpcloudRawError>
+  readonly list: (filter?: StorageListFilter) => Effect.Effect<ReadonlyArray<Storage>, UpcloudRawError>
   readonly get: (uuid: string) => Effect.Effect<Storage, UpcloudRawError>
   readonly create: (body: StorageCreateInput) => Effect.Effect<Storage, UpcloudRawError>
   readonly modify: (uuid: string, body: StoragePatchInput) => Effect.Effect<Storage, UpcloudRawError>
@@ -58,12 +62,26 @@ export interface StorageClient {
 
 const _base = "/1.3/storage"
 
+// "normal" excludes backups, templates and cdroms
+const _listUrl = (filter: StorageListFilter | undefined): string => {
+  const params = new URLSearchParams()
+
+  for (const label of filter?.labels ?? []) params.append("label", `${label.key}=${label.value}`)
+  const query = params.toString()
+
+  return query === "" ? `${_base}/normal` : `${_base}/normal?${query}`
+}
+
 export const makeStorageClient = (httpClient: HttpClient.HttpClient): StorageClient => ({
-  list: () => httpClient.execute(HttpClientRequest.get(_base)).pipe(Effect.flatMap(_decodeStorages), Effect.map((r) => r.storages.storage)),
+  list: (filter) =>
+    httpClient.execute(HttpClientRequest.get(_listUrl(filter))).pipe(
+      Effect.flatMap(_decodeStorages),
+      Effect.map((r) => r.storages.storage)
+    ),
   get: (uuid) =>
     httpClient.execute(HttpClientRequest.get(`${_base}/${uuid}`)).pipe(Effect.flatMap(_decodeStorage), Effect.map((r) => r.storage)),
   create: (body) =>
-    httpClient.execute(HttpClientRequest.post(_base).pipe(HttpClientRequest.bodyJsonUnsafe({ storage: body }))).pipe(
+    httpClient.execute(HttpClientRequest.post(_base).pipe(HttpClientRequest.bodyJsonUnsafe({ storage: { ...body, size: String(body.size) } }))).pipe(
       Effect.flatMap(_decodeStorage),
       Effect.map((r) => r.storage)
     ),
