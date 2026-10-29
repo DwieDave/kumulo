@@ -10,7 +10,7 @@ const _isValidKey = (key: string): boolean =>
     return code >= 0x20 && code <= 0x7e
   })
 
-const _isValidValue = (value: string): boolean => value.length <= 63 && /^[A-Za-z0-9\-_]*$/.test(value)
+const _isValidValue = (value: string): boolean => /^([A-Za-z0-9]([A-Za-z0-9_-]{0,61}[A-Za-z0-9])?)?$/.test(value)
 
 export const isValidLabel = ({ key, value }: UksLabel): boolean => _isValidKey(key) && _isValidValue(value)
 

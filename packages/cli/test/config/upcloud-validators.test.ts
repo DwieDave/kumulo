@@ -12,7 +12,12 @@ const _EXCLUDED: ReadonlyArray<readonly [string, number]> = [
   ["100.64.0.0", 10],
   ["127.0.0.0", 8],
   ["224.0.0.0", 4],
-  ["169.254.0.0", 16]
+  ["169.254.0.0", 16],
+  ["172.31.240.0", 24],
+  ["10.128.0.0", 12],
+  ["192.168.0.0", 16],
+  ["10.33.128.0", 22],
+  ["10.4.0.0", 16]
 ]
 
 const _rangeOf = (ip: string, bits: number): readonly [number, number] => {
@@ -104,4 +109,53 @@ describe("UpCloud pool-name validator", () => {
 
       expect(failure._tag).toBe("ConfigInvalid")
     }))
+})
+
+const _failureMessage = (candidate: Schema.Json): string =>
+  Effect.runSync(
+    Effect.match(decodeConfig(candidate), { onFailure: (error) => error.issues.map((issue) => issue.message).join("; "), onSuccess: () => "" })
+  )
+
+describe("UKS reserved ranges", () => {
+  it("rejects a cidr inside the pod range and names it", () => {
+    const message = _failureMessage({ ...validUpcloudUksConfig, network: { cidr: "192.168.0.0/24" } })
+
+    expect(message).toContain("POD CIDR 192.168.0.0/16")
+  })
+
+  it("rejects a cidr that covers the service range", () => {
+    const message = _failureMessage({ ...validUpcloudUksConfig, network: { cidr: "10.0.0.0/8" } })
+
+    expect(message).toContain("10.128.0.0/12")
+  })
+
+  it("accepts a private cidr clear of every reserved range", () => {
+    expect(_decodesOk({ ...validUpcloudUksConfig, network: { cidr: "172.16.0.0/24" } })).toBe(true)
+  })
+
+  it("rejects the zone utility range only for that zone", () => {
+    const network = { cidr: "10.4.1.0/24" }
+
+    expect(_decodesOk({ ...validUpcloudUksConfig, zone: "de-fra1", network })).toBe(false)
+    expect(_decodesOk({ ...validUpcloudUksConfig, zone: "fi-hel1", network })).toBe(true)
+  })
+
+  it("skips the utility check for an unknown zone", () => {
+    expect(_decodesOk({ ...validUpcloudUksConfig, zone: "xx-new1", network: { cidr: "10.4.1.0/24" } })).toBe(true)
+  })
+})
+
+describe("UKS cluster name and version", () => {
+  it("rejects uppercase, underscores and short names", () => {
+    expect(_decodesOk({ ...validUpcloudUksConfig, name: "Prod_EU" })).toBe(false)
+    expect(_decodesOk({ ...validUpcloudUksConfig, name: "ab" })).toBe(false)
+  })
+
+  it("accepts a lowercase hyphenated name", () => {
+    expect(_decodesOk({ ...validUpcloudUksConfig, name: "prod-eu" })).toBe(true)
+  })
+
+  it("rejects a v-prefixed version", () => {
+    expect(_decodesOk({ ...validUpcloudUksConfig, version: "v1.31" })).toBe(false)
+  })
 })

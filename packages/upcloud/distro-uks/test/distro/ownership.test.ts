@@ -24,6 +24,20 @@ describe("isValidLabel", () => {
   })
 })
 
+describe("isValidLabel value edges", () => {
+  it("rejects a value starting or ending with - or _", () => {
+    expect(isValidLabel({ key: "key", value: "-x" })).toBe(false)
+    expect(isValidLabel({ key: "key", value: "x_" })).toBe(false)
+    expect(isValidLabel({ key: "key", value: "_" })).toBe(false)
+  })
+
+  it("accepts single characters and inner separators", () => {
+    expect(isValidLabel({ key: "key", value: "" })).toBe(true)
+    expect(isValidLabel({ key: "key", value: "x" })).toBe(true)
+    expect(isValidLabel({ key: "key", value: "a-b_c" })).toBe(true)
+  })
+})
+
 describe("ownershipLabels", () => {
   it("stamps kumulo-config-hash and owner, both valid UpCloud labels", () => {
     const labels = ownershipLabels({ spec: { any: "thing" }, owner: "kumulo" })

@@ -1803,8 +1803,7 @@
           "type": "string"
         },
         "name": {
-          "type": "string",
-          "minLength": 1
+          "type": "string"
         },
         "outputs": {
           "type": "object",
