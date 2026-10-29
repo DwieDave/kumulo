@@ -202,6 +202,8 @@ export const makeFakeObjectStorageServer = () => {
       const payload = _bodyOf<{ readonly name?: string }>(request)
 
       if (payload?.name === undefined) return _badRequest("bucket create is missing name")
+
+      if (serviceBuckets.get(payload.name)?.deleted === true) return _conflict("bucket is still being deleted")
       serviceBuckets.set(payload.name, {
         name: payload.name,
         total_objects: 0,
