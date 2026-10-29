@@ -69,6 +69,10 @@ const _awaitRunning = (
     ref: uuid
   })
 
+export const desiredIpFilter = (
+  { config, live }: { readonly config?: ReadonlyArray<string>; readonly live?: ReadonlyArray<string> | null }
+): ReadonlyArray<string> => config ?? live ?? ["0.0.0.0/0"]
+
 const _reconcilePatchable = (
   { clients, cluster, config, owner }: {
     readonly clients: UksClients
@@ -77,15 +81,20 @@ const _reconcilePatchable = (
     readonly owner: string
   }
 ): Effect.Effect<void, MksError> => {
-  const desiredFilter = config.control_plane_ip_filter
   const desiredLabels = ownershipLabels({ spec: config, owner })
-  const filterDrift = JSON.stringify(desiredFilter ?? []) !== JSON.stringify(cluster.control_plane_ip_filter ?? [])
+
+  const filterDrift = config.control_plane_ip_filter !== undefined &&
+    JSON.stringify(config.control_plane_ip_filter) !== JSON.stringify(cluster.control_plane_ip_filter)
+
   const labelDrift = JSON.stringify(desiredLabels) !== JSON.stringify(cluster.labels ?? [])
 
   if (!filterDrift && !labelDrift) return Effect.void
 
   return mapUpcloudError({
-    self: clients.uks.patch(cluster.uuid, { control_plane_ip_filter: desiredFilter, labels: desiredLabels }),
+    self: clients.uks.patch(cluster.uuid, {
+      control_plane_ip_filter: desiredIpFilter({ config: config.control_plane_ip_filter, live: cluster.control_plane_ip_filter }),
+      labels: desiredLabels
+    }),
     ctx: { kind: "uks-cluster", ref: cluster.uuid }
   }).pipe(Effect.asVoid)
 }

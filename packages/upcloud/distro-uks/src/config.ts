@@ -182,7 +182,14 @@ export const UpcloudUksClusterConfig = Schema.Struct({
   dns: Dns,
   volumes: Schema.Union([NoVolumes, UpcloudVolumes]),
   object_storage: UksObjectStorage,
-  control_plane_ip_filter: Schema.optionalKey(Schema.Array(Cidr)),
+  control_plane_ip_filter: Schema.optionalKey(
+    Schema.Array(Cidr).check(
+      Schema.isMinLength(1, {
+        message:
+          'must not be empty: [] denies all access to the control plane; omit the field to leave the filter unmanaged, or use ["0.0.0.0/0"] to allow all'
+      })
+    )
+  ),
   storage_encryption: Schema.optionalKey(Schema.Boolean),
   upgrade_strategy: Schema.optionalKey(UpgradeStrategy)
 }).check(

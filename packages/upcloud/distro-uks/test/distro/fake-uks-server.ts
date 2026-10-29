@@ -132,6 +132,10 @@ const _bodyOf = <Body>(request: HttpClientRequest.HttpClientRequest): Body | und
 const _badRequest = (message: string): Response => new Response(JSON.stringify({ message }), { status: 400 })
 const _notFound = (message: string): Response => new Response(JSON.stringify({ message }), { status: 404 })
 const _conflict = (message: string): Response => new Response(JSON.stringify({ message }), { status: 409 })
+
+const _invalidRequest = (message: string): Response =>
+  new Response(JSON.stringify({ error: { error_code: "INVALID_REQUEST", error_message: message } }), { status: 400 })
+
 const _ok = <Body>(body: Body): Response => new Response(JSON.stringify(body), { status: 200 })
 const _empty = (): Response => new Response(null, { status: 200 })
 
@@ -143,6 +147,7 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number; 
   const networks = new Map<string, FakeNetwork>()
   const routers = new Map<string, FakeRouter>()
   const upgrades = new Map<string, ReadonlyArray<string>>()
+  const clusterPatches: Array<PatchClusterBody> = []
   let nextId = 1
   const freshUuid = (prefix: string) => `${prefix}-${nextId++}`
 
@@ -202,6 +207,9 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number; 
       const payload = _bodyOf<PatchClusterBody>(request)
 
       if (payload === undefined) return _badRequest("cluster patch sent an empty body")
+
+      if (payload.control_plane_ip_filter === undefined) return _invalidRequest("control_plane_ip_filter is required")
+      clusterPatches.push(payload)
 
       if (payload.control_plane_ip_filter !== undefined) cluster.control_plane_ip_filter = payload.control_plane_ip_filter
 
@@ -507,5 +515,5 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number; 
     HttpClient.mapRequest(HttpClientRequest.prependUrl("https://fixture.invalid"))
   )
 
-  return { httpClient, clusters, nodeGroups, networks, routers, upgrades, _clusterByName }
+  return { httpClient, clusters, nodeGroups, networks, routers, upgrades, clusterPatches, _clusterByName }
 }

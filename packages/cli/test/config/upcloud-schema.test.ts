@@ -17,6 +17,13 @@ describe("UpcloudUksClusterConfig", () => {
       expect(failure._tag).toBe("ConfigInvalid")
     }))
 
+  it.effect("rejects an empty control_plane_ip_filter", () =>
+    Effect.gen(function*() {
+      const failure = yield* Effect.flip(decodeConfig({ ...validUpcloudUksConfig, control_plane_ip_filter: [] }))
+      expect(failure._tag).toBe("ConfigInvalid")
+      expect(JSON.stringify(failure)).toContain("[] denies all access")
+    }))
+
   it.effect("rejects volumes.module cinder/hcloud", () =>
     Effect.gen(function*() {
       const failure = yield* Effect.flip(

@@ -14,6 +14,7 @@ import {
   uksNetworkLabels,
   upgradeCluster
 } from "../../src/distro/index.ts"
+import { desiredIpFilter } from "../../src/distro/ensure-cluster.ts"
 import type { UksClients, UksClusterConfig, UksClusterRef } from "../../src/distro/types.ts"
 import { makeFakeUksServer } from "./fake-uks-server.ts"
 
@@ -108,6 +109,45 @@ describe("upcloud-uks distro driver (fake server)", () => {
       const found = yield* findClusterByName({ clients, name: _config.name })
       expect(found?.uuid).toBe(info1.uuid)
     }))
+
+  it.effect("a label-only patch still sends control_plane_ip_filter", () =>
+    Effect.gen(function*() {
+      const server = makeFakeUksServer({ readyAfterPolls: 0 })
+      const clients = _clients(server.httpClient)
+      const network = yield* ensureNetwork({ clients, clusterName: _config.name, zone: _config.zone, cidr: _config.network.cidr })
+      yield* ensureCluster({ clients, config: _config, networkUuid: network.networkUuid, owner: _owner })
+      const scaled = { ..._config, worker_pools: [{ ..._pool, count: 5 }] }
+      yield* ensureCluster({ clients, config: scaled, networkUuid: network.networkUuid, owner: _owner })
+
+      expect(server.clusterPatches).toHaveLength(1)
+      expect(server.clusterPatches.every((body) => "control_plane_ip_filter" in body)).toBe(true)
+      expect(server.clusterPatches[0]?.control_plane_ip_filter).toEqual(["0.0.0.0/0"])
+    }))
+
+  it.effect("a config without a filter keeps a live filter", () =>
+    Effect.gen(function*() {
+      const server = makeFakeUksServer({ readyAfterPolls: 0 })
+      const clients = _clients(server.httpClient)
+      const network = yield* ensureNetwork({ clients, clusterName: _config.name, zone: _config.zone, cidr: _config.network.cidr })
+      const info = yield* ensureCluster({ clients, config: _config, networkUuid: network.networkUuid, owner: _owner })
+      const live = server.clusters.get(info.uuid)
+
+      if (live !== undefined) live.control_plane_ip_filter = ["10.0.0.0/8"]
+      const scaled = { ..._config, worker_pools: [{ ..._pool, count: 5 }] }
+      yield* ensureCluster({ clients, config: scaled, networkUuid: network.networkUuid, owner: _owner })
+
+      expect(server.clusterPatches).toHaveLength(1)
+      expect(server.clusterPatches[0]?.control_plane_ip_filter).toEqual(["10.0.0.0/8"])
+      expect(server.clusters.get(info.uuid)?.control_plane_ip_filter).toEqual(["10.0.0.0/8"])
+    }))
+
+  it("desiredIpFilter prefers config, then live, then open", () => {
+    expect(desiredIpFilter({ config: ["1.2.3.4/32"], live: ["10.0.0.0/8"] })).toEqual(["1.2.3.4/32"])
+    expect(desiredIpFilter({ live: ["10.0.0.0/8"] })).toEqual(["10.0.0.0/8"])
+    expect(desiredIpFilter({ live: [] })).toEqual([])
+    expect(desiredIpFilter({ live: null })).toEqual(["0.0.0.0/0"])
+    expect(desiredIpFilter({})).toEqual(["0.0.0.0/0"])
+  })
 
   it.effect("ensureNodePools scales a pool as an Update, no replace", () =>
     Effect.gen(function*() {
