@@ -5,6 +5,7 @@ import { authMethodsByProvider } from "@kumulo/core"
 import { ClusterConfig } from "../packages/cli/src/cluster-config.ts"
 
 // Mirrors the cross-field `.check(...)` filters in core's schema.ts — keep in sync.
+// kumulo: godaddy apex-CNAME rule is not expressible in JSON Schema (compares record.name to dns.zone).
 const crossFieldConstraints = [
   ...Object.entries(authMethodsByProvider).map(([provider, methods]) => ({
     if: { properties: { provider: { const: provider } }, required: ["provider"] },
@@ -38,6 +39,13 @@ const crossFieldConstraints = [
       required: ["cdn"]
     },
     then: { properties: { distro: { const: "ovh-mks" } }, required: ["ingress"] }
+  },
+  {
+    if: {
+      properties: { dns: { properties: { module: { const: "godaddy" } }, required: ["module"] } },
+      required: ["dns"]
+    },
+    then: { properties: { dns: { properties: { ttl: { minimum: 600 } } } } }
   },
   {
     if: { required: ["ingress"] },

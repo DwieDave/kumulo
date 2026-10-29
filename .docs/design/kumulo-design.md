@@ -215,6 +215,7 @@ Implementations (each its own package — adding one never touches core):
 |---|---|---|
 | `ovh` | **`@kumulo/dns-ovh`** (v1, ships now) | OVH DNS API (`/domain/zone/*`, OVH API v1, client via §4.5 pipeline, `OvhAuthLive`) |
 | `hetzner` | **`@kumulo/dns-hetzner`** | Hetzner DNS API, hand-written client |
+| `godaddy` | **`@kumulo/dns-godaddy`** | GoDaddy Domains v3 DNS API, hand-written client; PAT auth (`domains.dns:update`); individual records by id; TTL >= 600; the account must be eligible for API access or calls return 403 |
 | `bunny` | **`@kumulo/dns-bunny`** | bunny.net DNS (`/dnszone`); individual records, not record sets, so one value per (name, kind) is kept; the zone must already exist; apex hostnames for a CDN use a PullZone record |
 | `designate` | `@kumulo/dns-designate` (later) | OpenStack Designate, for generic clouds |
 | `none` | built-in no-op | DNS managed elsewhere |
@@ -566,6 +567,7 @@ distro-k3s → core (implements Distro, self-managed)
 distro-ovh-mks → core (implements Distro, managed)
 dns-ovh → core (implements DnsProvider)
 dns-hetzner → core (implements DnsProvider)
+dns-godaddy → core (implements DnsProvider)
 bunny → core (leaf API client shared by the bunny packages)
 dns-bunny → core, bunny (implements DnsProvider)
 storage-bunny → core, bunny (implements object storage)

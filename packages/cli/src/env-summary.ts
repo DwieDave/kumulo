@@ -19,7 +19,8 @@ const _dnsVars: Record<ClusterConfig["dns"]["module"], ReadonlyArray<string>> = 
   none: [],
   ovh: ["OVH_CLIENT_ID", "OVH_CLIENT_SECRET"],
   hetzner: ["HETZNER_DNS_TOKEN"],
-  bunny: ["BUNNYNET_API_KEY"]
+  bunny: ["BUNNYNET_API_KEY"],
+  godaddy: ["GODADDY_API_TOKEN"]
 }
 
 const _cdnVars: Record<"none" | "bunny", ReadonlyArray<string>> = {

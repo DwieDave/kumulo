@@ -15,6 +15,8 @@ export {
   Cdn,
   CdnOrigin,
   isCdnApexRequiresBunnyDns,
+  isGodaddyApexNotCname,
+  isGodaddyTtlMinimum,
   isCdnOriginUrlRequired,
   Shield,
   Cidr,

@@ -115,6 +115,7 @@
         "@kumulo/distro-ovh-mks": "workspace:*",
         "@kumulo/distro-upcloud-uks": "workspace:*",
         "@kumulo/dns-bunny": "workspace:*",
+        "@kumulo/dns-godaddy": "workspace:*",
         "@kumulo/dns-hetzner": "workspace:*",
         "@kumulo/dns-ovh": "workspace:*",
         "@kumulo/hetzner": "workspace:*",
@@ -165,6 +166,21 @@
       "devDependencies": {
         "@effect/vitest": "catalog:",
         "@types/ssh2": "catalog:",
+        "effect": "catalog:",
+        "vitest": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
+      },
+    },
+    "packages/godaddy/dns": {
+      "name": "@kumulo/dns-godaddy",
+      "version": "0.1.1",
+      "dependencies": {
+        "@kumulo/core": "workspace:*",
+      },
+      "devDependencies": {
+        "@effect/vitest": "catalog:",
         "effect": "catalog:",
         "vitest": "catalog:",
       },
@@ -497,6 +513,8 @@
     "@kumulo/distro-upcloud-uks": ["@kumulo/distro-upcloud-uks@workspace:packages/upcloud/distro-uks"],
 
     "@kumulo/dns-bunny": ["@kumulo/dns-bunny@workspace:packages/bunny/dns"],
+
+    "@kumulo/dns-godaddy": ["@kumulo/dns-godaddy@workspace:packages/godaddy/dns"],
 
     "@kumulo/dns-hetzner": ["@kumulo/dns-hetzner@workspace:packages/hetzner/dns"],
 

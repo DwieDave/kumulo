@@ -58,6 +58,7 @@
     "@kumulo/distro-ovh-mks": "workspace:*",
     "@kumulo/distro-upcloud-uks": "workspace:*",
     "@kumulo/dns-bunny": "workspace:*",
+    "@kumulo/dns-godaddy": "workspace:*",
     "@kumulo/dns-hetzner": "workspace:*",
     "@kumulo/dns-ovh": "workspace:*",
     "@kumulo/hetzner": "workspace:*",

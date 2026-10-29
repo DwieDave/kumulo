@@ -15,6 +15,9 @@ All notable changes to kumulo are documented here. Format:
 - Cinder volumes and PVC rendering (`@kumulo/volumes-cinder`).
 - OVH object storage buckets (`@kumulo/storage-ovh`).
 - DNS records via OVH (`@kumulo/dns-ovh`) and Hetzner (`@kumulo/dns-hetzner`).
+- DNS records via GoDaddy (`@kumulo/dns-godaddy`, `dns.module: godaddy`),
+  authenticated with a personal access token in `GODADDY_API_TOKEN`. TTL must
+  be at least 600 and the apex cannot hold a CNAME.
 - Cluster addons: Cilium, Cinder CSI, cloud-conf secret (`@kumulo/addons`).
 - SOPS-encrypted credential sink (`@kumulo/secrets-sops`).
 - Single-file executable build (`bun run build:binary`).

@@ -9,7 +9,9 @@ export const fakeCredentials = Layer.succeed(
       OVH_CLIENT_SECRET: "test-client-secret",
       OVH_SERVICE_NAME: "service-1",
       HETZNER_DNS_TOKEN: "test-dns-token",
-      BUNNYNET_API_KEY: "test-bunny-key"
+      BUNNYNET_API_KEY: "test-bunny-key",
+      GODADDY_API_TOKEN: "test-godaddy-token",
+      GODADDY_API_BASE_URL: "https://fixture.invalid"
     }
   })
 )

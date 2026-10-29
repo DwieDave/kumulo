@@ -6,6 +6,8 @@ import {
   Dns,
   isAuthMethodConsistentWithProvider,
   isCdnApexRequiresBunnyDns,
+  isGodaddyApexNotCname,
+  isGodaddyTtlMinimum,
   isSecretsRequiredForObjectStorage,
   OpenStackVolumes
 } from "@kumulo/core"
@@ -74,7 +76,7 @@ export const MksClusterConfig = Schema.Struct({
   // landmine: network is create-time-only, adding/removing it on a live cluster is refused at plan time
   network: Schema.optionalKey(MksNetwork),
   ingress: Schema.optionalKey(MksIngress)
-}).check(isSecretsRequiredForObjectStorage, isAuthMethodConsistentWithProvider, isIngressPlaceable, isFlavorUnambiguous, isCdnApexRequiresBunnyDns, isCdnIngressOriginPlaceable)
+}).check(isSecretsRequiredForObjectStorage, isAuthMethodConsistentWithProvider, isIngressPlaceable, isFlavorUnambiguous, isCdnApexRequiresBunnyDns, isCdnIngressOriginPlaceable, isGodaddyTtlMinimum, isGodaddyApexNotCname)
 
 export type MksClusterConfig = typeof MksClusterConfig.Type
 

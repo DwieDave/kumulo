@@ -6,7 +6,7 @@ import type { DnsTarget } from "./dns.ts"
 export type DnsPlanInput =
   | { readonly module: "none" }
   | {
-    readonly module: "ovh" | "hetzner" | "bunny"
+    readonly module: "ovh" | "hetzner" | "bunny" | "godaddy"
     readonly zone: string
     readonly records: ReadonlyArray<{ readonly name: string; readonly target: string }>
   }

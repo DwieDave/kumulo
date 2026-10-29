@@ -5,6 +5,8 @@ import {
   Dns,
   isAuthMethodConsistentWithProvider,
   isCdnApexRequiresBunnyDns,
+  isGodaddyApexNotCname,
+  isGodaddyTtlMinimum,
   isCdnOriginUrlRequired,
   isSecretsRequiredForObjectStorage,
   isVolumesModuleConsistentWithProvider,
@@ -101,7 +103,9 @@ export const K3sClusterConfig = Schema.Struct({
   isVolumesModuleConsistentWithProvider,
   isAddonsConsistentWithProvider,
   isCdnApexRequiresBunnyDns,
-  isCdnOriginUrlRequired
+  isCdnOriginUrlRequired,
+  isGodaddyTtlMinimum,
+  isGodaddyApexNotCname
 )
 
 export type K3sClusterConfig = typeof K3sClusterConfig.Type

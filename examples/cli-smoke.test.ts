@@ -22,6 +22,7 @@ const _fakeEnv = {
   OS_REGION_NAME: "x",
   HCLOUD_TOKEN: "x",
   HETZNER_DNS_TOKEN: "x",
+  GODADDY_API_TOKEN: "x",
   BUNNYNET_API_KEY: "x"
 }
 
@@ -52,6 +53,10 @@ describe("published kumulo CLI bundle", () => {
 
   it("apply --dry-run against the k3s example fails loudly on fake credentials", () => {
     expect(() => _dryRun("k3s.yaml")).toThrow(/POST http:\/\/example\.invalid\/v3\/auth\/tokens/)
+  })
+
+  it("apply --dry-run against the k3s-godaddy example fails loudly on fake credentials", () => {
+    expect(() => _dryRun("k3s-godaddy.yaml")).toThrow(/Authentication failed: example\.com\/\*: GoDaddy rejected the token/)
   })
 
   it("apply --dry-run against the k3s-hetzner example fails loudly on fake credentials", () => {
