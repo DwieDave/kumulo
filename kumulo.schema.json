@@ -341,6 +341,62 @@
                 "buckets"
               ],
               "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "module": {
+                  "type": "string",
+                  "enum": [
+                    "bunny"
+                  ]
+                },
+                "buckets": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "region": {
+                        "type": "string",
+                        "enum": [
+                          "DE",
+                          "NY",
+                          "SG",
+                          "UK",
+                          "SE",
+                          "LA",
+                          "JH",
+                          "SYD"
+                        ]
+                      },
+                      "tier": {
+                        "type": "string",
+                        "enum": [
+                          "standard",
+                          "edge"
+                        ]
+                      },
+                      "retain": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "region",
+                      "retain"
+                    ],
+                    "additionalProperties": true
+                  }
+                }
+              },
+              "required": [
+                "module",
+                "buckets"
+              ],
+              "additionalProperties": true
             }
           ]
         },
@@ -396,6 +452,283 @@
             }
           ]
         },
+        "cdn": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "module": {
+                  "type": "string",
+                  "enum": [
+                    "none"
+                  ]
+                }
+              },
+              "required": [
+                "module"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "module": {
+                  "type": "string",
+                  "enum": [
+                    "bunny"
+                  ]
+                },
+                "name": {
+                  "type": "string"
+                },
+                "tier": {
+                  "type": "string",
+                  "enum": [
+                    "standard",
+                    "volume"
+                  ]
+                },
+                "origin": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "ingress"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "url": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "url"
+                      ],
+                      "additionalProperties": true
+                    }
+                  ]
+                },
+                "verify_origin_tls": {
+                  "type": "boolean"
+                },
+                "websockets": {
+                  "type": "boolean"
+                },
+                "cache": {
+                  "type": "string",
+                  "enum": [
+                    "smart",
+                    "origin"
+                  ]
+                },
+                "hostnames": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "minItems": 1,
+                  "maxItems": 10,
+                  "uniqueItems": true
+                },
+                "force_ssl": {
+                  "type": "boolean"
+                },
+                "shield": {
+                  "type": "object",
+                  "properties": {
+                    "plan": {
+                      "type": "string",
+                      "enum": [
+                        "basic",
+                        "advanced",
+                        "business",
+                        "enterprise"
+                      ]
+                    },
+                    "waf": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "mode": {
+                          "type": "string",
+                          "enum": [
+                            "log",
+                            "block"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "mode"
+                      ],
+                      "additionalProperties": true
+                    },
+                    "ddos": {
+                      "type": "object",
+                      "properties": {
+                        "sensitivity": {
+                          "type": "string",
+                          "enum": [
+                            "off",
+                            "low",
+                            "medium",
+                            "high",
+                            "challenge"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "sensitivity"
+                      ],
+                      "additionalProperties": true
+                    },
+                    "bot_detection": {
+                      "type": "object",
+                      "properties": {
+                        "mode": {
+                          "type": "string",
+                          "enum": [
+                            "log",
+                            "block"
+                          ]
+                        },
+                        "sensitivity": {
+                          "type": "string",
+                          "enum": [
+                            "low",
+                            "medium",
+                            "high"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "mode",
+                        "sensitivity"
+                      ],
+                      "additionalProperties": true
+                    },
+                    "rate_limits": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "path_prefix": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "requests": {
+                            "type": "integer",
+                            "maximum": 9007199254740991,
+                            "exclusiveMinimum": 0
+                          },
+                          "window": {
+                            "type": "integer",
+                            "maximum": 9007199254740991,
+                            "exclusiveMinimum": 0
+                          },
+                          "block_for": {
+                            "type": "integer",
+                            "maximum": 9007199254740991,
+                            "exclusiveMinimum": 0
+                          },
+                          "key": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "ip"
+                                ]
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "path_prefix",
+                          "requests",
+                          "window",
+                          "block_for",
+                          "key"
+                        ],
+                        "additionalProperties": true
+                      }
+                    },
+                    "access_lists": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "cidr",
+                              "ip",
+                              "asn",
+                              "country"
+                            ]
+                          },
+                          "action": {
+                            "type": "string",
+                            "enum": [
+                              "allow",
+                              "block",
+                              "challenge",
+                              "log"
+                            ]
+                          },
+                          "entries": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "minItems": 1
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "type",
+                          "action",
+                          "entries"
+                        ],
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "plan",
+                    "waf",
+                    "ddos",
+                    "bot_detection",
+                    "rate_limits",
+                    "access_lists"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "module",
+                "name",
+                "origin",
+                "hostnames"
+              ],
+              "additionalProperties": true
+            }
+          ]
+        },
         "provider": {
           "type": "string",
           "enum": [
@@ -438,7 +771,8 @@
                   "type": "string",
                   "enum": [
                     "ovh",
-                    "hetzner"
+                    "hetzner",
+                    "bunny"
                   ]
                 },
                 "zone": {
@@ -930,6 +1264,62 @@
                 "buckets"
               ],
               "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "module": {
+                  "type": "string",
+                  "enum": [
+                    "bunny"
+                  ]
+                },
+                "buckets": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "region": {
+                        "type": "string",
+                        "enum": [
+                          "DE",
+                          "NY",
+                          "SG",
+                          "UK",
+                          "SE",
+                          "LA",
+                          "JH",
+                          "SYD"
+                        ]
+                      },
+                      "tier": {
+                        "type": "string",
+                        "enum": [
+                          "standard",
+                          "edge"
+                        ]
+                      },
+                      "retain": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "region",
+                      "retain"
+                    ],
+                    "additionalProperties": true
+                  }
+                }
+              },
+              "required": [
+                "module",
+                "buckets"
+              ],
+              "additionalProperties": true
             }
           ]
         },
@@ -985,6 +1375,283 @@
             }
           ]
         },
+        "cdn": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "module": {
+                  "type": "string",
+                  "enum": [
+                    "none"
+                  ]
+                }
+              },
+              "required": [
+                "module"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "module": {
+                  "type": "string",
+                  "enum": [
+                    "bunny"
+                  ]
+                },
+                "name": {
+                  "type": "string"
+                },
+                "tier": {
+                  "type": "string",
+                  "enum": [
+                    "standard",
+                    "volume"
+                  ]
+                },
+                "origin": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "ingress"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "url": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "url"
+                      ],
+                      "additionalProperties": true
+                    }
+                  ]
+                },
+                "verify_origin_tls": {
+                  "type": "boolean"
+                },
+                "websockets": {
+                  "type": "boolean"
+                },
+                "cache": {
+                  "type": "string",
+                  "enum": [
+                    "smart",
+                    "origin"
+                  ]
+                },
+                "hostnames": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "minItems": 1,
+                  "maxItems": 10,
+                  "uniqueItems": true
+                },
+                "force_ssl": {
+                  "type": "boolean"
+                },
+                "shield": {
+                  "type": "object",
+                  "properties": {
+                    "plan": {
+                      "type": "string",
+                      "enum": [
+                        "basic",
+                        "advanced",
+                        "business",
+                        "enterprise"
+                      ]
+                    },
+                    "waf": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "mode": {
+                          "type": "string",
+                          "enum": [
+                            "log",
+                            "block"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "mode"
+                      ],
+                      "additionalProperties": true
+                    },
+                    "ddos": {
+                      "type": "object",
+                      "properties": {
+                        "sensitivity": {
+                          "type": "string",
+                          "enum": [
+                            "off",
+                            "low",
+                            "medium",
+                            "high",
+                            "challenge"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "sensitivity"
+                      ],
+                      "additionalProperties": true
+                    },
+                    "bot_detection": {
+                      "type": "object",
+                      "properties": {
+                        "mode": {
+                          "type": "string",
+                          "enum": [
+                            "log",
+                            "block"
+                          ]
+                        },
+                        "sensitivity": {
+                          "type": "string",
+                          "enum": [
+                            "low",
+                            "medium",
+                            "high"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "mode",
+                        "sensitivity"
+                      ],
+                      "additionalProperties": true
+                    },
+                    "rate_limits": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "path_prefix": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "requests": {
+                            "type": "integer",
+                            "maximum": 9007199254740991,
+                            "exclusiveMinimum": 0
+                          },
+                          "window": {
+                            "type": "integer",
+                            "maximum": 9007199254740991,
+                            "exclusiveMinimum": 0
+                          },
+                          "block_for": {
+                            "type": "integer",
+                            "maximum": 9007199254740991,
+                            "exclusiveMinimum": 0
+                          },
+                          "key": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "ip"
+                                ]
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "path_prefix",
+                          "requests",
+                          "window",
+                          "block_for",
+                          "key"
+                        ],
+                        "additionalProperties": true
+                      }
+                    },
+                    "access_lists": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "cidr",
+                              "ip",
+                              "asn",
+                              "country"
+                            ]
+                          },
+                          "action": {
+                            "type": "string",
+                            "enum": [
+                              "allow",
+                              "block",
+                              "challenge",
+                              "log"
+                            ]
+                          },
+                          "entries": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "minItems": 1
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "type",
+                          "action",
+                          "entries"
+                        ],
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "plan",
+                    "waf",
+                    "ddos",
+                    "bot_detection",
+                    "rate_limits",
+                    "access_lists"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "module",
+                "name",
+                "origin",
+                "hostnames"
+              ],
+              "additionalProperties": true
+            }
+          ]
+        },
         "provider": {
           "type": "string",
           "enum": [
@@ -1024,7 +1691,8 @@
                   "type": "string",
                   "enum": [
                     "ovh",
-                    "hetzner"
+                    "hetzner",
+                    "bunny"
                   ]
                 },
                 "zone": {
@@ -1405,6 +2073,62 @@
                 "module": {
                   "type": "string",
                   "enum": [
+                    "bunny"
+                  ]
+                },
+                "buckets": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "region": {
+                        "type": "string",
+                        "enum": [
+                          "DE",
+                          "NY",
+                          "SG",
+                          "UK",
+                          "SE",
+                          "LA",
+                          "JH",
+                          "SYD"
+                        ]
+                      },
+                      "tier": {
+                        "type": "string",
+                        "enum": [
+                          "standard",
+                          "edge"
+                        ]
+                      },
+                      "retain": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "region",
+                      "retain"
+                    ],
+                    "additionalProperties": true
+                  }
+                }
+              },
+              "required": [
+                "module",
+                "buckets"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "module": {
+                  "type": "string",
+                  "enum": [
                     "upcloud"
                   ]
                 },
@@ -1493,6 +2217,283 @@
             }
           ]
         },
+        "cdn": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "module": {
+                  "type": "string",
+                  "enum": [
+                    "none"
+                  ]
+                }
+              },
+              "required": [
+                "module"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "module": {
+                  "type": "string",
+                  "enum": [
+                    "bunny"
+                  ]
+                },
+                "name": {
+                  "type": "string"
+                },
+                "tier": {
+                  "type": "string",
+                  "enum": [
+                    "standard",
+                    "volume"
+                  ]
+                },
+                "origin": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "ingress"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "url": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "url"
+                      ],
+                      "additionalProperties": true
+                    }
+                  ]
+                },
+                "verify_origin_tls": {
+                  "type": "boolean"
+                },
+                "websockets": {
+                  "type": "boolean"
+                },
+                "cache": {
+                  "type": "string",
+                  "enum": [
+                    "smart",
+                    "origin"
+                  ]
+                },
+                "hostnames": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "minItems": 1,
+                  "maxItems": 10,
+                  "uniqueItems": true
+                },
+                "force_ssl": {
+                  "type": "boolean"
+                },
+                "shield": {
+                  "type": "object",
+                  "properties": {
+                    "plan": {
+                      "type": "string",
+                      "enum": [
+                        "basic",
+                        "advanced",
+                        "business",
+                        "enterprise"
+                      ]
+                    },
+                    "waf": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "mode": {
+                          "type": "string",
+                          "enum": [
+                            "log",
+                            "block"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "mode"
+                      ],
+                      "additionalProperties": true
+                    },
+                    "ddos": {
+                      "type": "object",
+                      "properties": {
+                        "sensitivity": {
+                          "type": "string",
+                          "enum": [
+                            "off",
+                            "low",
+                            "medium",
+                            "high",
+                            "challenge"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "sensitivity"
+                      ],
+                      "additionalProperties": true
+                    },
+                    "bot_detection": {
+                      "type": "object",
+                      "properties": {
+                        "mode": {
+                          "type": "string",
+                          "enum": [
+                            "log",
+                            "block"
+                          ]
+                        },
+                        "sensitivity": {
+                          "type": "string",
+                          "enum": [
+                            "low",
+                            "medium",
+                            "high"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "mode",
+                        "sensitivity"
+                      ],
+                      "additionalProperties": true
+                    },
+                    "rate_limits": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "path_prefix": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "requests": {
+                            "type": "integer",
+                            "maximum": 9007199254740991,
+                            "exclusiveMinimum": 0
+                          },
+                          "window": {
+                            "type": "integer",
+                            "maximum": 9007199254740991,
+                            "exclusiveMinimum": 0
+                          },
+                          "block_for": {
+                            "type": "integer",
+                            "maximum": 9007199254740991,
+                            "exclusiveMinimum": 0
+                          },
+                          "key": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "ip"
+                                ]
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "path_prefix",
+                          "requests",
+                          "window",
+                          "block_for",
+                          "key"
+                        ],
+                        "additionalProperties": true
+                      }
+                    },
+                    "access_lists": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "cidr",
+                              "ip",
+                              "asn",
+                              "country"
+                            ]
+                          },
+                          "action": {
+                            "type": "string",
+                            "enum": [
+                              "allow",
+                              "block",
+                              "challenge",
+                              "log"
+                            ]
+                          },
+                          "entries": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "minItems": 1
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "type",
+                          "action",
+                          "entries"
+                        ],
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "plan",
+                    "waf",
+                    "ddos",
+                    "bot_detection",
+                    "rate_limits",
+                    "access_lists"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "module",
+                "name",
+                "origin",
+                "hostnames"
+              ],
+              "additionalProperties": true
+            }
+          ]
+        },
         "provider": {
           "type": "string",
           "enum": [
@@ -1552,7 +2553,8 @@
                   "type": "string",
                   "enum": [
                     "ovh",
-                    "hetzner"
+                    "hetzner",
+                    "bunny"
                   ]
                 },
                 "zone": {
@@ -1828,6 +2830,35 @@
             }
           }
         }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "cdn": {
+            "properties": {
+              "origin": {
+                "const": "ingress"
+              }
+            },
+            "required": [
+              "origin"
+            ]
+          }
+        },
+        "required": [
+          "cdn"
+        ]
+      },
+      "then": {
+        "properties": {
+          "distro": {
+            "const": "ovh-mks"
+          }
+        },
+        "required": [
+          "ingress"
+        ]
       }
     },
     {

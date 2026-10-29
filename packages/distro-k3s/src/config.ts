@@ -4,6 +4,8 @@ import {
   commonClusterFields,
   Dns,
   isAuthMethodConsistentWithProvider,
+  isCdnApexRequiresBunnyDns,
+  isCdnOriginUrlRequired,
   isSecretsRequiredForObjectStorage,
   isVolumesModuleConsistentWithProvider,
   ProviderSchema
@@ -97,7 +99,9 @@ export const K3sClusterConfig = Schema.Struct({
   isSecretsRequiredForObjectStorage,
   isAuthMethodConsistentWithProvider,
   isVolumesModuleConsistentWithProvider,
-  isAddonsConsistentWithProvider
+  isAddonsConsistentWithProvider,
+  isCdnApexRequiresBunnyDns,
+  isCdnOriginUrlRequired
 )
 
 export type K3sClusterConfig = typeof K3sClusterConfig.Type

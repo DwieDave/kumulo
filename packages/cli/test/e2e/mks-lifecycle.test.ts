@@ -5,11 +5,15 @@ import { loadConfig } from "../../src/config.ts"
 import { MksEnv } from "../../src/mks/env.ts"
 import { buildMksPlan } from "../../src/mks/plan.ts"
 import { applyMksEffect, deleteMksEffect, kubeconfigMks, lookupMksInventory } from "../../src/mks/reconcile.ts"
-import { cloudProviderNever } from "../mks/fake-cloud-provider.ts"
+import { cloudProviderNever, fakeCloudProvider } from "../mks/fake-cloud-provider.ts"
 import { decidePlanAction, renderPlan } from "../../src/present.ts"
 import { makeFakeMksServer } from "./fake-mks-server.ts"
 import { makeMksClient } from "@kumulo/distro-ovh-mks"
-import { dnsNoopLive } from "@kumulo/core"
+import { CloudProvider, dnsNoopLive } from "@kumulo/core"
+import { Ref } from "effect"
+import { cdnYamlBlock, makeFakeCdn } from "../cdn-fakes.ts"
+import { cdnPlanActions } from "../../src/cdn.ts"
+import { deleteMksWithCdn } from "../../src/mks/reconcile.ts"
 
 const _yaml = `
 name: prod-eu
@@ -109,3 +113,47 @@ it.effect("yaml → plan → apply → nodepool scale-update → kubeconfig → 
     yield* deleteMksEffect(config).pipe(Effect.provide(mksEnvLayer), Effect.provide(dnsNoopLive), Effect.provide(cloudProviderNever))
     assert.strictEqual(server.clusters.has(info.id), false)
   }).pipe(Effect.provide(_fsTestLayer)))
+
+const _cdnYaml = _yaml
+  .replace("masters:", "network:\n  cidr: 10.0.0.0/16\n  nodes_subnet: 10.0.1.0/24\n  load_balancers_subnet: 10.0.2.0/24\ningress: {}\nmasters:")
+  .replace("secrets:\n  sink: none\n  dir: .\n", `secrets:\n  sink: none\n  dir: .\n${cdnYamlBlock()}`)
+
+it.effect("cdn: plan -> apply -> replan is NoOp -> delete tears the edge down before the cluster", () =>
+  Effect.gen(function*() {
+    const server = makeFakeMksServer()
+    const mksEnvLayer = Layer.succeed(MksEnv, { mks: makeMksClient(server.httpClient), serviceName: "service-1" })
+
+    const cloudLayer = Layer.effect(
+      CloudProvider,
+      Effect.map(CloudProvider, (base) => ({ ...base, deleteByTag: () => Effect.void }))
+    ).pipe(Layer.provide(fakeCloudProvider().layer))
+
+    const fake = makeFakeCdn()
+    fake.pullZone.setDnsReady("app.example.com", true)
+    const config = yield* loadConfig(_configPath)
+
+    const planned = yield* cdnPlanActions({ config, cdn: fake.handle })
+    assert.deepStrictEqual(planned.map((a) => a._tag), ["Create", "Create"])
+
+    const info = yield* applyMksEffect({ config, cdn: fake.handle }).pipe(
+      Effect.provide(mksEnvLayer),
+      Effect.provide(dnsNoopLive),
+      Effect.provide(cloudLayer)
+    )
+
+    assert.strictEqual(info.status, "READY")
+
+    assert.strictEqual(fake.pullZone.zones()[0]?.OriginUrl, "https://203.0.113.1")
+
+    const replanned = yield* cdnPlanActions({ config, cdn: fake.handle })
+    assert.deepStrictEqual(replanned.map((a) => a._tag), ["NoOp", "NoOp"])
+    assert.ok((yield* Ref.get(fake.state)).pullZoneId !== undefined)
+
+    yield* deleteMksWithCdn({ config, cdn: fake.handle }).pipe(
+      Effect.provide(mksEnvLayer),
+      Effect.provide(dnsNoopLive),
+      Effect.provide(cloudLayer)
+    )
+    assert.strictEqual(fake.pullZone.zones().length, 0)
+    assert.strictEqual(server.clusters.has(info.id), false)
+  }).pipe(Effect.provide(layerNoop({ readFileString: () => Effect.succeed(_cdnYaml) }))))

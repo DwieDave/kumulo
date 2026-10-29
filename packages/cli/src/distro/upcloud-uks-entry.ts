@@ -36,13 +36,13 @@ export const upcloudUksEntry: DistroEntry<UpcloudUksClusterConfig> = {
     lookupUpcloudInventory(config).pipe(Effect.map((inventory) => buildUpcloudPlan({ config, inventory }))),
   deletePlanActions: upcloudDeletePlanActions,
   apply: (a) =>
-    applyUpcloudUks({ config: a.config, replace: a.replace }).pipe(
-      Effect.map((info) => ({ summary: `\nCluster "${a.config.name}" is ${info.status}.` }))
+    applyUpcloudUks({ config: a.config, configDir: a.configDir, replace: a.replace }).pipe(
+      Effect.map((info) => ({ summary: `\nCluster "${a.config.name}" is ${info.status}.${info.cdnWarnings}` }))
     ),
   delete: deleteUpcloudUks,
   kubeconfig: kubeconfigUpcloudUks,
   deletedLabel: "uks-cluster",
-  appliedPrefixes: ["router/", "network/", "uks-cluster/", "uks-pool/", "volume/", "bucket/"],
+  appliedPrefixes: ["router/", "network/", "uks-cluster/", "uks-pool/", "volume/", "bucket/", "cdn/"],
   selfProgress: true,
   status: statusUpcloudUks,
   upgrade: upgradeUpcloudUks,

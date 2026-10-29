@@ -3,7 +3,7 @@ import type * as HttpClient from "effect/http/HttpClient"
 import { ConfigInvalid, DnsProvider, dnsNoopLive, ownershipTarget } from "@kumulo/core"
 import type { AuthenticationFailed, DesiredRecord, DnsError } from "@kumulo/core"
 import type { ClusterConfig } from "./cluster-config.ts"
-import { k3sDnsProviderLayer, k3sHetznerDnsProviderLayer } from "./k3s/env.ts"
+import { k3sBunnyDnsProviderLayer, k3sDnsProviderLayer, k3sHetznerDnsProviderLayer } from "./k3s/env.ts"
 
 export type DnsTarget =
   | { readonly kind: "ip"; readonly value: string }
@@ -12,10 +12,11 @@ export type DnsTarget =
 export interface DnsTargets {
   readonly api_server: DnsTarget
   readonly ingress?: DnsTarget
+  readonly cdn?: DnsTarget
 }
 
 const _resolveTarget = (record: DesiredRecord, targets: DnsTargets): DesiredRecord => {
-  const resolved = record.target === "api_server" || record.target === "ingress" ? targets[record.target] : undefined
+  const resolved = record.target === "api_server" || record.target === "ingress" || record.target === "cdn" ? targets[record.target] : undefined
 
   return resolved === undefined ? record : { name: record.name, target: resolved.value }
 }
@@ -54,14 +55,18 @@ export const removeDns = (config: ClusterConfig): Effect.Effect<void, DnsError, 
     yield* dns.removeClusterRecords(cfgDns.zone, config.name)
   })
 
-export const dnsProviderLayerFor = (
-  config: ClusterConfig
+export const dnsProviderLayerFor = (config: ClusterConfig) => dnsProviderLayerWith({ config })
+
+export const dnsProviderLayerWith = (
+  { config, pullZoneIdFor }: { readonly config: ClusterConfig; readonly pullZoneIdFor?: ((target: string) => number | undefined) | undefined }
 ): Layer.Layer<DnsProvider, AuthenticationFailed | ConfigInvalid, HttpClient.HttpClient> => {
   const dnsModule = config.dns.module
 
   if (dnsModule === "ovh") return k3sDnsProviderLayer()
 
   if (dnsModule === "hetzner") return k3sHetznerDnsProviderLayer()
+
+  if (config.dns.module === "bunny") return k3sBunnyDnsProviderLayer({ pullZoneIdFor, ttl: config.dns.ttl })
 
   if (dnsModule === "none") return dnsNoopLive
 

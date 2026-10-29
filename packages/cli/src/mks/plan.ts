@@ -1,3 +1,4 @@
+import type { Types } from "effect"
 import { PlanAction } from "@kumulo/core"
 import type { NetworkInfo, Plan } from "@kumulo/core"
 import { clusterDrift, MksClusterDrift, mksPoolHash, type MksClusterState, type MksWorkerPoolConfig } from "@kumulo/distro-ovh-mks"
@@ -21,6 +22,7 @@ export interface MksPlanInput {
   readonly auth?: { readonly region: string }
   readonly network?: { readonly cidr: string }
   readonly ingress?: { readonly flavor_id?: string }
+  readonly cdn?: { readonly module: string }
 }
 
 export const toMksPool = (pool: MksPoolInput): MksWorkerPoolConfig => ({
@@ -130,8 +132,15 @@ const _ingressActions = (
     `floating-ip/${config.name}/ingress`
   ].map((name) => _createOrNoOp({ exists: inventory.clusterExists, name }))
 
-const _dnsTargets = (config: MksPlanInput): DnsPlanTargets =>
-  config.ingress === undefined ? { api_server: "hostname" } : { api_server: "hostname", ingress: "ip" }
+const _dnsTargets = (config: MksPlanInput): DnsPlanTargets => {
+  const targets: Types.Mutable<DnsPlanTargets> = { api_server: "hostname" }
+
+  if (config.ingress !== undefined) targets.ingress = "ip"
+
+  if (config.cdn !== undefined && config.cdn.module !== "none") targets.cdn = "hostname"
+
+  return targets
+}
 
 export const buildMksPlan = (
   { config, inventory }: { readonly config: MksPlanInput; readonly inventory: MksInventory }

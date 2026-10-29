@@ -14,7 +14,7 @@ bun add @kumulo/cli
 ## Credentials from a sops file
 
 Provider credentials (`OVH_CLIENT_ID`, `OVH_CLIENT_SECRET`, `OVH_SERVICE_NAME`,
-`HCLOUD_TOKEN`, `HETZNER_DNS_TOKEN`, the OpenStack `OS_*` keys) can come from a
+`HCLOUD_TOKEN`, `HETZNER_DNS_TOKEN`, `BUNNYNET_API_KEY`, the OpenStack `OS_*` keys) can come from a
 sops-encrypted YAML file instead of the shell environment:
 
 ```sh
@@ -44,6 +44,10 @@ populated environment never spawns `sops`. Key material is sops' business
 (`SOPS_AGE_KEY_FILE` and friends); a file that cannot be decrypted fails the
 command with the file path and sops' own stderr rather than reporting a missing
 variable.
+
+## bunny.net
+
+`dns.module`, `object_storage.module` and `cdn.module` accept `bunny`. Any of them makes the CLI require `BUNNYNET_API_KEY`, and `kumulo plan` lists it in the environment summary. With bunny storage, the sops credentials sink writes one entry per bucket under `s3.buckets.N.{name,region,endpoint,accessKey,secretKey}`, because a bunny S3 credential pair belongs to a single zone. The CDN keeps its ids in `<cluster>.cdn.yaml` beside the other outputs files. `apply` runs in this order: cluster, pull zone, DNS, certificates, Shield, storage. `delete` runs it in reverse and leaves the cluster for last.
 
 See the [root README](../../README.md) for configuration, commands and
 examples, and the [changelog](../../CHANGELOG.md) for release notes.

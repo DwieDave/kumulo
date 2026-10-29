@@ -5,7 +5,6 @@ import type { Layer } from "effect"
 import { genericProfileLive, namesToReplace, PlanAction, PlanDecision, PlanRejected, ProviderProfile } from "@kumulo/core"
 import type { ClusterConfigFields, ConfigInvalid, CredentialsSink, ObjectStorageProvider, Plan } from "@kumulo/core"
 import type { ClusterConfig } from "./cluster-config.ts"
-import { ovhObjectStorageProviderLive } from "@kumulo/storage-ovh"
 import { ovhProfileLive } from "@kumulo/provider-ovh"
 import { hetznerProfileLive } from "@kumulo/hetzner"
 import { readOutputs, setIngress, writeOutputs } from "@kumulo/volumes-cinder"
@@ -25,7 +24,8 @@ import { status } from "./commands/status.ts"
 import { upgrade } from "./commands/upgrade.ts"
 import { distroFor, onDistro, wantsObjectStorage } from "./distro/registry.ts"
 import type { DistroApplyResult, DistroFailure, DistroServices } from "./distro/types.ts"
-import { StorageEnv, storageLayers } from "./storage/env.ts"
+import { cdnDeletePlanActions, cdnHandleFor, cdnPlanActions } from "./cdn.ts"
+import { storageLayers, storageProviderLayer } from "./storage/env.ts"
 import { bucketDeletePlanActions, bucketPlanActions, convergeBuckets, reconcileBucketsOnDelete } from "./storage/reconcile.ts"
 import { decidePlanAction, dim, green, orderedActions, red, renderActionLine, renderPlan, yellow } from "./present.ts"
 import { logLine, withPlanView, withRowProgress, withSpinner } from "./spinner.ts"
@@ -125,7 +125,7 @@ export const recordIngressOutputs = (
   })
 
 const _convergeAll = Effect.fn(function*(
-  { apply, appliedPrefixes, config, configDir, plan, selfProgress, storageLayer }: {
+  { apply, appliedPrefixes: distroPrefixes, config, configDir, plan, selfProgress, storageLayer }: {
     readonly apply: Effect.Effect<DistroApplyResult, DistroFailure, DistroServices>
     readonly appliedPrefixes: ReadonlyArray<string>
     readonly config: ClusterConfig
@@ -135,6 +135,8 @@ const _convergeAll = Effect.fn(function*(
     readonly storageLayer: Layer.Layer<ObjectStorageProvider | CredentialsSink> | undefined
   }
 ) {
+  const appliedPrefixes = storageLayer === undefined ? distroPrefixes : distroPrefixes.filter((prefix) => prefix !== "bucket/")
+
   const clusterStep = (selfProgress ? apply : withRowProgress({
     match: (name) => appliedPrefixes.some((prefix) => name.startsWith(prefix)),
     effect: apply
@@ -185,7 +187,7 @@ const _applyFlow = Effect.fn(function*({ config: configPath }: { readonly config
 
   if (root.showEnv) yield* Console.log(`${yield* envSummary(config)}\n`)
   yield* requireCredentials(config)
-  const storageLayer = wantsObjectStorage(config) ? yield* storageLayers(config) : undefined
+  const storageLayer = wantsObjectStorage(config) ? yield* storageLayers({ config, configDir }) : undefined
 
   const plan: Plan = yield* withSpinner({
     label: _planPhrases,
@@ -196,7 +198,10 @@ const _applyFlow = Effect.fn(function*({ config: configPath }: { readonly config
         ? []
         : yield* bucketPlanActions({ config, configDir }).pipe(Effect.provide(storageLayer))
 
-      return { actions: [...basePlan.actions, ...bucketActions] }
+      const cdn = yield* cdnHandleFor({ config, configDir })
+      const cdnActions = yield* cdnPlanActions({ config, cdn })
+
+      return { actions: [...basePlan.actions, ...bucketActions, ...cdnActions] }
     })
   })
 
@@ -223,7 +228,7 @@ const _applyFlow = Effect.fn(function*({ config: configPath }: { readonly config
 
   const result = yield* withPlanView({
     ...view,
-    effect: appliedPrefixes.length === 0
+    effect: appliedPrefixes.length === 0 && storageLayer === undefined
       ? (selfProgress ? applyStep : withRowProgress({ match: () => true, effect: applyStep }))
       : _convergeAll({ apply: applyStep, appliedPrefixes, config, configDir, plan, selfProgress, storageLayer })
   })
@@ -250,11 +255,12 @@ export const kubeconfig = Command.make(
 ).pipe(Command.withDescription("Print the cluster's kubeconfig"))
 
 const _deletePlan = Effect.fn(function*(config: ClusterConfig, configDir: string) {
-  const [clusterActions, liveVolumes, bucketActions] = yield* Effect.all([
+  const [clusterActions, liveVolumes, bucketActions, cdnActions] = yield* Effect.all([
     onDistro(config)(({ config: cfg, entry }) => entry.deletePlanActions(cfg)),
     lookupManagedVolumeNames(config),
-    bucketDeletePlanActions({ config, configDir })
-  ], { concurrency: 3 })
+    bucketDeletePlanActions({ config, configDir }),
+    cdnHandleFor({ config, configDir }).pipe(Effect.flatMap((cdn) => cdnDeletePlanActions({ config, cdn })))
+  ], { concurrency: 4 })
 
   // upcloud module plans its own volume rows in deletePlanActions; emitting generic ones too duplicates every row.
   const genericVolumeModule = config.volumes.module === "cinder" || config.volumes.module === "hcloud"
@@ -268,7 +274,7 @@ const _deletePlan = Effect.fn(function*(config: ClusterConfig, configDir: string
         : PlanAction.Delete({ name: `volume/${entry.name}` })
     )
 
-  const plan: Plan = { actions: [...clusterActions, ...volumeActions, ...bucketActions] }
+  const plan: Plan = { actions: [...cdnActions, ...clusterActions, ...volumeActions, ...bucketActions] }
 
   return plan
 })
@@ -306,7 +312,7 @@ export const del = Command.make(
     const clusterAndVolumesStep = Effect.gen(function*() {
       yield* withRowProgress({
         match: (name) => !selfProgress && !name.startsWith("volume/") && !name.startsWith("bucket/"),
-        effect: onDistro(config)(({ config: cfg, entry }) => entry.delete(cfg))
+        effect: onDistro(config)(({ config: cfg, entry }) => entry.delete({ config: cfg, configDir: dirname(configPath) }))
       })
       yield* _ciLine(`${red("Deleted")} ${deletedLabel}/${config.name}`)
       yield* _logApplied({ plan, prefixes: ["mks-pool/"] })
@@ -323,8 +329,7 @@ export const del = Command.make(
 
     const bucketsStep = Effect.gen(function*() {
       if (!wantsObjectStorage(config)) return
-      const env = yield* StorageEnv
-      const providerLayer = ovhObjectStorageProviderLive(env)
+      const providerLayer = yield* storageProviderLayer({ config, configDir: dirname(configPath) })
 
       const buckets = yield* withRowProgress({
         match: (name) => name.startsWith("bucket/"),

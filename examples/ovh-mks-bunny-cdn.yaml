@@ -1,0 +1,68 @@
+name: staging-cdn
+provider: ovh
+distro: ovh-mks
+version: 1.35.0
+auth:
+  method: application_credential
+  region: DE1
+network:
+  cidr: 10.0.0.0/16
+  nodes_subnet: 10.0.1.0/24
+  load_balancers_subnet: 10.0.2.0/24
+  gateway_model: s
+ingress:
+  flavor: small
+worker_pools:
+  - name: general
+    flavor: d2-4
+    count: 1
+    labels:
+      workload: general
+    autoscaling:
+      enabled: true
+      min: 1
+      max: 1
+dns:
+  module: bunny
+  zone: example.com
+  ttl: 300
+  records:
+    - name: app
+      target: cdn
+    - name: origin.staging-cdn
+      target: ingress
+volumes:
+  module: none
+object_storage:
+  module: none
+cdn:
+  module: bunny
+  name: stagingcdn
+  origin: ingress
+  hostnames:
+    - app.example.com
+  shield:
+    plan: basic
+    waf:
+      enabled: true
+      mode: log
+    ddos:
+      sensitivity: medium
+    bot_detection:
+      mode: log
+      sensitivity: low
+    rate_limits:
+      - name: login
+        path_prefix: /login
+        requests: 20
+        window: 60
+        block_for: 300
+        key: ip
+    access_lists:
+      - name: office
+        type: cidr
+        action: allow
+        entries:
+          - 198.51.100.0/24
+secrets:
+  sink: none

@@ -1,16 +1,17 @@
 import { PlanAction } from "@kumulo/core"
-import { Effect, Redacted } from "effect"
+import { Effect } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import type { PlatformError } from "effect/PlatformError"
 import { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/process"
 import { ConfigInvalid, CredentialsSink, pollUntil, ProviderApiError } from "@kumulo/core"
-import type { BucketInfo, CredentialEntry, CredentialsSinkError, ObjectStorageError, S3Credentials } from "@kumulo/core"
+import type { BucketInfo, CredentialsSinkError, ObjectStorageError } from "@kumulo/core"
 import { credentialsPath, sopsCredentialsSinkLive } from "@kumulo/secrets-sops"
 import { mapUpcloudError } from "@kumulo/upcloud"
 import type { ObjectStorageClient } from "@kumulo/upcloud"
 import { deleteBucket, ensureBucket, ensureCredentials, listBuckets } from "@kumulo/storage-upcloud"
 import type { UpcloudObjectStorageOptions } from "@kumulo/storage-upcloud"
 import type { UpcloudUksClusterConfig } from "../cluster-config.ts"
+import { credentialEntries } from "../storage/credentials.ts"
 import { UpcloudEnv } from "./env.ts"
 
 export const uksBucketRow = (name: string): string => `bucket/${name}`
@@ -60,19 +61,6 @@ const _sopsConfig = (
     )
     : Effect.succeed({ dir: config.secrets.dir, ageRecipient: config.secrets.sops.age_recipient })
 
-const _credentialEntries = (
-  { config, creds, buckets }: { readonly config: UpcloudUksClusterConfig; readonly creds: S3Credentials; readonly buckets: ReadonlyArray<BucketInfo> }
-): ReadonlyArray<CredentialEntry> => [
-  { key: "cluster", value: Redacted.make(config.name) },
-  { key: "s3.user", value: Redacted.make(creds.user) },
-  { key: "s3.accessKey", value: creds.accessKey },
-  { key: "s3.secretKey", value: creds.secretKey },
-  ...buckets.flatMap((bucket, index) => [
-    { key: `s3.buckets.${index}.name`, value: Redacted.make(bucket.name) },
-    { key: `s3.buckets.${index}.endpoint`, value: Redacted.make(bucket.endpoint) }
-  ])
-]
-
 export const convergeUpcloudBuckets = (
   config: UpcloudUksClusterConfig
 ): Effect.Effect<
@@ -100,7 +88,7 @@ export const convergeUpcloudBuckets = (
     const spawner = yield* ChildProcessSpawnerNS.ChildProcessSpawner
     const creds = yield* ensureCredentials(options)(config.name)
     const sink = sopsCredentialsSinkLive({ dir: sops.dir, ageRecipient: sops.ageRecipient, spawner, fs })
-    yield* Effect.flatMap(CredentialsSink, (s) => s.write(_credentialEntries({ config, creds, buckets: ensured }))).pipe(
+    yield* Effect.flatMap(CredentialsSink, (s) => s.write(credentialEntries({ cluster: config.name, creds, buckets: ensured, withRegion: false }))).pipe(
       Effect.provide(sink)
     )
   })

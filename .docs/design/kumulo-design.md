@@ -214,10 +214,28 @@ Implementations (each its own package — adding one never touches core):
 | `dns.module` | Package | Backend |
 |---|---|---|
 | `ovh` | **`@kumulo/dns-ovh`** (v1, ships now) | OVH DNS API (`/domain/zone/*`, OVH API v1, client via §4.5 pipeline, `OvhAuthLive`) |
+| `hetzner` | **`@kumulo/dns-hetzner`** | Hetzner DNS API, hand-written client |
+| `bunny` | **`@kumulo/dns-bunny`** | bunny.net DNS (`/dnszone`); individual records, not record sets, so one value per (name, kind) is kept; the zone must already exist; apex hostnames for a CDN use a PullZone record |
 | `designate` | `@kumulo/dns-designate` (later) | OpenStack Designate, for generic clouds |
 | `none` | built-in no-op | DNS managed elsewhere |
 
 Records are tagged via a TXT ownership record (`kumulo.cluster=<name>`, external-dns convention) so reconcile/`delete` only ever touch records the module created — this contract is part of the *port*, so every implementation must honor it. This makes `kumulo create` in CI produce a fully reachable cluster URL with zero manual steps. See §5 for the config block.
+
+### 3.5.1 `CdnProvider` (implemented by `@kumulo/cdn-bunny`)
+
+CDN is a core port selected by the optional `cdn.module` value (`none` by default, `bunny`). Its spec types are provider-neutral: origin, hostnames, cache mode (`smart | origin`), WAF mode, DDoS level, rate limits, access lists and bot detection.
+
+```ts
+interface CdnProvider {
+  ensureEdge(spec): Effect<EdgeInfo, CdnError>
+  ensureCertificates(ref, hostnames): Effect<void, CdnError>
+  ensureSecurity(ref, policy): Effect<void, CdnError>
+  describeEdge(ref): Effect<EdgeState, CdnError>
+  deleteEdge(ref): Effect<void, CdnError>
+}
+```
+
+`CdnError` is the standard tagged errors plus `CapabilityMissing` (for example a Shield feature the plan lacks). Apply order is cluster, edge, DNS (`target: cdn` resolves to `<name>.b-cdn.net`), certificates, security, then storage; delete is the reverse. A certificate timeout leaves the edge on HTTP and is reported, not rolled back. The bunny implementation tracks the pull zone and Shield ids in `<cluster>.cdn.yaml` because bunny resources carry no tags, and Shield, which cannot be deleted, is reset to the basic plan.
 
 ### 3.6 Pluggable Retained-Volumes module (extension beyond hetzner-k3s)
 
@@ -541,12 +559,17 @@ Rules:
 ## Appendix A — Package dependency graph
 
 ```
-cli → core → (ports: CloudProvider, ProviderProfile, Distro, DnsProvider, VolumeProvider, Addon)
+cli → core → (ports: CloudProvider, ProviderProfile, Distro, DnsProvider, CdnProvider, VolumeProvider, Addon)
 openstack → core (implements CloudProvider) ; depends on generated clients
 provider-ovh → core (implements ProviderProfile)
 distro-k3s → core (implements Distro, self-managed)
 distro-ovh-mks → core (implements Distro, managed)
 dns-ovh → core (implements DnsProvider)
+dns-hetzner → core (implements DnsProvider)
+bunny → core (leaf API client shared by the bunny packages)
+dns-bunny → core, bunny (implements DnsProvider)
+storage-bunny → core, bunny (implements object storage)
+cdn-bunny → core, bunny (implements CdnProvider)
 volumes-cinder → core (implements VolumeProvider)
 addons → core (implements Addon) ; distro-agnostic manifests
 ```

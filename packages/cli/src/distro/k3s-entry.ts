@@ -160,7 +160,7 @@ export const k3sEntry: DistroEntry<K3sClusterConfig> = {
   apply: (a) =>
     applyK3s(a).pipe(
       Effect.map((result) => ({
-        summary: `Cluster "${a.config.name}" is up (${result.apiEndpoint}); kubeconfig at ${result.kubeconfigPath}.`
+        summary: `Cluster "${a.config.name}" is up (${result.apiEndpoint}); kubeconfig at ${result.kubeconfigPath}.${result.cdnWarnings ?? ""}`
       }))
     ),
   delete: deleteK3s,

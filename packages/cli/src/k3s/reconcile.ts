@@ -15,6 +15,7 @@ export type K3sError =
   | ResourceNotFound
   | AuthenticationFailed
   | HttpTransportError
+  | CdnStepError
 
 import type {
   Ssh} from "@kumulo/distro-k3s";
@@ -40,11 +41,15 @@ import {
 import { k8sHttpClientLayer } from "./k8s-http-client.ts"
 import { buildK3sServerSpecs } from "./plan.ts"
 import { withRowProgress } from "../spinner.ts"
-import { dnsProviderLayerFor, reconcileDns, removeDns } from "../dns.ts"
+import { dnsProviderLayerWith, reconcileDns, removeDns } from "../dns.ts"
+import { applyCdn, cdnHandleFor, cdnWarnings, pullZoneIdFor, removeCdn } from "../cdn.ts"
+import type { CdnHandle, CdnStepError } from "../cdn.ts"
+import type { FileSystem } from "effect/FileSystem"
 
 export interface K3sApplyResult {
   readonly apiEndpoint: string
   readonly kubeconfigPath: string
+  readonly cdnWarnings?: string
 }
 
 const CILIUM_CAPS: ReadonlyArray<Capability> = ["cilium"]
@@ -270,9 +275,10 @@ const _volumeProviderLayerFor = (
   config.volumes.module === "hcloud" ? k3sHetznerVolumeProviderLayer(config) : k3sVolumeProviderLayer({ tag: config.name })
 
 export const applyK3sEffect = (
-  { config, configDir, replace = NO_REPLACE, k8sClientLayer = k8sClientLive }: {
+  { cdn, config, configDir, replace = NO_REPLACE, k8sClientLayer = k8sClientLive }: {
     readonly config: K3sClusterConfig
     readonly configDir: string
+    readonly cdn?: CdnHandle | undefined
     readonly replace?: ReadonlySet<string>
     readonly k8sClientLayer?: (
       args: { readonly config: K3sClusterConfig; readonly master1: SshHost }
@@ -297,8 +303,18 @@ export const applyK3sEffect = (
     })
 
     yield* withRowProgress({
-      match: (name) => name.startsWith("dns/"),
-      effect: reconcileDns({ config, targets: { api_server: { kind: "ip", value: infra.lbVip } } })
+      match: (name) => name.startsWith("dns/") || name.startsWith("cdn/"),
+      effect: applyCdn({
+        config,
+        cdn,
+        dns: (targets) =>
+          reconcileDns({
+            config,
+            targets: targets.cdn === undefined
+              ? { api_server: { kind: "ip", value: infra.lbVip } }
+              : { api_server: { kind: "ip", value: infra.lbVip }, cdn: targets.cdn }
+          })
+      })
     })
     yield* withRowProgress({
       match: (name) => name.startsWith("volume/"),
@@ -311,17 +327,28 @@ export const applyK3sEffect = (
 
 export const applyK3s = (
   args: { readonly config: K3sClusterConfig; readonly configDir: string; readonly replace?: ReadonlySet<string> }
-): Effect.Effect<K3sApplyResult, K3sError, OpenStackEnv | CinderAuth | HttpClient.HttpClient> =>
-  applyK3sEffect(args).pipe(
-    Effect.provide(SshLive),
-    Effect.provide(_volumeProviderLayerFor(args.config)),
-    Effect.provide(dnsProviderLayerFor(args.config)),
-    Effect.provide(_cloudProviderLayerFor(args.config)),
-    Effect.provide(k3sCloudCredentialLayer(args.config))
-  )
+): Effect.Effect<K3sApplyResult, K3sError, OpenStackEnv | CinderAuth | HttpClient.HttpClient | FileSystem> =>
+  Effect.gen(function*() {
+    const cdn = yield* cdnHandleFor({ config: args.config, configDir: args.configDir })
+
+    const result = yield* applyK3sEffect({ ...args, cdn }).pipe(
+      Effect.provide(SshLive),
+      Effect.provide(_volumeProviderLayerFor(args.config)),
+      Effect.provide(dnsProviderLayerWith({ config: args.config, pullZoneIdFor: pullZoneIdFor(cdn) })),
+      Effect.provide(_cloudProviderLayerFor(args.config)),
+      Effect.provide(k3sCloudCredentialLayer(args.config))
+    )
+
+    return { ...result, cdnWarnings: yield* cdnWarnings(cdn) }
+  })
 
 export const deleteK3sEffect = (
   config: K3sClusterConfig
+): Effect.Effect<void, K3sError, CloudProvider | DnsProvider | VolumeProvider> =>
+  deleteK3sWithCdn({ config, cdn: undefined })
+
+export const deleteK3sWithCdn = (
+  { cdn, config }: { readonly config: K3sClusterConfig; readonly cdn: CdnHandle | undefined }
 ): Effect.Effect<void, K3sError, CloudProvider | DnsProvider | VolumeProvider> =>
   Effect.gen(function*() {
     const volumeProvider = yield* VolumeProvider
@@ -343,7 +370,10 @@ export const deleteK3sEffect = (
       })
     }
 
-    yield* removeDns(config)
+    yield* withRowProgress({
+      match: (name) => name.startsWith("dns/") || name.startsWith("cdn/"),
+      effect: removeCdn({ cdn, dns: removeDns(config) })
+    })
     yield* withRowProgress({
       match: (name) =>
         name.startsWith(`kumulo-${config.name}-`) || name.startsWith("network/") ||
@@ -352,12 +382,18 @@ export const deleteK3sEffect = (
     })
   })
 
-export const deleteK3s = (config: K3sClusterConfig): Effect.Effect<void, K3sError, OpenStackEnv | CinderAuth | HttpClient.HttpClient> =>
-  deleteK3sEffect(config).pipe(
-    Effect.provide(_volumeProviderLayerFor(config)),
-    Effect.provide(dnsProviderLayerFor(config)),
-    Effect.provide(_cloudProviderLayerFor(config))
-  )
+export const deleteK3s = (
+  { config, configDir }: { readonly config: K3sClusterConfig; readonly configDir: string }
+): Effect.Effect<void, K3sError, OpenStackEnv | CinderAuth | HttpClient.HttpClient | FileSystem> =>
+  Effect.gen(function*() {
+    const cdn = yield* cdnHandleFor({ config, configDir })
+
+    yield* deleteK3sWithCdn({ config, cdn }).pipe(
+      Effect.provide(_volumeProviderLayerFor(config)),
+      Effect.provide(dnsProviderLayerWith({ config, pullZoneIdFor: pullZoneIdFor(cdn) })),
+      Effect.provide(_cloudProviderLayerFor(config))
+    )
+  })
 
 export const kubeconfigK3sEffect = (config: K3sClusterConfig): Effect.Effect<Kubeconfig, K3sError, CloudProvider | Ssh> =>
   Effect.gen(function*() {

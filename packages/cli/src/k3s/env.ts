@@ -6,6 +6,8 @@ import type { DnsProvider, VolumeProvider } from "@kumulo/core"
 import type { ClusterConfig, K3sClusterConfig } from "../cluster-config.ts"
 import { makeDnsClient, ovhDnsProviderLive } from "@kumulo/dns-ovh"
 import { HetznerHttpLive, hetznerDnsProviderLive, makeHetznerDnsClient } from "@kumulo/dns-hetzner"
+import { BunnyHttpLive, bunnyDnsClient } from "@kumulo/bunny"
+import { bunnyDnsProviderLive } from "@kumulo/dns-bunny"
 import { VolumeProviderLive } from "@kumulo/volumes-cinder"
 import type { VolumeProviderOptions , CinderAuth} from "@kumulo/volumes-cinder"
 import { VolumeProviderLive as HcloudVolumeProviderLive } from "@kumulo/hetzner"
@@ -36,6 +38,21 @@ export const k3sHetznerDnsProviderLayer = (): Layer.Layer<DnsProvider, Authentic
       const httpClient = yield* Effect.provide(HttpClient.HttpClient, HetznerHttpLive({ token }))
 
       return hetznerDnsProviderLive(makeHetznerDnsClient(httpClient))
+    })
+  )
+
+export const k3sBunnyDnsProviderLayer = (
+  { pullZoneIdFor, ttl }: {
+    readonly pullZoneIdFor?: ((target: string) => number | undefined) | undefined
+    readonly ttl: number
+  }
+): Layer.Layer<DnsProvider, AuthenticationFailed, HttpClient.HttpClient> =>
+  Layer.unwrap(
+    Effect.gen(function*() {
+      const apiKey = yield* requiredRedactedEnv("BUNNYNET_API_KEY")
+      const httpClient = yield* Effect.provide(HttpClient.HttpClient, BunnyHttpLive({ apiKey }))
+
+      return bunnyDnsProviderLive({ dns: bunnyDnsClient({ httpClient }), pullZoneIdFor, ttl })
     })
   )
 

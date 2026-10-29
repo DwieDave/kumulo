@@ -43,6 +43,15 @@ export {
   encodeConfigWith,
   HcloudVolumes,
   isAuthMethodConsistentWithProvider,
+  isCdnApexRequiresBunnyDns,
+  isCdnOriginUrlRequired,
+  BunnyBucketName,
+  BunnyCdn,
+  BunnyObjectStorage,
+  BunnyStorageRegion,
+  Cdn,
+  CdnOrigin,
+  Shield,
   isSecretsRequiredForObjectStorage,
   isVolumesModuleConsistentWithProvider,
   ManagedVolume,
@@ -116,6 +125,12 @@ export { decidePlanAction, PlanDecision, renderPlan } from "./present/index.ts"
 
 export { genericProfile, genericProfileLive } from "./profiles/index.ts"
 
+export { CdnProvider } from "./ports/cdn-provider.ts"
+
+export type { CdnError } from "./ports/cdn-provider.ts"
+
+export { cdnNoop, cdnNoopLive } from "./cdn-noop/index.ts"
+
 export { dnsNoop, dnsNoopLive } from "./dns-noop/index.ts"
 
 export { OWNERSHIP_PREFIX, ownershipTarget, ownerTagOf, recordKind } from "./dns/index.ts"
@@ -138,7 +153,22 @@ export type {
   AddonContext,
   AutoscalingRule,
   BootstrapPlan,
+  AccessList,
+  AccessListAction,
+  AccessListType,
+  BucketCredential,
   BucketInfo,
+  CdnCacheMode,
+  CdnTier,
+  EdgeInfo,
+  EdgeRef,
+  EdgeSpec,
+  RateLimitKey,
+  RateLimitRule,
+  SecurityPolicy,
+  Sensitivity,
+  ShieldPlan,
+  WafMode,
   BucketRef,
   BucketSpec,
   Capability,

@@ -5,6 +5,7 @@ import {
   commonClusterFields,
   Dns,
   isAuthMethodConsistentWithProvider,
+  isCdnApexRequiresBunnyDns,
   isSecretsRequiredForObjectStorage,
   OpenStackVolumes
 } from "@kumulo/core"
@@ -56,6 +57,13 @@ const isIngressPlaceable = Schema.makeFilter((config: { network?: unknown; ingre
     : undefined
 )
 
+const isCdnIngressOriginPlaceable = Schema.makeFilter(
+  (config: { cdn?: { module: string; origin?: unknown }; ingress?: unknown }) =>
+    config.cdn?.origin === "ingress" && config.ingress === undefined
+      ? "cdn.origin ingress requires an ingress block"
+      : undefined
+)
+
 export const MksClusterConfig = Schema.Struct({
   ...commonClusterFields,
   provider: Schema.Literal("ovh"),
@@ -66,7 +74,7 @@ export const MksClusterConfig = Schema.Struct({
   // landmine: network is create-time-only, adding/removing it on a live cluster is refused at plan time
   network: Schema.optionalKey(MksNetwork),
   ingress: Schema.optionalKey(MksIngress)
-}).check(isSecretsRequiredForObjectStorage, isAuthMethodConsistentWithProvider, isIngressPlaceable, isFlavorUnambiguous)
+}).check(isSecretsRequiredForObjectStorage, isAuthMethodConsistentWithProvider, isIngressPlaceable, isFlavorUnambiguous, isCdnApexRequiresBunnyDns, isCdnIngressOriginPlaceable)
 
 export type MksClusterConfig = typeof MksClusterConfig.Type
 

@@ -20,7 +20,11 @@ import type { UksClusterConfig, UksClusterInfo } from "@kumulo/distro-upcloud-uk
 import { toUksPool, uksClusterRow, uksPoolRow } from "./plan.ts"
 import { UpcloudEnv } from "./env.ts"
 import { withRowProgress } from "../spinner.ts"
-import { dnsProviderLayerFor, reconcileDns, removeDns } from "../dns.ts"
+import { dnsProviderLayerWith, reconcileDns, removeDns } from "../dns.ts"
+import type { DnsTarget } from "../dns.ts"
+import { applyCdn, cdnHandleFor, cdnWarnings, pullZoneIdFor, removeCdn } from "../cdn.ts"
+import type { CdnHandle, CdnStepError } from "../cdn.ts"
+import type { AuthenticationFailed } from "@kumulo/core"
 import type { DistroUpgradeArgs } from "../distro/types.ts"
 import { convergeUpcloudBuckets, reconcileUpcloudObjectStorageOnDelete } from "./storage.ts"
 import { convergeUpcloudVolumes, managedUpcloudVolumes, reconcileUpcloudVolumesOnDelete } from "./volumes.ts"
@@ -58,10 +62,14 @@ const _poolsToReplace = (
 }
 
 export const applyUpcloudUksEffect = (
-  { config, replace }: { readonly config: UpcloudUksClusterConfig; readonly replace: ReadonlySet<string> }
+  { cdn, config, replace }: {
+    readonly config: UpcloudUksClusterConfig
+    readonly replace: ReadonlySet<string>
+    readonly cdn?: CdnHandle | undefined
+  }
 ): Effect.Effect<
   UksClusterInfo,
-  MksError | PlanRejected | ConfigInvalid | VolumeError | ObjectStorageError | CredentialsSinkError | PlatformError,
+  MksError | PlanRejected | ConfigInvalid | VolumeError | ObjectStorageError | CredentialsSinkError | PlatformError | CdnStepError,
   UpcloudEnv | DnsProvider | FileSystem | ChildProcessSpawnerNS.ChildProcessSpawner | HttpClient.HttpClient
 > =>
   Effect.gen(function*() {
@@ -90,17 +98,27 @@ export const applyUpcloudUksEffect = (
     })
     const managedVolumes = managedUpcloudVolumes(config)
 
-    if (config.dns.module !== "none" || managedVolumes.length > 0) {
-      const kubeconfig = yield* fetchKubeconfig({ clients, uuid: info.uuid })
+    const kubeconfig = config.dns.module !== "none" || managedVolumes.length > 0
+      ? yield* fetchKubeconfig({ clients, uuid: info.uuid })
+      : undefined
 
-      if (config.dns.module !== "none") yield* reconcileUpcloudDns({ config, kubeconfig })
+    yield* withRowProgress({
+      match: (name) => name.startsWith("cdn/"),
+      effect: applyCdn({
+        config,
+        cdn,
+        dns: (targets) =>
+          config.dns.module === "none" || kubeconfig === undefined
+            ? Effect.void
+            : reconcileUpcloudDns({ config, kubeconfig, cdn: targets.cdn })
+      })
+    })
 
-      if (managedVolumes.length > 0) {
-        yield* withRowProgress({
-          match: (name) => name.startsWith("volume/"),
-          effect: convergeUpcloudVolumes({ config, kubeconfig })
-        })
-      }
+    if (kubeconfig !== undefined && managedVolumes.length > 0) {
+      yield* withRowProgress({
+        match: (name) => name.startsWith("volume/"),
+        effect: convergeUpcloudVolumes({ config, kubeconfig })
+      })
     }
 
     yield* withRowProgress({
@@ -111,17 +129,43 @@ export const applyUpcloudUksEffect = (
     return info
   })
 
+export interface UksWrappedResult extends UksClusterInfo {
+  readonly cdnWarnings: string
+}
+
 export const applyUpcloudUks = (
-  args: { readonly config: UpcloudUksClusterConfig; readonly replace: ReadonlySet<string> }
+  args: { readonly config: UpcloudUksClusterConfig; readonly configDir: string; readonly replace: ReadonlySet<string> }
 ): Effect.Effect<
-  UksClusterInfo,
-  MksError | PlanRejected | ConfigInvalid | VolumeError | ObjectStorageError | CredentialsSinkError | PlatformError,
+  UksWrappedResult,
+  | MksError
+  | PlanRejected
+  | ConfigInvalid
+  | VolumeError
+  | ObjectStorageError
+  | CredentialsSinkError
+  | PlatformError
+  | CdnStepError
+  | AuthenticationFailed
+ ,
   UpcloudEnv | HttpClient.HttpClient | FileSystem | ChildProcessSpawnerNS.ChildProcessSpawner
-> => applyUpcloudUksEffect(args).pipe(Effect.provide(dnsProviderLayerFor(args.config)))
+> =>
+  Effect.gen(function*() {
+    const cdn = yield* cdnHandleFor({ config: args.config, configDir: args.configDir })
+
+    const result = yield* applyUpcloudUksEffect({ config: args.config, replace: args.replace, cdn }).pipe(
+      Effect.provide(dnsProviderLayerWith({ config: args.config, pullZoneIdFor: pullZoneIdFor(cdn) }))
+    )
+
+    return { ...result, cdnWarnings: yield* cdnWarnings(cdn) }
+  })
 
 // no endpoint field on the cluster response; hostname comes from kubeconfig's cluster.server URL
 export const reconcileUpcloudDns = (
-  { config, kubeconfig }: { readonly config: UpcloudUksClusterConfig; readonly kubeconfig: Kubeconfig }
+  { cdn, config, kubeconfig }: {
+    readonly config: UpcloudUksClusterConfig
+    readonly kubeconfig: Kubeconfig
+    readonly cdn?: DnsTarget | undefined
+  }
 ): Effect.Effect<void, DnsError | ConfigInvalid, DnsProvider> =>
   Effect.gen(function*() {
     if (config.dns.module === "none") return
@@ -133,7 +177,8 @@ export const reconcileUpcloudDns = (
     })
 
     if (hostname === "") return yield* Effect.fail(_serverInvalid(context.server))
-    yield* reconcileDns({ config, targets: { api_server: { kind: "hostname", value: hostname } } })
+    const apiServer: DnsTarget = { kind: "hostname", value: hostname }
+    yield* reconcileDns({ config, targets: cdn === undefined ? { api_server: apiServer } : { api_server: apiServer, cdn } })
   })
 
 const _serverInvalid = (server: string): ConfigInvalid =>
@@ -154,10 +199,17 @@ export const kubeconfigUpcloudUks = (
   })
 
 // order: object-storage -> non-retained volumes -> cluster -> network -> router; retained resources are never deleted
-const _deleteUpcloudUksEffect = (
-  config: UpcloudUksClusterConfig
-): Effect.Effect<void, MksError | ConfigInvalid | ObjectStorageError | VolumeError, UpcloudEnv | DnsProvider> =>
+export const deleteUpcloudUksWithCdn = (
+  { cdn, config }: { readonly config: UpcloudUksClusterConfig; readonly cdn: CdnHandle | undefined }
+): Effect.Effect<void, MksError | ConfigInvalid | ObjectStorageError | VolumeError | CdnStepError, UpcloudEnv | DnsProvider> =>
   Effect.gen(function*() {
+    if (cdn !== undefined) {
+      yield* withRowProgress({
+        match: (name) => name.startsWith("cdn/"),
+        effect: removeCdn({ cdn, dns: removeDns(config) })
+      })
+    }
+
     yield* withRowProgress({
       match: (name) => name.startsWith("bucket/"),
       effect: reconcileUpcloudObjectStorageOnDelete(config)
@@ -181,13 +233,24 @@ const _deleteUpcloudUksEffect = (
       match: (name) => name.startsWith("network/") || name.startsWith("router/"),
       effect: deleteNetwork({ clients, clusterName: config.name })
     })
-    yield* removeDns(config)
+
+    if (cdn === undefined) yield* removeDns(config)
   })
 
 export const deleteUpcloudUks = (
-  config: UpcloudUksClusterConfig
-): Effect.Effect<void, MksError | ConfigInvalid | ObjectStorageError | VolumeError, UpcloudEnv | HttpClient.HttpClient> =>
-  _deleteUpcloudUksEffect(config).pipe(Effect.provide(dnsProviderLayerFor(config)))
+  { config, configDir }: { readonly config: UpcloudUksClusterConfig; readonly configDir: string }
+): Effect.Effect<
+  void,
+  MksError | ConfigInvalid | ObjectStorageError | VolumeError | CdnStepError | AuthenticationFailed | PlatformError,
+  UpcloudEnv | HttpClient.HttpClient | FileSystem
+> =>
+  Effect.gen(function*() {
+    const cdn = yield* cdnHandleFor({ config, configDir })
+
+    yield* deleteUpcloudUksWithCdn({ config, cdn }).pipe(
+      Effect.provide(dnsProviderLayerWith({ config, pullZoneIdFor: pullZoneIdFor(cdn) }))
+    )
+  })
 
 export const statusUpcloudUks = Effect.fn(function*(config: UpcloudUksClusterConfig) {
   const { clients } = yield* UpcloudEnv

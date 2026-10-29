@@ -18,8 +18,16 @@ const _osVars = [...OS_ENV_KEYS, ...OS_SECRET_ENV_KEYS] as const
 const _dnsVars: Record<ClusterConfig["dns"]["module"], ReadonlyArray<string>> = {
   none: [],
   ovh: ["OVH_CLIENT_ID", "OVH_CLIENT_SECRET"],
-  hetzner: ["HETZNER_DNS_TOKEN"]
+  hetzner: ["HETZNER_DNS_TOKEN"],
+  bunny: ["BUNNYNET_API_KEY"]
 }
+
+const _cdnVars: Record<"none" | "bunny", ReadonlyArray<string>> = {
+  none: [],
+  bunny: ["BUNNYNET_API_KEY"]
+}
+
+const _cdnModule = (config: ClusterConfig): "none" | "bunny" => config.cdn?.module ?? "none"
 
 const _volumesVars: Record<ClusterConfig["volumes"]["module"], ReadonlyArray<string>> = {
   none: [],
@@ -31,7 +39,8 @@ const _volumesVars: Record<ClusterConfig["volumes"]["module"], ReadonlyArray<str
 const _objectStorageVars: Record<ClusterConfig["object_storage"]["module"], ReadonlyArray<string>> = {
   none: [],
   ovh: _ovhVars,
-  upcloud: ["UPCLOUD_API_TOKEN"]
+  upcloud: ["UPCLOUD_API_TOKEN"],
+  bunny: ["BUNNYNET_API_KEY"]
 }
 
 const _moduleSection = (
@@ -48,7 +57,8 @@ export const providerSections = (config: ClusterConfig): ReadonlyArray<ProviderS
     : { title: `provider: ${config.provider}`, vars: providerFor(config).requiredEnvVars },
   ..._moduleSection(`dns: ${config.dns.module}`, _dnsVars[config.dns.module]),
   ..._moduleSection(`volumes: ${config.volumes.module}`, _volumesVars[config.volumes.module]),
-  ..._moduleSection(`object_storage: ${config.object_storage.module}`, _objectStorageVars[config.object_storage.module])
+  ..._moduleSection(`object_storage: ${config.object_storage.module}`, _objectStorageVars[config.object_storage.module]),
+  ..._moduleSection(`cdn: ${_cdnModule(config)}`, _cdnVars[_cdnModule(config)])
 ]
 
 export const renderEnvSummary = (
@@ -72,7 +82,8 @@ const _requiredVars = (config: ClusterConfig): ReadonlyArray<string> => [
     ...(config.distro === "ovh-mks" ? distroRegistry["ovh-mks"].requiredEnvVars : []),
     ...(config.distro === "upcloud-uks" ? _upcloudVars : []),
     ..._dnsVars[config.dns.module],
-    ..._objectStorageVars[config.object_storage.module]
+    ..._objectStorageVars[config.object_storage.module],
+    ..._cdnVars[_cdnModule(config)]
   ])
 ]
 

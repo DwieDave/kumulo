@@ -25,4 +25,4 @@ export const onDistro = (config: ClusterConfig) =>
 }
 
 export const wantsObjectStorage = (config: ClusterConfig): boolean =>
-  distroFor(config).supportsObjectStorage && config.object_storage.module === "ovh"
+  config.object_storage.module === "bunny" || (distroFor(config).supportsObjectStorage && config.object_storage.module === "ovh")

@@ -44,7 +44,7 @@ module.exports = {
       severity: "error",
       from: { path: "^packages/(?!core/|cli/)([^/]+)/" },
       to: {
-        path: "^packages/(?!core/|upcloud/)[^/]+/",
+        path: "^packages/(?!core/|upcloud/|bunny/)[^/]+/",
         pathNot: "^packages/$1/",
       },
     },

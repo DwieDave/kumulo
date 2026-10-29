@@ -40,4 +40,17 @@ describe("example configs", () => {
     expect(config.provider).toBe("upcloud")
     expect(config.name).toBe("staging-de")
   })
+
+  it("k3s-bunny.yaml decodes with bunny dns, storage and cdn", () => {
+    const config = Effect.runSync(parseConfigYaml(_load("k3s-bunny.yaml")))
+    expect(config.dns.module).toBe("bunny")
+    expect(config.object_storage.module).toBe("bunny")
+    expect(config.cdn?.module).toBe("bunny")
+  })
+
+  it("ovh-mks-bunny-cdn.yaml decodes with ingress origin and shield", () => {
+    const config = Effect.runSync(parseConfigYaml(_load("ovh-mks-bunny-cdn.yaml")))
+    expect(config.distro).toBe("ovh-mks")
+    expect(config.cdn?.module === "bunny" && config.cdn.shield?.plan).toBe("basic")
+  })
 })

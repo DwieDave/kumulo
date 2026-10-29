@@ -6,7 +6,7 @@ import type { DnsTarget } from "./dns.ts"
 export type DnsPlanInput =
   | { readonly module: "none" }
   | {
-    readonly module: "ovh" | "hetzner"
+    readonly module: "ovh" | "hetzner" | "bunny"
     readonly zone: string
     readonly records: ReadonlyArray<{ readonly name: string; readonly target: string }>
   }
@@ -14,10 +14,11 @@ export type DnsPlanInput =
 export interface DnsPlanTargets {
   readonly api_server: DnsTarget["kind"]
   readonly ingress?: DnsTarget["kind"]
+  readonly cdn?: DnsTarget["kind"]
 }
 
 const _kindOf = (target: string, targets: DnsPlanTargets): DnsRecordKind => {
-  const kind = target === "api_server" || target === "ingress" ? targets[target] : undefined
+  const kind = target === "api_server" || target === "ingress" || target === "cdn" ? targets[target] : undefined
 
   return kind === undefined ? recordKind(target) : kind === "ip" ? "A" : "CNAME"
 }

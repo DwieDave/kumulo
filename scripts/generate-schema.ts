@@ -33,6 +33,13 @@ const crossFieldConstraints = [
     then: { properties: { secrets: { properties: { sink: { not: { const: "none" } } } } } }
   },
   {
+    if: {
+      properties: { cdn: { properties: { origin: { const: "ingress" } }, required: ["origin"] } },
+      required: ["cdn"]
+    },
+    then: { properties: { distro: { const: "ovh-mks" } }, required: ["ingress"] }
+  },
+  {
     if: { required: ["ingress"] },
     then: { required: ["network"] }
   }

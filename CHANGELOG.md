@@ -59,3 +59,8 @@ All notable changes to kumulo are documented here. Format:
   a second apply saw its own records as foreign and `delete` removed nothing.
 - DNS: a record whose target changed kind (`CNAME` ⇄ `A`) left the stale rrset
   in place beside the new one. Fixed in both the OVH and Hetzner adapters.
+- `@kumulo/bunny`: bunny.net Core and Shield API client with Schema-decoded responses and retry on 429/5xx.
+- `@kumulo/dns-bunny`: `dns.module: bunny`, including PullZone records for CDN apex hostnames and `target: cdn`.
+- `@kumulo/storage-bunny`: `object_storage.module: bunny`, one S3-type storage zone per bucket with per-bucket credentials in the sops sink.
+- `@kumulo/cdn-bunny` and a new `CdnProvider` core port: optional `cdn` block (`module: bunny`) with pull zone, hostnames, free certificates and Shield (WAF, DDoS, bot detection, rate limits, access lists). Ids are written to `<cluster>.cdn.yaml`.
+- `BUNNYNET_API_KEY` credential and the `examples/k3s-bunny.yaml` and `examples/ovh-mks-bunny-cdn.yaml` configs.

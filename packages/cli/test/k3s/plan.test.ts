@@ -5,7 +5,7 @@ import { CloudProvider, configHash, toTaggedResource } from "@kumulo/core"
 import type { Inventory, TaggedResource } from "@kumulo/core"
 import type { K3sClusterConfigEncoded } from "../../src/cluster-config.ts"
 import { buildK3sNodes, buildK3sPlan, buildK3sServerSpecs, k3sPlanEffect, k3sPlanFor } from "../../src/k3s/plan.ts"
-import { decodeK3sTestConfig } from "../fixtures.ts"
+import { baseEncodedConfig, decodeK3sTestConfig } from "../fixtures.ts"
 
 const _encoded: K3sClusterConfigEncoded = {
   name: "prod-eu",
@@ -159,3 +159,14 @@ it.effect("servers created before hash stamping never plan as drifted", () =>
     Effect.tap((plan) => Effect.sync(() => assert.ok(plan.actions.every((a) => PlanAction.$is("NoOp")(a)), JSON.stringify(plan.actions)))),
     Effect.provide(_inventoryOf(_stamped(_config).map(({ configHash: _drop, ...rest }) => rest)))
   ))
+
+it("k3s plan resolves the cdn dns target as a CNAME", () => {
+  const config = decodeK3sTestConfig({
+    ...baseEncodedConfig,
+    dns: { module: "hetzner", zone: "example.com", ttl: 300, records: [{ name: "app", target: "cdn" }] },
+    cdn: { module: "bunny", name: "stagingeu", origin: { url: "https://203.0.113.10" }, hostnames: ["app.example.com"] }
+  })
+
+  const names = buildK3sPlan(config).actions.map((action) => action.name)
+  assert.ok(names.includes("dns/example.com/app (CNAME)"), names.join(","))
+})

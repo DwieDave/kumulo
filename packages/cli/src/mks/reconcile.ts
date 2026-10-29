@@ -2,7 +2,7 @@ import { Effect } from "effect"
 import type { Types } from "effect"
 import type * as HttpClient from "effect/http/HttpClient"
 import { CloudProvider, ConfigInvalid, PlanRejected, ResourceConflict, ResourceNotFound } from "@kumulo/core"
-import type { DnsProvider, Kubeconfig, LbInfo, LbSpec, ManagedClusterInfo, MksError, NetworkInfo, NetworkSpec } from "@kumulo/core"
+import type { AuthenticationFailed, DnsProvider, Kubeconfig, LbInfo, LbSpec, ManagedClusterInfo, MksError, NetworkInfo, NetworkSpec } from "@kumulo/core"
 import type { ClusterConfig } from "../cluster-config.ts"
 import {
   clusterDrift,
@@ -29,7 +29,10 @@ import { withRowProgress } from "../spinner.ts"
 import { MksEnv } from "./env.ts"
 import type { MksInventory } from "./plan.ts"
 import { mksClusterRow, mksPoolRow, toMksPool } from "./plan.ts"
-import { dnsProviderLayerFor, reconcileDns, removeDns } from "../dns.ts"
+import { dnsProviderLayerWith, reconcileDns, removeDns } from "../dns.ts"
+import { applyCdn, cdnHandleFor, cdnWarnings, pullZoneIdFor, removeCdn } from "../cdn.ts"
+import type { CdnHandle, CdnStepError } from "../cdn.ts"
+import type { FileSystem } from "effect/FileSystem"
 import type { DnsTarget, DnsTargets } from "../dns.ts"
 
 const _toMksConfig = (
@@ -82,20 +85,25 @@ const _endpointInvalid = (apiEndpoint: string) =>
   })
 
 const _dnsTargets = (
-  { hostname, ingress }: { readonly hostname: string; readonly ingress: LbInfo | undefined }
+  { cdn, hostname, ingress }: { readonly hostname: string; readonly ingress: LbInfo | undefined; readonly cdn?: DnsTarget | undefined }
 ): DnsTargets => {
   const apiServer: DnsTarget = { kind: "hostname", value: hostname }
 
-  return ingress?.floatingIp === undefined || ingress.floatingIp === ""
-    ? { api_server: apiServer }
-    : { api_server: apiServer, ingress: { kind: "ip", value: ingress.floatingIp } }
+  const targets: Types.Mutable<DnsTargets> = { api_server: apiServer }
+
+  if (ingress?.floatingIp !== undefined && ingress.floatingIp !== "") targets.ingress = { kind: "ip", value: ingress.floatingIp }
+
+  if (cdn !== undefined) targets.cdn = cdn
+
+  return targets
 }
 
 export const reconcileMksDns = (
-  { apiEndpoint, config, ingress }: {
+  { apiEndpoint, cdn, config, ingress }: {
     readonly config: ClusterConfig
     readonly apiEndpoint: string
     readonly ingress?: LbInfo
+    readonly cdn?: DnsTarget
   }
 ): Effect.Effect<void, MksError | ConfigInvalid, DnsProvider> =>
   Effect.gen(function*() {
@@ -108,7 +116,7 @@ export const reconcileMksDns = (
     })
 
     if (hostname === "") return yield* Effect.fail(_endpointInvalid(apiEndpoint))
-    yield* reconcileDns({ config, targets: _dnsTargets({ hostname, ingress }) })
+    yield* reconcileDns({ config, targets: _dnsTargets({ hostname, ingress, cdn }) })
   })
 
 type MksNetworkIds = Pick<MksDriverConfig, "privateNetworkId" | "nodesSubnetId" | "loadBalancersSubnetId">
@@ -255,11 +263,16 @@ export interface MksApplyResult extends ManagedClusterInfo {
 }
 
 export const applyMksEffect = (
-  { config, replace = NO_REPLACE }: {
+  { cdn, config, replace = NO_REPLACE }: {
     readonly config: ClusterConfig
     readonly replace?: ReadonlySet<string>
+    readonly cdn?: CdnHandle | undefined
   }
-): Effect.Effect<MksApplyResult, MksError | ConfigInvalid | PlanRejected, MksEnv | DnsProvider | CloudProvider> =>
+): Effect.Effect<
+  MksApplyResult,
+  MksError | ConfigInvalid | PlanRejected | CdnStepError,
+  MksEnv | DnsProvider | CloudProvider
+> =>
   Effect.gen(function*() {
     const pools = yield* _poolsToReplace({ config, replace })
     const { mks, serviceName } = yield* MksEnv
@@ -288,18 +301,40 @@ export const applyMksEffect = (
       effect: _ensureMksIngress({ config, network })
     })
 
-    yield* reconcileMksDns({ config, apiEndpoint: info.apiEndpoint, ingress })
+    yield* withRowProgress({
+      match: (name) => name.startsWith("cdn/"),
+      effect: applyCdn({
+        config,
+        cdn,
+        ingressIp: ingress?.floatingIp,
+        dns: (targets) => reconcileMksDns({ config, apiEndpoint: info.apiEndpoint, ingress, cdn: targets.cdn })
+      })
+    })
 
     return ingress === undefined ? { ...info } : { ...info, ingress }
   })
 
+export interface MksWrappedResult extends MksApplyResult {
+  readonly cdnWarnings: string
+}
+
 export const applyMks = (
-  args: { readonly config: ClusterConfig; readonly replace?: ReadonlySet<string> }
-): Effect.Effect<MksApplyResult, MksError | ConfigInvalid | PlanRejected, MksEnv | OpenStackEnv | HttpClient.HttpClient> =>
-  applyMksEffect(args).pipe(
-    Effect.provide(dnsProviderLayerFor(args.config)),
-    Effect.provide(mksCloudProviderLayer(args.config))
-  )
+  args: { readonly config: ClusterConfig; readonly configDir: string; readonly replace?: ReadonlySet<string> }
+): Effect.Effect<
+  MksWrappedResult,
+  MksError | ConfigInvalid | PlanRejected | CdnStepError | AuthenticationFailed,
+  MksEnv | OpenStackEnv | HttpClient.HttpClient | FileSystem
+> =>
+  Effect.gen(function*() {
+    const cdn = yield* cdnHandleFor({ config: args.config, configDir: args.configDir })
+
+    const result = yield* applyMksEffect({ config: args.config, replace: args.replace, cdn }).pipe(
+      Effect.provide(dnsProviderLayerWith({ config: args.config, pullZoneIdFor: pullZoneIdFor(cdn) })),
+      Effect.provide(mksCloudProviderLayer(args.config))
+    )
+
+    return { ...result, cdnWarnings: yield* cdnWarnings(cdn) }
+  })
 
 export const kubeconfigMks = (
   config: ClusterConfig
@@ -337,11 +372,21 @@ const _deleteMksInfra = (config: ClusterConfig): Effect.Effect<void, MksError, C
     yield* cloud.deleteByTag(config.name)
   })
 
-export const deleteMksEffect = (config: ClusterConfig): Effect.Effect<void, MksError, MksEnv | DnsProvider | CloudProvider> =>
+export const deleteMksEffect = (
+  config: ClusterConfig
+): Effect.Effect<void, MksError | CdnStepError, MksEnv | DnsProvider | CloudProvider> =>
+  deleteMksWithCdn({ config, cdn: undefined })
+
+export const deleteMksWithCdn = (
+  { cdn, config }: { readonly config: ClusterConfig; readonly cdn: CdnHandle | undefined }
+): Effect.Effect<void, MksError | CdnStepError, MksEnv | DnsProvider | CloudProvider> =>
   Effect.gen(function*() {
     const { mks, serviceName } = yield* MksEnv
     const mksConfig = _toMksConfig({ config, serviceName })
-    yield* removeDns(config)
+    yield* withRowProgress({
+      match: (name) => name.startsWith("cdn/"),
+      effect: removeCdn({ cdn, dns: removeDns(config) })
+    })
     yield* withRowProgress({
       match: (name) => name.startsWith("mks-cluster/") || name.startsWith("mks-pool/"),
       effect: Effect.gen(function*() {
@@ -362,9 +407,17 @@ export const deleteMksEffect = (config: ClusterConfig): Effect.Effect<void, MksE
   })
 
 export const deleteMks = (
-  config: ClusterConfig
-): Effect.Effect<void, MksError | ConfigInvalid, MksEnv | OpenStackEnv | HttpClient.HttpClient> =>
-  deleteMksEffect(config).pipe(
-    Effect.provide(dnsProviderLayerFor(config)),
-    Effect.provide(mksCloudProviderLayer(config))
-  )
+  { config, configDir }: { readonly config: ClusterConfig; readonly configDir: string }
+): Effect.Effect<
+  void,
+  MksError | ConfigInvalid | CdnStepError | AuthenticationFailed,
+  MksEnv | OpenStackEnv | HttpClient.HttpClient | FileSystem
+> =>
+  Effect.gen(function*() {
+    const cdn = yield* cdnHandleFor({ config, configDir })
+
+    yield* deleteMksWithCdn({ config, cdn }).pipe(
+      Effect.provide(dnsProviderLayerWith({ config, pullZoneIdFor: pullZoneIdFor(cdn) })),
+      Effect.provide(mksCloudProviderLayer(config))
+    )
+  })

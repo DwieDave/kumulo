@@ -79,7 +79,7 @@ export const k3sPlanFor = (
   actions: [
     ..._infraActions({ config, infra }),
     ...computePlan({ desired: buildK3sNodes(config), actual: observed }).actions,
-    ...dnsPlanActions({ config: config.dns, targets: { api_server: "ip" } })
+    ...dnsPlanActions({ config: config.dns, targets: config.cdn === undefined || config.cdn.module === "none" ? { api_server: "ip" } : { api_server: "ip", cdn: "hostname" } })
   ]
 })
 

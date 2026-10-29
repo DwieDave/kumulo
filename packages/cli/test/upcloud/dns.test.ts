@@ -62,3 +62,20 @@ it.effect("fails loudly when the kubeconfig has no usable server host, rather th
     assert.strictEqual(result._tag, "Failure")
     assert.strictEqual(spy.ensured.length, 0)
   }))
+
+it.effect("writes the cdn target record pointing at the pull zone system hostname", () =>
+  Effect.gen(function*() {
+    const spy = spyDnsLayer()
+
+    const config = decodeUpcloudTestConfig({
+      ...validUpcloudUksConfig,
+      dns: { module: "hetzner", zone: "example.com", ttl: 300, records: [{ name: "app", target: "cdn" }] }
+    })
+
+    yield* reconcileUpcloudDns({
+      config,
+      kubeconfig: _kubeconfig,
+      cdn: { kind: "hostname", value: "stagingeu.b-cdn.net" }
+    }).pipe(Effect.provide(spy.layer))
+    assert.strictEqual(spy.ensured[0]?.find((entry) => entry.name === "app")?.target, "stagingeu.b-cdn.net")
+  }))

@@ -127,16 +127,16 @@ export const mksEntry: DistroEntry<MksClusterConfig> = {
   plan: _mksPlanLive,
   deletePlanActions: _deletePlanActions,
   apply: (a) =>
-    applyMks({ config: a.config, replace: a.replace }).pipe(
+    applyMks({ config: a.config, configDir: a.configDir, replace: a.replace }).pipe(
       Effect.map((info) => ({
-        summary: `\nCluster "${a.config.name}" is ${info.status} (${info.apiEndpoint}).`,
+        summary: `\nCluster "${a.config.name}" is ${info.status} (${info.apiEndpoint}).${info.cdnWarnings}`,
         ..._ingressOutputs(info.ingress)
       }))
     ),
   delete: deleteMks,
   kubeconfig: kubeconfigMks,
   deletedLabel: "mks-cluster",
-  appliedPrefixes: ["network/", "subnet/", "gateway/", "mks-cluster/", "mks-pool/", "load-balancer/", "floating-ip/"],
+  appliedPrefixes: ["network/", "subnet/", "gateway/", "mks-cluster/", "mks-pool/", "load-balancer/", "floating-ip/", "cdn/"],
   selfProgress: true,
   status: _statusMks,
   upgrade: _upgradeMksEntry,

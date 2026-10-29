@@ -32,6 +32,27 @@ describe("providerSections", () => {
     expect(sections[1]?.vars).toEqual(["HETZNER_DNS_TOKEN"])
   })
 
+  it("bunny cdn lists BUNNYNET_API_KEY once and requires it", () => {
+    const config = _config({
+      cdn: { module: "bunny", name: "stagingeu", origin: { url: "https://203.0.113.10" }, hostnames: ["app.example.com"] }
+    })
+
+    expect(providerSections(config).find((s) => s.title === "cdn: bunny")?.vars).toEqual(["BUNNYNET_API_KEY"])
+    expect(missingCredentials({ config, present: () => false })).toContain("BUNNYNET_API_KEY")
+    expect(missingCredentials({ config, present: (name) => name === "BUNNYNET_API_KEY" })).not.toContain("BUNNYNET_API_KEY")
+  })
+
+  it("no cdn section when cdn is absent or none", () => {
+    expect(providerSections(_config({})).some((s) => s.title.startsWith("cdn"))).toBe(false)
+    expect(providerSections(_config({ cdn: { module: "none" } })).some((s) => s.title.startsWith("cdn"))).toBe(false)
+  })
+
+  it("bunny dns lists BUNNYNET_API_KEY", () => {
+    const sections = providerSections(_mksConfig({ dns: { module: "bunny", zone: "example.com", ttl: 300, records: [] } }))
+
+    expect(sections.find((s) => s.title === "dns: bunny")?.vars).toEqual(["BUNNYNET_API_KEY"])
+  })
+
   it("hetzner k3s config lists HCLOUD_TOKEN", () => {
     const sections = providerSections(
       _config({

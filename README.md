@@ -100,8 +100,59 @@ change nothing), `--show-env` (print the provider env-var summary),
 
 The full schema lives in [`packages/core/src/config/schema.ts`](packages/core/src/config/schema.ts)
 (source of truth) and is described in [`.docs/design/kumulo-design.md`](.docs/design/kumulo-design.md)
-§5. The two files under [`examples/`](examples/) are decoded against that
+§5. The files under [`examples/`](examples/) are decoded against that
 schema in CI (`examples/decode.test.ts`), so they never drift out of date.
+
+### bunny.net (DNS, object storage, CDN)
+
+bunny.net has no compute or managed Kubernetes, so it fills three slots, each
+selected with `module: bunny`: `dns`, `object_storage` and `cdn`. All three
+authenticate with one account key in `BUNNYNET_API_KEY` (the variable the
+official Terraform provider reads). Complete configs:
+[`examples/k3s-bunny.yaml`](examples/k3s-bunny.yaml) and
+[`examples/ovh-mks-bunny-cdn.yaml`](examples/ovh-mks-bunny-cdn.yaml).
+
+**DNS.** The zone must already exist in bunny; kumulo does not create zones or
+change registrar nameservers. If the zone does not yet report bunny
+nameservers, `plan` warns. Ownership uses the same TXT record as the other
+DNS modules.
+
+**Object storage.** A bucket is one S3-type storage zone:
+`{ name, region, tier?, retain }`, with `region` one of `DE NY SG UK SE LA JH SYD`
+and `tier` `standard` (HDD) or `edge` (SSD). Names are globally unique and
+checked at plan time. bunny's S3 API is a public preview, so `versioning` and
+`encryption` are not accepted, there are no lifecycle rules, and each zone is
+limited to 500 requests per second. A zone that holds files is never deleted,
+and `retain: true` keeps it regardless.
+
+**CDN.** One pull zone fronts the cluster. `origin: ingress` works only on
+`ovh-mks` with an `ingress` block; `k3s` and `upcloud-uks` need
+`origin: { url: ... }`. Add `target: cdn` to a DNS record to point it at
+`<name>.b-cdn.net` as a CNAME. A hostname at the zone apex needs
+`dns.module: bunny`, which writes a PullZone record instead.
+
+*Certificates.* After the pull zone and DNS exist, kumulo asks bunny for a free
+certificate per hostname. bunny only issues one once the hostname resolves to
+bunny, so kumulo retries with backoff for up to 10 minutes. If a hostname never
+resolves, the edge keeps serving plain HTTP, `apply` reports the failing
+hostnames, and nothing is rolled back; fix DNS and run `apply` again. `force_ssl`
+is switched on only after the certificate is issued.
+
+*Shield.* The optional `cdn.shield` block sets plan, WAF, DDoS, bot detection,
+rate limits and access lists. Rate limits and access lists are matched by name,
+so names must be unique. Plans are gated: `basic` allows two rate limits, and
+bot detection on a plan that lacks it fails with an error naming the plan
+needed. A plan change shows as an update with a cost note. bunny has no Shield
+delete call, so `delete` resets the zone to the basic plan with WAF off instead
+of removing it.
+
+**Known assumptions.** There was no run against a live account; behaviour comes
+from bunny's OpenAPI specs and the official Terraform provider. These points
+are unconfirmed and handled defensively: the apex record name may come back as
+`""` or `"@"` (both are accepted), pull zone updates read the zone, merge the
+fields kumulo owns and write it back in case updates are not partial, 429 and
+5xx responses are retried, and a 404 on delete counts as already gone. Report
+any divergence you see.
 
 ### Private network and ingress (`ovh-mks`)
 

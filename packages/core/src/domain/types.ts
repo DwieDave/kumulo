@@ -179,11 +179,90 @@ export interface BucketRef {
   readonly region: string
 }
 
+export interface BucketCredential {
+  readonly name: string
+  readonly region: string
+  readonly endpoint: string
+  readonly accessKey: Redacted.Redacted<string>
+  readonly secretKey: Redacted.Redacted<string>
+}
+
 export interface S3Credentials {
   readonly user: string
   readonly accessKey: Redacted.Redacted<string>
   readonly secretKey: Redacted.Redacted<string>
   readonly buckets: ReadonlyArray<BucketInfo>
+  readonly bucketCredentials?: ReadonlyArray<BucketCredential>
+}
+
+export type CdnTier = "standard" | "volume"
+
+export type CdnCacheMode = "smart" | "origin"
+
+export type ShieldPlan = "basic" | "advanced" | "business" | "enterprise"
+
+export type WafMode = "log" | "block"
+
+export type Sensitivity = "off" | "low" | "medium" | "high"
+
+export type RateLimitKey = "ip" | "path" | "header"
+
+export type AccessListType = "ip" | "cidr" | "asn" | "country"
+
+export type AccessListAction = "allow" | "block" | "challenge" | "log"
+
+export interface EdgeSpec {
+  readonly name: string
+  readonly tier: CdnTier
+  readonly originUrl: string
+  readonly verifyOriginTls: boolean
+  readonly websockets: boolean
+  readonly cache: CdnCacheMode
+  readonly hostnames: ReadonlyArray<string>
+  readonly forceSsl: boolean
+}
+
+export interface EdgeRef {
+  readonly id: string
+  readonly name: string
+}
+
+export interface EdgeInfo {
+  readonly ref: EdgeRef
+  readonly originUrl: string
+  readonly verifyOriginTls: boolean
+  readonly websockets: boolean
+  readonly cache: CdnCacheMode
+  readonly tier: CdnTier
+  readonly forceSsl: boolean
+  readonly defaultHostname: string
+  readonly hostnames: ReadonlyArray<string>
+  readonly certificatesIssued: ReadonlyArray<string>
+}
+
+export interface RateLimitRule {
+  readonly name: string
+  readonly pathPrefix: string
+  readonly requests: number
+  readonly window: string
+  readonly blockFor: string
+  readonly key: RateLimitKey
+}
+
+export interface AccessList {
+  readonly name: string
+  readonly type: AccessListType
+  readonly action: AccessListAction
+  readonly entries: ReadonlyArray<string>
+}
+
+export interface SecurityPolicy {
+  readonly plan: ShieldPlan
+  readonly waf?: { readonly enabled: boolean; readonly mode: WafMode }
+  readonly ddos?: { readonly sensitivity: Sensitivity }
+  readonly botDetection?: { readonly mode: WafMode; readonly sensitivity: Sensitivity }
+  readonly rateLimits: ReadonlyArray<RateLimitRule>
+  readonly accessLists: ReadonlyArray<AccessList>
 }
 
 export interface CredentialEntry {

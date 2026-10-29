@@ -8,7 +8,8 @@ export const fakeCredentials = Layer.succeed(
       OVH_CLIENT_ID: "test-client-id",
       OVH_CLIENT_SECRET: "test-client-secret",
       OVH_SERVICE_NAME: "service-1",
-      HETZNER_DNS_TOKEN: "test-dns-token"
+      HETZNER_DNS_TOKEN: "test-dns-token",
+      BUNNYNET_API_KEY: "test-bunny-key"
     }
   })
 )

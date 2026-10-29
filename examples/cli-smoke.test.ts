@@ -21,7 +21,8 @@ const _fakeEnv = {
   OS_PROJECT_NAME: "x",
   OS_REGION_NAME: "x",
   HCLOUD_TOKEN: "x",
-  HETZNER_DNS_TOKEN: "x"
+  HETZNER_DNS_TOKEN: "x",
+  BUNNYNET_API_KEY: "x"
 }
 
 const _dryRun = (example: string): string =>
@@ -55,5 +56,13 @@ describe("published kumulo CLI bundle", () => {
 
   it("apply --dry-run against the k3s-hetzner example fails loudly on fake credentials", () => {
     expect(() => _dryRun("k3s-hetzner.yaml")).toThrow(/Authentication failed: \w[\w -]*prod-fsn: hcloud rejected the API token/)
+  })
+
+  it("apply --dry-run against the k3s-bunny example fails loudly on fake credentials", () => {
+    expect(() => _dryRun("k3s-bunny.yaml")).toThrow(/POST http:\/\/example\.invalid\/v3\/auth\/tokens/)
+  })
+
+  it("apply --dry-run against the ovh-mks-bunny-cdn example fails loudly on fake credentials", () => {
+    expect(() => _dryRun("ovh-mks-bunny-cdn.yaml")).toThrow(/OAuth2 token request failed|Authentication failed/)
   })
 })

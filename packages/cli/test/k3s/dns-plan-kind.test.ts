@@ -10,3 +10,12 @@ const _kinds = (targets: ReadonlyArray<string>) =>
 it("classifies IPv4 as A, IPv6 as AAAA, hostname as CNAME", () => {
   assert.deepStrictEqual(_kinds(["203.0.113.10", "2001:db8::1", "lb.example.net"]), ["(A)", "(AAAA)", "(CNAME)"])
 })
+
+it("plans the cdn target as a CNAME when the plan knows a cdn is configured", () => {
+  const actions = dnsPlanActions({
+    config: { module: "ovh", zone: "example.com", records: [{ name: "app", target: "cdn" }] },
+    targets: { api_server: "ip", cdn: "hostname" }
+  })
+
+  assert.deepStrictEqual(actions.map((action) => action.name), ["dns/example.com/app (CNAME)"])
+})

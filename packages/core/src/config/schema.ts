@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import { Effect, Schema } from "effect"
 
 const octet = "(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)"
 const prefix = "(3[0-2]|[12]?\\d)"
@@ -90,7 +90,7 @@ const DnsRecord = Schema.Struct({
 export const Dns = Schema.Union([
   Schema.Struct({ module: Schema.Literal("none") }),
   Schema.Struct({
-    module: Schema.Literals(["ovh", "hetzner"]),
+    module: Schema.Literals(["ovh", "hetzner", "bunny"]),
     zone: Schema.NonEmptyString,
     ttl: PositiveInt,
     records: Schema.Array(DnsRecord)
@@ -140,13 +140,107 @@ const Bucket = Schema.Struct({
   retain: Schema.Boolean
 })
 
+export const BunnyStorageRegion = Schema.Literals(["DE", "NY", "SG", "UK", "SE", "LA", "JH", "SYD"])
+
+const isBunnyBucketName = Schema.isPattern(/^[A-Za-z0-9-]{4,}$/, {
+  message: "must be at least 4 characters: letters, digits and dashes"
+})
+
+export const BunnyBucketName = Schema.String.check(isBunnyBucketName)
+
+const BunnyBucket = Schema.Struct({
+  name: BunnyBucketName,
+  region: BunnyStorageRegion,
+  tier: Schema.optionalKey(Schema.Literals(["standard", "edge"])),
+  retain: Schema.Boolean
+})
+
+export const BunnyObjectStorage = Schema.Struct({
+  module: Schema.Literal("bunny"),
+  buckets: Schema.Array(BunnyBucket)
+})
+
 export const ObjectStorage = Schema.Union([
   Schema.Struct({ module: Schema.Literal("none") }),
   Schema.Struct({
     module: Schema.Literal("ovh"),
     buckets: Schema.Array(Bucket)
-  })
+  }),
+  BunnyObjectStorage
 ])
+
+const isHostname = Schema.isPattern(/^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/, {
+  message: "must be a lowercase DNS hostname such as app.example.com"
+})
+
+const CdnHostname = Schema.String.check(isHostname)
+
+const isCdnName = Schema.isPattern(/^[A-Za-z0-9]+$/, { message: "must contain letters and digits only" })
+
+const ShieldPlan = Schema.Literals(["basic", "advanced", "business", "enterprise"])
+const ShieldMode = Schema.Literals(["log", "block"])
+
+const RateLimit = Schema.Struct({
+  name: Schema.NonEmptyString,
+  path_prefix: Schema.NonEmptyString,
+  requests: PositiveInt,
+  window: PositiveInt,
+  block_for: PositiveInt,
+  key: Schema.Literals(["ip"])
+})
+
+const AccessList = Schema.Struct({
+  name: Schema.NonEmptyString,
+  type: Schema.Literals(["cidr", "ip", "asn", "country"]),
+  action: Schema.Literals(["allow", "block", "challenge", "log"]),
+  entries: Schema.Array(Schema.NonEmptyString).check(Schema.isMinLength(1))
+})
+
+const _isUniqueNames = (label: string) =>
+  Schema.makeFilter((items: ReadonlyArray<{ name: string }>) =>
+    new Set(items.map((item) => item.name)).size === items.length ? undefined : `${label} names must be unique`
+  )
+
+export const Shield = Schema.Struct({
+  plan: ShieldPlan,
+  waf: Schema.Struct({ enabled: Schema.Boolean, mode: ShieldMode }),
+  ddos: Schema.Struct({ sensitivity: Schema.Literals(["off", "low", "medium", "high", "challenge"]) }),
+  bot_detection: Schema.Struct({ mode: ShieldMode, sensitivity: Schema.Literals(["low", "medium", "high"]) }),
+  rate_limits: Schema.Array(RateLimit).check(_isUniqueNames("shield rate_limits")),
+  access_lists: Schema.Array(AccessList).check(_isUniqueNames("shield access_lists"))
+})
+
+export const CdnOrigin = Schema.Union([Schema.Literal("ingress"), Schema.Struct({ url: Schema.NonEmptyString })])
+
+export const BunnyCdn = Schema.Struct({
+  module: Schema.Literal("bunny"),
+  name: Schema.String.check(isCdnName),
+  tier: Schema.Literals(["standard", "volume"]).pipe(Schema.withDecodingDefaultKey(Effect.succeed("standard" as const))),
+  origin: CdnOrigin,
+  verify_origin_tls: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
+  websockets: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(true))),
+  cache: Schema.Literals(["smart", "origin"]).pipe(Schema.withDecodingDefaultKey(Effect.succeed("smart" as const))),
+  hostnames: Schema.Array(CdnHostname).check(Schema.isMinLength(1), Schema.isMaxLength(10), Schema.isUnique()),
+  force_ssl: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(true))),
+  shield: Schema.optionalKey(Shield)
+})
+
+export const Cdn = Schema.Union([Schema.Struct({ module: Schema.Literal("none") }), BunnyCdn])
+
+export const isCdnApexRequiresBunnyDns = Schema.makeFilter(
+  (config: { dns: { module: string; zone?: string }; cdn?: { module: string; hostnames?: ReadonlyArray<string> } }) => {
+    const zone = "zone" in config.dns ? config.dns.zone : undefined
+
+    return config.cdn?.hostnames?.some((host) => host === zone) === true && config.dns.module !== "bunny"
+      ? "cdn.hostnames contains the dns.zone apex, which requires dns.module bunny"
+      : undefined
+  }
+)
+
+export const isCdnOriginUrlRequired = Schema.makeFilter(
+  (config: { cdn?: { module: string; origin?: unknown } }) =>
+    config.cdn?.origin === "ingress" ? "cdn.origin ingress is only valid for distro ovh-mks with an ingress block" : undefined
+)
 
 const isAgeRecipient = Schema.isPattern(/^age1/, {
   message: "must be an age recipient key starting with age1"
@@ -180,7 +274,8 @@ export const commonClusterFields = {
   worker_pools: Schema.Array(WorkerPool),
   volumes: Volumes,
   object_storage: ObjectStorage,
-  secrets: Secrets
+  secrets: Secrets,
+  cdn: Schema.optionalKey(Cdn)
 }
 
 export type WorkerPool = typeof WorkerPool.Type

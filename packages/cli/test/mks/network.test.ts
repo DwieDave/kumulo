@@ -120,7 +120,7 @@ it.effect("applies a networkless config with no OpenStack credentials present", 
     const server = makeFakeMksServer({ vrackId: null })
     const config = yield* loadConfig("cluster.yaml")
 
-    const info = yield* applyMks({ config }).pipe(
+    const info = yield* applyMks({ config, configDir: "." }).pipe(
       Effect.provide(Layer.succeed(MksEnv, { mks: makeMksClient(server.httpClient), serviceName: "service-1" })),
       Effect.provide(_noOpenStackCredentials),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, server.httpClient))

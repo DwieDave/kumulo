@@ -39,7 +39,7 @@ export interface DistroEntry<C extends ClusterConfig = ClusterConfig> {
   readonly apply: (
     a: { readonly config: C; readonly configDir: string; readonly replace: ReadonlySet<string> }
   ) => Effect.Effect<DistroApplyResult, DistroFailure, DistroServices>
-  readonly delete: (config: C) => Effect.Effect<void, DistroFailure, DistroServices>
+  readonly delete: (a: { readonly config: C; readonly configDir: string }) => Effect.Effect<void, DistroFailure, DistroServices>
   readonly kubeconfig: (config: C) => Effect.Effect<Kubeconfig, DistroFailure, DistroServices>
   readonly deletedLabel: string
   readonly appliedPrefixes: ReadonlyArray<string>

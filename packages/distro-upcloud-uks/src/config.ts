@@ -5,6 +5,8 @@ import {
   commonClusterFields,
   Dns,
   isAuthMethodConsistentWithProvider,
+  isCdnApexRequiresBunnyDns,
+  isCdnOriginUrlRequired,
   isSecretsRequiredForObjectStorage,
   NonNegativeInt,
   NoVolumes,
@@ -124,7 +126,12 @@ export const UpcloudUksClusterConfig = Schema.Struct({
   control_plane_ip_filter: Schema.optionalKey(Schema.Array(Cidr)),
   storage_encryption: Schema.optionalKey(Schema.Boolean),
   upgrade_strategy: Schema.optionalKey(UpgradeStrategy)
-}).check(isSecretsRequiredForObjectStorage, isAuthMethodConsistentWithProvider)
+}).check(
+  isSecretsRequiredForObjectStorage,
+  isAuthMethodConsistentWithProvider,
+  isCdnApexRequiresBunnyDns,
+  isCdnOriginUrlRequired
+)
 
 export type UpcloudUksClusterConfig = typeof UpcloudUksClusterConfig.Type
 
