@@ -1,4 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
+import { Effect, Schema } from "effect"
+import { UpcloudUksClusterConfig } from "../../src/config.ts"
+import { parseTaint } from "../../src/distro/ensure-nodepools.ts"
 import { KUMULO_POOL_LABEL_KEY, uksPoolHash, uksPoolName } from "../../src/distro/nodegroup-diff.ts"
 import type { UksWorkerPoolConfig } from "../../src/distro/types.ts"
 
@@ -32,6 +35,61 @@ describe("uksPoolHash", () => {
   it("is unaffected by the pool's own name (name is identity, not immutable-field drift)", () => {
     expect(uksPoolHash(_pool({ name: "workers" }))).toBe(uksPoolHash(_pool({ name: "spot" })))
   })
+})
+
+describe("uksPoolHash golden", () => {
+  it("is unchanged for a pool with a bare taint and labels", () => {
+    expect(uksPoolHash(_pool({ labels: [{ key: "role", value: "gpu" }], taints: ["gpu"] }))).toBe("0352581186545fcc")
+  })
+})
+
+describe("parseTaint", () => {
+  it("keeps the old bare form as an empty-value NoSchedule taint", () => {
+    expect(parseTaint("gpu")).toEqual({ key: "gpu", value: "", effect: "NoSchedule" })
+  })
+
+  it("parses key=value:Effect", () => {
+    expect(parseTaint("dedicated=gpu:NoExecute")).toEqual({ key: "dedicated", value: "gpu", effect: "NoExecute" })
+  })
+
+  it("parses key:Effect and key=value", () => {
+    expect(parseTaint("gpu:PreferNoSchedule")).toEqual({ key: "gpu", value: "", effect: "PreferNoSchedule" })
+    expect(parseTaint("a=b")).toEqual({ key: "a", value: "b", effect: "NoSchedule" })
+  })
+})
+
+const _config = (pool: { readonly labels?: Readonly<Record<string, string>>; readonly taints?: ReadonlyArray<string> }) => ({
+  name: "staging-eu",
+  provider: "upcloud",
+  distro: "upcloud-uks",
+  version: "1.31",
+  zone: "de-fra1",
+  auth: { method: "api_token", region: "de-fra1" },
+  network: { cidr: "10.0.0.0/16" },
+  worker_pools: [{ name: "general", flavor: "2xCPU-4GB", count: 1, ...pool }],
+  dns: { module: "none" },
+  volumes: { module: "none" },
+  object_storage: { module: "none" },
+  secrets: { sink: "none" }
+})
+
+const _decode = (pool: { readonly labels?: Readonly<Record<string, string>>; readonly taints?: ReadonlyArray<string> }) => Effect.flip(Schema.decodeUnknownEffect(UpcloudUksClusterConfig)(_config(pool)))
+
+describe("worker pool config", () => {
+  it.effect("accepts valid taints", () =>
+    Schema.decodeUnknownEffect(UpcloudUksClusterConfig)(_config({ taints: ["gpu", "dedicated=gpu:NoExecute"] })).pipe(Effect.asVoid))
+
+  it.effect("rejects an unknown taint effect", () =>
+    Effect.gen(function*() {
+      const failure = yield* _decode({ taints: ["a:Bogus"] })
+      expect(String(failure)).toContain("taints")
+    }))
+
+  it.effect("rejects kumulo- label keys", () =>
+    Effect.gen(function*() {
+      const failure = yield* _decode({ labels: { "kumulo-pool": "x" } })
+      expect(String(failure)).toContain("kumulo- label keys are reserved")
+    }))
 })
 
 describe("uksPoolName", () => {

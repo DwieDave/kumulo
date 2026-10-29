@@ -23,12 +23,31 @@ const _labels = ({ pool, owner }: { readonly pool: UksWorkerPoolConfig; readonly
   { key: KUMULO_POOL_LABEL_KEY, value: pool.name }
 ]
 
+type TaintEffect = "NoSchedule" | "PreferNoSchedule" | "NoExecute"
+
+const _TAINT_EFFECTS: ReadonlyArray<string> = ["NoSchedule", "PreferNoSchedule", "NoExecute"]
+
+const _isTaintEffect = (value: string): value is TaintEffect => _TAINT_EFFECTS.includes(value)
+
+// grammar: key[=value][:Effect]; a missing effect means NoSchedule
+export const parseTaint = (spec: string): { key: string; value: string; effect: TaintEffect } => {
+  const colon = spec.lastIndexOf(":")
+  const suffix = colon === -1 ? undefined : spec.slice(colon + 1)
+  const effect = suffix !== undefined && _isTaintEffect(suffix) ? suffix : "NoSchedule"
+  const body = effect === suffix ? spec.slice(0, colon) : spec
+  const equals = body.indexOf("=")
+
+  return equals === -1
+    ? { key: body, value: "", effect }
+    : { key: body.slice(0, equals), value: body.slice(equals + 1), effect }
+}
+
 const _createPayload = ({ pool, owner }: { readonly pool: UksWorkerPoolConfig; readonly owner: string }) => ({
   name: uksPoolName(pool),
   count: pool.count,
   plan: pool.plan,
-  labels: _labels({ pool, owner }),
-  taints: pool.taints?.map((taint) => ({ key: taint, value: "", effect: "NoSchedule" })),
+  labels: [...(pool.labels ?? []), ..._labels({ pool, owner })],
+  taints: pool.taints?.map(parseTaint),
   ssh_keys: pool.ssh_keys,
   storage: pool.storage,
   anti_affinity: pool.anti_affinity,

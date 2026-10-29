@@ -149,6 +149,26 @@ describe("upcloud-uks distro driver (fake server)", () => {
     expect(desiredIpFilter({})).toEqual(["0.0.0.0/0"])
   })
 
+  it.effect("ensureNodePools sends user labels, kumulo labels and parsed taints", () =>
+    Effect.gen(function*() {
+      const server = makeFakeUksServer({ readyAfterPolls: 0 })
+      const clients = _clients(server.httpClient)
+      const network = yield* ensureNetwork({ clients, clusterName: _config.name, zone: _config.zone, cidr: _config.network.cidr })
+      const info = yield* ensureCluster({ clients, config: _config, networkUuid: network.networkUuid, owner: _owner })
+      const ref: UksClusterRef = { uuid: info.uuid, name: info.name }
+      const pool = { ..._pool, labels: [{ key: "role", value: "gpu" }], taints: ["dedicated=gpu:NoExecute", "gpu"] }
+      yield* ensureNodePools({ clients, ref, pools: [pool], owner: _owner })
+
+      const group = [...(server.nodeGroups.get(info.uuid)?.values() ?? [])][0]
+      const keys = group?.labels?.map((label) => label.key)
+      expect(group?.labels).toContainEqual({ key: "role", value: "gpu" })
+      expect(keys).toEqual(expect.arrayContaining(["kumulo-pool", "kumulo-owner", "kumulo-config-hash"]))
+      expect(group?.taints).toEqual([
+        { key: "dedicated", value: "gpu", effect: "NoExecute" },
+        { key: "gpu", value: "", effect: "NoSchedule" }
+      ])
+    }))
+
   it.effect("ensureNodePools scales a pool as an Update, no replace", () =>
     Effect.gen(function*() {
       const server = makeFakeUksServer({ readyAfterPolls: 0 })

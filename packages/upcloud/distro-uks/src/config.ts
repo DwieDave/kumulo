@@ -125,12 +125,24 @@ const UpcloudNetwork = Schema.Struct({
   cidr: UpcloudCidr
 })
 
+export const UksTaint = Schema.String.check(
+  Schema.isPattern(/^[^=:\s]{1,255}(=[^:\s]{0,255})?(:(NoSchedule|PreferNoSchedule|NoExecute))?$/, {
+    message: "must look like key[=value][:NoSchedule|PreferNoSchedule|NoExecute]"
+  })
+)
+
+const UksPoolLabels = Schema.Record(Schema.String, Schema.String).check(
+  Schema.makeFilter((labels: Readonly<Record<string, string>>) =>
+    Object.keys(labels).some((key) => key.startsWith("kumulo-")) ? "kumulo- label keys are reserved" : undefined
+  )
+)
+
 const UpcloudWorkerPool = Schema.Struct({
   name: UpcloudPoolName,
   flavor: Schema.NonEmptyString,
   count: NonNegativeInt,
-  labels: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
-  taints: Schema.optionalKey(Schema.Array(Schema.String)),
+  labels: Schema.optionalKey(UksPoolLabels),
+  taints: Schema.optionalKey(Schema.Array(UksTaint)),
   autoscaling: Schema.optionalKey(Autoscaling)
 })
 
