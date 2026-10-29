@@ -6,6 +6,7 @@
       "@kumulo/distro-ovh-mks": ["./packages/ovh/distro-mks/dist/index.d.ts"],
       "@kumulo/distro-upcloud-uks": ["./packages/upcloud/distro-uks/dist/index.d.ts"],
       "@kumulo/dns-bunny": ["./packages/bunny/dns/dist/index.d.ts"],
+      "@kumulo/dns-godaddy": ["./packages/godaddy/dns/dist/index.d.ts"],
       "@kumulo/dns-hetzner": ["./packages/hetzner/dns/dist/index.d.ts"],
       "@kumulo/dns-ovh": ["./packages/ovh/dns/dist/index.d.ts"],
       "@kumulo/hetzner": ["./packages/hetzner/client/dist/index.d.ts"],

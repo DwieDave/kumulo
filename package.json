@@ -18,6 +18,7 @@
       "packages/ovh/*",
       "packages/upcloud/*",
       "packages/hetzner/*",
+      "packages/godaddy/*",
       "packages/openstack/*",
       "tools/*"
     ],
@@ -54,7 +55,8 @@
     "release:rewrite-deps": "node scripts/rewrite-workspace-deps.cjs",
     "specs:update:ovh": "bash tools/ovh2openapi/scripts/update-specs.sh",
     "specs:update:openstack": "bash packages/openstack/client/scripts/update-specs.sh",
-    "specs:update:hetzner": "bash packages/hetzner/client/scripts/update-specs.sh"
+    "specs:update:hetzner": "bash packages/hetzner/client/scripts/update-specs.sh",
+    "specs:update:godaddy": "bash packages/godaddy/dns/scripts/update-specs.sh"
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",

@@ -1,9 +1,10 @@
 import { Effect, Layer } from "effect"
 import type * as HttpClient from "effect/http/HttpClient"
+import { makeGodaddyDnsClient } from "@kumulo/dns-godaddy"
 import { ConfigInvalid, DnsProvider, dnsNoopLive, ownershipTarget } from "@kumulo/core"
 import type { AuthenticationFailed, DesiredRecord, DnsError } from "@kumulo/core"
 import type { ClusterConfig } from "./cluster-config.ts"
-import { k3sBunnyDnsProviderLayer, k3sDnsProviderLayer, k3sHetznerDnsProviderLayer } from "./k3s/env.ts"
+import { godaddyHttpClientFromEnv, k3sBunnyDnsProviderLayer, k3sDnsProviderLayer, k3sGodaddyDnsProviderLayer, k3sHetznerDnsProviderLayer } from "./k3s/env.ts"
 
 export type DnsTarget =
   | { readonly kind: "ip"; readonly value: string }
@@ -68,6 +69,8 @@ export const dnsProviderLayerWith = (
 
   if (config.dns.module === "bunny") return k3sBunnyDnsProviderLayer({ pullZoneIdFor, ttl: config.dns.ttl })
 
+  if (config.dns.module === "godaddy") return k3sGodaddyDnsProviderLayer({ ttl: config.dns.ttl })
+
   if (dnsModule === "none") return dnsNoopLive
 
   return Layer.effect(
@@ -79,3 +82,14 @@ export const dnsProviderLayerWith = (
     )
   )
 }
+
+export const dnsPreflight = (
+  config: ClusterConfig
+): Effect.Effect<void, DnsError | AuthenticationFailed | ConfigInvalid, HttpClient.HttpClient> =>
+  Effect.gen(function*() {
+    const cfgDns = config.dns
+
+    if (cfgDns.module !== "godaddy") return
+    const httpClient = yield* godaddyHttpClientFromEnv()
+    yield* makeGodaddyDnsClient(httpClient).probe({ zone: cfgDns.zone })
+  })

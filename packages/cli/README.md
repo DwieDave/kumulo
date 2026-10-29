@@ -14,7 +14,7 @@ bun add @kumulo/cli
 ## Credentials from a sops file
 
 Provider credentials (`OVH_CLIENT_ID`, `OVH_CLIENT_SECRET`, `OVH_SERVICE_NAME`,
-`HCLOUD_TOKEN`, `HETZNER_DNS_TOKEN`, `BUNNYNET_API_KEY`, the OpenStack `OS_*` keys) can come from a
+`HCLOUD_TOKEN`, `HETZNER_DNS_TOKEN`, `GODADDY_API_TOKEN` (plus optional `GODADDY_API_BASE_URL`), `BUNNYNET_API_KEY`, the OpenStack `OS_*` keys) can come from a
 sops-encrypted YAML file instead of the shell environment:
 
 ```sh

@@ -90,7 +90,7 @@ const DnsRecord = Schema.Struct({
 export const Dns = Schema.Union([
   Schema.Struct({ module: Schema.Literal("none") }),
   Schema.Struct({
-    module: Schema.Literals(["ovh", "hetzner", "bunny"]),
+    module: Schema.Literals(["ovh", "hetzner", "bunny", "godaddy"]),
     zone: Schema.NonEmptyString,
     ttl: PositiveInt,
     records: Schema.Array(DnsRecord)
@@ -235,6 +235,32 @@ export const isCdnApexRequiresBunnyDns = Schema.makeFilter(
       ? "cdn.hostnames contains the dns.zone apex, which requires dns.module bunny"
       : undefined
   }
+)
+
+export const isGodaddyTtlMinimum = Schema.makeFilter((config: { dns: { module: string; ttl?: number } }) =>
+  config.dns.module === "godaddy" && config.dns.ttl !== undefined && config.dns.ttl < 600
+    ? "GoDaddy requires dns.ttl >= 600"
+    : undefined
+)
+
+const _reservedDnsTargets = ["api_server", "ingress", "cdn"]
+
+const _ipv4Literal = new RegExp(`^${octet}\\.${octet}\\.${octet}\\.${octet}$`)
+const _ipv6Literal = /^(?!.*:::)(?=(?:[^:]*:){2})(?:[0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$/
+
+const _isIpLiteral = (target: string): boolean => _ipv4Literal.test(target) || _ipv6Literal.test(target)
+
+export const isGodaddyApexNotCname = Schema.makeFilter(
+  (config: { dns: { module: string; zone?: string; records?: ReadonlyArray<{ name: string; target: string }> } }) =>
+    config.dns.module === "godaddy" &&
+    config.dns.records?.some(
+      (record) =>
+        (record.name === "@" || record.name === config.dns.zone) &&
+        !_reservedDnsTargets.includes(record.target) &&
+        !_isIpLiteral(record.target)
+    ) === true
+      ? "GoDaddy rejects an apex CNAME: dns.records at the zone apex must target an IP address"
+      : undefined
 )
 
 export const isCdnOriginUrlRequired = Schema.makeFilter(

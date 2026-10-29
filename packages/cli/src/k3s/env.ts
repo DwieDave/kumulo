@@ -1,11 +1,13 @@
 import type { Redacted } from "effect";
-import { Context, Effect, Layer } from "effect"
+import { Config, Context, Effect, Layer, Option } from "effect"
 import * as HttpClient from "effect/http/HttpClient"
+import { ConfigInvalid } from "@kumulo/core"
 import type { AuthenticationFailed } from "@kumulo/core"
 import type { DnsProvider, VolumeProvider } from "@kumulo/core"
 import type { ClusterConfig, K3sClusterConfig } from "../cluster-config.ts"
 import { makeDnsClient, ovhDnsProviderLive } from "@kumulo/dns-ovh"
 import { HetznerHttpLive, hetznerDnsProviderLive, makeHetznerDnsClient } from "@kumulo/dns-hetzner"
+import { GodaddyHttpLive, godaddyDnsProviderLive, makeGodaddyDnsClient } from "@kumulo/dns-godaddy"
 import { BunnyHttpLive, bunnyDnsClient } from "@kumulo/bunny"
 import { bunnyDnsProviderLive } from "@kumulo/dns-bunny"
 import { VolumeProviderLive } from "@kumulo/volumes-cinder"
@@ -38,6 +40,36 @@ export const k3sHetznerDnsProviderLayer = (): Layer.Layer<DnsProvider, Authentic
       const httpClient = yield* Effect.provide(HttpClient.HttpClient, HetznerHttpLive({ token }))
 
       return hetznerDnsProviderLive(makeHetznerDnsClient(httpClient))
+    })
+  )
+
+export const godaddyHttpClientFromEnv = (): Effect.Effect<
+  HttpClient.HttpClient,
+  AuthenticationFailed | ConfigInvalid,
+  HttpClient.HttpClient
+> =>
+  Effect.gen(function*() {
+    const token = yield* requiredRedactedEnv("GODADDY_API_TOKEN")
+
+    const baseUrl = yield* Config.option(Config.String("GODADDY_API_BASE_URL")).pipe(
+      Effect.mapError((cause) => new ConfigInvalid({ issues: [{ path: ["GODADDY_API_BASE_URL"], message: cause.message }] })),
+      Effect.filterOrFail(
+        (url) => Option.match(url, { onNone: () => true, onSome: (value) => URL.canParse(value) }),
+        () => new ConfigInvalid({ issues: [{ path: ["GODADDY_API_BASE_URL"], message: "GODADDY_API_BASE_URL is not a valid URL" }] })
+      )
+    )
+
+    return yield* Effect.provide(HttpClient.HttpClient, GodaddyHttpLive({ token, baseUrl: Option.getOrUndefined(baseUrl) }))
+  })
+
+export const k3sGodaddyDnsProviderLayer = (
+  { ttl }: { readonly ttl: number }
+): Layer.Layer<DnsProvider, AuthenticationFailed | ConfigInvalid, HttpClient.HttpClient> =>
+  Layer.unwrap(
+    Effect.gen(function*() {
+      const httpClient = yield* godaddyHttpClientFromEnv()
+
+      return godaddyDnsProviderLive({ dns: makeGodaddyDnsClient(httpClient), ttl })
     })
   )
 

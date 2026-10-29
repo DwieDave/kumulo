@@ -6,6 +6,8 @@ import {
   Dns,
   isAuthMethodConsistentWithProvider,
   isCdnApexRequiresBunnyDns,
+  isGodaddyApexNotCname,
+  isGodaddyTtlMinimum,
   isCdnOriginUrlRequired,
   isSecretsRequiredForObjectStorage,
   NonNegativeInt,
@@ -130,7 +132,9 @@ export const UpcloudUksClusterConfig = Schema.Struct({
   isSecretsRequiredForObjectStorage,
   isAuthMethodConsistentWithProvider,
   isCdnApexRequiresBunnyDns,
-  isCdnOriginUrlRequired
+  isCdnOriginUrlRequired,
+  isGodaddyTtlMinimum,
+  isGodaddyApexNotCname
 )
 
 export type UpcloudUksClusterConfig = typeof UpcloudUksClusterConfig.Type

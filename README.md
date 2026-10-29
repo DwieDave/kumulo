@@ -30,6 +30,7 @@ node packages/cli/dist/main.mjs <command> <config-path>   # after `bun run build
 Every command reads a cluster from one config file — YAML or JSON. See
 [`examples/k3s.yaml`](examples/k3s.yaml),
 [`examples/k3s-hetzner.yaml`](examples/k3s-hetzner.yaml),
+[`examples/k3s-godaddy.yaml`](examples/k3s-godaddy.yaml),
 [`examples/ovh-mks.yaml`](examples/ovh-mks.yaml) and
 [`examples/upcloud-uks.json`](examples/upcloud-uks.json) for full, schema-valid
 examples — copy one and edit `name`, `auth.region`, `ssh.public_key_path`,
@@ -42,10 +43,54 @@ Credentials are read from the environment, not the config file:
 | `OVH_CLIENT_ID`, `OVH_CLIENT_SECRET`, `OVH_SERVICE_NAME` | `ovh-mks` cluster API calls |
 | `OS_AUTH_URL`, `OS_USERNAME`, `OS_PASSWORD`, `OS_PROJECT_NAME`, `OS_REGION_NAME` (or `OS_CLOUD` + `clouds.yaml`) | Cinder volumes (both distros); the `ovh-mks` `network`/`ingress` blocks |
 | `HCLOUD_TOKEN`, `HETZNER_DNS_TOKEN` | `k3s` clusters with `provider: hetzner` |
+| `GODADDY_API_TOKEN`, optional `GODADDY_API_BASE_URL` | `dns.module: godaddy` |
 | `UPCLOUD_API_TOKEN` | `upcloud-uks` cluster API calls |
 
 They can also come from a sops-encrypted file — see
 [`packages/cli/README.md`](packages/cli/README.md).
+
+## GoDaddy DNS
+
+Set `dns.module: godaddy` to manage records in a zone hosted at GoDaddy
+(see [`examples/k3s-godaddy.yaml`](examples/k3s-godaddy.yaml)). The zone must
+already exist in the account; kumulo does not create it.
+
+**Token.** Create a personal access token (PAT) at
+https://developer.godaddy.com/personal-access-token. Give it the scope
+`domains.dns:update` and pick an expiry (7, 30, 60 or 90 days, or 1 year).
+The token is shown once. Export it as `GODADDY_API_TOKEN`. `GODADDY_API_BASE_URL`
+is optional and overrides `https://api.godaddy.com`. When the token expires,
+requests fail with 401; create a new one.
+
+**Limits.**
+- `dns.ttl` must be at least 600 seconds (GoDaddy's minimum; the maximum is 86400).
+- A CNAME cannot sit on the zone apex. Use an A record there.
+- The rate limit is about 600 requests per 23 minutes, shared by everything
+  using the same token. kumulo reads the zone once per run, writes one record
+  at a time, and waits out `Retry-After` on 429.
+
+**Account eligibility and 403.** GoDaddy only allows DNS API calls from some
+accounts. Reports from 2024 require 10+ domains or a Discount Domain Club
+Premier plan. A 2026 support quote relaxes this to one or more domains, a
+Discount Domain Club Pro plan, or $20+/month of eligible purchases. A 403 means
+either the token lacks `domains.dns:update` or the account is not eligible
+(typically `ACCESS_DENIED`). Fix the scope first. If the scope is right, ask
+GoDaddy API support to allow-list the account, or meet the threshold.
+
+**Fallback.** If the account cannot get API access, point the zone's
+nameservers at another DNS provider (OVH, Hetzner or bunny.net) at the
+registrar, and set `dns.module` to that provider.
+
+**OTE.** GoDaddy's test environment is `https://api.ote-godaddy.com`, set
+through `GODADDY_API_BASE_URL`. Support says OTE is not subject to the
+eligibility rules, but it is not known whether PATs work there.
+
+**Unverified assumptions.** These come from research and were not confirmed
+against the live API:
+- whether the DNS endpoints enforce `Idempotency-Key`;
+- how TXT record data must be quoted;
+- the exact set of 403 error codes;
+- that the 2026 eligibility relaxation applies to every account.
 
 Build once — the CLI runs on node, and `dist/main.mjs` carries its own
 `#!/usr/bin/env node` shebang, so `./packages/cli/dist/main.mjs` works too:

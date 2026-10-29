@@ -44,6 +44,8 @@ export {
   HcloudVolumes,
   isAuthMethodConsistentWithProvider,
   isCdnApexRequiresBunnyDns,
+  isGodaddyApexNotCname,
+  isGodaddyTtlMinimum,
   isCdnOriginUrlRequired,
   BunnyBucketName,
   BunnyCdn,
