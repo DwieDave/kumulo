@@ -1,15 +1,10 @@
 # @kumulo/oxlint
 
-Custom oxlint rules enforcing kumulo's Effect and workspace conventions.
+Private workspace package holding kumulo's oxlint JS plugins. It is not published; `.oxlintrc.json` loads the plugins from source.
 
-Part of [kumulo](../../README.md) — a CLI that provisions and manages
-Kubernetes clusters on OVH from a single YAML config. This package is
-published from that workspace and is normally consumed through the `kumulo`
-CLI rather than directly.
+- `src/oxlint`: the `kumulo/*` rules (Effect and workspace conventions).
+- `src/anti-slop`: the `anti-slop/*` rules, vendored from [dmmulroy/anti-slop](https://github.com/dmmulroy/anti-slop). See `src/anti-slop/UPSTREAM.md` for the pinned commit and local deviations.
 
-```sh
-bun add @kumulo/oxlint
-```
+Tests live in `test/` (`test/kumulo`, `test/anti-slop`) and run under the root vitest config using oxlint's `RuleTester` via `test/rule-tester.ts`.
 
-See the [root README](../../README.md) for configuration, commands and
-examples, and the [changelog](../../CHANGELOG.md) for release notes.
+See the [root README](../../README.md) for the project overview.

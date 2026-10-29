@@ -1,5 +1,5 @@
-import { isFunctionLike } from "../types.ts"
-import type { AstNode, Rule, RuleContext } from "../types.ts"
+import { defineRule } from "@oxlint/plugins"
+import type { Context, ESTree } from "@oxlint/plugins"
 
 const MESSAGE = "Functions with more than one parameter must take a single object parameter (named-args)."
 
@@ -7,9 +7,10 @@ type Scope = "all" | "exports"
 
 const _isScope = (value: unknown): value is Scope => value === "all" || value === "exports"
 
-const _isInsideExport = (context: RuleContext, node: AstNode): boolean => {
-  for (const ancestor of context.sourceCode.getAncestors(node)) {
+const _isInsideExport = (node: ESTree.Node): boolean => {
+  for (let ancestor = node.parent; ancestor; ancestor = ancestor.parent) {
     const t = ancestor.type
+
     if (
       t === "ExportNamedDeclaration" ||
       t === "ExportDefaultDeclaration" ||
@@ -18,14 +19,17 @@ const _isInsideExport = (context: RuleContext, node: AstNode): boolean => {
       return true
     }
   }
+
   return false
 }
 
-const _scopeFrom = (context: RuleContext): Scope => {
+const _scopeFrom = (context: Context): Scope => {
   const opt = context.options[0]
-  if (opt && typeof opt === "object" && "scope" in opt && _isScope(opt.scope)) {
+
+  if (opt instanceof Object && "scope" in opt && _isScope(opt.scope)) {
     return opt.scope
   }
+
   return "exports"
 }
 
@@ -35,45 +39,43 @@ const FUNCTION_LIKE = new Set<string>([
   "ArrowFunctionExpression"
 ])
 
-const _isInlineCallback = (
-  context: RuleContext,
-  node: AstNode
-): boolean => {
+const _isInlineCallback = (node: ESTree.Node): boolean => {
   // Inline callback: walk up past Property/ObjectExpression/ArrayExpression to a Call/New (exempt) or anything else (not exempt).
-  const ancestors = context.sourceCode.getAncestors(node)
-  for (let i = ancestors.length - 1; i >= 0; i--) {
-    const p = ancestors[i]
-    if (!p) return false
+  for (let p = node.parent; p; p = p.parent) {
     const t = p.type
+
     if (t === "CallExpression" || t === "NewExpression") return true
+
     if (t === "ArrayExpression") continue
+
     if (t === "ObjectExpression" || t === "Property") continue
+
     return false
   }
+
   return false
 }
 
-const _isNestedInsideFunction = (
-  context: RuleContext,
-  node: AstNode
-): boolean => {
-  for (const ancestor of context.sourceCode.getAncestors(node)) {
-    if (ancestor === node) continue
+const _isNestedInsideFunction = (node: ESTree.Node): boolean => {
+  for (let ancestor = node.parent; ancestor; ancestor = ancestor.parent) {
     if (FUNCTION_LIKE.has(ancestor.type)) return true
   }
+
   return false
 }
 
-function _check(context: RuleContext, node: AstNode, scope: Scope) {
-  if (!isFunctionLike(node)) return
+function _check(context: Context, node: ESTree.Function | ESTree.ArrowFunctionExpression, scope: Scope) {
   if (node.params.length <= 1) return
-  if (_isInlineCallback(context, node)) return
-  if (_isNestedInsideFunction(context, node)) return
-  if (scope === "exports" && !_isInsideExport(context, node)) return
+
+  if (_isInlineCallback(node)) return
+
+  if (_isNestedInsideFunction(node)) return
+
+  if (scope === "exports" && !_isInsideExport(node)) return
   context.report({ node, message: MESSAGE })
 }
 
-export const noMultipleFunctionParams: Rule = {
+export const noMultipleFunctionParams = defineRule({
   meta: {
     type: "problem",
     docs: {
@@ -92,6 +94,7 @@ export const noMultipleFunctionParams: Rule = {
   },
   create(context) {
     const scope = _scopeFrom(context)
+
     return {
       FunctionDeclaration(node) {
         _check(context, node, scope)
@@ -104,4 +107,4 @@ export const noMultipleFunctionParams: Rule = {
       }
     }
   }
-}
+})

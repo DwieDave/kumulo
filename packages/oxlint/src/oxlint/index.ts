@@ -6,9 +6,9 @@ import { noSyncSchemaApis } from "./rules/no-sync-schema-apis.ts"
 import { noTypeAssertion } from "./rules/no-type-assertion.ts"
 import { noYieldlessEffectGen } from "./rules/no-yieldless-effect-gen.ts"
 import { privateFunctionPrefix } from "./rules/private-function-prefix.ts"
-import type { Plugin } from "./types.ts"
+import { definePlugin } from "@oxlint/plugins"
 
-const plugin: Plugin = {
+const plugin = definePlugin({
   meta: { name: "kumulo" },
   rules: {
     "no-banned-type-assertions": noBannedTypeAssertions,
@@ -20,6 +20,6 @@ const plugin: Plugin = {
     "no-yieldless-effect-gen": noYieldlessEffectGen,
     "private-function-prefix": privateFunctionPrefix
   }
-}
+})
 
 export default plugin

@@ -1,21 +1,21 @@
-import { isTSTypeCast } from "../types.ts"
-import type { AstNode, Rule } from "../types.ts"
+import { defineRule } from "@oxlint/plugins"
+import type { ESTree } from "@oxlint/plugins"
 
 const BANNED_KEYWORDS = new Set(["TSAnyKeyword", "TSUnknownKeyword", "TSNeverKeyword"])
 
-function _bannedTargetKind(node: AstNode): string | null {
-  if (!isTSTypeCast(node)) return null
+function _bannedTargetKind(node: ESTree.TSAsExpression | ESTree.TSTypeAssertion): string | null {
   const ann = node.typeAnnotation
+
   if (BANNED_KEYWORDS.has(ann.type)) return ann.type.replace(/^TS|Keyword$/g, "").toLowerCase()
+
   return null
 }
 
-function _isDoubleAssertion(node: AstNode): boolean {
-  if (!isTSTypeCast(node)) return false
-  return isTSTypeCast(node.expression)
+function _isDoubleAssertion(node: ESTree.TSAsExpression | ESTree.TSTypeAssertion): boolean {
+  return node.expression.type === "TSAsExpression" || node.expression.type === "TSTypeAssertion"
 }
 
-export const noBannedTypeAssertions: Rule = {
+export const noBannedTypeAssertions = defineRule({
   meta: {
     type: "problem",
     docs: {
@@ -23,15 +23,18 @@ export const noBannedTypeAssertions: Rule = {
     }
   },
   create(context) {
-    function report(node: AstNode) {
+    function report(node: ESTree.TSAsExpression | ESTree.TSTypeAssertion) {
       const banned = _bannedTargetKind(node)
+
       if (banned) {
         context.report({
           node,
           message: `\`as ${banned}\` is banned — silently disables the type checker.`
         })
+
         return
       }
+
       if (_isDoubleAssertion(node)) {
         context.report({
           node,
@@ -39,9 +42,10 @@ export const noBannedTypeAssertions: Rule = {
         })
       }
     }
+
     return {
       TSAsExpression: report,
       TSTypeAssertion: report
     }
   }
-}
+})

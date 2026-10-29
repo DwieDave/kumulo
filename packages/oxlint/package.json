@@ -10,7 +10,10 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@oxlint/plugins": "catalog:",
     "@types/bun": "catalog:",
-    "typescript": "catalog:"
+    "oxlint": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

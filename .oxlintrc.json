@@ -1,6 +1,16 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "jsPlugins": ["./packages/oxlint/src/oxlint/index.ts"],
+  "jsPlugins": [
+    "./packages/oxlint/src/oxlint/index.ts",
+    {
+      "name": "anti-slop",
+      "specifier": "./packages/oxlint/src/anti-slop/index.ts"
+    },
+    {
+      "name": "anti-slop-effect",
+      "specifier": "./packages/oxlint/src/anti-slop/effect/index.ts"
+    }
+  ],
   "categories": {
     "correctness": "error",
     "suspicious": "warn"
@@ -21,20 +31,56 @@
     "eslint/no-eval": "error",
     "import/no-cycle": "error",
     "promise/no-return-wrap": "error",
-    "unicorn/no-await-in-promise-methods": "error"
+    "unicorn/no-await-in-promise-methods": "error",
+    "oxc/no-accumulating-spread": "error",
+    "anti-slop/no-array-filter-map": "error",
+    "anti-slop/no-reduce-accumulator-copy": "error",
+    "anti-slop/no-chained-type-assertions": "error",
+    "anti-slop/no-conditional-empty-object-spread": "error",
+    "anti-slop/no-known-value-widening": "error",
+    "anti-slop/no-module-mocking": "error",
+    "anti-slop/no-object-parameters": "error",
+    "anti-slop/no-reflect-apply": "error",
+    "anti-slop/no-reflect-get": "error",
+    "anti-slop/no-runtime-typeof": "error",
+    "anti-slop/no-shape-in-symbol-names": "error",
+    "anti-slop/no-unknown-parameters": "error",
+    "anti-slop/no-unknown-returns": "error",
+    "anti-slop/no-unknown-type-aliases": "error",
+    "anti-slop/no-unsafe-dictionary-type": "error",
+    "anti-slop/no-widen-then-assert": "error",
+    "anti-slop/require-readable-spacing": "error",
+    "anti-slop/require-safety-comment-for-type-assertion": "error",
+    "anti-slop-effect/no-manual-effect-error-tag": "error",
+    "anti-slop-effect/no-manual-tag-comparison": "error",
+    "anti-slop-effect/no-manual-tagged-construction": "error",
+    "anti-slop-effect/no-service-constructor-imports": "error",
+    "anti-slop-effect/prefer-effect-match": "error"
   },
   "overrides": [
     {
-      "files": ["packages/oxlint/**"],
-      "rules": { "kumulo/no-type-assertion": "off" }
+      "files": [
+        "packages/oxlint/**"
+      ],
+      "rules": {
+        "kumulo/no-type-assertion": "off"
+      }
     },
     {
-      "files": ["scripts/**"],
-      "rules": { "unicorn/no-thenable": "off" }
+      "files": [
+        "scripts/**"
+      ],
+      "rules": {
+        "unicorn/no-thenable": "off"
+      }
     },
     {
-      "files": ["**/test/**"],
-      "rules": { "kumulo/no-comments": "off" }
+      "files": [
+        "**/test/**"
+      ],
+      "rules": {
+        "kumulo/no-comments": "off"
+      }
     }
   ],
   "ignorePatterns": [
@@ -42,6 +88,18 @@
     "dist",
     ".references",
     "coverage",
-    "packages/*/src/generated/**"
+    "packages/*/src/generated/**",
+    ".agent/**",
+    ".agents/**",
+    ".claude/**",
+    ".codex/**",
+    ".continue/**",
+    ".cursor/**",
+    ".gemini/**",
+    ".opencode/**",
+    ".pi/**",
+    ".roo/**",
+    ".windsurf/**",
+    "packages/oxlint/src/anti-slop/**"
   ]
 }

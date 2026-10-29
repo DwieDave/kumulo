@@ -38,8 +38,21 @@ All notable changes to kumulo are documented here. Format:
   the cluster. A network is never retained; `retain` on volumes and buckets is
   unchanged.
 
+### Changed
+
+- Built on Effect 4.1.0 (was 4.0.0-beta.102), vitest 5, oxlint 1.90 and bun
+  1.4.4. Generated OpenAPI clients are regenerated with the 4.1 generator and
+  keep their previous closed struct types.
+- `kumulo.schema.json` inlines its definitions instead of using `$ref`s; the
+  accepted config is unchanged.
+- Lint now also runs the vendored anti-slop rules
+  ([dmmulroy/anti-slop](https://github.com/dmmulroy/anti-slop)), including the
+  Effect rule group.
+
 ### Fixed
 
+- `--yes`, `--dry-run` and `--show-env` failed with "Missing required flag"
+  when omitted under Effect 4.1; they default to off again.
 - `ensureNetwork`'s existing-network path re-reads the network's subnets
   instead of returning without them, so a re-apply and a first apply agree.
 - DNS: the CLI never wrote the `kumulo.cluster=<tag>` ownership TXT record, so

@@ -1,4 +1,4 @@
-import type { AstNode, Rule } from "../types.ts"
+import { defineRule } from "@oxlint/plugins"
 
 const DIRECTIVE_PREFIX = /^\s*(eslint|oxlint|biome|prettier|@ts-)/
 const WHY_PREFIX = /^\s*kumulo:\s*WHY\b/
@@ -6,7 +6,7 @@ const MAX_COMMENT_LENGTH = 150
 
 const _isJsDoc = (value: string): boolean => value.startsWith("*")
 
-export const noComments: Rule = {
+export const noComments = defineRule({
   meta: {
     type: "suggestion",
     docs: {
@@ -16,10 +16,12 @@ export const noComments: Rule = {
   },
   create(context) {
     return {
-      Program(node: AstNode) {
+      Program(node) {
         for (const comment of context.sourceCode.getAllComments()) {
           if (DIRECTIVE_PREFIX.test(comment.value)) continue
+
           if (WHY_PREFIX.test(comment.value)) continue
+
           if (comment.type === "Block") {
             if (_isJsDoc(comment.value)) continue
             context.report({
@@ -30,6 +32,7 @@ export const noComments: Rule = {
             })
             continue
           }
+
           if (comment.value.length > MAX_COMMENT_LENGTH) {
             context.report({
               loc: comment.loc,
@@ -42,4 +45,4 @@ export const noComments: Rule = {
       }
     }
   }
-}
+})
