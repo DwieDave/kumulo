@@ -288,4 +288,69 @@ describe("upcloud-uks distro driver (fake server)", () => {
       expect(server.networks.size).toBe(0)
       expect(server.routers.size).toBe(0)
     }))
+
+  it.effect("maps storage_encryption none, data-at-rest and null onto a boolean", () =>
+    Effect.gen(function*() {
+      const server = makeFakeUksServer({ readyAfterPolls: 0 })
+      const clients = _clients(server.httpClient)
+
+      const base = {
+        zone: "de-fra1",
+        network: "net-1",
+        network_cidr: "10.0.0.0/24",
+        version: "1.31",
+        plan: "dev-md",
+        state: "running",
+        control_plane_ip_filter: null,
+        pollsRemaining: 0
+      }
+
+      server.clusters.set("a", { ...base, uuid: "a", name: "a", storage_encryption: "none" })
+      server.clusters.set("b", { ...base, uuid: "b", name: "b", storage_encryption: "data-at-rest" })
+      server.clusters.set("c", { ...base, uuid: "c", name: "c", storage_encryption: null })
+      server.clusters.set("d", { ...base, uuid: "d", name: "d" })
+
+      const encrypted = yield* Effect.forEach(["a", "b", "c", "d"], (name) =>
+        findClusterByName({ clients, name }).pipe(Effect.map((info) => info?.storageEncryption)))
+
+      expect(encrypted).toEqual([false, true, false, false])
+
+      const info = yield* findClusterByName({ clients, name: "a" })
+      expect(info?.version).toBe("1.31")
+    }))
+
+  it.effect("ensureCluster refuses a live version ahead of the config", () =>
+    Effect.gen(function*() {
+      const server = makeFakeUksServer({ readyAfterPolls: 0 })
+      const clients = _clients(server.httpClient)
+      const network = yield* ensureNetwork({ clients, clusterName: _config.name, zone: _config.zone, cidr: _config.network.cidr })
+      yield* ensureCluster({ clients, config: { ..._config, version: "1.31" }, networkUuid: network.networkUuid, owner: _owner })
+
+      const error = yield* ensureCluster({
+        clients,
+        config: { ..._config, version: "1.30" },
+        networkUuid: network.networkUuid,
+        owner: _owner
+      }).pipe(Effect.flip)
+
+      expect(error._tag).toBe("ResourceConflict")
+    }))
+
+  it.effect("ensureCluster tolerates a live version behind the config and does not upgrade", () =>
+    Effect.gen(function*() {
+      const server = makeFakeUksServer({ readyAfterPolls: 0 })
+      const clients = _clients(server.httpClient)
+      const network = yield* ensureNetwork({ clients, clusterName: _config.name, zone: _config.zone, cidr: _config.network.cidr })
+      yield* ensureCluster({ clients, config: { ..._config, version: "1.30" }, networkUuid: network.networkUuid, owner: _owner })
+
+      const info = yield* ensureCluster({
+        clients,
+        config: { ..._config, version: "1.31" },
+        networkUuid: network.networkUuid,
+        owner: _owner
+      })
+
+      expect(info.version).toBe("1.30")
+      expect(server.upgradeRequests).toHaveLength(0)
+    }))
 })

@@ -7,6 +7,8 @@ export type { UpcloudUksClusterConfigEncoded } from "./config.ts"
 
 export {
   clusterDrift,
+  VersionDrift,
+  versionDrift,
   UksClusterDrift,
   UpgradeTarget,
   deleteAll,
@@ -24,6 +26,7 @@ export {
   networkName,
   ownershipLabels,
   pollUntil,
+  compareMinor,
   resolveUpgradeTarget,
   routerName,
   uksNetworkLabels,

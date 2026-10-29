@@ -1,6 +1,7 @@
-import { Effect } from "effect"
+import { Console, Effect } from "effect"
 import { mapUpcloudError } from "@kumulo/upcloud"
 import type { MksError } from "@kumulo/core"
+import { pollUntil } from "./status.ts"
 import type { UksClients } from "./types.ts"
 import { resolveUpgradeTarget, UpgradeTarget } from "./upgrade.ts"
 import type { UksUpgradeStrategy } from "./types.ts"
@@ -27,4 +28,17 @@ export const upgradeCluster = (
       self: clients.uks.upgrade(uuid, { version: target.version, strategy: { type: upgradeStrategy } }),
       ctx: { kind: "uks-upgrade", ref: uuid }
     })
+
+    yield* pollUntil({
+      check: mapUpcloudError({ self: clients.uks.get(uuid), ctx: { kind: "uks-cluster", ref: uuid } }),
+      isDone: (cluster) => cluster.state === "running",
+      interval: "10 seconds",
+      timeout: "30 minutes",
+      kind: "uks-cluster",
+      ref: uuid
+    })
+
+    if (upgradeStrategy === "manual") {
+      yield* Console.log("Node groups keep their old kubelet until replaced: re-create each pool to finish the upgrade.")
+    }
   })

@@ -19,6 +19,7 @@ const _live: UpcloudInventory = {
   plan: undefined,
   networkCidr: "10.0.0.0/16",
   storageEncryption: undefined,
+  version: "1.31",
   networkExists: true,
   nodeGroups: [{ name: uksPoolName(_pool), count: 1, poolLabel: "general", configHash: uksPoolHash(_pool) }]
 }
@@ -67,4 +68,20 @@ it("plans a Create for a pool the cluster does not have yet", () => {
     plan.actions.find((action) => action.name === uksPoolRow({ cluster: "staging-eu", pool: "gpu" })),
     PlanAction.Create({ name: uksPoolRow({ cluster: "staging-eu", pool: "gpu" }) })
   )
+})
+
+it("plans a live version behind the config as Update pointing at kumulo upgrade", () => {
+  const plan = buildUpcloudPlan({ config: _config, inventory: { ..._live, version: "1.30" } })
+  const cluster = plan.actions.find((action) => action.name === "uks-cluster/staging-eu")
+  assert.strictEqual(cluster?._tag, "Update")
+
+  if (cluster?._tag === "Update") assert.include(cluster.reason, "run kumulo upgrade")
+})
+
+it("plans a live version ahead of the config as ReplaceNeedsConfirm", () => {
+  const plan = buildUpcloudPlan({ config: _config, inventory: { ..._live, version: "1.32" } })
+  const cluster = plan.actions.find((action) => action.name === "uks-cluster/staging-eu")
+  assert.strictEqual(cluster?._tag, "ReplaceNeedsConfirm")
+
+  if (cluster?._tag === "ReplaceNeedsConfirm") assert.include(cluster.reason, "UKS cannot downgrade")
 })

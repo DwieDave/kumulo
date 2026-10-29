@@ -1,4 +1,4 @@
-export { clusterDrift, driftConflict, UksClusterDrift } from "./cluster-drift.ts"
+export { clusterDrift, driftConflict, UksClusterDrift, VersionDrift, versionDrift } from "./cluster-drift.ts"
 
 export type { UksClusterState, UksDesiredCluster } from "./cluster-drift.ts"
 
@@ -6,7 +6,7 @@ export { KUMULO_POOL_LABEL_KEY, diffNodePools, uksPoolHash, uksPoolName } from "
 
 export type { ExistingNodeGroup, NodeGroupDiff } from "./nodegroup-diff.ts"
 
-export { resolveUpgradeTarget, UpgradeTarget } from "./upgrade.ts"
+export { compareMinor, resolveUpgradeTarget, UpgradeTarget } from "./upgrade.ts"
 
 
 export { isValidLabel, KUMULO_OWNER_LABEL_KEY, ownershipLabels } from "./ownership.ts"

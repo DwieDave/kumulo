@@ -19,7 +19,7 @@ interface FakeCluster {
   state: string
   // quirk: control_plane_ip_filter is null (not absent) when no filter is set
   control_plane_ip_filter: ReadonlyArray<string> | null
-  storage_encryption?: string
+  storage_encryption?: string | null
   private_node_groups?: boolean
   labels?: ReadonlyArray<FakeLabel>
   pollsRemaining: number
@@ -148,6 +148,8 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number; 
   const routers = new Map<string, FakeRouter>()
   const upgrades = new Map<string, ReadonlyArray<string>>()
   const clusterPatches: Array<PatchClusterBody> = []
+  const clusterGets: Array<string> = []
+  const upgradeRequests: Array<{ readonly version?: string; readonly strategy?: { readonly type?: string } }> = []
   let nextId = 1
   const freshUuid = (prefix: string) => `${prefix}-${nextId++}`
 
@@ -195,6 +197,7 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number; 
 
     if (request.method === "GET") {
       if (!cluster) return _notFound("cluster not found")
+      clusterGets.push(uuid)
 
       if (cluster.pollsRemaining > 0) cluster.pollsRemaining -= 1
       else cluster.state = "running"
@@ -451,7 +454,13 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number; 
       if (payload.version === undefined || payload.strategy?.type === undefined) return _badRequest("upgrade is missing a required field")
       const cluster = clusters.get(uuid)
 
-      if (cluster) cluster.version = payload.version
+      upgradeRequests.push(payload)
+
+      if (cluster) {
+        cluster.version = payload.version
+        cluster.state = "pending"
+        cluster.pollsRemaining = readyAfterPolls
+      }
 
       return _empty()
     }
@@ -515,5 +524,5 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number; 
     HttpClient.mapRequest(HttpClientRequest.prependUrl("https://fixture.invalid"))
   )
 
-  return { httpClient, clusters, nodeGroups, networks, routers, upgrades, clusterPatches, _clusterByName }
+  return { httpClient, clusters, nodeGroups, networks, routers, upgrades, clusterPatches, clusterGets, upgradeRequests, _clusterByName }
 }

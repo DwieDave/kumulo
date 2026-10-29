@@ -4,6 +4,8 @@ import type { BucketInfo, Plan } from "@kumulo/core"
 import {
   clusterDrift,
   UksClusterDrift,
+  VersionDrift,
+  versionDrift,
   findClusterByName,
   listNodeGroups,
   findOwnedNetwork,
@@ -29,6 +31,7 @@ export interface UpcloudInventory {
   readonly uuid?: string
   readonly zone?: string
   readonly plan?: string
+  readonly version?: string
   readonly nodeGroups: ReadonlyArray<ExistingNodeGroup>
   readonly networkExists: boolean
   readonly networkCidr?: string
@@ -53,6 +56,7 @@ export const lookupUpcloudInventory = (
       uuid: cluster?.uuid,
       zone: cluster?.zone,
       plan: cluster?.plan,
+      version: cluster?.version,
       networkCidr: cluster?.networkCidr,
       storageEncryption: cluster?.storageEncryption,
       nodeGroups,
@@ -82,7 +86,21 @@ const _clusterAction = (
     }
   })
 
-  return UksClusterDrift.$is("None")(drift) ? PlanAction.NoOp({ name }) : PlanAction.ReplaceNeedsConfirm({ name, reason: `${drift.field}: ${drift.reason}` })
+  if (!UksClusterDrift.$is("None")(drift)) return PlanAction.ReplaceNeedsConfirm({ name, reason: `${drift.field}: ${drift.reason}` })
+
+  if (inventory.version === undefined) return PlanAction.NoOp({ name })
+  const version = versionDrift({ live: inventory.version, desired: config.version })
+
+  if (VersionDrift.$is("Ahead")(version)) {
+    return PlanAction.ReplaceNeedsConfirm({
+      name,
+      reason: `version: cluster runs ${version.live} but the config asks for ${version.desired}; UKS cannot downgrade`
+    })
+  }
+
+  return VersionDrift.$is("Behind")(version)
+    ? PlanAction.Update({ name, reason: `version: cluster runs ${version.live}, config asks for ${version.desired}; run kumulo upgrade` })
+    : PlanAction.NoOp({ name })
 }
 
 const _poolAction = (

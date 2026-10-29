@@ -1,6 +1,7 @@
 // None of network/zone/plan/storage_encryption/private_node_groups have an UpCloud PATCH path — drift here is always a refusal, never a mutation.
 import { ResourceConflict } from "@kumulo/core"
 import { Data } from "effect"
+import { compareMinor } from "./upgrade.ts"
 
 export interface UksClusterState {
   readonly zone?: string | undefined
@@ -8,6 +9,23 @@ export interface UksClusterState {
   readonly networkCidr?: string | undefined
   readonly storageEncryption?: boolean | undefined
   readonly privateNodeGroups?: boolean | undefined
+}
+
+export type VersionDrift = Data.TaggedEnum<{
+  None: {}
+  Behind: { readonly live: string; readonly desired: string }
+  Ahead: { readonly live: string; readonly desired: string }
+}>
+
+export const VersionDrift = Data.taggedEnum<VersionDrift>()
+
+// Behind: the live version is lower than the config. UKS only moves forward, via POST /upgrade.
+export const versionDrift = ({ live, desired }: { readonly live: string; readonly desired: string }): VersionDrift => {
+  const order = compareMinor({ a: live, b: desired })
+
+  if (order < 0) return VersionDrift.Behind({ live, desired })
+
+  return order > 0 ? VersionDrift.Ahead({ live, desired }) : VersionDrift.None()
 }
 
 export interface UksDesiredCluster {

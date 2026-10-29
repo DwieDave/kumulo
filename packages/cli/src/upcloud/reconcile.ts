@@ -285,7 +285,7 @@ export const upgradeUpcloudUks = (
     yield* upgradeCluster({
       clients,
       uuid: info.uuid,
-      currentVersion: config.version,
+      currentVersion: info.version,
       strategy,
       upgradeStrategy: config.upgrade_strategy ?? "manual"
     })

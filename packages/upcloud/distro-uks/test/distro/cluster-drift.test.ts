@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
-import { clusterDrift, UksClusterDrift } from "../../src/distro/cluster-drift.ts"
+import { clusterDrift, UksClusterDrift, VersionDrift, versionDrift } from "../../src/distro/cluster-drift.ts"
 import type { UksClusterState, UksDesiredCluster } from "../../src/distro/cluster-drift.ts"
 
 const _desired: UksDesiredCluster = {
@@ -83,4 +83,18 @@ it("does not fabricate network drift when the CIDRs agree", () => {
   })
 
   expect(drift._tag).toBe("None")
+})
+
+describe("versionDrift", () => {
+  it("is None when the minors match", () => {
+    expect(versionDrift({ live: "1.31", desired: "1.31" })).toEqual(VersionDrift.None())
+  })
+
+  it("is Behind when the live minor is lower than the config", () => {
+    expect(versionDrift({ live: "1.30", desired: "1.31" })).toEqual(VersionDrift.Behind({ live: "1.30", desired: "1.31" }))
+  })
+
+  it("is Ahead when the live minor is higher than the config", () => {
+    expect(versionDrift({ live: "1.31", desired: "1.30" })).toEqual(VersionDrift.Ahead({ live: "1.31", desired: "1.30" }))
+  })
 })

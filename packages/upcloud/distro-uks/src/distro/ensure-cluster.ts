@@ -1,26 +1,28 @@
 import { Effect } from "effect"
+import { ResourceConflict } from "@kumulo/core"
 import { mapUpcloudError } from "@kumulo/upcloud"
 import type { UksCluster } from "@kumulo/upcloud"
 import type { ManagedClusterInfo, MksError } from "@kumulo/core"
-import { clusterDrift, driftConflict, UksClusterDrift } from "./cluster-drift.ts"
+import { clusterDrift, driftConflict, UksClusterDrift, VersionDrift, versionDrift } from "./cluster-drift.ts"
 import type { UksClusterState } from "./cluster-drift.ts"
 import { ownershipLabels } from "./ownership.ts"
 import { pollUntil } from "./status.ts"
 import type { UksClients, UksClusterConfig } from "./types.ts"
 
-export type UksClusterInfo = ManagedClusterInfo & UksClusterState & { readonly uuid: string; readonly name: string }
+export type UksClusterInfo = ManagedClusterInfo & UksClusterState & { readonly uuid: string; readonly name: string; readonly version: string }
 
 // kumulo: UpCloud's cluster response has no API endpoint field; fetchKubeconfig is the real connection info, so apiEndpoint stays empty here
 const _toInfo = (cluster: UksCluster): UksClusterInfo => ({
   id: cluster.uuid,
   uuid: cluster.uuid,
   name: cluster.name,
+  version: cluster.version,
   apiEndpoint: "",
   status: cluster.state,
   zone: cluster.zone,
   plan: cluster.plan,
   networkCidr: cluster.network_cidr,
-  storageEncryption: cluster.storage_encryption !== undefined,
+  storageEncryption: cluster.storage_encryption === "data-at-rest",
   privateNodeGroups: cluster.private_node_groups
 })
 
@@ -108,7 +110,22 @@ const _refuseCreationDrift = (
     actual: _toInfo(cluster)
   })
 
-  return UksClusterDrift.$is("None")(drift) ? Effect.void : Effect.fail(driftConflict(drift))
+  if (!UksClusterDrift.$is("None")(drift)) return Effect.fail(driftConflict(drift))
+
+  const version = versionDrift({ live: cluster.version, desired: config.version })
+
+  if (VersionDrift.$is("Ahead")(version)) {
+    return Effect.fail(
+      new ResourceConflict({
+        kind: "cluster-drift",
+        ref: `version: cluster runs ${version.live} but the config asks for ${version.desired}; UKS cannot downgrade — raise the config version or recreate the cluster`
+      })
+    )
+  }
+
+  return VersionDrift.$is("Behind")(version)
+    ? Effect.logWarning(`cluster "${config.name}" runs ${version.live}, config asks for ${version.desired}; run kumulo upgrade`)
+    : Effect.void
 }
 
 export const ensureCluster = (
