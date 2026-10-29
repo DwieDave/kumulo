@@ -181,7 +181,10 @@ describe("upcloud-uks distro driver (fake server)", () => {
       const liveName = before[0]?.name
 
       const scaled = [{ ..._pool, count: 5 }]
-      yield* ensureNodePools({ clients, ref, pools: scaled, owner: _owner })
+      const fiber = yield* Effect.forkChild(ensureNodePools({ clients, ref, pools: scaled, owner: _owner }))
+
+      yield* TestClock.adjust("30 seconds")
+      yield* Fiber.join(fiber)
       const after = yield* listNodeGroups({ clients, ref })
       expect(after).toHaveLength(1)
       expect(after[0]?.name).toBe(liveName)
@@ -352,5 +355,88 @@ describe("upcloud-uks distro driver (fake server)", () => {
 
       expect(info.version).toBe("1.30")
       expect(server.upgradeRequests).toHaveLength(0)
+    }))
+
+  it.effect("ensureCluster tolerates early 404s right after create", () =>
+    Effect.gen(function*() {
+      const server = makeFakeUksServer({ readyAfterPolls: 0, notFoundPollsAfterCreate: 2 })
+      const clients = _clients(server.httpClient)
+      const network = yield* ensureNetwork({ clients, clusterName: _config.name, zone: _config.zone, cidr: _config.network.cidr })
+
+      const fiber = yield* Effect.forkChild(
+        ensureCluster({ clients, config: _config, networkUuid: network.networkUuid, owner: _owner })
+      )
+
+      yield* TestClock.adjust("30 seconds")
+      const info = yield* Fiber.join(fiber)
+      expect(info.status).toBe("running")
+    }))
+
+  it.effect("ensureCluster fails fast when the cluster enters failed", () =>
+    Effect.gen(function*() {
+      const server = makeFakeUksServer({ failClusterOnCreate: true })
+      const clients = _clients(server.httpClient)
+      const network = yield* ensureNetwork({ clients, clusterName: _config.name, zone: _config.zone, cidr: _config.network.cidr })
+
+      const error = yield* Effect.flip(
+        ensureCluster({ clients, config: _config, networkUuid: network.networkUuid, owner: _owner })
+      )
+
+      expect(error._tag).toBe("ProviderApiError")
+    }))
+
+  it.effect("a pool replace waits until the old group returns 404", () =>
+    Effect.gen(function*() {
+      const server = makeFakeUksServer({ readyAfterPolls: 0, terminatingPolls: 2 })
+      const clients = _clients(server.httpClient)
+      const network = yield* ensureNetwork({ clients, clusterName: _config.name, zone: _config.zone, cidr: _config.network.cidr })
+      const info = yield* ensureCluster({ clients, config: _config, networkUuid: network.networkUuid, owner: _owner })
+      const ref: UksClusterRef = { uuid: info.uuid, name: info.name }
+      yield* ensureNodePools({ clients, ref, pools: _config.worker_pools, owner: _owner })
+
+      const fiber = yield* Effect.forkChild(
+        ensureNodePools({
+          clients,
+          ref,
+          pools: [{ ..._pool, plan: "2xCPU-4GB" }],
+          owner: _owner,
+          replace: new Set(["workers"])
+        })
+      )
+
+      yield* TestClock.adjust("30 seconds")
+      yield* Fiber.join(fiber)
+      expect(server.nodeGroups.get(info.uuid)?.size).toBe(1)
+    }))
+
+  it.effect("listNodeGroups skips terminating groups", () =>
+    Effect.gen(function*() {
+      const server = makeFakeUksServer({ readyAfterPolls: 0, terminatingPolls: 5 })
+      const clients = _clients(server.httpClient)
+      const network = yield* ensureNetwork({ clients, clusterName: _config.name, zone: _config.zone, cidr: _config.network.cidr })
+      const info = yield* ensureCluster({ clients, config: _config, networkUuid: network.networkUuid, owner: _owner })
+      const ref: UksClusterRef = { uuid: info.uuid, name: info.name }
+      yield* ensureNodePools({ clients, ref, pools: _config.worker_pools, owner: _owner })
+      const [group] = yield* listNodeGroups({ clients, ref })
+      yield* clients.nodeGroups.delete(ref.uuid, group?.name ?? "")
+
+      expect(server.nodeGroups.get(info.uuid)?.size).toBe(1)
+      expect(yield* listNodeGroups({ clients, ref })).toHaveLength(0)
+    }))
+
+  it.effect("a scale waits for running", () =>
+    Effect.gen(function*() {
+      const server = makeFakeUksServer({ readyAfterPolls: 0 })
+      const clients = _clients(server.httpClient)
+      const network = yield* ensureNetwork({ clients, clusterName: _config.name, zone: _config.zone, cidr: _config.network.cidr })
+      const info = yield* ensureCluster({ clients, config: _config, networkUuid: network.networkUuid, owner: _owner })
+      const ref: UksClusterRef = { uuid: info.uuid, name: info.name }
+      yield* ensureNodePools({ clients, ref, pools: _config.worker_pools, owner: _owner })
+
+      const fiber = yield* Effect.forkChild(ensureNodePools({ clients, ref, pools: [{ ..._pool, count: 5 }], owner: _owner }))
+
+      yield* TestClock.adjust("30 seconds")
+      yield* Fiber.join(fiber)
+      expect([...(server.nodeGroups.get(info.uuid)?.values() ?? [])].map((group) => group.state)).toEqual(["running"])
     }))
 })

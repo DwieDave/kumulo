@@ -65,6 +65,8 @@ const _awaitRunning = (
   pollUntil({
     check: mapUpcloudError({ self: clients.uks.get(uuid), ctx: { kind: "uks-cluster", ref: uuid } }),
     isDone: (cluster) => cluster.state === "running",
+    isFailed: (cluster) => cluster.state === "failed",
+    tolerateNotFound: 2,
     interval: "3 seconds",
     timeout: "10 minutes",
     kind: "uks-cluster",

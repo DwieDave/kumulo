@@ -13,7 +13,7 @@ export { isValidLabel, KUMULO_OWNER_LABEL_KEY, ownershipLabels } from "./ownersh
 
 export type { UksClusterConfig, UksClusterRef, UksClients, UksLabel, UksUpgradeStrategy, UksWorkerPoolConfig } from "./types.ts"
 
-export { pollUntil } from "./status.ts"
+export { pollUntil, pollUntilGone } from "./status.ts"
 
 export type { StatusPollOptions } from "./status.ts"
 

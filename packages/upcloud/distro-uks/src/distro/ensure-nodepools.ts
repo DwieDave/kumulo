@@ -7,7 +7,7 @@ import type { MksError } from "@kumulo/core"
 import type { ExistingNodeGroup, NodeGroupDiff } from "./nodegroup-diff.ts"
 import { diffNodePools, KUMULO_POOL_LABEL_KEY, uksPoolHash, uksPoolName } from "./nodegroup-diff.ts"
 import { KUMULO_OWNER_LABEL_KEY } from "./ownership.ts"
-import { pollUntil } from "./status.ts"
+import { pollUntil, pollUntilGone } from "./status.ts"
 import type { UksClients, UksClusterRef, UksLabel, UksWorkerPoolConfig } from "./types.ts"
 
 const _toExisting = (group: NodeGroup): ExistingNodeGroup => ({
@@ -68,7 +68,17 @@ const _create = (
 const _delete = (
   { clients, ref, name }: { readonly clients: UksClients; readonly ref: UksClusterRef; readonly name: string }
 ): Effect.Effect<void, MksError> =>
-  mapUpcloudError({ self: clients.nodeGroups.delete(ref.uuid, name), ctx: { kind: "uks-node-group", ref: name } })
+  mapUpcloudError({ self: clients.nodeGroups.delete(ref.uuid, name), ctx: { kind: "uks-node-group", ref: name } }).pipe(
+    Effect.andThen(
+      pollUntilGone({
+        check: mapUpcloudError({ self: clients.nodeGroups.get(ref.uuid, name), ctx: { kind: "uks-node-group", ref: name } }),
+        interval: "3 seconds",
+        timeout: "10 minutes",
+        kind: "uks-node-group",
+        ref: name
+      })
+    )
+  )
 
 const _update = (
   { clients, ref, name, pool }: {
@@ -81,7 +91,7 @@ const _update = (
   mapUpcloudError({
     self: clients.nodeGroups.patch(ref.uuid, name, { count: pool.count }),
     ctx: { kind: "uks-node-group", ref: name }
-  }).pipe(Effect.asVoid)
+  }).pipe(Effect.andThen(_awaitRunning({ clients, ref, name })))
 
 const _awaitRunning = (
   { clients, ref, name }: { readonly clients: UksClients; readonly ref: UksClusterRef; readonly name: string }
@@ -89,6 +99,8 @@ const _awaitRunning = (
   pollUntil({
     check: mapUpcloudError({ self: clients.nodeGroups.get(ref.uuid, name), ctx: { kind: "uks-node-group", ref: name } }),
     isDone: (group) => group.state === "running",
+    isFailed: (group) => group.state === "failed",
+    tolerateNotFound: 2,
     interval: "3 seconds",
     timeout: "10 minutes",
     kind: "uks-node-group",
@@ -120,7 +132,7 @@ export const listNodeGroups = (
   { clients, ref }: { readonly clients: UksClients; readonly ref: UksClusterRef }
 ): Effect.Effect<ReadonlyArray<ExistingNodeGroup>, MksError> =>
   mapUpcloudError({ self: clients.nodeGroups.list(ref.uuid), ctx: { kind: "uks-node-group", ref: ref.uuid } }).pipe(
-    Effect.map((groups) => groups.map(_toExisting))
+    Effect.map((groups) => groups.filter((group) => group.state !== "terminating").map(_toExisting))
   )
 
 export const ensureNodePools = (

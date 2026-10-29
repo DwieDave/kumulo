@@ -27,6 +27,7 @@ export {
   ownershipLabels,
   pollUntil,
   compareMinor,
+  pollUntilGone,
   resolveUpgradeTarget,
   routerName,
   uksNetworkLabels,

@@ -23,6 +23,7 @@ interface FakeCluster {
   private_node_groups?: boolean
   labels?: ReadonlyArray<FakeLabel>
   pollsRemaining: number
+  notFoundPolls: number
 }
 
 interface FakeNodeGroup {
@@ -37,6 +38,7 @@ interface FakeNodeGroup {
   anti_affinity?: boolean
   utility_network_access?: boolean
   pollsRemaining: number
+  terminatingPolls?: number
 }
 
 interface FakeNetwork {
@@ -139,7 +141,16 @@ const _invalidRequest = (message: string): Response =>
 const _ok = <Body>(body: Body): Response => new Response(JSON.stringify(body), { status: 200 })
 const _empty = (): Response => new Response(null, { status: 200 })
 
-export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number; readonly networkDeleteConflicts?: number } = {}) => {
+export const makeFakeUksServer = (
+  options: {
+    readonly readyAfterPolls?: number
+    readonly networkDeleteConflicts?: number
+    readonly notFoundPollsAfterCreate?: number
+    readonly failClusterOnCreate?: boolean
+    readonly terminatingPolls?: number
+  } = {}
+) => {
+  const terminatingPolls = options.terminatingPolls ?? 0
   const readyAfterPolls = options.readyAfterPolls ?? 2
   let networkDeleteConflicts = options.networkDeleteConflicts ?? 0
   const clusters = new Map<string, FakeCluster>()
@@ -181,7 +192,8 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number; 
         storage_encryption: payload.storage_encryption,
         private_node_groups: payload.private_node_groups,
         labels: payload.labels,
-        pollsRemaining: readyAfterPolls
+        pollsRemaining: readyAfterPolls,
+        notFoundPolls: options.notFoundPollsAfterCreate ?? 0
       })
       nodeGroups.set(uuid, new Map())
       upgrades.set(uuid, [])
@@ -199,7 +211,14 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number; 
       if (!cluster) return _notFound("cluster not found")
       clusterGets.push(uuid)
 
-      if (cluster.pollsRemaining > 0) cluster.pollsRemaining -= 1
+      if (cluster.notFoundPolls > 0) {
+        cluster.notFoundPolls -= 1
+
+        return _notFound("cluster not found")
+      }
+
+      if (options.failClusterOnCreate === true) cluster.state = "failed"
+      else if (cluster.pollsRemaining > 0) cluster.pollsRemaining -= 1
       else cluster.state = "running"
 
       return _ok(cluster)
@@ -285,6 +304,17 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number; 
     if (request.method === "GET") {
       if (!group) return _notFound("node group not found")
 
+      if (group.state === "terminating") {
+        if ((group.terminatingPolls ?? 0) > 0) group.terminatingPolls = (group.terminatingPolls ?? 0) - 1
+        else {
+          groups.delete(name)
+
+          return _notFound("node group not found")
+        }
+
+        return _ok(group)
+      }
+
       if (group.pollsRemaining > 0) group.pollsRemaining -= 1
       else group.state = "running"
 
@@ -297,13 +327,28 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number; 
 
       if (payload === undefined) return _badRequest("node group patch sent an empty body")
 
-      if (payload.count !== undefined) group.count = payload.count
+      if (payload.count !== undefined) {
+        if (payload.count !== group.count) {
+          group.state = payload.count > group.count ? "scaling-up" : "scaling-down"
+          group.pollsRemaining = 1
+        }
+
+        group.count = payload.count
+      }
 
       return _ok(group)
     }
 
     if (request.method === "DELETE") {
       if (!group) return _notFound("node group not found")
+
+      if (terminatingPolls > 0) {
+        group.state = "terminating"
+        group.terminatingPolls = terminatingPolls
+
+        return _empty()
+      }
+
       groups.delete(name)
 
       return _empty()
