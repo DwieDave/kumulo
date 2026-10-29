@@ -305,7 +305,8 @@ describe("upcloud-uks distro driver (fake server)", () => {
         plan: "dev-md",
         state: "running",
         control_plane_ip_filter: null,
-        pollsRemaining: 0
+        pollsRemaining: 0,
+        notFoundPolls: 0
       }
 
       server.clusters.set("a", { ...base, uuid: "a", name: "a", storage_encryption: "none" })
