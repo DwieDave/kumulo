@@ -2601,7 +2601,8 @@
           "type": "array",
           "items": {
             "type": "string"
-          }
+          },
+          "minItems": 1
         },
         "storage_encryption": {
           "type": "boolean"
