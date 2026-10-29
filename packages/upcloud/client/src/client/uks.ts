@@ -6,7 +6,7 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest"
 import { decodeOn2xx, decodeVoid, UpcloudLabel } from "./common.ts"
 import type { UpcloudRawError } from "./common.ts"
 
-export const UksState = Schema.Literals(["pending", "running", "scaling-up", "scaling-down", "terminating", "failed", "unknown"])
+export const UksState = Schema.Literals(["pending", "running", "scaling-up", "scaling-down", "terminating", "terminated", "failed", "unknown"])
 
 export type UksState = typeof UksState.Type
 
@@ -18,10 +18,11 @@ export const UksCluster = Schema.Struct({
   network_cidr: Schema.String,
   version: Schema.String,
   plan: Schema.String,
-  state: UksState,
+  // lenient: a state outside UksState must not break account-wide lists
+  state: Schema.String,
   // live API sends null (not absent) when no filter is set
   control_plane_ip_filter: Schema.optionalKey(Schema.NullOr(Schema.Array(Schema.String))),
-  storage_encryption: Schema.optionalKey(Schema.String),
+  storage_encryption: Schema.optionalKey(Schema.NullOr(Schema.String)),
   private_node_groups: Schema.optionalKey(Schema.Boolean),
   labels: Schema.optionalKey(Schema.Array(UpcloudLabel))
 })
@@ -57,6 +58,11 @@ export interface UksClusterCreateInput {
   readonly storage_encryption?: string
 }
 
+export interface UksUpgradeRequest {
+  readonly version: string
+  readonly strategy?: { readonly type: "manual" | "rolling-update" }
+}
+
 export interface UksClusterPatchInput {
   readonly control_plane_ip_filter?: ReadonlyArray<string>
   readonly labels?: ReadonlyArray<UpcloudLabel>
@@ -69,7 +75,7 @@ export interface UksClient {
   readonly patch: (uuid: string, body: UksClusterPatchInput) => Effect.Effect<UksCluster, UpcloudRawError>
   readonly delete: (uuid: string) => Effect.Effect<void, UpcloudRawError>
   readonly availableUpgrades: (uuid: string) => Effect.Effect<ReadonlyArray<string>, UpcloudRawError>
-  readonly upgrade: (uuid: string, body: { readonly version: string; readonly strategy: string }) => Effect.Effect<void, UpcloudRawError>
+  readonly upgrade: (uuid: string, body: UksUpgradeRequest) => Effect.Effect<void, UpcloudRawError>
   readonly kubeconfig: (uuid: string) => Effect.Effect<string, UpcloudRawError>
   readonly plans: () => Effect.Effect<ReadonlyArray<UksPlan>, UpcloudRawError>
 }

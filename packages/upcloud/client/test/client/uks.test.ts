@@ -99,3 +99,36 @@ it.effect("DELETE /1.3/kubernetes/{uuid} hits the right path", () =>
     yield* client.delete("c1")
     assert.strictEqual(capturedPath, `${_fixtureBaseUrl}/1.3/kubernetes/c1`)
   }))
+
+it.effect("decodes clusters in states outside the documented list", () =>
+  Effect.gen(function*() {
+    const client = makeUksClient(
+      _fixtureHttpClient(200, [{ ..._cluster, state: "terminated" }, { ..._cluster, uuid: "c2", state: "some-future-state" }])
+    )
+
+    const clusters = yield* client.list()
+    assert.deepStrictEqual(clusters.map((c) => c.state), ["terminated", "some-future-state"])
+  }))
+
+it.effect("decodes a cluster with storage_encryption: null", () =>
+  Effect.gen(function*() {
+    const client = makeUksClient(_fixtureHttpClient(200, { ..._cluster, storage_encryption: null }))
+    const cluster = yield* client.get("c1")
+    assert.strictEqual(cluster.storage_encryption, null)
+  }))
+
+it.effect("POST upgrade sends the strategy as an object", () =>
+  Effect.gen(function*() {
+    let captured: unknown
+
+    const client = makeUksClient(
+      _rawHttpClient((request) => {
+        captured = capturedJson(request)
+
+        return new Response(JSON.stringify(_cluster), { status: 200 })
+      })
+    )
+
+    yield* client.upgrade("c1", { version: "1.31", strategy: { type: "rolling-update" } })
+    assert.deepStrictEqual(captured, { version: "1.31", strategy: { type: "rolling-update" } })
+  }))

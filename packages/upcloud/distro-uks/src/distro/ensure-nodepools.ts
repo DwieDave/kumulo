@@ -30,7 +30,7 @@ const _createPayload = ({ pool, owner }: { readonly pool: UksWorkerPoolConfig; r
   labels: _labels({ pool, owner }),
   taints: pool.taints?.map((taint) => ({ key: taint, value: "", effect: "NoSchedule" })),
   ssh_keys: pool.ssh_keys,
-  storage: pool.storage === undefined ? undefined : { tier: pool.storage },
+  storage: pool.storage,
   anti_affinity: pool.anti_affinity,
   utility_network_access: pool.utility_network_access
 })

@@ -24,7 +24,7 @@ export const upgradeCluster = (
 
     if (UpgradeTarget.$is("AlreadyCurrent")(target)) return
     yield* mapUpcloudError({
-      self: clients.uks.upgrade(uuid, { version: target.version, strategy: upgradeStrategy }),
+      self: clients.uks.upgrade(uuid, { version: target.version, strategy: { type: upgradeStrategy } }),
       ctx: { kind: "uks-upgrade", ref: uuid }
     })
   })

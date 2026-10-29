@@ -22,9 +22,9 @@ export type { UpcloudRawError } from "./client/common.ts"
 
 export { makeUksClient, UksCluster, UksPlan, UksState } from "./client/uks.ts"
 
-export type { UksClient, UksClusterCreateInput, UksClusterPatchInput } from "./client/uks.ts"
+export type { UksClient, UksClusterCreateInput, UksClusterPatchInput, UksUpgradeRequest } from "./client/uks.ts"
 
-export { makeNodeGroupsClient, NodeGroup, NodeGroupState, NodeGroupStorage, NodeGroupTaint } from "./client/node-groups.ts"
+export { makeNodeGroupsClient, NodeGroup, NodeGroupKubeletArg, NodeGroupState, NodeGroupStorage, NodeGroupTaint } from "./client/node-groups.ts"
 
 export type { NodeGroupCreateInput, NodeGroupPatchInput, NodeGroupsClient } from "./client/node-groups.ts"
 

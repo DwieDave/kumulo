@@ -381,11 +381,11 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number }
     }
 
     if (rest[0] === "upgrade" && request.method === "POST") {
-      const payload = _bodyOf<{ readonly version?: string; readonly strategy?: string }>(request)
+      const payload = _bodyOf<{ readonly version?: string; readonly strategy?: { readonly type?: string } }>(request)
 
       if (payload === undefined) return _badRequest("upgrade sent an empty body")
 
-      if (payload.version === undefined || payload.strategy === undefined) return _badRequest("upgrade is missing a required field")
+      if (payload.version === undefined || payload.strategy?.type === undefined) return _badRequest("upgrade is missing a required field")
       const cluster = clusters.get(uuid)
 
       if (cluster) cluster.version = payload.version

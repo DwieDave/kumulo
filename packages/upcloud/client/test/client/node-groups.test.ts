@@ -25,6 +25,21 @@ it.effect("decodes GET .../node-groups as a bare array", () =>
     assert.deepStrictEqual(groups, [_group])
   }))
 
+it.effect("decodes kubelet_args as {key, value} objects", () =>
+  Effect.gen(function*() {
+    const withArgs = { ..._group, kubelet_args: [{ key: "log-flush-frequency", value: "5s" }] }
+    const client = makeNodeGroupsClient(_fixtureHttpClient(200, [withArgs]))
+    const groups = yield* client.list("c1")
+    assert.deepStrictEqual(groups[0]?.kubelet_args, [{ key: "log-flush-frequency", value: "5s" }])
+  }))
+
+it.effect("decodes a node group in a state outside the documented list", () =>
+  Effect.gen(function*() {
+    const client = makeNodeGroupsClient(_fixtureHttpClient(200, [{ ..._group, state: "some-future-state" }]))
+    const groups = yield* client.list("c1")
+    assert.strictEqual(groups[0]?.state, "some-future-state")
+  }))
+
 it.effect("decodes GET .../node-groups/{name} bare", () =>
   Effect.gen(function*() {
     const client = makeNodeGroupsClient(_fixtureHttpClient(200, _group))
@@ -65,9 +80,9 @@ it.effect("DELETE single node hits .../node-groups/{name}/{node}", () =>
     assert.strictEqual(capturedPath, `${_fixtureBaseUrl}/1.3/kubernetes/c1/node-groups/workers-ab12cd34/node-1`)
   }))
 
-it.effect("R4: an unrecognized state literal surfaces as a decode failure", () =>
+it.effect("R4: a shape mismatch surfaces as a decode failure", () =>
   Effect.gen(function*() {
-    const client = makeNodeGroupsClient(_fixtureHttpClient(200, { ..._group, state: "not-a-real-state" }))
+    const client = makeNodeGroupsClient(_fixtureHttpClient(200, { ..._group, count: "three" }))
     const failure = yield* Effect.flip(client.get("c1", "workers-ab12cd34"))
     assert.strictEqual(failure._tag, "SchemaError")
   }))

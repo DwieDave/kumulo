@@ -21,7 +21,11 @@ export const NodeGroupTaint = Schema.Struct({ key: Schema.String, value: Schema.
 
 export type NodeGroupTaint = typeof NodeGroupTaint.Type
 
-export const NodeGroupStorage = Schema.Struct({ tier: Schema.optionalKey(Schema.String), size: Schema.optionalKey(Schema.Number) })
+export const NodeGroupKubeletArg = Schema.Struct({ key: Schema.String, value: Schema.String })
+
+export type NodeGroupKubeletArg = typeof NodeGroupKubeletArg.Type
+
+export const NodeGroupStorage =Schema.Struct({ tier: Schema.optionalKey(Schema.String), size: Schema.optionalKey(Schema.Number) })
 
 export type NodeGroupStorage = typeof NodeGroupStorage.Type
 
@@ -30,10 +34,10 @@ export const NodeGroup = Schema.Struct({
   count: Schema.Number,
   plan: Schema.String,
   // kumulo: absent on the POST create response, live API only includes state on GET/list.
-  state: Schema.optionalKey(NodeGroupState),
+  state: Schema.optionalKey(Schema.String),
   labels: Schema.optionalKey(Schema.Array(UpcloudLabel)),
   taints: Schema.optionalKey(Schema.Array(NodeGroupTaint)),
-  kubelet_args: Schema.optionalKey(Schema.Array(Schema.String)),
+  kubelet_args: Schema.optionalKey(Schema.Array(NodeGroupKubeletArg)),
   ssh_keys: Schema.optionalKey(Schema.Array(Schema.String)),
   // kumulo: create accepts {tier, size}, but list/get return the resolved storage-template UUID as a bare string.
   storage: Schema.optionalKey(Schema.Union([Schema.String, NodeGroupStorage])),
@@ -54,9 +58,10 @@ export interface NodeGroupCreateInput {
   readonly plan: string
   readonly labels?: ReadonlyArray<UpcloudLabel>
   readonly taints?: ReadonlyArray<NodeGroupTaint>
-  readonly kubelet_args?: ReadonlyArray<string>
+  readonly kubelet_args?: ReadonlyArray<NodeGroupKubeletArg>
   readonly ssh_keys?: ReadonlyArray<string>
-  readonly storage?: NodeGroupStorage
+  // storage template UUID; tier and size belong in custom_plan/cloud_native_plan
+  readonly storage?: string
   readonly anti_affinity?: boolean
   readonly utility_network_access?: boolean
   readonly storage_encryption?: string
