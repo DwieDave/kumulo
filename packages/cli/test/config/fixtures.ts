@@ -55,8 +55,7 @@ export const validConfig: K3sClusterConfigEncoded = {
   },
   addons: {
     cloud_controller_manager: true,
-    cinder_csi: { enabled: true, default_volume_type: "high-speed" },
-    hcloud_csi: { enabled: false },
+    csi: { enabled: true, default_volume_type: "high-speed" },
     system_upgrade_controller: true,
     cni: "cilium"
   },

@@ -20,3 +20,9 @@ export type { OpenStackError } from "./provider/errors.ts"
 export { buildFr57Rules } from "./provider/security-group-rules.ts"
 
 export type { SecurityGroupRuleInput } from "./provider/security-group-rules.ts"
+
+export { openstackClusterAddons } from "./cluster/index.ts"
+
+export type { OpenstackClusterAddonsInput } from "./cluster/index.ts"
+
+export type { CloudConf } from "./cluster/cloud-conf.ts"

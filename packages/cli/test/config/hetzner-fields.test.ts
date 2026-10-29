@@ -12,8 +12,7 @@ const hetznerConfig = {
   volumes: { module: "hcloud" as const, managed: [] },
   addons: {
     ...validConfig.addons,
-    cinder_csi: { enabled: false, default_volume_type: "high-speed" },
-    hcloud_csi: { enabled: true }
+    csi: { enabled: true }
   }
 }
 
@@ -24,7 +23,7 @@ describe("ClusterConfig — hetzner fields", () => {
       expect(decoded.provider).toBe("hetzner")
       expect(decoded.auth.method).toBe("api_token")
       expect(decoded.volumes.module).toBe("hcloud")
-      expect(decoded.distro === "k3s" && decoded.addons.hcloud_csi.enabled).toBe(true)
+      expect(decoded.distro === "k3s" && decoded.addons.csi.enabled).toBe(true)
     }))
 
   it.effect("decodes dns.module: hetzner", () =>
@@ -81,25 +80,35 @@ describe("ClusterConfig — hetzner fields", () => {
       expect(failure._tag).toBe("ConfigInvalid")
     }))
 
-  it.effect("rejects addons.hcloud_csi.enabled on a non-hetzner provider", () =>
+  it.effect("rejects addons.csi.default_volume_type on provider: hetzner", () =>
     Effect.gen(function* () {
       const candidate = {
-        ...validConfig,
-        addons: { ...validConfig.addons, hcloud_csi: { enabled: true } }
+        ...hetznerConfig,
+        addons: { ...hetznerConfig.addons, csi: { enabled: true, default_volume_type: "high-speed" } }
       }
 
       const failure = yield* Effect.flip(decodeConfig(candidate))
       expect(failure._tag).toBe("ConfigInvalid")
     }))
 
-  it.effect("rejects addons.cinder_csi.enabled on provider: hetzner", () =>
+  it.effect("accepts addons.csi.enabled without default_volume_type on an openstack provider", () =>
     Effect.gen(function* () {
+      const candidate = { ...validConfig, addons: { ...validConfig.addons, csi: { enabled: true } } }
+      const decoded = yield* decodeConfig(candidate)
+      expect(decoded.distro === "k3s" && decoded.addons.csi.enabled).toBe(true)
+    }))
+
+  it.effect("rejects a pre-csi config that still uses addons.cinder_csi / addons.hcloud_csi", () =>
+    Effect.gen(function* () {
+      const { csi: _csi, ...legacyAddons } = hetznerConfig.addons
+
       const candidate = {
         ...hetznerConfig,
-        addons: { ...hetznerConfig.addons, cinder_csi: { enabled: true, default_volume_type: "high-speed" } }
+        addons: { ...legacyAddons, cinder_csi: { enabled: false, default_volume_type: "high-speed" }, hcloud_csi: { enabled: true } }
       }
 
       const failure = yield* Effect.flip(decodeConfig(candidate))
       expect(failure._tag).toBe("ConfigInvalid")
+      expect(JSON.stringify(failure.issues)).toContain("it replaced addons.cinder_csi and addons.hcloud_csi")
     }))
 })

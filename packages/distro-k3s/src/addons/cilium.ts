@@ -1,12 +1,12 @@
-import type { K8sManifest } from "@kumulo/core"
+import type { Addon, K8sManifest } from "@kumulo/core"
 
 const NAMESPACE = "kube-system"
 const IMAGE = "quay.io/cilium/cilium:v1.16.5"
 
-// Optional CNI replacing k3s's built-in flannel — only selectable
-// capability-gated (`cilium`), never under ovh-mks (CNI fixed by OVH;
-// rejected earlier by core's validateCni, see packages/core/src/ports/validation.ts).
-export const ciliumManifests = (): ReadonlyArray<K8sManifest> => [
+// Optional CNI replacing k3s's built-in flannel; only ever installed by the
+// k3s path, never under ovh-mks (CNI fixed by OVH; rejected earlier by core's
+// validateCni, see packages/core/src/ports/validation.ts).
+const _ciliumManifests = (): ReadonlyArray<K8sManifest> => [
   {
     apiVersion: "v1",
     kind: "ServiceAccount",
@@ -29,3 +29,5 @@ export const ciliumManifests = (): ReadonlyArray<K8sManifest> => [
     }
   }
 ]
+
+export const ciliumAddon: Addon = { name: "cilium", manifests: _ciliumManifests() }

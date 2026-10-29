@@ -50,7 +50,6 @@
     }
   },
   "dependencies": {
-    "@kumulo/addons": "workspace:*",
     "@kumulo/bunny": "workspace:*",
     "@kumulo/cdn-bunny": "workspace:*",
     "@kumulo/core": "workspace:*",

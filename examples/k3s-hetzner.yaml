@@ -50,10 +50,7 @@ secrets:
   sink: none
 addons:
   cloud_controller_manager: true
-  cinder_csi:
-    enabled: false
-    default_volume_type: high-speed
-  hcloud_csi:
+  csi:
     enabled: true
   system_upgrade_controller: true
   cni: cilium

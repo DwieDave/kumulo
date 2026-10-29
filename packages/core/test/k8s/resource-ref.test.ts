@@ -1,6 +1,6 @@
 import { assert, it } from "@effect/vitest"
-import type { K8sManifest } from "@kumulo/core"
-import { refFor } from "../src/resource-ref.ts"
+import type { K8sManifest } from "../../src/domain/types.ts"
+import { refFor } from "../../src/k8s/resource-ref.ts"
 
 it("refFor builds a namespaced path from a well-formed manifest", () => {
   const manifest: K8sManifest = {

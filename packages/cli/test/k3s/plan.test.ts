@@ -26,8 +26,7 @@ const _encoded: K3sClusterConfigEncoded = {
   secrets: { sink: "none" },
   addons: {
     cloud_controller_manager: false,
-    cinder_csi: { enabled: false, default_volume_type: "high-speed" },
-    hcloud_csi: { enabled: false },
+    csi: { enabled: false, default_volume_type: "high-speed" },
     system_upgrade_controller: false,
     cni: "flannel"
   },

@@ -41,3 +41,7 @@ export type { PvcBinding } from "./volume/manifests.ts"
 export { deleteVolume, ensureVolume, listClusterVolumes, VolumeProviderLive } from "./volume/provider.ts"
 
 export type { VolumeProviderOptions } from "./volume/provider.ts"
+
+export { hetznerClusterAddons } from "./cluster/addons.ts"
+
+export type { HetznerClusterAddonsInput } from "./cluster/addons.ts"

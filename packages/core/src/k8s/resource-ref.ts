@@ -1,4 +1,5 @@
-import type { K8sManifest, ResourceRef } from "@kumulo/core"
+import type { K8sManifest } from "../domain/types.ts"
+import type { ResourceRef } from "./client.ts"
 import { Result, Schema } from "effect"
 
 // PLURALS only covers kinds we emit, not a full GVK->plural mapper

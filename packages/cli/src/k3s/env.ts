@@ -1,5 +1,4 @@
-import type { Redacted } from "effect";
-import { Config, Context, Effect, Layer, Option } from "effect"
+import { Config, Effect, Layer, Option } from "effect"
 import * as HttpClient from "effect/http/HttpClient"
 import { ConfigInvalid } from "@kumulo/core"
 import type { AuthenticationFailed } from "@kumulo/core"
@@ -13,7 +12,6 @@ import { bunnyDnsProviderLive } from "@kumulo/dns-bunny"
 import { VolumeProviderLive } from "@kumulo/volumes-cinder"
 import type { VolumeProviderOptions , CinderAuth} from "@kumulo/volumes-cinder"
 import { VolumeProviderLive as HcloudVolumeProviderLive } from "@kumulo/hetzner"
-import type { OpenStackEnv } from "../doctor-openstack/env.ts"
 import { requiredRedactedEnv } from "../env.ts"
 import { hcloudHttpClientLayer, providerFor } from "../provider/registry.ts"
 import { ovhHttpClientFromEnv } from "../mks/env.ts"
@@ -92,20 +90,3 @@ export const k3sHetznerVolumeProviderLayer = (
   config: ClusterConfig
 ): Layer.Layer<VolumeProvider, AuthenticationFailed, HttpClient.HttpClient> =>
   HcloudVolumeProviderLive({ tag: config.name, location: config.auth.region }).pipe(Layer.provide(hcloudHttpClientLayer()))
-
-export type CloudCredentialFields =
-  | {
-    readonly provider: "openstack"
-    readonly authUrl: string
-    readonly region: string
-    readonly applicationCredentialId: string
-    readonly applicationCredentialSecret: string
-  }
-  | { readonly provider: "hetzner"; readonly token: Redacted.Redacted<string> }
-
-export class CloudCredentialEnv extends Context.Service<CloudCredentialEnv, CloudCredentialFields>()("@kumulo/cli/CloudCredentialEnv") {}
-
-export const k3sCloudCredentialLayer = (
-  config: K3sClusterConfig
-): Layer.Layer<CloudCredentialEnv, AuthenticationFailed, OpenStackEnv> =>
-  Layer.effect(CloudCredentialEnv, providerFor(config).cloudCredential(config))

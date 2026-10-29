@@ -1,14 +1,27 @@
 import type { K8sManifest } from "@kumulo/core"
-import { CLOUD_CONF_NAMESPACE, CLOUD_CONF_SECRET_NAME, cloudConfSecretManifest, type CloudConf } from "../cloud-conf.ts"
+import { CLOUD_CONF_NAMESPACE, CLOUD_CONF_SECRET_NAME, cloudConfSecretManifest, type CloudConf } from "./cloud-conf.ts"
 
 const SERVICE_ACCOUNT = "cinder-csi-controller-sa"
 const IMAGE = "registry.k8s.io/provider-os/cinder-csi-plugin:v1.30.0"
 
 // Shares the cloud.conf Secret with openstack-ccm;
-// `defaultVolumeType` comes from config.addons.cinder_csi.default_volume_type.
+// `defaultVolumeType` comes from config.addons.csi.default_volume_type.
 export interface CinderCsiParams {
   readonly conf: CloudConf
-  readonly defaultVolumeType: string
+  readonly defaultVolumeType?: string | undefined
+}
+
+const _storageClass = (defaultVolumeType: string | undefined): K8sManifest => {
+  const storageClass: K8sManifest = {
+    apiVersion: "storage.k8s.io/v1",
+    kind: "StorageClass",
+    metadata: { name: "cinder-csi" },
+    provisioner: "cinder.csi.openstack.org",
+    reclaimPolicy: "Delete",
+    volumeBindingMode: "WaitForFirstConsumer"
+  }
+
+  return defaultVolumeType === undefined ? storageClass : { ...storageClass, parameters: { type: defaultVolumeType } }
 }
 
 export const cinderCsiManifests = ({ conf, defaultVolumeType }: CinderCsiParams): ReadonlyArray<K8sManifest> => [
@@ -40,13 +53,5 @@ export const cinderCsiManifests = ({ conf, defaultVolumeType }: CinderCsiParams)
       }
     }
   },
-  {
-    apiVersion: "storage.k8s.io/v1",
-    kind: "StorageClass",
-    metadata: { name: "cinder-csi" },
-    provisioner: "cinder.csi.openstack.org",
-    parameters: { type: defaultVolumeType },
-    reclaimPolicy: "Delete",
-    volumeBindingMode: "WaitForFirstConsumer"
-  }
+  _storageClass(defaultVolumeType)
 ]

@@ -1,5 +1,5 @@
 import { assert, it } from "@effect/vitest"
-import { hcloudSecretManifest } from "../src/hcloud-secret.ts"
+import { hcloudSecretManifest } from "../../src/cluster/hcloud-secret.ts"
 
 it("renders token-only when no network is supplied", () => {
   assert.deepStrictEqual(hcloudSecretManifest({ token: "t" }).stringData, { token: "t" })

@@ -6,8 +6,6 @@ export type NodeRole = "master" | "worker"
 
 export type DistroKind = "k3s" | "ovh-mks" | "upcloud-uks"
 
-export type Capability = "octavia" | "floatingIps" | "cilium"
-
 export type Version = string
 
 export interface NetworkSpec {
@@ -132,11 +130,6 @@ export interface K8sManifest {
   readonly apiVersion: string
   readonly kind: string
   readonly [key: string]: Schema.Json
-}
-
-export interface AddonContext {
-  readonly clusterName: string
-  readonly capabilities: ReadonlyArray<Capability>
 }
 
 export interface DesiredRecord {

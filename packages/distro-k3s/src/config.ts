@@ -45,19 +45,17 @@ const Masters = Schema.Struct({
   image: Schema.NonEmptyString
 })
 
-const CinderCsi = Schema.Struct({
+const Csi = Schema.Struct({
   enabled: Schema.Boolean,
-  default_volume_type: Schema.NonEmptyString
+  default_volume_type: Schema.optionalKey(Schema.NonEmptyString)
 })
 
-const HcloudCsi = Schema.Struct({
-  enabled: Schema.Boolean
-})
+// pre-csi configs lack this key, so the missing-key error doubles as the migration hint
+const LEGACY_CSI_MESSAGE = "addons.csi is required: it replaced addons.cinder_csi and addons.hcloud_csi"
 
 const Addons = Schema.Struct({
   cloud_controller_manager: Schema.Boolean,
-  cinder_csi: CinderCsi,
-  hcloud_csi: HcloudCsi,
+  csi: Csi.pipe(Schema.annotateKey({ messageMissingKey: LEGACY_CSI_MESSAGE })),
   system_upgrade_controller: Schema.Boolean,
   cni: Cni
 })
@@ -67,22 +65,11 @@ const K3sPassthrough = Schema.Struct({
   extra_agent_args: Schema.Array(Schema.String)
 })
 
-// wrong provider addon enabled is a config error, not a silent no-op
-const isAddonsConsistentWithProvider = Schema.makeFilter(
-  (config: {
-    provider: string
-    addons?: { hcloud_csi: { enabled: boolean }; cinder_csi: { enabled: boolean } }
-  }) => {
-    if (config.addons === undefined) return undefined
-
-    if (config.addons.hcloud_csi.enabled && config.provider !== "hetzner")
-      return "addons.hcloud_csi can only be enabled when provider is hetzner"
-
-    if (config.addons.cinder_csi.enabled && config.provider === "hetzner")
-      return "addons.cinder_csi cannot be enabled when provider is hetzner"
-
-    return undefined
-  }
+const isCsiVolumeTypeSupportedByProvider = Schema.makeFilter(
+  (config: { provider: string; addons?: { csi: { default_volume_type?: string | undefined } } }) =>
+    config.provider === "hetzner" && config.addons?.csi.default_volume_type !== undefined
+      ? "addons.csi.default_volume_type is not supported when provider is hetzner (Hetzner volumes have no types)"
+      : undefined
 )
 
 export const K3sClusterConfig = Schema.Struct({
@@ -101,7 +88,7 @@ export const K3sClusterConfig = Schema.Struct({
   isSecretsRequiredForObjectStorage,
   isAuthMethodConsistentWithProvider,
   isVolumesModuleConsistentWithProvider,
-  isAddonsConsistentWithProvider,
+  isCsiVolumeTypeSupportedByProvider,
   isCdnApexRequiresBunnyDns,
   isCdnOriginUrlRequired,
   isGodaddyTtlMinimum,

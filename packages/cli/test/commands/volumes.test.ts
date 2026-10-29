@@ -52,11 +52,9 @@ secrets:
   dir: .
 addons:
   cloud_controller_manager: true
-  cinder_csi:
+  csi:
     enabled: true
     default_volume_type: high-speed
-  hcloud_csi:
-    enabled: false
   system_upgrade_controller: false
   cni: flannel
 k3s:

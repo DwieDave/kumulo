@@ -1,5 +1,5 @@
 import type { K8sManifest } from "@kumulo/core"
-import { CLOUD_CONF_NAMESPACE, CLOUD_CONF_SECRET_NAME, cloudConfSecretManifest, type CloudConf } from "../cloud-conf.ts"
+import { CLOUD_CONF_NAMESPACE, CLOUD_CONF_SECRET_NAME, cloudConfSecretManifest, type CloudConf } from "./cloud-conf.ts"
 
 const SERVICE_ACCOUNT = "openstack-cloud-controller-manager"
 const IMAGE = "registry.k8s.io/provider-os/openstack-cloud-controller-manager:v1.30.0"

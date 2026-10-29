@@ -18,7 +18,9 @@ All notable changes to kumulo are documented here. Format:
 - DNS records via GoDaddy (`@kumulo/dns-godaddy`, `dns.module: godaddy`),
   authenticated with a personal access token in `GODADDY_API_TOKEN`. TTL must
   be at least 600 and the apex cannot hold a CNAME.
-- Cluster addons: Cilium, Cinder CSI, cloud-conf secret (`@kumulo/addons`).
+- Cluster addons: provider addons (OpenStack CCM and Cinder CSI, Hetzner CCM
+  and CSI) live in the provider packages, Cilium and the system upgrade
+  controller in `@kumulo/distro-k3s`; `@kumulo/core` applies them.
 - SOPS-encrypted credential sink (`@kumulo/secrets-sops`).
 - Single-file executable build (`bun run build:binary`).
 - `ovh-mks`: optional `network` block (`cidr`, `nodes_subnet`,
@@ -43,6 +45,13 @@ All notable changes to kumulo are documented here. Format:
 
 ### Changed
 
+- **BREAKING:** `addons.cinder_csi` and `addons.hcloud_csi` are replaced by one
+  provider-neutral `addons.csi { enabled, default_volume_type? }`. Migrate on
+  Hetzner by deleting `cinder_csi` and renaming `hcloud_csi` to `csi`; on
+  OpenStack (ovh, generic) delete `hcloud_csi` and rename `cinder_csi` to `csi`
+  (`default_volume_type` is now optional; omitting it uses the cloud's default
+  volume type). A config without `csi` is rejected with a pointer to the new
+  block.
 - Built on Effect 4.1.0 (was 4.0.0-beta.102), vitest 5, oxlint 1.90 and bun
   1.4.4. Generated OpenAPI clients are regenerated with the 4.1 generator and
   keep their previous closed struct types.

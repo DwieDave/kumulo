@@ -16,13 +16,12 @@ const crossFieldConstraints = [
     then: {
       properties: {
         volumes: { properties: { module: { enum: ["hcloud", "none"] } } },
-        addons: { properties: { cinder_csi: { properties: { enabled: { const: false } } } } }
+        addons: { properties: { csi: { not: { required: ["default_volume_type"] } } } }
       }
     },
     else: {
       properties: {
-        volumes: { properties: { module: { not: { const: "hcloud" } } } },
-        addons: { properties: { hcloud_csi: { properties: { enabled: { const: false } } } } }
+        volumes: { properties: { module: { not: { const: "hcloud" } } } }
       }
     }
   },

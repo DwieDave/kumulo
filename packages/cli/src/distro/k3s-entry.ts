@@ -1,10 +1,9 @@
 import { Console, Effect } from "effect"
 import * as HttpClient from "effect/http/HttpClient"
-import { AuthenticationFailed, makeK8sClient, parseKubeconfig, waitForDeploymentAvailable } from "@kumulo/core"
+import { AuthenticationFailed, makeK8sClient, refFor, parseKubeconfig, waitForDeploymentAvailable } from "@kumulo/core"
 import type { CloudProvider, ResourceRef, K8sClient } from "@kumulo/core"
 import type { K3sClusterConfig } from "../cluster-config.ts"
-import { refForPlan, renderMastersPlan, renderUpgradePlan, renderWorkersPlan } from "@kumulo/distro-k3s"
-import { refFor, systemUpgradeControllerManifests } from "@kumulo/addons"
+import { refForPlan, systemUpgradeControllerAddon, renderMastersPlan, renderUpgradePlan, renderWorkersPlan } from "@kumulo/distro-k3s"
 import type { Ssh} from "@kumulo/distro-k3s";
 import { SshLive } from "@kumulo/distro-k3s"
 import { k3sDeletePlanActions, k3sPlanEffect } from "../k3s/plan.ts"
@@ -77,7 +76,7 @@ const _ensureSucReady = (k8sClient: K8sClient["Service"]) =>
     )
 
     yield* Effect.forEach(
-      systemUpgradeControllerManifests(),
+      systemUpgradeControllerAddon.manifests,
       (manifest) => k8sClient.apply(refFor(manifest), manifest),
       { discard: true }
     )

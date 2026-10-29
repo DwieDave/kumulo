@@ -1,11 +1,11 @@
-import type { K8sManifest } from "@kumulo/core"
+import type { Addon, K8sManifest } from "@kumulo/core"
 
 const NAMESPACE = "system-upgrade"
 const IMAGE = "rancher/system-upgrade-controller:v0.13.4"
 
 // SUC itself is addon-installed; `upgrade` renders the Plan CRs consumed
 // by this controller.
-export const systemUpgradeControllerManifests = (): ReadonlyArray<K8sManifest> => [
+const _systemUpgradeControllerManifests = (): ReadonlyArray<K8sManifest> => [
   { apiVersion: "v1", kind: "Namespace", metadata: { name: NAMESPACE } },
   {
     apiVersion: "v1",
@@ -36,3 +36,8 @@ export const systemUpgradeControllerManifests = (): ReadonlyArray<K8sManifest> =
     }
   }
 ]
+
+export const systemUpgradeControllerAddon: Addon = {
+  name: "system-upgrade-controller",
+  manifests: _systemUpgradeControllerManifests()
+}

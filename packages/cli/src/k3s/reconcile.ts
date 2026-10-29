@@ -1,7 +1,7 @@
-import { Effect, Exit, Layer, Redacted, Schema } from "effect"
+import { Effect, Exit, Layer, Schema } from "effect"
 import * as HttpClient from "effect/http/HttpClient"
-import { BootstrapFailed, CloudProvider, K8sClient, makeK8sClient, parseKubeconfig, PlanRejected, ResourceNotFound, VolumeProvider } from "@kumulo/core"
-import type { AddonContext, AddonError, AuthenticationFailed, Capability, CloudError, DnsError, HttpTransportError, K8sManifest, Kubeconfig, ServerInfo, ServerSpec, VolumeError, ConfigInvalid, DnsProvider } from "@kumulo/core"
+import { BootstrapFailed, CloudProvider, installAddons, K8sClient, makeK8sClient, parseKubeconfig, PlanRejected, ResourceNotFound, VolumeProvider } from "@kumulo/core"
+import type { Addon, AddonError, AuthenticationFailed, CloudError, DnsError, HttpTransportError, K8sManifest, Kubeconfig, ServerInfo, ServerSpec, VolumeError, ConfigInvalid, DnsProvider } from "@kumulo/core"
 import type { K3sClusterConfig } from "../cluster-config.ts"
 
 export type K3sError =
@@ -20,6 +20,8 @@ export type K3sError =
 import type {
   Ssh} from "@kumulo/distro-k3s";
 import {
+  ciliumAddon,
+  systemUpgradeControllerAddon,
   drainAndRemove,
   fetchKubeconfig,
   resolveServerUrl,
@@ -27,13 +29,10 @@ import {
   SshLive
 } from "@kumulo/distro-k3s"
 import type { SshHost } from "@kumulo/distro-k3s"
-import { installAddons, resolveAddons } from "@kumulo/addons"
 import type { CinderAuth } from "@kumulo/volumes-cinder"
 import { providerFor } from "../provider/registry.ts"
 import type { OpenStackEnv } from "../doctor-openstack/env.ts"
 import {
-  CloudCredentialEnv,
-  k3sCloudCredentialLayer,
   k3sHetznerVolumeProviderLayer,
   k3sVolumeProviderLayer,
   secGroupRules
@@ -51,12 +50,6 @@ export interface K3sApplyResult {
   readonly kubeconfigPath: string
   readonly cdnWarnings?: string
 }
-
-const CILIUM_CAPS: ReadonlyArray<Capability> = ["cilium"]
-const NO_CAPS: ReadonlyArray<Capability> = []
-
-const _capabilities = (config: K3sClusterConfig): ReadonlyArray<Capability> =>
-  config.addons.cni === "cilium" ? CILIUM_CAPS : NO_CAPS
 
 const _toHost = (info: ServerInfo): SshHost => ({ ip: info.ip, port: 22 })
 
@@ -187,24 +180,19 @@ export const k8sClientLive = (
     })
   )
 
-const _installAddons = (config: K3sClusterConfig): Effect.Effect<void, AddonError, CloudCredentialEnv | K8sClient> =>
+const _installAddons = (
+  { config, providerAddons }: { readonly config: K3sClusterConfig; readonly providerAddons: ReadonlyArray<Addon> }
+): Effect.Effect<void, AddonError, K8sClient> =>
   Effect.gen(function*() {
     const k8sClient = yield* K8sClient
-    const cred = yield* CloudCredentialEnv
 
-    const cloudCredential = cred.provider === "hetzner"
-      ? { provider: "hetzner" as const, token: Redacted.value(cred.token) }
-      : {
-        provider: "openstack" as const,
-        authUrl: cred.authUrl,
-        region: cred.region,
-        applicationCredentialId: cred.applicationCredentialId,
-        applicationCredentialSecret: cred.applicationCredentialSecret
-      }
+    const addons: ReadonlyArray<Addon> = [
+      ...(config.addons.cni === "cilium" ? [ciliumAddon] : []),
+      ...providerAddons,
+      ...(config.addons.system_upgrade_controller ? [systemUpgradeControllerAddon] : [])
+    ]
 
-    const addons = resolveAddons({ distro: "k3s", addons: config.addons, capabilities: _capabilities(config), cloudCredential })
-    const ctx: AddonContext = { clusterName: config.name, capabilities: _capabilities(config) }
-    yield* installAddons({ k8sClient, addons, ctx })
+    yield* installAddons({ k8sClient, addons })
   })
 
 const _reconcileVolumes = (config: K3sClusterConfig): Effect.Effect<void, VolumeError, VolumeProvider> => {
@@ -275,8 +263,9 @@ const _volumeProviderLayerFor = (
   config.volumes.module === "hcloud" ? k3sHetznerVolumeProviderLayer(config) : k3sVolumeProviderLayer({ tag: config.name })
 
 export const applyK3sEffect = (
-  { cdn, config, configDir, replace = NO_REPLACE, k8sClientLayer = k8sClientLive }: {
+  { cdn, config, configDir, providerAddons, replace = NO_REPLACE, k8sClientLayer = k8sClientLive }: {
     readonly config: K3sClusterConfig
+    readonly providerAddons: ReadonlyArray<Addon>
     readonly configDir: string
     readonly cdn?: CdnHandle | undefined
     readonly replace?: ReadonlySet<string>
@@ -284,7 +273,7 @@ export const applyK3sEffect = (
       args: { readonly config: K3sClusterConfig; readonly master1: SshHost }
     ) => Layer.Layer<K8sClient, BootstrapFailed | ConfigInvalid, Ssh>
   }
-): Effect.Effect<K3sApplyResult, K3sError, CloudProvider | Ssh | DnsProvider | VolumeProvider | CloudCredentialEnv> =>
+): Effect.Effect<K3sApplyResult, K3sError, CloudProvider | Ssh | DnsProvider | VolumeProvider> =>
   Effect.gen(function*() {
     const nodeRow = (name: string): boolean => name.startsWith(`kumulo-${config.name}-`)
 
@@ -294,7 +283,7 @@ export const applyK3sEffect = (
         const provisioned = yield* _provisionInfra(config, replace)
         const bootstrapped = yield* _bootstrap(config, provisioned)
         yield* Effect.gen(function*() {
-          yield* _installAddons(config)
+          yield* _installAddons({ config, providerAddons })
           yield* _drainOrphanedWorkers(config)
         }).pipe(Effect.provide(k8sClientLayer({ config, master1: bootstrapped })))
 
@@ -330,13 +319,14 @@ export const applyK3s = (
 ): Effect.Effect<K3sApplyResult, K3sError, OpenStackEnv | CinderAuth | HttpClient.HttpClient | FileSystem> =>
   Effect.gen(function*() {
     const cdn = yield* cdnHandleFor({ config: args.config, configDir: args.configDir })
+    // resolved before any infrastructure exists so a missing credential fails fast
+    const providerAddons = yield* providerFor(args.config).clusterAddons(args.config)
 
-    const result = yield* applyK3sEffect({ ...args, cdn }).pipe(
+    const result = yield* applyK3sEffect({ ...args, cdn, providerAddons }).pipe(
       Effect.provide(SshLive),
       Effect.provide(_volumeProviderLayerFor(args.config)),
       Effect.provide(dnsProviderLayerWith({ config: args.config, pullZoneIdFor: pullZoneIdFor(cdn) })),
-      Effect.provide(_cloudProviderLayerFor(args.config)),
-      Effect.provide(k3sCloudCredentialLayer(args.config))
+      Effect.provide(_cloudProviderLayerFor(args.config))
     )
 
     return { ...result, cdnWarnings: yield* cdnWarnings(cdn) }

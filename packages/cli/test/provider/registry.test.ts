@@ -15,7 +15,8 @@ const _ovhConfig = decodeK3sTestConfig(baseEncodedConfig)
 const _hetznerConfig = decodeK3sTestConfig({
   ...baseEncodedConfig,
   provider: "hetzner",
-  auth: { method: "api_token", region: "fsn1" }
+  auth: { method: "api_token", region: "fsn1" },
+  addons: { ...baseEncodedConfig.addons, csi: { enabled: false } }
 })
 
 const _recordingClient = (

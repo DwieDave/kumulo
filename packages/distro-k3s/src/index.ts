@@ -1,6 +1,10 @@
 /** @kumulo/distro-k3s — package barrel. */
 export const packageName = "@kumulo/distro-k3s"
 
+export { ciliumAddon } from "./addons/cilium.ts"
+
+export { systemUpgradeControllerAddon } from "./addons/system-upgrade-controller.ts"
+
 export { K3sClusterConfig } from "./config.ts"
 
 export type { K3sClusterConfigEncoded } from "./config.ts"

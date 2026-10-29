@@ -75,10 +75,6 @@ export {
 
 export type { AuthMethod, Provider, WorkerPool } from "./config/index.ts"
 
-export { Addon } from "./ports/addon.ts"
-
-export type { AddonError } from "./ports/addon.ts"
-
 export { CloudProvider } from "./ports/cloud-provider.ts"
 
 export type { CloudError } from "./ports/cloud-provider.ts"
@@ -139,7 +135,9 @@ export { OWNERSHIP_PREFIX, ownershipTarget, ownerTagOf, recordKind } from "./dns
 
 export type { DnsRecordKind } from "./dns/index.ts"
 
-export { cordonNode, deleteNode, drainNode, K8sClient, makeK8sClient, parseKubeconfig, waitForDeploymentAvailable, waitForNodeReady } from "./k8s/index.ts"
+export { cordonNode, deleteNode, drainNode, installAddons, K8sClient, makeK8sClient, parseKubeconfig, refFor, waitForDeploymentAvailable, waitForNodeReady } from "./k8s/index.ts"
+
+export type { Addon, AddonError } from "./k8s/index.ts"
 
 export type {
   ClientCertAuth,
@@ -152,7 +150,6 @@ export type {
 } from "./k8s/index.ts"
 
 export type {
-  AddonContext,
   AutoscalingRule,
   BootstrapPlan,
   AccessList,
@@ -173,7 +170,6 @@ export type {
   WafMode,
   BucketRef,
   BucketSpec,
-  Capability,
   ClusterConfigFields,
   ClusterTag,
   CredentialEntry,

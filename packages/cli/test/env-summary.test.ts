@@ -58,7 +58,8 @@ describe("providerSections", () => {
       _config({
         provider: "hetzner",
         auth: { method: "api_token", region: "fsn1" },
-        volumes: { module: "hcloud", managed: [] }
+        volumes: { module: "hcloud", managed: [] },
+        addons: { ...baseEncodedConfig.addons, csi: { enabled: false } }
       })
     )
 

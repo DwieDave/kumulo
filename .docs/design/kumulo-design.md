@@ -42,7 +42,7 @@ Primary target for v1: **k3s on OVHcloud Public Cloud with static node pools** (
 │    · Reconciler (plan → diff → apply, tag-based discovery)  │
 │    · Phases: Network → Security → LB → Nodes → Bootstrap    │
 │              → Addons → Kubeconfig                          │
-│    · Ports (interfaces): CloudProvider, Distro, Addon       │
+│    · Ports (interfaces): CloudProvider, Distro; plain-data Addon + installAddons       │
 ├──────────────────────────┬──────────────────────────────────┤
 │  @kumulo/openstack        │  @kumulo/distro-k3s               │
 │  Generated clients +     │  cloud-init templates, token     │
@@ -52,10 +52,10 @@ Primary target for v1: **k3s on OVHcloud Public Cloud with static node pools** (
 │   Cinder, Octavia)       │  (future: distro-rke2,           │
 │                          │   distro-talos)                  │
 ├──────────────────────────┼──────────────────────────────────┤
-│  @kumulo/provider-ovh     │  @kumulo/addons                   │
-│  OVH profile: regions,   │  Manifests + install logic:      │
-│  Ext-Net, image names,   │  OCCM, cinder-csi, SUC, CNI      │
-│  Octavia availability,   │  (Cilium option)                 │
+│  @kumulo/provider-ovh     │  (no addons package)              │
+│  OVH profile: regions,   │  Addons live with their owner:   │
+│  Ext-Net, image names,   │  providers (CCM/CSI), distro     │
+│  Octavia availability,   │  (Cilium, SUC)                   │
 │  flavor catalog, quirks  │                                  │
 └──────────────────────────┴──────────────────────────────────┘
 ```
@@ -71,7 +71,6 @@ Primary target for v1: **k3s on OVHcloud Public Cloud with static node pools** (
 | `@kumulo/distro-ovh-mks` | `Distro` (managed) implementation for OVH Managed Kubernetes (§3.3.1). |
 | `@kumulo/dns-ovh` | `DnsProvider` module for OVH DNS (§3.5). |
 | `@kumulo/volumes-cinder` | `VolumeProvider` module for retained Cinder volumes (§3.6). |
-| `@kumulo/addons` | Addon registry and installers (applied via kubectl-equivalent HTTP calls to the API server, no kubectl dependency — or shell out to kubectl as a pragmatic v1 fallback). |
 | `@kumulo/cli` | Command definitions, output formatting, wiring of Layers. |
 
 Everything composes through Effect **Layers**; the CLI's `main` builds the Layer graph: `ProviderProfile → KeystoneAuth → OpenStackClients → CloudProvider → Reconciler`.
@@ -188,15 +187,9 @@ Pragmatic sequencing option: **implement `ovh-mks` first** — it exercises the 
 
 ### 3.4 `Addon`
 
-```ts
-interface Addon {
-  name: string
-  requiredCapabilities: Capability[]     // e.g. LB addon requires octavia
-  manifests(ctx: AddonContext): Effect<K8sManifest[]>
-}
-```
+Not a port: `Addon` is plain data in `@kumulo/core` (`{ name, manifests }`), applied in order by `installAddons` via the k8s client. There is no capability gating.
 
-Built-in addons: `openstack-ccm`, `cinder-csi`, `system-upgrade-controller`, `cilium` (optional CNI, replacing flannel). Each is toggleable in config. The OCCM/CSI addons receive a generated `cloud.conf` (Keystone app credentials, scoped minimally) injected as a Secret.
+Providers own their addons (`openstack-ccm`, `cinder-csi`, `hcloud-ccm`, `hcloud-csi`) and receive credentials as input; the OpenStack ones get a generated `cloud.conf` injected as a Secret. `@kumulo/distro-k3s` owns `cilium` (optional CNI, replacing flannel) and `system-upgrade-controller`. The CLI composes the install list from config: `addons.csi` is provider-neutral.
 
 ### 3.5 Pluggable DNS module (extension beyond hetzner-k3s)
 
@@ -560,7 +553,7 @@ Rules:
 ## Appendix A — Package dependency graph
 
 ```
-cli → core → (ports: CloudProvider, ProviderProfile, Distro, DnsProvider, CdnProvider, VolumeProvider, Addon)
+cli → core → (ports: CloudProvider, ProviderProfile, Distro, DnsProvider, CdnProvider, VolumeProvider; plus plain-data Addon, installAddons)
 openstack → core (implements CloudProvider) ; depends on generated clients
 provider-ovh → core (implements ProviderProfile)
 distro-k3s → core (implements Distro, self-managed)
@@ -573,7 +566,7 @@ dns-bunny → core, bunny (implements DnsProvider)
 storage-bunny → core, bunny (implements object storage)
 cdn-bunny → core, bunny (implements CdnProvider)
 volumes-cinder → core (implements VolumeProvider)
-addons → core (implements Addon) ; distro-agnostic manifests
+openstack, hetzner → core (export cluster addons) ; distro-k3s → core (cilium, SUC addons)
 ```
 
 Module selection (`dns.module`, `volumes.module`, `distro`, `provider`) maps config values to Layers in `cli/main` — explicit wiring, no runtime plugin discovery (KISS).

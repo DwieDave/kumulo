@@ -1,6 +1,6 @@
 import { assert, it } from "@effect/vitest"
 import { Option, Schema } from "effect"
-import { cloudConfSecretManifest, renderCloudConfIni } from "../src/cloud-conf.ts"
+import { cloudConfSecretManifest, renderCloudConfIni } from "../../src/cluster/cloud-conf.ts"
 
 const conf = {
   authUrl: "https://auth.cloud.ovh.net/v3",

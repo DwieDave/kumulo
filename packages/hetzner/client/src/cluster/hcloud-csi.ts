@@ -1,5 +1,5 @@
 import type { K8sManifest } from "@kumulo/core"
-import { HCLOUD_NAMESPACE, HCLOUD_SECRET_NAME, hcloudSecretManifest, type HcloudCredential } from "../hcloud-secret.ts"
+import { HCLOUD_NAMESPACE, HCLOUD_SECRET_NAME, hcloudSecretManifest, type HcloudCredential } from "./hcloud-secret.ts"
 
 const SERVICE_ACCOUNT = "hcloud-csi-controller"
 const IMAGE = "hetznercloud/hcloud-csi-driver:v2.22.0"

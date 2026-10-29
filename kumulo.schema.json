@@ -906,7 +906,7 @@
             "cloud_controller_manager": {
               "type": "boolean"
             },
-            "cinder_csi": {
+            "csi": {
               "type": "object",
               "properties": {
                 "enabled": {
@@ -915,19 +915,6 @@
                 "default_volume_type": {
                   "type": "string",
                   "minLength": 1
-                }
-              },
-              "required": [
-                "enabled",
-                "default_volume_type"
-              ],
-              "additionalProperties": true
-            },
-            "hcloud_csi": {
-              "type": "object",
-              "properties": {
-                "enabled": {
-                  "type": "boolean"
                 }
               },
               "required": [
@@ -948,8 +935,7 @@
           },
           "required": [
             "cloud_controller_manager",
-            "cinder_csi",
-            "hcloud_csi",
+            "csi",
             "system_upgrade_controller",
             "cni"
           ],
@@ -2765,11 +2751,11 @@
           },
           "addons": {
             "properties": {
-              "cinder_csi": {
-                "properties": {
-                  "enabled": {
-                    "const": false
-                  }
+              "csi": {
+                "not": {
+                  "required": [
+                    "default_volume_type"
+                  ]
                 }
               }
             }
@@ -2783,17 +2769,6 @@
               "module": {
                 "not": {
                   "const": "hcloud"
-                }
-              }
-            }
-          },
-          "addons": {
-            "properties": {
-              "hcloud_csi": {
-                "properties": {
-                  "enabled": {
-                    "const": false
-                  }
                 }
               }
             }

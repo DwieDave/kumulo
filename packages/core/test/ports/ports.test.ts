@@ -4,7 +4,6 @@ import { CloudProvider } from "../../src/ports/cloud-provider.ts"
 import { CredentialsSink } from "../../src/ports/credentials-sink.ts"
 import { ProviderProfile } from "../../src/ports/provider-profile.ts"
 import { Distro } from "../../src/ports/distro.ts"
-import { Addon } from "../../src/ports/addon.ts"
 import { DnsProvider } from "../../src/ports/dns-provider.ts"
 import { ObjectStorageProvider } from "../../src/ports/object-storage-provider.ts"
 import { VolumeProvider } from "../../src/ports/volume-provider.ts"
@@ -104,21 +103,6 @@ describe("ports", () => {
 
       const kind = yield* Effect.provide(Distro.pipe(Effect.map((d) => d.kind)), fake)
       expect(kind).toBe("managed")
-    }))
-
-  it.effect("Addon resolves through a fake Layer", () =>
-    Effect.gen(function*() {
-      const fake = Layer.succeed(
-        Addon,
-        Addon.of({
-          name: "cilium",
-          requiredCapabilities: [],
-          manifests: () => Effect.succeed([])
-        })
-      )
-
-      const name = yield* Effect.provide(Addon.pipe(Effect.map((a) => a.name)), fake)
-      expect(name).toBe("cilium")
     }))
 
   it.effect("DnsProvider resolves through a fake Layer", () =>
