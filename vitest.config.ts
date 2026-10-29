@@ -9,6 +9,6 @@ export default defineConfig({
   resolve: { conditions: _conditions },
   ssr: { resolve: { conditions: _conditions, externalConditions: _conditions } },
   test: {
-    include: ["packages/*/test/**/*.test.ts", "tools/*/test/**/*.test.ts", "examples/*.test.ts"]
+    include: ["packages/*/test/**/*.test.ts", "packages/*/*/test/**/*.test.ts", "tools/*/test/**/*.test.ts", "examples/*.test.ts"]
   }
 })

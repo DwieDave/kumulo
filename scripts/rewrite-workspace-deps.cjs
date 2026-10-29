@@ -14,6 +14,7 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
+const { workspacePackages } = require("./workspace-packages.mjs");
 
 const REPO_ROOT = path.resolve(__dirname, "..");
 const PACKAGES_DIR = path.join(REPO_ROOT, "packages");
@@ -88,15 +89,9 @@ const _main = () => {
     process.exit(1);
   }
 
-  for (const entry of fs.readdirSync(PACKAGES_DIR)) {
-    const pkgDir = path.join(PACKAGES_DIR, entry);
-
-    if (!fs.statSync(pkgDir).isDirectory()) continue;
-
-    if (!fs.existsSync(path.join(pkgDir, "package.json"))) continue;
-
-    if (_readJson(path.join(pkgDir, "package.json")).private === true) continue;
-    _rewriteOne(pkgDir, version, catalog, namedCatalogs);
+  for (const { dir, pkg } of workspacePackages().filter((p) => p.dir.startsWith("packages/"))) {
+    if (pkg.private === true) continue;
+    _rewriteOne(path.join(REPO_ROOT, dir), version, catalog, namedCatalogs);
   }
 
   console.log(`done — resolved workspace:* and catalog: deps to concrete versions (v${version})`);

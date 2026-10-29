@@ -14,6 +14,11 @@
   "workspaces": {
     "packages": [
       "packages/*",
+      "packages/bunny/*",
+      "packages/ovh/*",
+      "packages/upcloud/*",
+      "packages/hetzner/*",
+      "packages/openstack/*",
       "tools/*"
     ],
     "catalog": {
@@ -36,20 +41,20 @@
     }
   },
   "scripts": {
-    "typecheck": "s=0; for d in packages/* tools/*; do (cd \"$d\" && echo \"[typecheck] $d\" && ../../node_modules/.bin/tsc --noEmit) || s=1; done; exit $s",
+    "typecheck": "node scripts/typecheck-all.mjs",
     "test": "vitest run",
     "lint:deps": "depcruise --config .dependency-cruiser.cjs packages tools",
     "codegen:check": "cd tools/codegen && bun run check",
     "ci": "bun run typecheck && bun run build && bun run test && bun run lint:deps && bun run lint && bun run codegen:check && bun run schema:check",
     "lint": "oxlint",
-    "build": "set -e; for d in $(node -e 'const fs=require(\"node:fs\");const p=fs.readdirSync(\"packages\").filter(d=>fs.existsSync(`packages/${d}/package.json`)&&require(`${process.cwd()}/packages/${d}/package.json`).scripts?.build);const leaf=[\"core\",\"bunny\",\"upcloud\"];const m=p.filter(d=>!leaf.includes(d)&&d!==\"cli\").sort();console.log([...p.filter(d=>leaf.includes(d)).sort((a,b)=>leaf.indexOf(a)-leaf.indexOf(b)),...m,...p.filter(d=>d===\"cli\")].join(\" \"))'); do echo \"[build] $d\"; bun run --cwd \"packages/$d\" build; done",
+    "build": "node scripts/build-all.mjs",
     "schema:generate": "bun scripts/generate-schema.ts",
     "schema:check": "set -e; cp kumulo.schema.json .kumulo.schema.check.bak; bun scripts/generate-schema.ts; s=0; diff -u .kumulo.schema.check.bak kumulo.schema.json || { s=$?; echo 'kumulo.schema.json is stale: run `bun run schema:generate` and commit'; }; mv .kumulo.schema.check.bak kumulo.schema.json; exit $s",
     "version:bump": "node scripts/bump-version.mjs",
     "release:rewrite-deps": "node scripts/rewrite-workspace-deps.cjs",
     "specs:update:ovh": "bash tools/ovh2openapi/scripts/update-specs.sh",
-    "specs:update:openstack": "bash packages/openstack/scripts/update-specs.sh",
-    "specs:update:hetzner": "bash packages/hetzner/scripts/update-specs.sh"
+    "specs:update:openstack": "bash packages/openstack/client/scripts/update-specs.sh",
+    "specs:update:hetzner": "bash packages/hetzner/client/scripts/update-specs.sh"
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",

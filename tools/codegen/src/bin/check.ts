@@ -76,18 +76,18 @@ const _loadOvhPipeline = (pipeline: OvhPipeline) =>
 const _ovhPipelines: Effect.Effect<ReadonlyArray<OvhPipeline>> = Effect.promise(async () => [
   {
     name: "distro-ovh-mks",
-    outputPath: "../../packages/distro-ovh-mks/src/generated/client.ts",
-    generate: (await import("../../../../packages/distro-ovh-mks/scripts/generate.ts")).generate
+    outputPath: "../../packages/ovh/distro-mks/src/generated/client.ts",
+    generate: (await import("../../../../packages/ovh/distro-mks/scripts/generate.ts")).generate
   },
   {
     name: "dns-ovh",
-    outputPath: "../../packages/dns-ovh/src/generated/client.ts",
-    generate: (await import("../../../../packages/dns-ovh/scripts/generate.ts")).generate
+    outputPath: "../../packages/ovh/dns/src/generated/client.ts",
+    generate: (await import("../../../../packages/ovh/dns/scripts/generate.ts")).generate
   },
   {
     name: "storage-ovh",
-    outputPath: "../../packages/storage-ovh/src/generated/client.ts",
-    generate: (await import("../../../../packages/storage-ovh/scripts/generate.ts")).generate
+    outputPath: "../../packages/ovh/storage/src/generated/client.ts",
+    generate: (await import("../../../../packages/ovh/storage/scripts/generate.ts")).generate
   }
 ])
 

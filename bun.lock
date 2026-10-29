@@ -35,7 +35,24 @@
         "effect": "catalog:",
       },
     },
-    "packages/bunny": {
+    "packages/bunny/cdn": {
+      "name": "@kumulo/cdn-bunny",
+      "version": "0.1.1",
+      "dependencies": {
+        "@kumulo/bunny": "workspace:*",
+        "@kumulo/core": "workspace:*",
+        "yaml": "catalog:",
+      },
+      "devDependencies": {
+        "@effect/vitest": "catalog:",
+        "effect": "catalog:",
+        "vitest": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
+      },
+    },
+    "packages/bunny/client": {
       "name": "@kumulo/bunny",
       "version": "0.1.1",
       "dependencies": {
@@ -50,12 +67,29 @@
         "effect": "catalog:",
       },
     },
-    "packages/cdn-bunny": {
-      "name": "@kumulo/cdn-bunny",
+    "packages/bunny/dns": {
+      "name": "@kumulo/dns-bunny",
       "version": "0.1.1",
       "dependencies": {
         "@kumulo/bunny": "workspace:*",
         "@kumulo/core": "workspace:*",
+      },
+      "devDependencies": {
+        "@effect/vitest": "catalog:",
+        "effect": "catalog:",
+        "vitest": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
+      },
+    },
+    "packages/bunny/storage": {
+      "name": "@kumulo/storage-bunny",
+      "version": "0.1.1",
+      "dependencies": {
+        "@kumulo/bunny": "workspace:*",
+        "@kumulo/core": "workspace:*",
+        "yaml": "catalog:",
       },
       "devDependencies": {
         "@effect/vitest": "catalog:",
@@ -138,88 +172,7 @@
         "effect": "catalog:",
       },
     },
-    "packages/distro-ovh-mks": {
-      "name": "@kumulo/distro-ovh-mks",
-      "version": "0.1.1",
-      "dependencies": {
-        "@kumulo/core": "workspace:*",
-      },
-      "devDependencies": {
-        "@effect/vitest": "catalog:",
-        "codegen": "workspace:*",
-        "effect": "catalog:",
-        "ovh2openapi": "workspace:*",
-        "vitest": "catalog:",
-      },
-      "peerDependencies": {
-        "effect": "catalog:",
-      },
-    },
-    "packages/distro-upcloud-uks": {
-      "name": "@kumulo/distro-upcloud-uks",
-      "version": "0.1.1",
-      "dependencies": {
-        "@kumulo/core": "workspace:*",
-        "@kumulo/upcloud": "workspace:*",
-      },
-      "devDependencies": {
-        "@effect/vitest": "catalog:",
-        "effect": "catalog:",
-        "vitest": "catalog:",
-      },
-      "peerDependencies": {
-        "effect": "catalog:",
-      },
-    },
-    "packages/dns-bunny": {
-      "name": "@kumulo/dns-bunny",
-      "version": "0.1.1",
-      "dependencies": {
-        "@kumulo/bunny": "workspace:*",
-        "@kumulo/core": "workspace:*",
-      },
-      "devDependencies": {
-        "@effect/vitest": "catalog:",
-        "effect": "catalog:",
-        "vitest": "catalog:",
-      },
-      "peerDependencies": {
-        "effect": "catalog:",
-      },
-    },
-    "packages/dns-hetzner": {
-      "name": "@kumulo/dns-hetzner",
-      "version": "0.1.1",
-      "dependencies": {
-        "@kumulo/core": "workspace:*",
-      },
-      "devDependencies": {
-        "@effect/vitest": "catalog:",
-        "effect": "catalog:",
-        "vitest": "catalog:",
-      },
-      "peerDependencies": {
-        "effect": "catalog:",
-      },
-    },
-    "packages/dns-ovh": {
-      "name": "@kumulo/dns-ovh",
-      "version": "0.1.1",
-      "dependencies": {
-        "@kumulo/core": "workspace:*",
-      },
-      "devDependencies": {
-        "@effect/vitest": "catalog:",
-        "codegen": "workspace:*",
-        "effect": "catalog:",
-        "ovh2openapi": "workspace:*",
-        "vitest": "catalog:",
-      },
-      "peerDependencies": {
-        "effect": "catalog:",
-      },
-    },
-    "packages/hetzner": {
+    "packages/hetzner/client": {
       "name": "@kumulo/hetzner",
       "version": "0.1.1",
       "dependencies": {
@@ -235,7 +188,22 @@
         "effect": "catalog:",
       },
     },
-    "packages/openstack": {
+    "packages/hetzner/dns": {
+      "name": "@kumulo/dns-hetzner",
+      "version": "0.1.1",
+      "dependencies": {
+        "@kumulo/core": "workspace:*",
+      },
+      "devDependencies": {
+        "@effect/vitest": "catalog:",
+        "effect": "catalog:",
+        "vitest": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
+      },
+    },
+    "packages/openstack/client": {
       "name": "@kumulo/openstack",
       "version": "0.1.1",
       "dependencies": {
@@ -252,18 +220,24 @@
         "effect": "catalog:",
       },
     },
-    "packages/oxlint": {
-      "name": "@kumulo/oxlint",
-      "version": "0.0.0",
+    "packages/openstack/volumes": {
+      "name": "@kumulo/volumes-cinder",
+      "version": "0.1.1",
+      "dependencies": {
+        "@kumulo/core": "workspace:*",
+        "yaml": "catalog:",
+      },
       "devDependencies": {
-        "@oxlint/plugins": "catalog:",
-        "@types/bun": "catalog:",
-        "oxlint": "catalog:",
-        "typescript": "catalog:",
+        "@effect/vitest": "catalog:",
+        "codegen": "workspace:*",
+        "effect": "catalog:",
         "vitest": "catalog:",
       },
+      "peerDependencies": {
+        "effect": "catalog:",
+      },
     },
-    "packages/provider-ovh": {
+    "packages/ovh/client": {
       "name": "@kumulo/provider-ovh",
       "version": "0.1.1",
       "dependencies": {
@@ -276,6 +250,69 @@
       },
       "peerDependencies": {
         "effect": "catalog:",
+      },
+    },
+    "packages/ovh/distro-mks": {
+      "name": "@kumulo/distro-ovh-mks",
+      "version": "0.1.1",
+      "dependencies": {
+        "@kumulo/core": "workspace:*",
+      },
+      "devDependencies": {
+        "@effect/vitest": "catalog:",
+        "codegen": "workspace:*",
+        "effect": "catalog:",
+        "ovh2openapi": "workspace:*",
+        "vitest": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
+      },
+    },
+    "packages/ovh/dns": {
+      "name": "@kumulo/dns-ovh",
+      "version": "0.1.1",
+      "dependencies": {
+        "@kumulo/core": "workspace:*",
+      },
+      "devDependencies": {
+        "@effect/vitest": "catalog:",
+        "codegen": "workspace:*",
+        "effect": "catalog:",
+        "ovh2openapi": "workspace:*",
+        "vitest": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
+      },
+    },
+    "packages/ovh/storage": {
+      "name": "@kumulo/storage-ovh",
+      "version": "0.1.1",
+      "dependencies": {
+        "@kumulo/core": "workspace:*",
+        "yaml": "catalog:",
+      },
+      "devDependencies": {
+        "@effect/vitest": "catalog:",
+        "codegen": "workspace:*",
+        "effect": "catalog:",
+        "ovh2openapi": "workspace:*",
+        "vitest": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
+      },
+    },
+    "packages/oxlint": {
+      "name": "@kumulo/oxlint",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@oxlint/plugins": "catalog:",
+        "@types/bun": "catalog:",
+        "oxlint": "catalog:",
+        "typescript": "catalog:",
+        "vitest": "catalog:",
       },
     },
     "packages/secrets-sops": {
@@ -295,11 +332,10 @@
         "effect": "catalog:",
       },
     },
-    "packages/storage-bunny": {
-      "name": "@kumulo/storage-bunny",
-      "version": "0.1.1",
+    "packages/upcloud/client": {
+      "name": "@kumulo/upcloud",
+      "version": "0.1.0",
       "dependencies": {
-        "@kumulo/bunny": "workspace:*",
         "@kumulo/core": "workspace:*",
       },
       "devDependencies": {
@@ -311,25 +347,23 @@
         "effect": "catalog:",
       },
     },
-    "packages/storage-ovh": {
-      "name": "@kumulo/storage-ovh",
+    "packages/upcloud/distro-uks": {
+      "name": "@kumulo/distro-upcloud-uks",
       "version": "0.1.1",
       "dependencies": {
         "@kumulo/core": "workspace:*",
-        "yaml": "catalog:",
+        "@kumulo/upcloud": "workspace:*",
       },
       "devDependencies": {
         "@effect/vitest": "catalog:",
-        "codegen": "workspace:*",
         "effect": "catalog:",
-        "ovh2openapi": "workspace:*",
         "vitest": "catalog:",
       },
       "peerDependencies": {
         "effect": "catalog:",
       },
     },
-    "packages/storage-upcloud": {
+    "packages/upcloud/storage": {
       "name": "@kumulo/storage-upcloud",
       "version": "0.1.0",
       "dependencies": {
@@ -345,39 +379,7 @@
         "effect": "catalog:",
       },
     },
-    "packages/upcloud": {
-      "name": "@kumulo/upcloud",
-      "version": "0.1.0",
-      "dependencies": {
-        "@kumulo/core": "workspace:*",
-      },
-      "devDependencies": {
-        "@effect/vitest": "catalog:",
-        "effect": "catalog:",
-        "vitest": "catalog:",
-      },
-      "peerDependencies": {
-        "effect": "catalog:",
-      },
-    },
-    "packages/volumes-cinder": {
-      "name": "@kumulo/volumes-cinder",
-      "version": "0.1.1",
-      "dependencies": {
-        "@kumulo/core": "workspace:*",
-        "yaml": "catalog:",
-      },
-      "devDependencies": {
-        "@effect/vitest": "catalog:",
-        "codegen": "workspace:*",
-        "effect": "catalog:",
-        "vitest": "catalog:",
-      },
-      "peerDependencies": {
-        "effect": "catalog:",
-      },
-    },
-    "packages/volumes-upcloud": {
+    "packages/upcloud/volumes": {
       "name": "@kumulo/volumes-upcloud",
       "version": "0.1.0",
       "dependencies": {
@@ -480,9 +482,9 @@
 
     "@kumulo/addons": ["@kumulo/addons@workspace:packages/addons"],
 
-    "@kumulo/bunny": ["@kumulo/bunny@workspace:packages/bunny"],
+    "@kumulo/bunny": ["@kumulo/bunny@workspace:packages/bunny/client"],
 
-    "@kumulo/cdn-bunny": ["@kumulo/cdn-bunny@workspace:packages/cdn-bunny"],
+    "@kumulo/cdn-bunny": ["@kumulo/cdn-bunny@workspace:packages/bunny/cdn"],
 
     "@kumulo/cli": ["@kumulo/cli@workspace:packages/cli"],
 
@@ -490,37 +492,37 @@
 
     "@kumulo/distro-k3s": ["@kumulo/distro-k3s@workspace:packages/distro-k3s"],
 
-    "@kumulo/distro-ovh-mks": ["@kumulo/distro-ovh-mks@workspace:packages/distro-ovh-mks"],
+    "@kumulo/distro-ovh-mks": ["@kumulo/distro-ovh-mks@workspace:packages/ovh/distro-mks"],
 
-    "@kumulo/distro-upcloud-uks": ["@kumulo/distro-upcloud-uks@workspace:packages/distro-upcloud-uks"],
+    "@kumulo/distro-upcloud-uks": ["@kumulo/distro-upcloud-uks@workspace:packages/upcloud/distro-uks"],
 
-    "@kumulo/dns-bunny": ["@kumulo/dns-bunny@workspace:packages/dns-bunny"],
+    "@kumulo/dns-bunny": ["@kumulo/dns-bunny@workspace:packages/bunny/dns"],
 
-    "@kumulo/dns-hetzner": ["@kumulo/dns-hetzner@workspace:packages/dns-hetzner"],
+    "@kumulo/dns-hetzner": ["@kumulo/dns-hetzner@workspace:packages/hetzner/dns"],
 
-    "@kumulo/dns-ovh": ["@kumulo/dns-ovh@workspace:packages/dns-ovh"],
+    "@kumulo/dns-ovh": ["@kumulo/dns-ovh@workspace:packages/ovh/dns"],
 
-    "@kumulo/hetzner": ["@kumulo/hetzner@workspace:packages/hetzner"],
+    "@kumulo/hetzner": ["@kumulo/hetzner@workspace:packages/hetzner/client"],
 
-    "@kumulo/openstack": ["@kumulo/openstack@workspace:packages/openstack"],
+    "@kumulo/openstack": ["@kumulo/openstack@workspace:packages/openstack/client"],
 
     "@kumulo/oxlint": ["@kumulo/oxlint@workspace:packages/oxlint"],
 
-    "@kumulo/provider-ovh": ["@kumulo/provider-ovh@workspace:packages/provider-ovh"],
+    "@kumulo/provider-ovh": ["@kumulo/provider-ovh@workspace:packages/ovh/client"],
 
     "@kumulo/secrets-sops": ["@kumulo/secrets-sops@workspace:packages/secrets-sops"],
 
-    "@kumulo/storage-bunny": ["@kumulo/storage-bunny@workspace:packages/storage-bunny"],
+    "@kumulo/storage-bunny": ["@kumulo/storage-bunny@workspace:packages/bunny/storage"],
 
-    "@kumulo/storage-ovh": ["@kumulo/storage-ovh@workspace:packages/storage-ovh"],
+    "@kumulo/storage-ovh": ["@kumulo/storage-ovh@workspace:packages/ovh/storage"],
 
-    "@kumulo/storage-upcloud": ["@kumulo/storage-upcloud@workspace:packages/storage-upcloud"],
+    "@kumulo/storage-upcloud": ["@kumulo/storage-upcloud@workspace:packages/upcloud/storage"],
 
-    "@kumulo/upcloud": ["@kumulo/upcloud@workspace:packages/upcloud"],
+    "@kumulo/upcloud": ["@kumulo/upcloud@workspace:packages/upcloud/client"],
 
-    "@kumulo/volumes-cinder": ["@kumulo/volumes-cinder@workspace:packages/volumes-cinder"],
+    "@kumulo/volumes-cinder": ["@kumulo/volumes-cinder@workspace:packages/openstack/volumes"],
 
-    "@kumulo/volumes-upcloud": ["@kumulo/volumes-upcloud@workspace:packages/volumes-upcloud"],
+    "@kumulo/volumes-upcloud": ["@kumulo/volumes-upcloud@workspace:packages/upcloud/volumes"],
 
     "@napi-rs/wasm-runtime": ["@napi-rs/wasm-runtime@1.1.6", "", { "dependencies": { "@tybys/wasm-util": "^0.10.3" }, "peerDependencies": { "@emnapi/core": "^1.7.1", "@emnapi/runtime": "^1.7.1" } }, "sha512-ZLv/JdUfkvOy9eCnnBaGfiO+XimbjebAeO+MRQqD/B+FR1tnRN0tpKSJHRbE8sFfS6aqsXZ67TQjfwfsxULVbg=="],
 

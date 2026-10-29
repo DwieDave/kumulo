@@ -9,6 +9,22 @@
 
     "moduleResolution": "bundler",
     "paths": {
+      "@kumulo/bunny": ["./packages/bunny/client/src/index.ts"],
+      "@kumulo/cdn-bunny": ["./packages/bunny/cdn/src/index.ts"],
+      "@kumulo/distro-ovh-mks": ["./packages/ovh/distro-mks/src/index.ts"],
+      "@kumulo/distro-upcloud-uks": ["./packages/upcloud/distro-uks/src/index.ts"],
+      "@kumulo/dns-bunny": ["./packages/bunny/dns/src/index.ts"],
+      "@kumulo/dns-hetzner": ["./packages/hetzner/dns/src/index.ts"],
+      "@kumulo/dns-ovh": ["./packages/ovh/dns/src/index.ts"],
+      "@kumulo/hetzner": ["./packages/hetzner/client/src/index.ts"],
+      "@kumulo/openstack": ["./packages/openstack/client/src/index.ts"],
+      "@kumulo/provider-ovh": ["./packages/ovh/client/src/index.ts"],
+      "@kumulo/storage-bunny": ["./packages/bunny/storage/src/index.ts"],
+      "@kumulo/storage-ovh": ["./packages/ovh/storage/src/index.ts"],
+      "@kumulo/storage-upcloud": ["./packages/upcloud/storage/src/index.ts"],
+      "@kumulo/upcloud": ["./packages/upcloud/client/src/index.ts"],
+      "@kumulo/volumes-cinder": ["./packages/openstack/volumes/src/index.ts"],
+      "@kumulo/volumes-upcloud": ["./packages/upcloud/volumes/src/index.ts"],
       "@kumulo/*": ["./packages/*/src/index.ts"]
     },
     "allowImportingTsExtensions": true,

@@ -1,0 +1,67 @@
+{
+  "name": "@kumulo/dns-ovh",
+  "version": "0.1.1",
+  "description": "OVH DNS provider for kumulo.",
+  "license": "MIT",
+  "author": "David Stahl-Gruber",
+  "homepage": "https://github.com/DwieDave/kumulo#readme",
+  "bugs": "https://github.com/DwieDave/kumulo/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DwieDave/kumulo.git",
+    "directory": "packages/ovh/dns"
+  },
+  "keywords": [
+    "ovh",
+    "dns",
+    "effect",
+    "typescript"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.mjs"
+      }
+    }
+  },
+  "dependencies": {
+    "@kumulo/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "codegen": "workspace:*",
+    "effect": "catalog:",
+    "ovh2openapi": "workspace:*",
+    "vitest": "catalog:"
+  },
+  "scripts": {
+    "build": "bash ../../../scripts/build-package.sh",
+    "prepack": "node ../../../scripts/prepack-exports.mjs strip",
+    "postpack": "node ../../../scripts/prepack-exports.mjs restore",
+    "prepublishOnly": "bun run build"
+  }
+}

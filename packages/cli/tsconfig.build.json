@@ -1,13 +1,12 @@
 {
-  "extends": "./tsconfig.json",
+  "extends": ["./tsconfig.json", "../../tsconfig.build.base.json"],
   "compilerOptions": {
     "noEmit": false,
     "allowJs": false,
     "declaration": true,
     "emitDeclarationOnly": true,
     "declarationDir": "./dist",
-    "rootDir": "./src",
-    "paths": { "@kumulo/*": ["../*/dist/index.d.ts"] }
+    "rootDir": "./src"
   },
   "include": ["src"],
   "exclude": ["src/**/*.test.ts", "dist"]

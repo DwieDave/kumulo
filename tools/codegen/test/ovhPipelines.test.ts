@@ -14,8 +14,8 @@ import { checkNoop } from "../src/regenCheck.ts"
  */
 describe("OVH-pipeline regen-noop coverage", () => {
   const cases = [
-    { name: "distro-ovh-mks", pkgDir: "../../../packages/distro-ovh-mks" },
-    { name: "dns-ovh", pkgDir: "../../../packages/dns-ovh" }
+    { name: "distro-ovh-mks", pkgDir: "../../../packages/ovh/distro-mks" },
+    { name: "dns-ovh", pkgDir: "../../../packages/ovh/dns" }
   ]
 
   for (const { name, pkgDir } of cases) {

@@ -1,66 +1,66 @@
 [
   {
     "name": "Keystone",
-    "specPath": "../../packages/openstack/specs/keystone/v3.14.yaml",
-    "allowlistPath": "../../packages/openstack/allowlists/keystone.json",
-    "patchPaths": ["../../packages/openstack/patches/keystone.patch.json5"],
+    "specPath": "../../packages/openstack/client/specs/keystone/v3.14.yaml",
+    "allowlistPath": "../../packages/openstack/client/allowlists/keystone.json",
+    "patchPaths": ["../../packages/openstack/client/patches/keystone.patch.json5"],
     "format": "httpapi",
-    "outputPath": "../../packages/openstack/src/generated/keystone.ts"
+    "outputPath": "../../packages/openstack/client/src/generated/keystone.ts"
   },
   {
     "name": "Nova",
-    "specPath": "../../packages/openstack/specs/nova/v2.96.yaml",
-    "allowlistPath": "../../packages/openstack/allowlists/nova.json",
-    "patchPaths": ["../../packages/openstack/patches/nova.patch.json5"],
+    "specPath": "../../packages/openstack/client/specs/nova/v2.96.yaml",
+    "allowlistPath": "../../packages/openstack/client/allowlists/nova.json",
+    "patchPaths": ["../../packages/openstack/client/patches/nova.patch.json5"],
     "format": "httpapi",
-    "outputPath": "../../packages/openstack/src/generated/nova.ts"
+    "outputPath": "../../packages/openstack/client/src/generated/nova.ts"
   },
   {
     "name": "Neutron",
-    "specPath": "../../packages/openstack/specs/neutron/v2.yaml",
-    "allowlistPath": "../../packages/openstack/allowlists/neutron.json",
-    "patchPaths": ["../../packages/openstack/patches/neutron.patch.json5"],
+    "specPath": "../../packages/openstack/client/specs/neutron/v2.yaml",
+    "allowlistPath": "../../packages/openstack/client/allowlists/neutron.json",
+    "patchPaths": ["../../packages/openstack/client/patches/neutron.patch.json5"],
     "format": "httpapi",
-    "outputPath": "../../packages/openstack/src/generated/neutron.ts"
+    "outputPath": "../../packages/openstack/client/src/generated/neutron.ts"
   },
   {
     "name": "Glance",
-    "specPath": "../../packages/openstack/specs/glance/v2.16.yaml",
-    "allowlistPath": "../../packages/openstack/allowlists/glance.json",
-    "patchPaths": ["../../packages/openstack/patches/glance.patch.json5"],
+    "specPath": "../../packages/openstack/client/specs/glance/v2.16.yaml",
+    "allowlistPath": "../../packages/openstack/client/allowlists/glance.json",
+    "patchPaths": ["../../packages/openstack/client/patches/glance.patch.json5"],
     "format": "httpapi",
-    "outputPath": "../../packages/openstack/src/generated/glance.ts"
+    "outputPath": "../../packages/openstack/client/src/generated/glance.ts"
   },
   {
     "name": "Cinder",
-    "specPath": "../../packages/openstack/specs/cinder/v3.70.yaml",
-    "allowlistPath": "../../packages/openstack/allowlists/cinder.json",
-    "patchPaths": ["../../packages/openstack/patches/cinder.patch.json5"],
+    "specPath": "../../packages/openstack/client/specs/cinder/v3.70.yaml",
+    "allowlistPath": "../../packages/openstack/client/allowlists/cinder.json",
+    "patchPaths": ["../../packages/openstack/client/patches/cinder.patch.json5"],
     "format": "httpapi",
-    "outputPath": "../../packages/openstack/src/generated/cinder.ts"
+    "outputPath": "../../packages/openstack/client/src/generated/cinder.ts"
   },
   {
     "name": "Cinder",
-    "specPath": "../../packages/openstack/specs/cinder/v3.70.yaml",
-    "allowlistPath": "../../packages/volumes-cinder/allowlists/cinder.json",
-    "patchPaths": ["../../packages/volumes-cinder/patches/cinder.patch.json5"],
+    "specPath": "../../packages/openstack/client/specs/cinder/v3.70.yaml",
+    "allowlistPath": "../../packages/openstack/volumes/allowlists/cinder.json",
+    "patchPaths": ["../../packages/openstack/volumes/patches/cinder.patch.json5"],
     "format": "httpapi",
-    "outputPath": "../../packages/volumes-cinder/src/generated/cinder.ts"
+    "outputPath": "../../packages/openstack/volumes/src/generated/cinder.ts"
   },
   {
     "name": "Octavia",
-    "specPath": "../../packages/openstack/specs/octavia/v2.yaml",
-    "allowlistPath": "../../packages/openstack/allowlists/octavia.json",
-    "patchPaths": ["../../packages/openstack/patches/octavia.patch.json5"],
+    "specPath": "../../packages/openstack/client/specs/octavia/v2.yaml",
+    "allowlistPath": "../../packages/openstack/client/allowlists/octavia.json",
+    "patchPaths": ["../../packages/openstack/client/patches/octavia.patch.json5"],
     "format": "httpapi",
-    "outputPath": "../../packages/openstack/src/generated/octavia.ts"
+    "outputPath": "../../packages/openstack/client/src/generated/octavia.ts"
   },
   {
     "name": "Hcloud",
-    "specPath": "../../packages/hetzner/specs/hcloud/cloud.spec.json",
-    "allowlistPath": "../../packages/hetzner/allowlists/hcloud.json",
-    "patchPaths": ["../../packages/hetzner/patches/hcloud.patch.json5"],
+    "specPath": "../../packages/hetzner/client/specs/hcloud/cloud.spec.json",
+    "allowlistPath": "../../packages/hetzner/client/allowlists/hcloud.json",
+    "patchPaths": ["../../packages/hetzner/client/patches/hcloud.patch.json5"],
     "format": "httpapi",
-    "outputPath": "../../packages/hetzner/src/generated/hcloud.ts"
+    "outputPath": "../../packages/hetzner/client/src/generated/hcloud.ts"
   }
 ]

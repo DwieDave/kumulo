@@ -3,7 +3,7 @@ import type { HttpClientRequest} from "effect/http";
 import { HttpClient, HttpClientResponse } from "effect/http"
 
 // kumulo: recorded-response fixture fake — same shape as
-// packages/openstack/test/transport/http-client.test.ts's `_fakeBase`,
+// packages/openstack/client/test/transport/http-client.test.ts's `_fakeBase`,
 // duplicated locally (core can't import a sibling package's test helper).
 export interface FakeHttpClient {
   readonly client: HttpClient.HttpClient

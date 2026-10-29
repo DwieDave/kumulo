@@ -37,7 +37,11 @@ jobs:
           TAG="${GITHUB_REF##*/}"
           TAG_VERSION="${TAG#v}"
           echo "Tag ${TAG} → version ${TAG_VERSION}"
-          for pkg in packages/*/package.json; do
+          PKGS=$(node --input-type=module -e '
+            import { workspacePackages } from "./scripts/workspace-packages.mjs";
+            console.log(workspacePackages().filter((p) => p.dir.startsWith("packages/")).map((p) => `${p.dir}/package.json`).join(" "));
+          ')
+          for pkg in $PKGS; do
             if [ "$(node -p "require('./$pkg').private === true")" = "true" ]; then
               echo "skip (private, not published): $pkg"
               continue
@@ -90,13 +94,12 @@ jobs:
         id: order
         run: |
           set -euo pipefail
-          ORDER=$(node -e '
-            const fs = require("node:fs");
-            const pub = fs.readdirSync("packages").filter((d) =>
-              fs.existsSync(`packages/${d}/package.json`)
-              && require(`${process.cwd()}/packages/${d}/package.json`).private !== true);
-            const mid = pub.filter((d) => d !== "core" && d !== "cli").sort();
-            console.log([...pub.filter((d) => d === "core"), ...mid, ...pub.filter((d) => d === "cli")].join(" "));
+          ORDER=$(node --input-type=module -e '
+            import { workspacePackages } from "./scripts/workspace-packages.mjs";
+            const pub = workspacePackages().filter((p) => p.dir.startsWith("packages/") && p.pkg.private !== true);
+            const mid = pub.filter((p) => p.name !== "@kumulo/core" && p.name !== "@kumulo/cli");
+            const order = [...pub.filter((p) => p.name === "@kumulo/core"), ...mid, ...pub.filter((p) => p.name === "@kumulo/cli")];
+            console.log(order.map((p) => p.dir.slice("packages/".length)).join(" "));
           ')
           echo "packages=$ORDER" >> "$GITHUB_OUTPUT"
           echo "publish order: $ORDER"
@@ -114,7 +117,7 @@ jobs:
         run: |
           set -euo pipefail
           for pkg in ${{ steps.order.outputs.packages }}; do
-            echo "::group::publish @kumulo/$pkg"
+            echo "::group::publish packages/$pkg"
             (cd "packages/$pkg" && npm publish --access public)
             echo "::endgroup::"
           done

@@ -18,9 +18,8 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
+import { REPO_ROOT, workspacePackages } from "./workspace-packages.mjs";
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PACKAGES_DIR = path.join(REPO_ROOT, "packages");
 
 const SEMVER_RE = /^(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
@@ -96,18 +95,14 @@ const _main = () => {
   // Every NON-private package under packages/.
   let published = 0;
 
-  for (const entry of fs.readdirSync(PACKAGES_DIR).toSorted()) {
-    const pkgJsonPath = path.join(PACKAGES_DIR, entry, "package.json");
-
-    if (!fs.existsSync(pkgJsonPath)) continue;
-
-    if (_readJson(pkgJsonPath).private === true) {
-      console.log(`  skip (private): packages/${entry}`);
+  for (const { dir, pkg } of workspacePackages().filter((p) => p.dir.startsWith("packages/"))) {
+    if (pkg.private === true) {
+      console.log(`  skip (private): ${dir}`);
       continue;
     }
 
-    if (_setVersion(pkgJsonPath, target)) {
-      console.log(`  bumped packages/${entry} → ${target}`);
+    if (_setVersion(path.join(REPO_ROOT, dir, "package.json"), target)) {
+      console.log(`  bumped ${dir} → ${target}`);
       published += 1;
     }
   }

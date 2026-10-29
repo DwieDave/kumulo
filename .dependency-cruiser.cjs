@@ -42,9 +42,9 @@ module.exports = {
         "'upcloud' in the 'from' pattern below, so its own OUTGOING edges stay governed by " +
         "this same rule and it may still only import @kumulo/core)",
       severity: "error",
-      from: { path: "^packages/(?!core/|cli/)([^/]+)/" },
+      from: { path: "^packages/(?!core/|cli/)((?:bunny|ovh|upcloud|hetzner|openstack)/[^/]+|[^/]+)/" },
       to: {
-        path: "^packages/(?!core/|upcloud/|bunny/)[^/]+/",
+        path: "^packages/(?!core/|upcloud/client/|bunny/client/)[^/]+/",
         pathNot: "^packages/$1/",
       },
     },
@@ -59,9 +59,9 @@ module.exports = {
       name: "no-deep-package-imports",
       comment: "only package-root imports allowed, never into another package's src internals",
       severity: "error",
-      from: { path: "^(packages|tools)/([^/]+)/" },
+      from: { path: "^(packages|tools)/((?:bunny|ovh|upcloud|hetzner|openstack)/[^/]+|[^/]+)/" },
       to: {
-        path: "^packages/[^/]+/src/(?!index\\.ts$).+",
+        path: "^packages/(?:(?:bunny|ovh|upcloud|hetzner|openstack)/)?[^/]+/src/(?!index\\.ts$).+",
         pathNot: "^packages/$2/",
       },
     },
