@@ -48,9 +48,29 @@ All notable changes to kumulo are documented here. Format:
 - Lint now also runs the vendored anti-slop rules
   ([dmmulroy/anti-slop](https://github.com/dmmulroy/anti-slop)), including the
   Effect rule group.
+- UpCloud: `control_plane_ip_filter` is left unmanaged when omitted, and `[]`
+  (deny all) is rejected because it would lock kumulo out of the control plane.
+- UpCloud: the node-pool taint syntax is `key[=value][:Effect]`.
+- UpCloud: pool labels are applied to new node groups. Existing groups need a
+  replace to get them.
+- UpCloud: cluster names must be 3-55 characters (`[a-z0-9-]`), versions have
+  no `v` prefix, and the UKS reserved CIDRs are rejected.
+- UpCloud object storage: users get the `ECSS3FullAccess` policy.
+- UpCloud teardown refuses to remove an object storage service that holds
+  unmanaged buckets.
 
 ### Fixed
 
+- UpCloud: no retry of POST on 5xx, request timeout, `Retry-After` honoured,
+  and `*_LIMIT_REACHED` 403s reported as quota errors.
+- UpCloud UKS: wire shapes (upgrade strategy object, `kubelet_args`, lenient
+  states), IP filter on every PATCH, version drift, upgrade ordering and wait,
+  early 404s, fail-fast on `failed`, and awaited node-group deletes.
+- UpCloud networks, routers and volumes are scoped by label and zone, and
+  teardown retries conflicts.
+- UpCloud object storage: paginated lists, region and bucket schemas, one
+  service ensure, stopped and deleting states, and credentials refreshed on
+  every run.
 - `--yes`, `--dry-run` and `--show-env` failed with "Missing required flag"
   when omitted under Effect 4.1; they default to off again.
 - `ensureNetwork`'s existing-network path re-reads the network's subnets
