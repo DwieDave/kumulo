@@ -56,16 +56,25 @@ const _ok = <Body>(body: Body): Response => new Response(JSON.stringify(body), {
 const _keyOf = (serviceUuid: string, username: string) => `${serviceUuid}/${username}`
 const _empty = (): Response => new Response(null, { status: 200 })
 
+const _page = <Item>(items: ReadonlyArray<Item>, url: URL): ReadonlyArray<Item> => {
+  const limit = Number(url.searchParams.get("limit") ?? 10)
+  const offset = Number(url.searchParams.get("offset") ?? 0)
+
+  return items.slice(offset, offset + (limit === 0 ? items.length : limit))
+}
+
 export const makeFakeObjectStorageServer = () => {
   const services = new Map<string, FakeService>()
   const buckets = new Map<string, Map<string, FakeBucket>>()
   const users = new Map<string, Set<string>>()
   const accessKeys = new Map<string, Map<string, FakeAccessKey>>()
+  const policies = new Map<string, Array<string>>()
+  const requests: Array<string> = []
   let nextId = 1
 
 
   const _handleServices = (request: HttpClientRequest.HttpClientRequest): Response => {
-    if (request.method === "GET") return _ok([...services.values()])
+    if (request.method === "GET") return _ok(_page([...services.values()], new URL(request.url, "https://fixture.invalid")))
 
     if (request.method === "POST") {
       const payload = _bodyOf<
@@ -152,6 +161,7 @@ export const makeFakeObjectStorageServer = () => {
   }
 
   const _handleBuckets = (request: HttpClientRequest.HttpClientRequest, serviceUuid: string): Response => {
+    const url = new URL(request.url, "https://fixture.invalid")
     const serviceBuckets = buckets.get(serviceUuid)
 
     if (!serviceBuckets) return _notFound("service not found")
@@ -164,7 +174,7 @@ export const makeFakeObjectStorageServer = () => {
         }
       }
 
-      return _ok([...serviceBuckets.values()])
+      return _ok(_page([...serviceBuckets.values()], url))
     }
 
     if (request.method === "POST") {
@@ -236,6 +246,7 @@ export const makeFakeObjectStorageServer = () => {
       if (!serviceUsers.has(username)) return _notFound("user not found")
       serviceUsers.delete(username)
       accessKeys.delete(_keyOf(serviceUuid, username))
+      policies.delete(_keyOf(serviceUuid, username))
 
       return _empty()
     }
@@ -298,8 +309,29 @@ export const makeFakeObjectStorageServer = () => {
     return _badRequest(`unsupported method ${request.method}`)
   }
 
+  const _handlePolicies = (request: HttpClientRequest.HttpClientRequest, serviceUuid: string, username: string): Response => {
+    if (!users.get(serviceUuid)?.has(username)) return _notFound("user not found")
+    const key = _keyOf(serviceUuid, username)
+    const attached = policies.get(key) ?? []
+
+    if (request.method === "GET") return _ok(attached.map((name) => ({ name, arn: `arn:ecs:iam::policy/${name}` })))
+
+    if (request.method === "POST") {
+      const payload = _bodyOf<{ readonly name?: string }>(request)
+
+      if (payload?.name === undefined) return _badRequest("policy attach is missing name")
+
+      if (!attached.includes(payload.name)) policies.set(key, [...attached, payload.name])
+
+      return _empty()
+    }
+
+    return _badRequest(`unsupported method ${request.method}`)
+  }
+
   const _handle = (request: HttpClientRequest.HttpClientRequest): Response => {
     const url = new URL(request.url, "https://fixture.invalid")
+    requests.push(`${request.method} ${url.pathname}${url.search}`)
     const parts = url.pathname.split("/").filter(Boolean)
 
     // Live API 404s without the /1.3 prefix.
@@ -309,7 +341,7 @@ export const makeFakeObjectStorageServer = () => {
     if (rest.length === 0) return _handleServices(request)
 
     if (rest[0] === "regions" && request.method === "GET") {
-      return _ok([{ name: "europe-1", primary_zone: "de-fra1", zones: ["de-fra1"] }])
+      return _ok([{ name: "europe-1", primary_zone: "de-fra1", zones: [{ name: "de-fra1" }] }])
     }
 
     const serviceUuid = rest[0]
@@ -329,6 +361,8 @@ export const makeFakeObjectStorageServer = () => {
 
       if (username === undefined) return _handleUsers(request, serviceUuid)
 
+      if (rest[3] === "policies") return _handlePolicies(request, serviceUuid, username)
+
       if (rest[3] === "access-keys") {
         const accessKeyId = rest[4]
 
@@ -347,5 +381,5 @@ export const makeFakeObjectStorageServer = () => {
     HttpClient.mapRequest(HttpClientRequest.prependUrl("https://fixture.invalid"))
   )
 
-  return { httpClient, services, buckets, users, accessKeys }
+  return { httpClient, services, buckets, users, accessKeys, policies, requests }
 }

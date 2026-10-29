@@ -105,3 +105,72 @@ it.effect("fake server: service delete 409s with a non-empty bucket unless force
     assert.strictEqual(failure._tag, "HttpClientError")
     yield* client.services.delete(service.uuid, true)
   }))
+
+it.effect("services.list pages with limit=100 until a short page", () =>
+  Effect.gen(function*() {
+    const fake = makeFakeObjectStorageServer()
+    const client = makeObjectStorageClient(fake.httpClient)
+
+    for (let i = 0; i < 150; i++) {
+      yield* client.services.create({ name: `svc-${i}`, region: "europe-1", configured_status: "started" })
+    }
+
+    fake.requests.length = 0
+    const list = yield* client.services.list()
+    assert.strictEqual(list.length, 150)
+    assert.deepStrictEqual(fake.requests, [
+      "GET /1.3/object-storage-2?limit=100&offset=0",
+      "GET /1.3/object-storage-2?limit=100&offset=100"
+    ])
+  }))
+
+it.effect("buckets.list pages with limit=100 until a short page", () =>
+  Effect.gen(function*() {
+    const fake = makeFakeObjectStorageServer()
+    const client = makeObjectStorageClient(fake.httpClient)
+    const service = yield* client.services.create({ name: "demo-objsto", region: "europe-1", configured_status: "started" })
+
+    for (let i = 0; i < 101; i++) yield* client.buckets.create(service.uuid, `bucket-${i}`)
+    fake.requests.length = 0
+    const list = yield* client.buckets.list(service.uuid)
+    assert.strictEqual(list.length, 101)
+    assert.deepStrictEqual(fake.requests, [
+      `GET /1.3/object-storage-2/${service.uuid}/buckets?limit=100&offset=0`,
+      `GET /1.3/object-storage-2/${service.uuid}/buckets?limit=100&offset=100`
+    ])
+  }))
+
+it.effect("a bucket response without deleted decodes", () =>
+  Effect.gen(function*() {
+    const client = makeObjectStorageClient(_fixtureHttpClient(200, [{ name: "b", total_objects: 0, total_size_bytes: 0 }]))
+    const list = yield* client.buckets.list("svc1")
+    assert.deepStrictEqual(list, [{ name: "b", total_objects: 0, total_size_bytes: 0 }])
+  }))
+
+it.effect("a regions response with zone objects decodes", () =>
+  Effect.gen(function*() {
+    const body = [{ name: "europe-1", primary_zone: "fi-hel1", zones: [{ name: "fi-hel1" }] }]
+    const client = makeObjectStorageClient(_fixtureHttpClient(200, body))
+    assert.deepStrictEqual(yield* client.regions(), body)
+  }))
+
+it.effect("an endpoint with a mode decodes", () =>
+  Effect.gen(function*() {
+    const endpoint = { domain_name: "x.example", type: "public", mode: "api" }
+    const client = makeObjectStorageClient(_fixtureHttpClient(200, { ..._service, endpoints: [endpoint] }))
+    assert.deepStrictEqual((yield* client.services.get("svc1")).endpoints, [endpoint])
+  }))
+
+it.effect("users.policies.attach posts the policy name and list returns it", () =>
+  Effect.gen(function*() {
+    const fake = makeFakeObjectStorageServer()
+    const client = makeObjectStorageClient(fake.httpClient)
+    const service = yield* client.services.create({ name: "demo-objsto", region: "europe-1", configured_status: "started" })
+    yield* client.users.create(service.uuid, "u")
+    assert.deepStrictEqual(yield* client.users.policies.list(service.uuid, "u"), [])
+    yield* client.users.policies.attach(service.uuid, "u", "ECSS3FullAccess")
+    assert.deepStrictEqual(fake.policies.get(`${service.uuid}/u`), ["ECSS3FullAccess"])
+    const listed = yield* client.users.policies.list(service.uuid, "u")
+    assert.deepStrictEqual(listed.map((p) => p.name), ["ECSS3FullAccess"])
+    assert.ok(fake.requests.includes(`POST /1.3/object-storage-2/${service.uuid}/users/u/policies`))
+  }))

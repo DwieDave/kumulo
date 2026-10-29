@@ -21,6 +21,7 @@ export type ObjectStorageNetwork = typeof ObjectStorageNetwork.Type
 export const ObjectStorageEndpoint = Schema.Struct({
   domain_name: Schema.String,
   type: Schema.String,
+  mode: Schema.optionalKey(Schema.String),
   iam_url: Schema.optionalKey(Schema.String),
   sts_url: Schema.optionalKey(Schema.String)
 })
@@ -45,7 +46,8 @@ export const BucketMetrics = Schema.Struct({
   name: Schema.String,
   total_objects: Schema.Number,
   total_size_bytes: Schema.Number,
-  deleted: Schema.Boolean
+  // kumulo: the documented responses omit it — treat a missing value as false.
+  deleted: Schema.optionalKey(Schema.Boolean)
 })
 
 export type BucketMetrics = typeof BucketMetrics.Type
@@ -70,7 +72,7 @@ export type AccessKey = typeof AccessKey.Type
 export const ObjectStorageRegion = Schema.Struct({
   name: Schema.String,
   primary_zone: Schema.String,
-  zones: Schema.optionalKey(Schema.Array(Schema.String))
+  zones: Schema.optionalKey(Schema.Array(Schema.Struct({ name: Schema.String })))
 })
 
 export type ObjectStorageRegion = typeof ObjectStorageRegion.Type
@@ -82,6 +84,15 @@ const _decodeUser = decodeOn2xx(ObjectStorageUser)
 const _decodeAccessKey = decodeOn2xx(AccessKey)
 const _decodeAccessKeys = decodeOn2xx(Schema.Array(AccessKey))
 const _decodeRegions = decodeOn2xx(Schema.Array(ObjectStorageRegion))
+
+export const ObjectStorageUserPolicy = Schema.Struct({
+  name: Schema.String,
+  arn: Schema.optionalKey(Schema.String)
+})
+
+export type ObjectStorageUserPolicy = typeof ObjectStorageUserPolicy.Type
+
+const _decodePolicies = decodeOn2xx(Schema.Array(ObjectStorageUserPolicy))
 
 export interface ObjectStorageServiceCreateInput {
   readonly name: string
@@ -113,6 +124,10 @@ export interface ObjectStorageClient {
     readonly create: (serviceUuid: string, username: string) => Effect.Effect<ObjectStorageUser, UpcloudRawError>
     readonly get: (serviceUuid: string, username: string) => Effect.Effect<ObjectStorageUser, UpcloudRawError>
     readonly delete: (serviceUuid: string, username: string) => Effect.Effect<void, UpcloudRawError>
+    readonly policies: {
+      readonly list: (serviceUuid: string, username: string) => Effect.Effect<ReadonlyArray<ObjectStorageUserPolicy>, UpcloudRawError>
+      readonly attach: (serviceUuid: string, username: string, name: string) => Effect.Effect<void, UpcloudRawError>
+    }
   }
   readonly accessKeys: {
     readonly create: (serviceUuid: string, username: string) => Effect.Effect<AccessKey, UpcloudRawError>
@@ -133,11 +148,29 @@ const _service = (uuid: string) => `${_base}/${uuid}`
 const _buckets = (serviceUuid: string) => `${_service(serviceUuid)}/buckets`
 const _users = (serviceUuid: string) => `${_service(serviceUuid)}/users`
 const _user = (serviceUuid: string, username: string) => `${_users(serviceUuid)}/${username}`
+const _policies = (serviceUuid: string, username: string) => `${_user(serviceUuid, username)}/policies`
 const _accessKeys = (serviceUuid: string, username: string) => `${_user(serviceUuid, username)}/access-keys`
+
+const _pageSize = 100
+
+const _paged = <Item, Failure>(
+  fetch: (page: string) => Effect.Effect<ReadonlyArray<Item>, Failure>
+): Effect.Effect<ReadonlyArray<Item>, Failure> =>
+  Effect.gen(function*() {
+    const items: Array<Item> = []
+
+    for (let offset = 0;; offset += _pageSize) {
+      const page = yield* fetch(`limit=${_pageSize}&offset=${offset}`)
+      items.push(...page)
+
+      if (page.length < _pageSize) return items
+    }
+  })
 
 export const makeObjectStorageClient = (httpClient: HttpClient.HttpClient): ObjectStorageClient => ({
   services: {
-    list: () => httpClient.execute(HttpClientRequest.get(_base)).pipe(Effect.flatMap(_decodeServices)),
+    list: () =>
+      _paged((page) => httpClient.execute(HttpClientRequest.get(`${_base}?${page}`)).pipe(Effect.flatMap(_decodeServices))),
     get: (uuid) => httpClient.execute(HttpClientRequest.get(_service(uuid))).pipe(Effect.flatMap(_decodeService)),
     create: (body) =>
       httpClient.execute(HttpClientRequest.post(_base).pipe(HttpClientRequest.bodyJsonUnsafe(body))).pipe(Effect.flatMap(_decodeService)),
@@ -151,7 +184,10 @@ export const makeObjectStorageClient = (httpClient: HttpClient.HttpClient): Obje
       )
   },
   buckets: {
-    list: (serviceUuid) => httpClient.execute(HttpClientRequest.get(_buckets(serviceUuid))).pipe(Effect.flatMap(_decodeBucketList)),
+    list: (serviceUuid) =>
+      _paged((page) =>
+        httpClient.execute(HttpClientRequest.get(`${_buckets(serviceUuid)}?${page}`)).pipe(Effect.flatMap(_decodeBucketList))
+      ),
     create: (serviceUuid, name) =>
       httpClient.execute(HttpClientRequest.post(_buckets(serviceUuid)).pipe(HttpClientRequest.bodyJsonUnsafe({ name }))).pipe(
         Effect.flatMap(decodeVoid)
@@ -167,7 +203,15 @@ export const makeObjectStorageClient = (httpClient: HttpClient.HttpClient): Obje
     get: (serviceUuid, username) =>
       httpClient.execute(HttpClientRequest.get(_user(serviceUuid, username))).pipe(Effect.flatMap(_decodeUser)),
     delete: (serviceUuid, username) =>
-      httpClient.execute(HttpClientRequest.delete(_user(serviceUuid, username))).pipe(Effect.flatMap(decodeVoid))
+      httpClient.execute(HttpClientRequest.delete(_user(serviceUuid, username))).pipe(Effect.flatMap(decodeVoid)),
+    policies: {
+      list: (serviceUuid, username) =>
+        httpClient.execute(HttpClientRequest.get(_policies(serviceUuid, username))).pipe(Effect.flatMap(_decodePolicies)),
+      attach: (serviceUuid, username, name) =>
+        httpClient.execute(HttpClientRequest.post(_policies(serviceUuid, username)).pipe(HttpClientRequest.bodyJsonUnsafe({ name }))).pipe(
+          Effect.flatMap(decodeVoid)
+        )
+    }
   },
   accessKeys: {
     create: (serviceUuid, username) =>

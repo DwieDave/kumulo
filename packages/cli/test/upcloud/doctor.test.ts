@@ -4,7 +4,8 @@ import { assert, it } from "@effect/vitest"
 import * as HttpClient from "effect/http/HttpClient"
 import * as HttpClientRequest from "effect/http/HttpClientRequest"
 import * as HttpClientResponse from "effect/http/HttpClientResponse"
-import { makeUksClient, makeZoneClient } from "@kumulo/upcloud"
+import { makeObjectStorageClient, makeUksClient, makeZoneClient } from "@kumulo/upcloud"
+import { objectStorageRegionCheck } from "../../src/doctor/upcloud/storage.ts"
 import { authValidityCheck, controlPlanePlanCheck, nodeGroupPlansCheck, versionSupportedCheck, zoneExistsCheck } from "../../src/doctor/upcloud/index.ts"
 
 const _http = (handle: (request: HttpClientRequest.HttpClientRequest) => Response) =>
@@ -81,4 +82,12 @@ it.effect("version check accepts a supported minor and rejects an unsupported on
   Effect.gen(function*() {
     assert.strictEqual((yield* versionSupportedCheck({ version: "1.31" }).run).status, "pass")
     assert.strictEqual((yield* versionSupportedCheck({ version: "1.11" }).run).status, "fail")
+  }))
+
+it.effect("object-storage region check passes against the zone-object shape", () =>
+  Effect.gen(function*() {
+    const regions = [{ name: "europe-1", primary_zone: "fi-hel1", zones: [{ name: "fi-hel1" }] }]
+    const objectStorage = makeObjectStorageClient(_json(200, regions))
+    assert.strictEqual((yield* objectStorageRegionCheck({ objectStorage, region: "europe-1" }).run).status, "pass")
+    assert.strictEqual((yield* objectStorageRegionCheck({ objectStorage, region: "mars-1" }).run).status, "fail")
   }))
