@@ -18,6 +18,7 @@ export {
   ensureNodePools,
   fetchKubeconfig,
   findClusterByName,
+  findOwnedNetwork,
   isValidLabel,
   listNodeGroups,
   networkName,
@@ -25,6 +26,7 @@ export {
   pollUntil,
   resolveUpgradeTarget,
   routerName,
+  uksNetworkLabels,
   uksPoolHash,
   uksPoolName,
   upgradeCluster

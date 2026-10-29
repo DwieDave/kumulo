@@ -17,7 +17,7 @@ export { pollUntil } from "./status.ts"
 
 export type { StatusPollOptions } from "./status.ts"
 
-export { ensureNetwork, deleteNetwork, networkName, routerName } from "./network.ts"
+export { ensureNetwork, deleteNetwork, findOwnedNetwork, networkName, routerName, uksNetworkLabels } from "./network.ts"
 
 export type { EnsuredNetwork } from "./network.ts"
 

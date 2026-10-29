@@ -96,3 +96,81 @@ it.effect("a singly-wrapped list is a decode failure, not an empty list", () =>
     const result = yield* Effect.result(makeNetworkClient(_fixtureHttpClient(200, { networks: [_network] })).list())
     assert.strictEqual(result._tag, "Failure")
   }))
+
+it.effect("GET /1.3/network sends zone and label filters", () =>
+  Effect.gen(function*() {
+    let url: string | undefined
+
+    const client = makeNetworkClient(
+      _rawHttpClient((request) => {
+        url = request.url
+
+        return new Response(JSON.stringify({ networks: { network: [] } }), { status: 200 })
+      })
+    )
+
+    yield* client.list({ zone: "de-fra1", labels: [{ key: "kumulo-cluster", value: "c1" }] })
+    assert.strictEqual(url, `${_fixtureBaseUrl}/1.3/network?zone=de-fra1&label=kumulo-cluster%3Dc1`)
+  }))
+
+it.effect("GET /1.3/router sends label filters", () =>
+  Effect.gen(function*() {
+    let url: string | undefined
+
+    const client = makeRouterClient(
+      _rawHttpClient((request) => {
+        url = request.url
+
+        return new Response(JSON.stringify({ routers: { router: [] } }), { status: 200 })
+      })
+    )
+
+    yield* client.list({ labels: [{ key: "kumulo-cluster", value: "c1" }] })
+    assert.strictEqual(url, `${_fixtureBaseUrl}/1.3/router?label=kumulo-cluster%3Dc1`)
+  }))
+
+it.effect("a network with an unknown ip family still decodes", () =>
+  Effect.gen(function*() {
+    const odd = { ..._network, ip_networks: { ip_network: [{ address: "x", dhcp: "maybe", family: "IPv7" }] } }
+    const networks = yield* makeNetworkClient(_fixtureHttpClient(200, { networks: { network: [odd] } })).list()
+    assert.strictEqual(networks[0]?.ip_networks.ip_network[0]?.family, "IPv7")
+  }))
+
+it.effect("PUT /1.3/network/{uuid} sends {network: {labels}}", () =>
+  Effect.gen(function*() {
+    let captured: { method: string; url: string; body: unknown } | undefined
+
+    const client = makeNetworkClient(
+      _rawHttpClient((request) => {
+        captured = { method: request.method, url: request.url, body: capturedJson(request) }
+
+        return new Response(JSON.stringify({ network: _network }), { status: 200 })
+      })
+    )
+
+    yield* client.modify("net-1", { labels: [{ key: "kumulo-cluster", value: "c1" }] })
+    assert.deepStrictEqual(captured, {
+      method: "PUT",
+      url: `${_fixtureBaseUrl}/1.3/network/net-1`,
+      body: { network: { labels: [{ key: "kumulo-cluster", value: "c1" }] } }
+    })
+  }))
+
+it.effect("PATCH /1.3/router/{uuid} sends {router: {name, labels}}", () =>
+  Effect.gen(function*() {
+    let captured: { method: string; body: unknown } | undefined
+
+    const client = makeRouterClient(
+      _rawHttpClient((request) => {
+        captured = { method: request.method, body: capturedJson(request) }
+
+        return new Response(JSON.stringify({ router: _router }), { status: 200 })
+      })
+    )
+
+    yield* client.modify("router-1", { name: "c1-router", labels: [{ key: "kumulo-cluster", value: "c1" }] })
+    assert.deepStrictEqual(captured, {
+      method: "PATCH",
+      body: { router: { name: "c1-router", labels: [{ key: "kumulo-cluster", value: "c1" }] } }
+    })
+  }))

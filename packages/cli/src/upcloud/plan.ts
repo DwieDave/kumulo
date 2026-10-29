@@ -6,11 +6,10 @@ import {
   UksClusterDrift,
   findClusterByName,
   listNodeGroups,
-  networkName,
+  findOwnedNetwork,
   uksPoolHash
 } from "@kumulo/distro-upcloud-uks"
 import type { ExistingNodeGroup, UksWorkerPoolConfig } from "@kumulo/distro-upcloud-uks"
-import { mapUpcloudError } from "@kumulo/upcloud"
 import type { MksError, ObjectStorageError, VolumeError } from "@kumulo/core"
 import type { UpcloudUksClusterConfig } from "../cluster-config.ts"
 import { UpcloudEnv } from "./env.ts"
@@ -45,7 +44,7 @@ export const lookupUpcloudInventory = (
     const { clients } = yield* UpcloudEnv
     const cluster = yield* findClusterByName({ clients, name: config.name })
     const nodeGroups = cluster === undefined ? [] : yield* listNodeGroups({ clients, ref: { uuid: cluster.uuid, name: cluster.name } })
-    const networks = yield* mapUpcloudError({ self: clients.network.list(), ctx: { kind: "network", ref: config.name } })
+    const ownedNetwork = yield* findOwnedNetwork({ clients, clusterName: config.name, zone: config.zone, adopt: false })
     const volumes = yield* lookupUpcloudVolumes(config)
     const buckets = yield* lookupUpcloudBuckets(config)
 
@@ -57,7 +56,7 @@ export const lookupUpcloudInventory = (
       networkCidr: cluster?.networkCidr,
       storageEncryption: cluster?.storageEncryption,
       nodeGroups,
-      networkExists: networks.some((network) => network.name === networkName(config.name)),
+      networkExists: ownedNetwork !== undefined,
       volumes,
       buckets
     }

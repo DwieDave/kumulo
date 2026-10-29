@@ -44,12 +44,14 @@ interface FakeNetwork {
   name: string
   zone: string
   router?: string
+  labels?: ReadonlyArray<FakeLabel>
   ip_networks: { readonly ip_network: ReadonlyArray<{ readonly address: string; readonly dhcp: string; readonly family: string }> }
 }
 
 interface FakeRouter {
   uuid: string
   name: string
+  labels?: ReadonlyArray<FakeLabel>
   type?: string
   attached_networks?: { readonly network: ReadonlyArray<unknown> }
 }
@@ -93,13 +95,26 @@ interface CreateNetworkBody {
     readonly name?: string
     readonly zone?: string
     readonly router?: string
+    readonly labels?: ReadonlyArray<FakeLabel>
     readonly ip_networks?: { readonly ip_network: ReadonlyArray<{ readonly address: string; readonly dhcp: string; readonly family: string }> }
   }
 }
 
 interface CreateRouterBody {
-  readonly router?: { readonly name?: string }
+  readonly router?: { readonly name?: string; readonly labels?: ReadonlyArray<FakeLabel> }
 }
+
+interface ModifyBody {
+  readonly network?: { readonly labels?: ReadonlyArray<FakeLabel> }
+  readonly router?: { readonly name?: string; readonly labels?: ReadonlyArray<FakeLabel> }
+}
+
+const _matchesLabels = (url: string, labels: ReadonlyArray<FakeLabel> | undefined): boolean =>
+  new URL(url, "https://fixture.invalid").searchParams.getAll("label").every((filter) => {
+    const [key, value] = filter.split("=")
+
+    return (labels ?? []).some((label) => label.key === key && label.value === value)
+  })
 
 /** `undefined` means the request carried no body at all — an empty-body call is a 400, not a silent success. */
 const _bodyOf = <Body>(request: HttpClientRequest.HttpClientRequest): Body | undefined => {
@@ -120,8 +135,9 @@ const _conflict = (message: string): Response => new Response(JSON.stringify({ m
 const _ok = <Body>(body: Body): Response => new Response(JSON.stringify(body), { status: 200 })
 const _empty = (): Response => new Response(null, { status: 200 })
 
-export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number } = {}) => {
+export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number; readonly networkDeleteConflicts?: number } = {}) => {
   const readyAfterPolls = options.readyAfterPolls ?? 2
+  let networkDeleteConflicts = options.networkDeleteConflicts ?? 0
   const clusters = new Map<string, FakeCluster>()
   const nodeGroups = new Map<string, Map<string, FakeNodeGroup>>()
   const networks = new Map<string, FakeNetwork>()
@@ -286,7 +302,15 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number }
   }
 
   const _handleNetworks = (request: HttpClientRequest.HttpClientRequest): Response => {
-    if (request.method === "GET") return _ok({ networks: { network: [...networks.values()] } })
+    if (request.method === "GET") {
+      const zone = new URL(request.url, "https://fixture.invalid").searchParams.get("zone")
+
+      const listed = [...networks.values()].filter(
+        (network) => (zone === null || network.zone === zone) && _matchesLabels(request.url, network.labels)
+      )
+
+      return _ok({ networks: { network: listed } })
+    }
 
     if (request.method === "POST") {
       const payload = _bodyOf<CreateNetworkBody>(request)
@@ -302,6 +326,7 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number }
         name: body.name ?? "",
         zone: body.zone,
         router: body.router,
+        labels: body.labels,
         ip_networks: body.ip_networks ?? { ip_network: [] }
       }
 
@@ -322,8 +347,25 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number }
       return _ok({ network })
     }
 
+    if (request.method === "PUT") {
+      if (!network) return _notFound("network not found")
+      const labels = _bodyOf<ModifyBody>(request)?.network?.labels
+
+      if (labels === undefined) return _badRequest("network modify sent no labels")
+      network.labels = labels
+
+      return _ok({ network })
+    }
+
     if (request.method === "DELETE") {
       if (!network) return _notFound("network not found")
+
+      if (networkDeleteConflicts > 0) {
+        networkDeleteConflicts -= 1
+
+        return _conflict("NETWORK_NOT_EMPTY")
+      }
+
       networks.delete(uuid)
 
       return _empty()
@@ -333,7 +375,9 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number }
   }
 
   const _handleRouters = (request: HttpClientRequest.HttpClientRequest): Response => {
-    if (request.method === "GET") return _ok({ routers: { router: [...routers.values()] } })
+    if (request.method === "GET") {
+      return _ok({ routers: { router: [...routers.values()].filter((router) => _matchesLabels(request.url, router.labels)) } })
+    }
 
     if (request.method === "POST") {
       const payload = _bodyOf<CreateRouterBody>(request)
@@ -341,7 +385,7 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number }
 
       if (body === undefined) return _badRequest("router create sent an empty body")
       const uuid = freshUuid("rtr")
-      const router: FakeRouter = { uuid, name: body.name ?? "", attached_networks: { network: [] } }
+      const router: FakeRouter = { uuid, name: body.name ?? "", labels: body.labels, attached_networks: { network: [] } }
       routers.set(uuid, router)
 
       return _ok({ router })
@@ -355,6 +399,17 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number }
 
     if (request.method === "GET") {
       if (!router) return _notFound("router not found")
+
+      return _ok({ router })
+    }
+
+    if (request.method === "PATCH") {
+      if (!router) return _notFound("router not found")
+      const body = _bodyOf<ModifyBody>(request)?.router
+
+      if (body?.name === undefined) return _badRequest("router modify requires name")
+
+      if (body.labels !== undefined) router.labels = body.labels
 
       return _ok({ router })
     }

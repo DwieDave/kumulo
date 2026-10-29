@@ -231,7 +231,7 @@ export const deleteUpcloudUksWithCdn = (
     })
     yield* withRowProgress({
       match: (name) => name.startsWith("network/") || name.startsWith("router/"),
-      effect: deleteNetwork({ clients, clusterName: config.name })
+      effect: deleteNetwork({ clients, clusterName: config.name, zone: config.zone })
     })
 
     if (cdn === undefined) yield* removeDns(config)

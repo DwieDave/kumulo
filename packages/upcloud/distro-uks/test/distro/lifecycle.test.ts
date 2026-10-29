@@ -1,14 +1,17 @@
-import { Effect } from "effect"
+import { Effect, Fiber } from "effect"
+import { TestClock } from "effect/testing"
 import { describe, expect, it } from "@effect/vitest"
 import { makeNetworkClient, makeNodeGroupsClient, makeRouterClient, makeUksClient } from "@kumulo/upcloud"
 import {
   deleteAll,
+  deleteNetwork,
   ensureCluster,
   ensureNetwork,
   ensureNodePools,
   fetchKubeconfig,
   findClusterByName,
   listNodeGroups,
+  uksNetworkLabels,
   upgradeCluster
 } from "../../src/distro/index.ts"
 import type { UksClients, UksClusterConfig, UksClusterRef } from "../../src/distro/types.ts"
@@ -147,5 +150,82 @@ describe("upcloud-uks distro driver (fake server)", () => {
       const replaced = yield* listNodeGroups({ clients, ref })
       expect(replaced).toHaveLength(1)
       expect(replaced[0]?.name).not.toBe(oldLiveName)
+    }))
+
+  it.effect("adopts an unlabelled legacy network and router by name and labels them", () =>
+    Effect.gen(function*() {
+      const server = makeFakeUksServer({ readyAfterPolls: 0 })
+      const clients = _clients(server.httpClient)
+      server.routers.set("rtr-legacy", { uuid: "rtr-legacy", name: "c1-router" })
+
+      server.networks.set("net-legacy", {
+        uuid: "net-legacy",
+        name: "c1-network",
+        zone: "de-fra1",
+        router: "rtr-legacy",
+        ip_networks: { ip_network: [] }
+      })
+
+      const ensured = yield* ensureNetwork({ clients, clusterName: "c1", zone: "de-fra1", cidr: "10.0.0.0/24" })
+      expect(ensured).toEqual({ networkUuid: "net-legacy", routerUuid: "rtr-legacy" })
+      expect(server.networks.size).toBe(1)
+      expect(server.routers.size).toBe(1)
+      expect(server.networks.get("net-legacy")?.labels).toEqual(uksNetworkLabels("c1"))
+      expect(server.routers.get("rtr-legacy")?.labels).toEqual(uksNetworkLabels("c1"))
+    }))
+
+  it.effect("creates labelled resources and does not adopt a network from another zone", () =>
+    Effect.gen(function*() {
+      const server = makeFakeUksServer({ readyAfterPolls: 0 })
+      const clients = _clients(server.httpClient)
+
+      server.networks.set("net-hel", {
+        uuid: "net-hel",
+        name: "c1-network",
+        zone: "fi-hel1",
+        labels: uksNetworkLabels("c1"),
+        ip_networks: { ip_network: [] }
+      })
+
+      const ensured = yield* ensureNetwork({ clients, clusterName: "c1", zone: "de-fra1", cidr: "10.0.0.0/24" })
+      expect(ensured.networkUuid).not.toBe("net-hel")
+      expect(server.networks.size).toBe(2)
+      expect(server.networks.get(ensured.networkUuid)?.zone).toBe("de-fra1")
+      expect(server.networks.get(ensured.networkUuid)?.labels).toEqual(uksNetworkLabels("c1"))
+      expect(server.routers.get(ensured.routerUuid)?.labels).toEqual(uksNetworkLabels("c1"))
+    }))
+
+  it.effect("deleteNetwork keeps a same-named network owned by another cluster", () =>
+    Effect.gen(function*() {
+      const server = makeFakeUksServer({ readyAfterPolls: 0 })
+      const clients = _clients(server.httpClient)
+
+      server.networks.set("net-other", {
+        uuid: "net-other",
+        name: "c1-network",
+        zone: "de-fra1",
+        labels: [{ key: "kumulo-cluster", value: "other" }],
+        ip_networks: { ip_network: [] }
+      })
+
+      yield* deleteNetwork({ clients, clusterName: "c1", zone: "de-fra1" })
+      expect(server.networks.has("net-other")).toBe(true)
+    }))
+
+  it.effect("deleteAll retries NETWORK_NOT_EMPTY conflicts, then removes the router", () =>
+    Effect.gen(function*() {
+      const server = makeFakeUksServer({ readyAfterPolls: 0, networkDeleteConflicts: 2 })
+      const clients = _clients(server.httpClient)
+      const network = yield* ensureNetwork({ clients, clusterName: _config.name, zone: _config.zone, cidr: _config.network.cidr })
+      const info = yield* ensureCluster({ clients, config: _config, networkUuid: network.networkUuid, owner: _owner })
+
+      const fiber = yield* Effect.forkChild(
+        deleteAll({ clients, ref: { uuid: info.uuid, name: info.name }, clusterName: _config.name, zone: _config.zone })
+      )
+
+      yield* TestClock.adjust("30 seconds")
+      yield* Fiber.join(fiber)
+      expect(server.networks.size).toBe(0)
+      expect(server.routers.size).toBe(0)
     }))
 })

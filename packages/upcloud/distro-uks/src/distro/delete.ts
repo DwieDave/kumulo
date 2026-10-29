@@ -25,5 +25,10 @@ export const deleteCluster = (
   )
 
 export const deleteAll = (
-  { clients, ref, clusterName }: { readonly clients: UksClients; readonly ref: UksClusterRef; readonly clusterName: string }
-): Effect.Effect<void, MksError> => deleteCluster({ clients, ref }).pipe(Effect.andThen(deleteNetwork({ clients, clusterName })))
+  { clients, ref, clusterName, zone }: {
+    readonly clients: UksClients
+    readonly ref: UksClusterRef
+    readonly clusterName: string
+    readonly zone?: string | undefined
+  }
+): Effect.Effect<void, MksError> => deleteCluster({ clients, ref }).pipe(Effect.andThen(deleteNetwork({ clients, clusterName, zone })))
