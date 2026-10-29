@@ -32,24 +32,32 @@ const _strip = () => {
 	const raw = fs.readFileSync(PKG_JSON, "utf8")
 	const pkg = JSON.parse(raw)
 	const dot = pkg.exports?.["."]
+
 	if (!dot) {
 		console.error(`prepack-exports: ${pkg.name ?? PKG_JSON} has no exports["."]; nothing to strip`)
+
 		return
 	}
+
 	// Back up the exact pre-strip bytes so `restore` is lossless and git-independent.
 	fs.writeFileSync(BACKUP, raw)
 	// Keep only the conditions that make sense in a published tarball, in the
 	// canonical order: types first (so TS resolves declarations), then import.
 	const stripped = {}
+
 	if (dot.types) stripped.types = dot.types
+
 	if (dot.import) stripped.import = dot.import
 	pkg.exports["."] = stripped
+
 	// publishConfig.exports was the (never-applied) npm override; it is now
 	// redundant because `exports` itself is already publish-safe.
 	if (pkg.publishConfig && "exports" in pkg.publishConfig) {
 		delete pkg.publishConfig.exports
+
 		if (Object.keys(pkg.publishConfig).length === 0) delete pkg.publishConfig
 	}
+
 	fs.writeFileSync(PKG_JSON, `${JSON.stringify(pkg, null, 2)}\n`)
 	console.log(`prepack-exports: stripped bun/source from ${pkg.name} exports`)
 }
@@ -57,14 +65,17 @@ const _strip = () => {
 const _restore = () => {
 	if (!fs.existsSync(BACKUP)) {
 		console.error(`prepack-exports: no backup at ${BACKUP}; nothing to restore`)
+
 		return
 	}
+
 	fs.copyFileSync(BACKUP, PKG_JSON)
 	fs.rmSync(BACKUP)
 	console.log(`prepack-exports: restored ${PKG_JSON} from backup`)
 }
 
 const mode = process.argv[2]
+
 if (mode === "strip") {
 	_strip()
 } else if (mode === "restore") {

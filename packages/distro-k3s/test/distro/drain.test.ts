@@ -8,14 +8,17 @@ const _node = (name: string): K8sManifest => ({ apiVersion: "v1", kind: "Node", 
 
 const _fakeClient = (pods: ReadonlyArray<K8sManifest>): K8sClient["Service"] => {
   const calls: Array<string> = []
+
   return {
     get: (ref: ResourceRef) => Effect.succeed(_node(ref.path)),
     list: (_ref: ResourceRef) => Effect.sync(() => {
       calls.push("list")
+
       return pods
     }),
     apply: (_ref: ResourceRef, manifest: K8sManifest) => Effect.sync(() => {
       calls.push("cordon")
+
       return manifest
     }),
     delete: (_ref: ResourceRef) => Effect.sync(() => {
@@ -34,6 +37,7 @@ describe("drainAndRemove", () => {
         { apiVersion: "v1", kind: "Pod", metadata: { name: "a", namespace: "default" } },
         { apiVersion: "v1", kind: "Pod", metadata: { name: "b", namespace: "default" } }
       ]
+
       const client = _fakeClient(pods)
       yield* drainAndRemove({ client, node: { name: "worker-1", role: "worker" } })
     }))
@@ -47,6 +51,7 @@ describe("drainAndRemove", () => {
         delete: () => Effect.die("unused"),
         evict: () => Effect.die("unused")
       }
+
       const result = yield* drainAndRemove({ client, node: { name: "worker-1", role: "worker" } }).pipe(Effect.flip)
       expect(result._tag).toBe("BootstrapFailed")
     }))

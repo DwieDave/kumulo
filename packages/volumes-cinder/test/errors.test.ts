@@ -8,18 +8,18 @@ import {
   ResourceNotFound,
   ResponseDecodeError
 } from "@kumulo/core"
-import { Effect, Layer } from "effect"
-import { FastCheck as fc } from "effect/testing"
+import { Effect, Layer, Predicate, Result, Schema } from "effect"
 import { CinderAuth } from "../src/auth.ts"
 import { deleteVolume, listClusterVolumes } from "../src/provider.ts"
 import { makeFakeCinder } from "./fake-cinder.ts"
 
-const _errorEffect = (status: number, body?: unknown, headers?: Record<string, string>) => {
+const _errorEffect = (status: number, body?: Schema.Json, headers?: Record<string, string>) => {
   const fake = makeFakeCinder({ "DELETE /volumes/vol-1": () => ({ status, body, headers }) })
+
   return Effect.provide(Effect.flip(deleteVolume({ id: "vol-1" })), fake.layer)
 }
 
-const _errorAt = (status: number, body?: unknown) => Effect.runPromise(_errorEffect(status, body))
+const _errorAt = (status: number, body?: Schema.Json) => Effect.runPromise(_errorEffect(status, body))
 
 // regression: auth port used to be typed AuthenticationFailed only, rewriting Keystone outages/rate-limits as "bad credentials"
 const _withAuth = (failure: ProviderApiError | RateLimited) =>
@@ -34,13 +34,15 @@ const _withAuth = (failure: ProviderApiError | RateLimited) =>
 describe("CinderAuth port keeps the real failure tag", () => {
   it("a Keystone 5xx stays a ProviderApiError", async () => {
     const error = await _withAuth(new ProviderApiError({ operation: "keystone token", status: 503, body: "down" }))
-    expect(error).toMatchObject({ _tag: "ProviderApiError", status: 503 })
+    expect(error).toBeInstanceOf(ProviderApiError)
+    expect(error).toMatchObject({ status: 503 })
     expect(error).not.toBeInstanceOf(AuthenticationFailed)
   })
 
   it("a Keystone rate limit stays a RateLimited", async () => {
     const error = await _withAuth(new RateLimited({ kind: "token", ref: "keystone", retryAfter: "5" }))
-    expect(error).toMatchObject({ _tag: "RateLimited", retryAfter: "5" })
+    expect(error).toBeInstanceOf(RateLimited)
+    expect(error).toMatchObject({ retryAfter: "5" })
   })
 })
 
@@ -58,7 +60,8 @@ describe("generated-client failures keep their Cinder meaning", () => {
     const error = await _errorAt(403, { message: "VolumeSizeExceedsAvailableQuota" })
     expect(error).toBeInstanceOf(QuotaExceeded)
     expect(error).toMatchObject({ resource: "volume" })
-    if (error._tag !== "QuotaExceeded") throw new Error(`expected QuotaExceeded, got ${error._tag}`)
+
+    if (!Predicate.isTagged(error, "QuotaExceeded")) throw new Error(`expected QuotaExceeded, got ${error._tag}`)
     expect(error.limit).toBeUndefined()
   })
 
@@ -71,14 +74,16 @@ describe("generated-client failures keep their Cinder meaning", () => {
 
   it("carries Retry-After verbatim when Cinder sends one", async () => {
     const error = await Effect.runPromise(_errorEffect(429, { message: "slow down" }, { "retry-after": "17" }))
-    expect(error).toMatchObject({ _tag: "RateLimited", retryAfter: "17" })
+    expect(error).toBeInstanceOf(RateLimited)
+    expect(error).toMatchObject({ retryAfter: "17" })
   })
 
   it("reports 422 as a provider error carrying the status", async () => {
-    expect(await _errorAt(422, { message: "invalid size" })).toMatchObject({ _tag: "ProviderApiError", status: 422 })
+    expect(await _errorAt(422, { message: "invalid size" })).toBeInstanceOf(ProviderApiError)
+    expect(await _errorAt(422, { message: "invalid size" })).toMatchObject({ status: 422 })
   })
 
-  it.effect.prop("every 5xx is a provider error carrying the real status", [fc.integer({ min: 500, max: 599 })], ([status]) =>
+  it.effect.prop("every 5xx is a provider error carrying the real status", [Schema.Int.check(Schema.isBetween({ minimum: 500, maximum: 599 }))], ([status]) =>
     Effect.gen(function*() {
       const error = yield* _errorEffect(status, { message: "boom" })
       expect(error).toBeInstanceOf(ProviderApiError)
@@ -87,7 +92,7 @@ describe("generated-client failures keep their Cinder meaning", () => {
     }))
 })
 
-const _list = (body: unknown) =>
+const _list = (body: Schema.Json) =>
   Effect.provide(
     listClusterVolumes("prod"),
     makeFakeCinder({ "GET /volumes/detail": () => ({ status: 200, body }) }).layer
@@ -113,11 +118,11 @@ describe("list decoding never invents a volume", () => {
       expect(failure).toBeInstanceOf(ResponseDecodeError)
     }))
 
-  it.effect.prop("an arbitrary list body never yields id-less volumes", [fc.anything()], ([body]) =>
+  it.effect.prop("an arbitrary list body never yields id-less volumes", [Schema.Json], ([body]) =>
     Effect.map(
       Effect.result(_list({ volumes: [body] })),
       (result) => {
-        expect(result._tag === "Failure" || result.success.every((info) => info.id.length > 0)).toBe(true)
+        expect(Result.isFailure(result) || result.success.every((info) => info.id.length > 0)).toBe(true)
       }
     ))
 })

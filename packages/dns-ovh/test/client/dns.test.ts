@@ -1,8 +1,8 @@
 import { Effect } from "effect"
 import { assert, it } from "@effect/vitest"
-import * as HttpClient from "effect/unstable/http/HttpClient"
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
+import * as HttpClient from "effect/http/HttpClient"
+import * as HttpClientRequest from "effect/http/HttpClientRequest"
+import * as HttpClientResponse from "effect/http/HttpClientResponse"
 import { makeDnsClient } from "../../src/client/dns.ts"
 
 const _fixtureBaseUrl = "https://fixture.invalid"
@@ -27,14 +27,19 @@ it.effect("creates a record (POST /record) against the target path", () =>
   Effect.gen(function* () {
     const record = { id: 42, zone: "example.com", fieldType: "TXT", subDomain: "kumulo-owner", target: "\"kumulo\"", ttl: 60 }
     let capturedPath: string | undefined
+
     const httpClient = _rawHttpClient((request) => {
       capturedPath = request.url
+
       return new Response(JSON.stringify(record), { status: 200 })
     })
+
     const client = makeDnsClient(httpClient)
+
     const result = yield* client.createRecord("example.com", {
       payload: { fieldType: "TXT", subDomain: "kumulo-owner", target: "\"kumulo\"" }
     })
+
     assert.strictEqual(capturedPath, `${_fixtureBaseUrl}/domain/zone/example.com/record`)
     assert.strictEqual(result.target, "\"kumulo\"")
   }))
@@ -42,10 +47,13 @@ it.effect("creates a record (POST /record) against the target path", () =>
 it.effect("refreshes a zone (POST /refresh, void response)", () =>
   Effect.gen(function* () {
     let capturedPath: string | undefined
+
     const httpClient = _rawHttpClient((request) => {
       capturedPath = request.url
+
       return new Response(null, { status: 200 })
     })
+
     const client = makeDnsClient(httpClient)
     yield* client.refreshZone("example.com", undefined)
     assert.strictEqual(capturedPath, `${_fixtureBaseUrl}/domain/zone/example.com/refresh`)

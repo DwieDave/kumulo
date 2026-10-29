@@ -1,11 +1,12 @@
 import type { SchemaError } from "effect/Schema"
 import * as Schema from "effect/Schema"
 import * as SchemaGetter from "effect/SchemaGetter"
-import * as HttpClientError from "effect/unstable/http/HttpClientError"
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
+import * as HttpClientError from "effect/http/HttpClientError"
+import * as HttpClientResponse from "effect/http/HttpClientResponse"
 import { Effect } from "effect"
 
 export const UpcloudLabel = Schema.Struct({ key: Schema.String, value: Schema.String })
+
 export type UpcloudLabel = typeof UpcloudLabel.Type
 
 // classic /1.3 endpoints encode booleans as "yes"/"no" strings; newer endpoints use real booleans — accept both

@@ -1,7 +1,7 @@
 import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient"
 import type { Layer } from "effect"
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient"
-import type * as HttpClient from "effect/unstable/http/HttpClient"
+import * as FetchHttpClient from "effect/http/FetchHttpClient"
+import type * as HttpClient from "effect/http/HttpClient"
 
 export const isBun = (): boolean => "Bun" in globalThis
 

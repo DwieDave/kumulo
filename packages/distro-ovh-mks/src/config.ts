@@ -14,13 +14,17 @@ const PlainK8sVersion = Schema.String.check(
 )
 
 const _SUBNET_FIELDS = ["nodes_subnet", "load_balancers_subnet"] as const
+
 const isSubnetsWithinCidr = Schema.makeFilter(
   (network: { cidr: string; nodes_subnet: string; load_balancers_subnet: string }) => {
     const [first, last] = cidrRange(network.cidr)
+
     const outside = _SUBNET_FIELDS.filter((field) => {
       const [start, end] = cidrRange(network[field])
+
       return start < first || end > last
     })
+
     return outside.length === 0 ? undefined : `${outside.join(" and ")} must be inside cidr ${network.cidr}`
   }
 )
@@ -65,4 +69,5 @@ export const MksClusterConfig = Schema.Struct({
 }).check(isSecretsRequiredForObjectStorage, isAuthMethodConsistentWithProvider, isIngressPlaceable, isFlavorUnambiguous)
 
 export type MksClusterConfig = typeof MksClusterConfig.Type
+
 export type MksClusterConfigEncoded = typeof MksClusterConfig.Encoded

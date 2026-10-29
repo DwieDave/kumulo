@@ -11,6 +11,7 @@ const masters: NonEmptyMasters = [
   { ip: "10.0.0.2", port: 22 },
   { ip: "10.0.0.3", port: 22 }
 ]
+
 const workers: ReadonlyArray<SshHost> = [{ ip: "10.0.0.4", port: 22 }]
 
 describe("runBootstrap", () => {
@@ -24,10 +25,13 @@ describe("runBootstrap", () => {
         exec: (host, command) => {
           if (command === "kubectl cluster-info") {
             clusterInfoCalls.push(host.ip)
+
             return Effect.succeed("ok")
           }
+
           if (command.startsWith(`test -f`)) return Effect.succeed("")
           executed.push({ host: host.ip, command })
+
           return Effect.succeed("ok")
         },
         waitReady: () => Effect.void

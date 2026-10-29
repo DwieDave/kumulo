@@ -1,6 +1,6 @@
 import { Effect, Layer } from "effect"
 import { layerNoop } from "effect/FileSystem"
-import * as HttpClient from "effect/unstable/http/HttpClient"
+import * as HttpClient from "effect/http/HttpClient"
 import { assert, it } from "@effect/vitest"
 import { AuthenticationFailed } from "@kumulo/core"
 import { parseConfigYaml } from "../../src/cluster-config.ts"
@@ -68,6 +68,7 @@ it.effect("keeps retain:true volumes and deletes the rest", () =>
   Effect.gen(function*() {
     const config = yield* parseConfigYaml(_yaml)
     const deletedIds: Array<string> = []
+
     const fakeCinder = makeFakeCinder({
       "GET /volumes/detail": () => ({
         status: 200,
@@ -80,6 +81,7 @@ it.effect("keeps retain:true volumes and deletes the rest", () =>
       }),
       "DELETE /volumes/vol-drop": () => {
         deletedIds.push("vol-drop")
+
         return { status: 204 }
       }
     })
@@ -101,6 +103,7 @@ it.effect("no-ops when volumes.module isn't cinder", () =>
 
 const _fakeFs = (seed: Record<string, string> = {}) => {
   const store = new Map(Object.entries(seed))
+
   const layer = layerNoop({
     exists: (path) => Effect.succeed(store.has(path)),
     readFileString: (path) => Effect.succeed(store.get(path) ?? ""),
@@ -109,10 +112,11 @@ const _fakeFs = (seed: Record<string, string> = {}) => {
         store.set(path, data)
       })
   })
+
   return { layer, store }
 }
 
-const _outputsSeed = (dir: string, file: OutputsFile): Record<string, string> => ({
+const _outputsSeed = (dir: string, file: OutputsFile) => ({
   [`${dir}/${file.cluster}.outputs.yaml`]: stringifyOutputsYaml(file)
 })
 
@@ -120,13 +124,16 @@ it.effect("convergeManagedVolumes ensures each managed volume and records its id
   Effect.gen(function*() {
     const config = yield* parseConfigYaml(_yaml)
     let created = 0
+
     const fakeCinder = makeFakeCinder({
       "GET /volumes/detail": () => ({ status: 200, body: { volumes: [] } }),
       "POST /volumes": () => {
         created += 1
+
         return { status: 200, body: { volume: { id: `vol-${created}`, name: "unused" } } }
       }
     })
+
     const fs = _fakeFs()
 
     yield* convergeManagedVolumes({ config, configDir: "." }).pipe(Effect.provide(Layer.merge(fakeCinder, fs.layer)))
@@ -141,11 +148,14 @@ it.effect("convergeManagedVolumes ensures each managed volume and records its id
 it.effect("convergeManagedVolumes reuses an already-recorded volume id without recreating it", () =>
   Effect.gen(function*() {
     const config = yield* parseConfigYaml(_yaml)
+
     const seed = _outputsSeed(".", {
       cluster: "staging",
       volumes: [{ name: "keep-me", id: "vol-existing", retain: true }]
     })
+
     let created = 0
+
     const fakeCinder = makeFakeCinder({
       "GET /volumes/detail": () => ({
         status: 200,
@@ -153,9 +163,11 @@ it.effect("convergeManagedVolumes reuses an already-recorded volume id without r
       }),
       "POST /volumes": () => {
         created += 1
+
         return { status: 200, body: { volume: { id: "vol-drop-me", name: "drop-me" } } }
       }
     })
+
     const fs = _fakeFs(seed)
 
     yield* convergeManagedVolumes({ config, configDir: "." }).pipe(Effect.provide(Layer.merge(fakeCinder, fs.layer)))
@@ -177,10 +189,12 @@ it.effect("convergeManagedVolumes no-ops when volumes.module isn't cinder", () =
 it.effect("convergeManagedVolumes fails with AuthenticationFailed when OpenStack credentials are missing, never a silent skip", () =>
   Effect.gen(function*() {
     const config = yield* parseConfigYaml(_yaml)
+
     const failingAuth = Layer.succeed(CinderAuth, {
       token: Effect.fail(new AuthenticationFailed({ hint: "missing required env var OS_AUTH_URL" })),
       endpoint: Effect.fail(new AuthenticationFailed({ hint: "missing required env var OS_AUTH_URL" }))
     })
+
     // client must be present in context even though auth failure means it's never used
     const deadHttpClient = Layer.succeed(HttpClient.HttpClient, HttpClient.make(() => Effect.die("unreachable")))
 
@@ -189,6 +203,6 @@ it.effect("convergeManagedVolumes fails with AuthenticationFailed when OpenStack
       Effect.flip
     )
 
-    assert.strictEqual(failure._tag, "AuthenticationFailed")
-    if (failure._tag === "AuthenticationFailed") assert.match(failure.hint, /OS_AUTH_URL/)
+    assert.instanceOf(failure, AuthenticationFailed)
+    assert.match(failure.hint, /OS_AUTH_URL/)
   }))

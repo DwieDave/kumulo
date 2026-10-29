@@ -1,6 +1,9 @@
-import type * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
+import { Predicate } from "effect"
+import type { Schema } from "effect"
+import type * as HttpClientRequest from "effect/http/HttpClientRequest"
 
-export const capturedJson = (request: HttpClientRequest.HttpClientRequest): unknown => {
+export const capturedJson = (request: HttpClientRequest.HttpClientRequest): Schema.Json => {
   const body = request.body
-  return body._tag === "Uint8Array" ? JSON.parse(new TextDecoder().decode(body.body)) : {}
+
+  return Predicate.isTagged(body, "Uint8Array") ? JSON.parse(new TextDecoder().decode(body.body)) : {}
 }

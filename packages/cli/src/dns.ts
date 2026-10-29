@@ -1,5 +1,5 @@
 import { Effect, Layer } from "effect"
-import type * as HttpClient from "effect/unstable/http/HttpClient"
+import type * as HttpClient from "effect/http/HttpClient"
 import { ConfigInvalid, DnsProvider, dnsNoopLive, ownershipTarget } from "@kumulo/core"
 import type { AuthenticationFailed, DesiredRecord, DnsError } from "@kumulo/core"
 import type { ClusterConfig } from "./cluster-config.ts"
@@ -16,6 +16,7 @@ export interface DnsTargets {
 
 const _resolveTarget = (record: DesiredRecord, targets: DnsTargets): DesiredRecord => {
   const resolved = record.target === "api_server" || record.target === "ingress" ? targets[record.target] : undefined
+
   return resolved === undefined ? record : { name: record.name, target: resolved.value }
 }
 
@@ -38,6 +39,7 @@ export const reconcileDns = (
 ): Effect.Effect<void, DnsError, DnsProvider> =>
   Effect.gen(function*() {
     const cfgDns = config.dns
+
     if (cfgDns.module === "none") return
     const dns = yield* DnsProvider
     yield* dns.ensureRecords(cfgDns.zone, desiredRecords({ config, targets }))
@@ -46,6 +48,7 @@ export const reconcileDns = (
 export const removeDns = (config: ClusterConfig): Effect.Effect<void, DnsError, DnsProvider> =>
   Effect.gen(function*() {
     const cfgDns = config.dns
+
     if (cfgDns.module === "none") return
     const dns = yield* DnsProvider
     yield* dns.removeClusterRecords(cfgDns.zone, config.name)
@@ -55,9 +58,13 @@ export const dnsProviderLayerFor = (
   config: ClusterConfig
 ): Layer.Layer<DnsProvider, AuthenticationFailed | ConfigInvalid, HttpClient.HttpClient> => {
   const dnsModule = config.dns.module
+
   if (dnsModule === "ovh") return k3sDnsProviderLayer()
+
   if (dnsModule === "hetzner") return k3sHetznerDnsProviderLayer()
+
   if (dnsModule === "none") return dnsNoopLive
+
   return Layer.effect(
     DnsProvider,
     Effect.fail(

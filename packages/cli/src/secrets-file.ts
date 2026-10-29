@@ -1,7 +1,7 @@
 import { resolve } from "node:path"
 import { ConfigProvider } from "effect"
 import { sopsConfigProvider } from "@kumulo/secrets-sops"
-import type { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/unstable/process"
+import type { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/process"
 
 type ChildProcessSpawnerService = (typeof ChildProcessSpawnerNS.ChildProcessSpawner)["Service"]
 

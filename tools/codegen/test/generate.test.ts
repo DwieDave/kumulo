@@ -24,6 +24,7 @@ describe("generateSource", () => {
         spec: syntheticSpecWithFreeformAdditionalProperties,
         options: { name: "Widgets", format: "httpapi" }
       })
+
       expect(source).not.toContain("[x: string]: string")
     }))
 
@@ -37,6 +38,7 @@ describe("generateSource", () => {
         spec: syntheticSpecWithFreeformMap,
         options: { name: "Widgets", format: "httpapi" }
       })
+
       expect(source).toContain("Schema.Record(Schema.String, Schema.String)")
       expect(source).not.toContain("Schema.Struct({  })")
     }))
@@ -49,6 +51,7 @@ describe("generateSource", () => {
         spec: syntheticSpecWithFreeformMap,
         options: { name: "Widgets", format: "httpapi" }
       })
+
       expect(source).not.toContain("long prose that buys no validation")
       expect(source).not.toContain('"description": "prose"')
       expect(source).toContain('"description": Schema.optionalKey(Schema.String)')

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Effect, Layer, Ref } from "effect"
+import { Effect, Layer, Option, Ref, Schema } from "effect"
 import { CloudProvider, DnsProvider, K8sClient, VolumeProvider } from "@kumulo/core"
 import type { DesiredRecord, K8sManifest, ServerInfo } from "@kumulo/core"
 import type { K3sClusterConfigEncoded } from "../../src/cluster-config.ts"
@@ -8,7 +8,8 @@ import { CloudCredentialEnv } from "../../src/k3s/env.ts"
 import { applyK3sEffect, deleteK3sEffect, k3sStatusEffect, orphanedWorkers } from "../../src/k3s/reconcile.ts"
 import { decodeK3sTestConfig } from "../fixtures.ts"
 
-const _isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null
+const _ManifestName = Schema.Struct({ metadata: Schema.Struct({ name: Schema.String }) })
+
 const _emptyManifests: ReadonlyArray<K8sManifest> = []
 
 const _fakeK8sClientLayer = (cordonedNodes: Array<string>): Layer.Layer<K8sClient> =>
@@ -17,9 +18,10 @@ const _fakeK8sClientLayer = (cordonedNodes: Array<string>): Layer.Layer<K8sClien
     list: () => Effect.succeed(_emptyManifests),
     apply: (_ref, manifest) =>
       Effect.sync(() => {
-        const metadata = manifest["metadata"]
-        const name = _isRecord(metadata) ? metadata["name"] : undefined
-        if (typeof name === "string") cordonedNodes.push(name)
+        const decoded = Schema.decodeUnknownOption(_ManifestName)(manifest)
+
+        if (Option.isSome(decoded)) cordonedNodes.push(decoded.value.metadata.name)
+
         return manifest
       }),
     delete: () => Effect.void,
@@ -73,6 +75,7 @@ const _encoded: K3sClusterConfigEncoded = {
   },
   k3s: { extra_server_args: [], extra_agent_args: [] }
 }
+
 const _config = decodeK3sTestConfig(_encoded)
 
 const CloudCredentialEnvFake = Layer.succeed(CloudCredentialEnv, {
@@ -87,21 +90,25 @@ interface VolumeCalls {
   readonly ensured: Array<string>
   readonly deleted: Array<string>
 }
+
 const _trackingVolumeProvider = (calls: VolumeCalls) =>
   Layer.succeed(VolumeProvider, {
     ensureVolume: (v: { readonly name: string }) =>
       Effect.sync(() => {
         calls.ensured.push(v.name)
+
         return { id: `vol-${v.name}`, name: v.name }
       }),
     listClusterVolumes: () => Effect.succeed([{ id: "vol-1", name: "pg-data" }]),
     deleteVolume: (v: { readonly id: string }) => Effect.sync(() => calls.deleted.push(v.id)),
     staticPvManifest: () => ({ apiVersion: "v1", kind: "PersistentVolume" })
   })
+
 interface DnsCalls {
   readonly ensured: Array<ReadonlyArray<DesiredRecord>>
   readonly removed: Array<string>
 }
+
 const _trackingDnsProvider = (calls: DnsCalls) =>
   Layer.succeed(DnsProvider, {
     ensureRecords: (_zone: string, records: ReadonlyArray<DesiredRecord>) => Effect.sync(() => calls.ensured.push(records)),
@@ -113,6 +120,7 @@ const _fakeCloudProviderLive = (deletedServers: Array<string> = []): Layer.Layer
   CloudProvider,
   Effect.gen(function*() {
     const servers = yield* Ref.make<ReadonlyMap<string, ServerInfo>>(new Map())
+
     return {
       ensureNetwork: (spec) => Effect.succeed({ id: "net-1", cidr: spec.cidr }),
       findNetwork: (spec) => Effect.succeed({ id: "net-1", cidr: spec.cidr }),
@@ -123,8 +131,10 @@ const _fakeCloudProviderLive = (deletedServers: Array<string> = []): Layer.Layer
         Ref.get(servers).pipe(
           Effect.flatMap((map) => {
             const existing = map.get(spec.name)
+
             if (existing !== undefined) return Effect.succeed(existing)
             const info: ServerInfo = { id: `srv-${map.size + 1}`, name: spec.name, ip: `10.0.0.${map.size + 1}` }
+
             return Ref.update(servers, (current) => new Map(current).set(spec.name, info)).pipe(Effect.as(info))
           })
         ),
@@ -149,18 +159,24 @@ interface SshLog {
   readonly cloudInitGates: Array<string>
   readonly clusterInfoGates: Array<string>
 }
+
 const _FakeSshLive = (log: SshLog): Layer.Layer<Ssh> =>
   Layer.succeed(Ssh, {
     exec: (host, command) => {
       if (command.startsWith("test -f")) {
         log.cloudInitGates.push(host.ip)
+
         return Effect.succeed("")
       }
+
       if (command === "kubectl cluster-info") {
         log.clusterInfoGates.push(host.ip)
+
         return Effect.succeed("")
       }
+
       log.executed.push({ host: host.ip, command })
+
       return Effect.succeed("ok")
     },
     readFile: (host, path) =>
@@ -198,6 +214,7 @@ describe("k3s CLI composition root", () => {
       expect(log.clusterInfoGates).toHaveLength(1)
 
       const masterScripts = log.executed.filter((e) => e.command.includes("--cluster-init") || e.command.includes("--server https://10.0.0."))
+
       for (const { command } of masterScripts) {
         expect(command).toContain("--tls-san='10.0.0.100'")
         expect(command).toContain("--tls-san='api.test-k3s.example.com'")
@@ -218,6 +235,7 @@ describe("k3s CLI composition root", () => {
       const deletedServers: Array<string> = []
       const cloudLayer = _fakeCloudProviderLive(deletedServers)
       const sshLayer = _FakeSshLive(log)
+
       const provide = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         effect.pipe(
           Effect.provide(sshLayer),
@@ -240,6 +258,7 @@ describe("k3s CLI composition root", () => {
     const deletedServers: Array<string> = []
     const cordonedNodes: Array<string> = []
     const k8sClientLayer = () => _fakeK8sClientLayer(cordonedNodes)
+
     return Effect.gen(function*() {
       yield* applyK3sEffect({ config: _configWithWorkerCount(2), configDir: "/tmp", k8sClientLayer })
       yield* applyK3sEffect({ config: _configWithWorkerCount(1), configDir: "/tmp", k8sClientLayer })
@@ -260,6 +279,7 @@ describe("k3s CLI composition root", () => {
       { id: "1", name: "kumulo-test-k3s-worker-general-1", ip: "10.0.0.4" },
       { id: "2", name: "kumulo-test-k3s-worker-general-2", ip: "10.0.0.5" }
     ]
+
     expect(orphanedWorkers({ config: _configWithWorkerCount(1), workerInfos }).map((w) => w.name))
       .toEqual(["kumulo-test-k3s-worker-general-2"])
     expect(orphanedWorkers({ config: _configWithWorkerCount(2), workerInfos })).toEqual([])
@@ -300,10 +320,12 @@ describe("k3s status", () => {
   it.effect("reports \"does not exist\" when the tagged inventory has no master", () =>
     Effect.gen(function*() {
       const log: SshLog = { executed: [], cloudInitGates: [], clusterInfoGates: [] }
+
       const status = yield* k3sStatusEffect({ config: _config }).pipe(
         Effect.provide(_FakeSshLive(log)),
         Effect.provide(_fakeCloudProviderLive())
       )
+
       expect(status).toEqual({ exists: false, nodes: [] })
     }))
 

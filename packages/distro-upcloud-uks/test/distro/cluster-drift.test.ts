@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
-import { clusterDrift } from "../../src/distro/cluster-drift.ts"
+import { clusterDrift, UksClusterDrift } from "../../src/distro/cluster-drift.ts"
 import type { UksClusterState, UksDesiredCluster } from "../../src/distro/cluster-drift.ts"
 
 const _desired: UksDesiredCluster = {
@@ -20,7 +20,7 @@ const _actual: UksClusterState = {
 
 describe("clusterDrift", () => {
   it("is None when nothing creation-time-only has changed", () => {
-    expect(clusterDrift({ desired: _desired, actual: _actual })).toEqual({ _tag: "None" })
+    expect(clusterDrift({ desired: _desired, actual: _actual })).toEqual(UksClusterDrift.None())
   })
 
   it("refuses (never mutates) on zone drift", () => {
@@ -55,7 +55,7 @@ describe("clusterDrift", () => {
 
   it("makes no claim ('can't tell') when a field was never read", () => {
     const drift = clusterDrift({ desired: _desired, actual: { ..._actual, plan: undefined } })
-    expect(drift).toEqual({ _tag: "None" })
+    expect(drift).toEqual(UksClusterDrift.None())
   })
 })
 
@@ -67,8 +67,10 @@ it("blocks when the configured network CIDR differs from the live one (AC6)", ()
     desired: { zone: "de-fra1", networkCidr: "10.1.0.0/24" },
     actual: { zone: "de-fra1", networkCidr: "10.0.0.0/24" }
   })
+
   expect(drift._tag).toBe("Blocked")
-  if (drift._tag === "Blocked") {
+
+  if (UksClusterDrift.$is("Blocked")(drift)) {
     expect(drift.field).toBe("network_cidr")
     expect(drift.reason).toContain("10.1.0.0/24")
   }
@@ -79,5 +81,6 @@ it("does not fabricate network drift when the CIDRs agree", () => {
     desired: { zone: "de-fra1", networkCidr: "10.0.0.0/24" },
     actual: { zone: "de-fra1", networkCidr: "10.0.0.0/24" }
   })
+
   expect(drift._tag).toBe("None")
 })

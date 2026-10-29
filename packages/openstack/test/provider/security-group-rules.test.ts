@@ -9,6 +9,7 @@ describe("buildFr57Rules", () => {
       networkCidr: "10.0.0.0/24",
       cni: "flannel"
     })
+
     expect(rules).toContainEqual({ protocol: "tcp", portMin: 22, portMax: 22, remoteCidr: "1.2.3.0/24" })
     expect(rules).toContainEqual({ protocol: "tcp", portMin: 6443, portMax: 6443, remoteCidr: "4.5.6.0/24" })
     expect(rules).toContainEqual({ protocol: "any", remoteCidr: "10.0.0.0/24" })
@@ -29,6 +30,7 @@ describe("buildFr57Rules", () => {
       networkCidr: "10.0.0.0/24",
       cni: "flannel"
     })
+
     expect(rules.filter((rule) => rule.portMin === 22)).toHaveLength(2)
     expect(rules.filter((rule) => rule.portMin === 6443)).toHaveLength(1)
   })

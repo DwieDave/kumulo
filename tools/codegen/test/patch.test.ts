@@ -10,6 +10,7 @@ describe("applyPatches", () => {
         patches: [{ source: "test.patch.json", patch: [{ op: "replace", path: "/info/title", value: "Patched" }] }],
         document: syntheticSpec
       })
+
       expect(patched).toMatchObject({ info: { title: "Patched" } })
     }))
 
@@ -29,6 +30,7 @@ describe("applyPatches", () => {
           document: syntheticSpec
         })
       )
+
       expect(result._tag).toEqual("JsonPatchAggregateError")
       expect(result.errors.length).toEqual(2)
     }))

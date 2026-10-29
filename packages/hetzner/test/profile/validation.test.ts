@@ -1,9 +1,9 @@
 import { Effect } from "effect"
 import { assert, it } from "@effect/vitest"
-import type { ClusterConfigShape } from "@kumulo/core"
+import type { ClusterConfigFields } from "@kumulo/core"
 import { validateHetznerConfig } from "../../src/profile/validation.ts"
 
-const _config = (region: string): ClusterConfigShape => ({
+const _config = (region: string): ClusterConfigFields => ({
   distro: "k3s",
   worker_pools: [],
   addons: { cni: "flannel" },
@@ -26,12 +26,13 @@ it.effect("rejects an unrecognized location", () =>
 
 it.effect("still runs the shared cross-distro rules (autoscaling/cni)", () =>
   Effect.gen(function*() {
-    const config: ClusterConfigShape = {
+    const config: ClusterConfigFields = {
       distro: "k3s",
       worker_pools: [{ name: "pool-1", autoscaling: { enabled: true } }],
       addons: { cni: "flannel" },
       auth: { region: "fsn1" }
     }
+
     const result = yield* Effect.result(validateHetznerConfig(config))
     assert.strictEqual(result._tag, "Failure")
   }))

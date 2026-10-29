@@ -1,19 +1,20 @@
 import { Effect } from "effect"
-import { Command, Flag } from "effect/unstable/cli"
+import { Command, Flag } from "effect/cli"
 import { loadConfig } from "../config.ts"
 import { onDistro } from "../distro/registry.ts"
 import { configArgument, kumulo } from "../root.ts"
 
 export { applyK3sUpgradeWith } from "../distro/k3s-entry.ts"
 
-const strategyFlag = Flag.choiceWithValue("strategy", [
+const strategyFlag = Flag.ChoiceWithValue("strategy", [
   ["latest-patch", "LATEST_PATCH" as const],
   ["next-minor", "NEXT_MINOR" as const]
 ]).pipe(
   Flag.withDefault("LATEST_PATCH" as const),
   Flag.withDescription("ovh-mks only: upgrade to the latest patch of the current minor, or the next minor")
 )
-const workerConcurrencyFlag = Flag.integer("worker-concurrency").pipe(
+
+const workerConcurrencyFlag = Flag.Int("worker-concurrency").pipe(
   Flag.withDefault(1),
   Flag.withDescription("k3s only: how many worker nodes the SUC agent Plan upgrades at once")
 )

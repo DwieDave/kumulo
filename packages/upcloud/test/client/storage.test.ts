@@ -1,8 +1,9 @@
 import { Effect } from "effect"
+import type { Schema } from "effect"
 import { assert, it } from "@effect/vitest"
-import * as HttpClient from "effect/unstable/http/HttpClient"
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
+import * as HttpClient from "effect/http/HttpClient"
+import * as HttpClientRequest from "effect/http/HttpClientRequest"
+import * as HttpClientResponse from "effect/http/HttpClientResponse"
 import { makeStorageClient } from "../../src/client/storage.ts"
 import { capturedJson } from "./capture.ts"
 import { makeFakeStorageServer } from "./fake-storage-server.ts"
@@ -14,7 +15,7 @@ const _rawHttpClient = (handle: (request: HttpClientRequest.HttpClientRequest) =
     HttpClient.mapRequest(HttpClientRequest.prependUrl(_fixtureBaseUrl))
   )
 
-const _fixtureHttpClient = (status: number, body: unknown) => _rawHttpClient(() => new Response(JSON.stringify(body), { status }))
+const _fixtureHttpClient = (status: number, body: Schema.Json) => _rawHttpClient(() => new Response(JSON.stringify(body), { status }))
 
 const _storage = {
   uuid: "s1",
@@ -50,12 +51,15 @@ it.effect("R4/D3: a bare storage response (no envelope) is a decode failure", ()
 it.effect("POST create wraps the request body as {storage: {...}}", () =>
   Effect.gen(function*() {
     let captured: unknown
+
     const client = makeStorageClient(
       _rawHttpClient((request) => {
         captured = capturedJson(request)
+
         return new Response(JSON.stringify({ storage: _storage }), { status: 200 })
       })
     )
+
     yield* client.create({ size: 25, zone: "de-fra1", title: "demo" })
     assert.deepStrictEqual(captured, { storage: { size: 25, zone: "de-fra1", title: "demo" } })
   }))
@@ -63,12 +67,15 @@ it.effect("POST create wraps the request body as {storage: {...}}", () =>
 it.effect("modify only sends title/size/labels, never tier/zone", () =>
   Effect.gen(function*() {
     let captured: unknown
+
     const client = makeStorageClient(
       _rawHttpClient((request) => {
         captured = capturedJson(request)
+
         return new Response(JSON.stringify({ storage: _storage }), { status: 200 })
       })
     )
+
     yield* client.modify("s1", { title: "renamed", size: 50 })
     assert.deepStrictEqual(captured, { storage: { title: "renamed", size: 50 } })
   }))
@@ -76,12 +83,15 @@ it.effect("modify only sends title/size/labels, never tier/zone", () =>
 it.effect("delete passes ?backups=delete", () =>
   Effect.gen(function*() {
     let capturedPath: string | undefined
+
     const client = makeStorageClient(
       _rawHttpClient((request) => {
         capturedPath = request.url
+
         return new Response(null, { status: 204 })
       })
     )
+
     yield* client.delete("s1")
     assert.strictEqual(capturedPath, `${_fixtureBaseUrl}/1.3/storage/s1?backups=delete`)
   }))

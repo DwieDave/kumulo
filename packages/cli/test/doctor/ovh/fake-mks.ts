@@ -1,7 +1,7 @@
 import { Effect } from "effect"
-import * as HttpClientError from "effect/unstable/http/HttpClientError"
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
+import * as HttpClientError from "effect/http/HttpClientError"
+import * as HttpClientRequest from "effect/http/HttpClientRequest"
+import * as HttpClientResponse from "effect/http/HttpClientResponse"
 import type { OvhProjectClient } from "../../../src/doctor/ovh/probe.ts"
 
 /** A `GET /kube` fake that always succeeds with the given cluster id list. */
@@ -13,6 +13,7 @@ export const fakeMksListing = (clusterIds: ReadonlyArray<string>): OvhProjectCli
 export const fakeMksStatus = (status: number): OvhProjectClient => {
   const request = HttpClientRequest.get("/cloud/project/service-1/kube")
   const response = HttpClientResponse.fromWeb(request, new Response("", { status }))
+
   return {
     getCloudProjectServiceNameKube: () =>
       Effect.fail(

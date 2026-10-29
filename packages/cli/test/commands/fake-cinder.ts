@@ -1,6 +1,6 @@
 import { Effect, Layer } from "effect"
-import { HttpClient, HttpClientResponse } from "effect/unstable/http"
-import type { HttpClientRequest } from "effect/unstable/http"
+import { HttpClient, HttpClientResponse } from "effect/http"
+import type { HttpClientRequest } from "effect/http"
 import { CinderAuth } from "@kumulo/volumes-cinder"
 
 export type RouteHandler = (
@@ -16,14 +16,19 @@ export const makeFakeCinder = (routes: Record<string, RouteHandler>): Layer.Laye
     const url = new URL(request.url)
     const key = `${request.method} ${url.pathname}`
     const handler = routes[key]
+
     if (handler === undefined) {
       return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("not found", { status: 404 })))
     }
+
     const result = handler(request)
     const nullBodyStatus = result.status === 204 || result.status === 304
     const body = nullBodyStatus || result.body === undefined ? null : JSON.stringify(result.body)
+
     return Effect.succeed(HttpClientResponse.fromWeb(request, new Response(body, { status: result.status })))
   })
+
   const auth = Layer.succeed(CinderAuth, { token: Effect.succeed("tok"), endpoint: Effect.succeed("https://cinder.example.com/") })
+
   return Layer.merge(auth, Layer.succeed(HttpClient.HttpClient, client))
 }

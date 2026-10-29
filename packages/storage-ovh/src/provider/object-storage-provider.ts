@@ -1,4 +1,4 @@
-import { Effect, Layer, Redacted, Schedule } from "effect"
+import { Effect, Layer, Predicate, Redacted, Schedule } from "effect"
 import { BucketNotEmpty, ObjectStorageProvider, ProviderApiError, ResourceNotFound } from "@kumulo/core"
 import type { BucketInfo, BucketRef, BucketSpec, ClusterTag, ObjectStorageError, S3Credentials } from "@kumulo/core"
 import type { Cloud_StorageContainer, Cloud_storage_VersioningStatusEnum, Cloud_user_User, Storage } from "../generated/client.ts"
@@ -51,13 +51,17 @@ const _ensureContainer = (
 ): Effect.Effect<Container, ObjectStorageError> =>
   Effect.gen(function*() {
     const ctx = { kind: "bucket", ref: `${spec.region}/${spec.name}` }
+
     const containers = yield* mapStorageError({
       self: storage.getStorageContainersOnRegion(serviceName, spec.region, undefined),
       ctx: { kind: "storage-region", ref: spec.region }
     })
+
     if (!containers.some((c) => c.name === spec.name)) return yield* _create({ storage, serviceName, spec })
     const current = yield* mapStorageError({ self: storage.getStorageContainerOnRegion(serviceName, spec.region, spec.name, undefined), ctx })
+
     if ((current.versioning?.status === "enabled") === spec.versioning) return current
+
     return yield* _update({ storage, serviceName, spec })
   })
 
@@ -91,7 +95,7 @@ const _awaitUserReady = (
     ),
     Effect.retry({
       schedule: Schedule.spaced("3 seconds").pipe(Schedule.upTo({ duration: "2 minutes" })),
-      while: (error) => error._tag === "ResourceNotFound"
+      while: Predicate.isTagged("ResourceNotFound")
     })
   )
 
@@ -100,11 +104,14 @@ const _ensureUser = (
 ): Effect.Effect<Cloud_user_User, ObjectStorageError> =>
   Effect.gen(function*() {
     const existing = yield* _findUser({ storage, serviceName, username })
+
     const user = existing ?? (yield* mapStorageError({
       self: storage.postCloudProjectServiceNameUser(serviceName, { payload: { description: username, role: "objectstore_operator" } }),
       ctx: { kind: "s3-user", ref: username }
     }))
+
     if (user.status === "ok" || user.id === undefined) return user
+
     return yield* _awaitUserReady({ storage, serviceName, userId: String(user.id), username })
   })
 
@@ -149,16 +156,19 @@ export const deleteBucket = (
   (ref: BucketRef): Effect.Effect<void, ObjectStorageError> =>
     Effect.gen(function*() {
       const ctx = { kind: "bucket", ref: `${ref.region}/${ref.name}` }
+
       const container = yield* mapStorageError({
         self: storage.getStorageContainerOnRegion(serviceName, ref.region, ref.name, { params: { noObjects: true } }),
         ctx
       })
+
       // Absent objectsCount means "unknown", not "empty" — refuse rather than delete a bucket whose contents we couldn't verify.
       if (container.objectsCount === undefined) {
         return yield* Effect.fail(
           new ProviderApiError({ operation: `bucket ${ctx.ref}`, status: 200, body: "response omitted objectsCount; refusing to delete" })
         )
       }
+
       if (container.objectsCount > 0) return yield* Effect.fail(new BucketNotEmpty({ bucket: ref.name, objectCount: container.objectsCount }))
       yield* mapStorageError({ self: storage.deteteStorageContainerOnRegion(serviceName, ref.region, ref.name, undefined), ctx })
     })
@@ -171,17 +181,22 @@ export const ensureCredentials = (
       const username = _userTag(clusterName)
       const user = yield* _ensureUser({ storage, serviceName, username })
       const ctx = { kind: "s3-credential", ref: username }
+
       if (user.id === undefined) return yield* Effect.fail(new ResourceNotFound({ kind: "s3-user", ref: username }))
       const userId = String(user.id)
+
       const existing = yield* mapStorageError({
         self: storage.getCloudProjectServiceNameUserUserIdS3Credentials(serviceName, userId, undefined),
         ctx
       })
+
       if (existing.length > 0) yield* _deleteOrphanedCredentials({ storage, serviceName, userId, username, existing })
+
       const created = yield* mapStorageError({
         self: storage.postCloudProjectServiceNameUserUserIdS3Credentials(serviceName, userId, undefined),
         ctx
       })
+
       return {
         user: username,
         accessKey: Redacted.make(created.access ?? ""),

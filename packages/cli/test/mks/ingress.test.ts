@@ -52,6 +52,7 @@ const _run = (
 ) =>
   Effect.gen(function*() {
     const config = yield* loadConfig("cluster.yaml")
+
     return yield* applyMksEffect({ config })
   }).pipe(
     Effect.provide(Layer.succeed(MksEnv, { mks: makeMksClient(server.httpClient), serviceName: "service-1" })),

@@ -10,6 +10,7 @@ const spec = { name: "postgres-data", sizeGb: 100, type: "high-speed", retain: t
 describe("volumes-cinder VolumeProvider", () => {
   it.effect("ensureVolume creates then reuses by tag+name", () => {
     let created = false
+
     const fake = makeFakeCinder({
       "GET /volumes/detail": () =>
         created
@@ -17,9 +18,11 @@ describe("volumes-cinder VolumeProvider", () => {
           : { status: 200, body: { volumes: [] } },
       "POST /volumes": () => {
         created = true
+
         return { status: 202, body: { volume: { id: "vol-1", name: "postgres-data" } } }
       }
     })
+
     return Effect.gen(function*() {
       const first = yield* ensureVolume({ options, spec })
       const second = yield* ensureVolume({ options, spec })
@@ -37,6 +40,7 @@ describe("volumes-cinder VolumeProvider", () => {
       }),
       "POST /volumes": () => ({ status: 202, body: { volume: { id: "vol-1", name: "postgres-data" } } })
     })
+
     return Effect.gen(function*() {
       const info = yield* ensureVolume({ options, spec })
       expect(info).toEqual({ id: "vol-1", name: "postgres-data" })
@@ -55,6 +59,7 @@ describe("volumes-cinder VolumeProvider", () => {
         }
       })
     })
+
     return Effect.gen(function*() {
       const volumes = yield* listClusterVolumes("prod")
       expect(volumes).toEqual([{ id: "vol-1", name: "a" }])
@@ -65,6 +70,7 @@ describe("volumes-cinder VolumeProvider", () => {
     const fake = makeFakeCinder({
       "GET /volumes/detail": (request) => {
         const marker = new URL(request.url).searchParams.get("marker")
+
         return marker === null
           ? {
             status: 200,
@@ -76,6 +82,7 @@ describe("volumes-cinder VolumeProvider", () => {
           : { status: 200, body: { volumes: [{ id: "vol-2", name: "b", metadata: { kumulo_cluster: "prod" } }] } }
       }
     })
+
     return Effect.gen(function*() {
       const volumes = yield* listClusterVolumes("prod")
       expect(volumes).toEqual([{ id: "vol-1", name: "a" }, { id: "vol-2", name: "b" }])
@@ -87,6 +94,7 @@ describe("volumes-cinder VolumeProvider", () => {
       "GET /volumes/detail": () => ({ status: 200, body: { garbage: true } }),
       "POST /volumes": () => ({ status: 202, body: { volume: { id: "vol-1" } } })
     })
+
     return Effect.gen(function*() {
       const failure = yield* Effect.flip(ensureVolume({ options, spec }))
       expect(failure).toBeInstanceOf(ResponseDecodeError)
@@ -100,6 +108,7 @@ describe("volumes-cinder VolumeProvider", () => {
       "GET /volumes/detail": () => ({ status: 200, body: { volumes: [] } }),
       "POST /volumes": () => ({ status: 202, body: { volume: { name: "postgres-data" } } })
     })
+
     return Effect.gen(function*() {
       const failure = yield* Effect.flip(ensureVolume({ options, spec }))
       expect(failure).toBeInstanceOf(ResponseDecodeError)
@@ -108,6 +117,7 @@ describe("volumes-cinder VolumeProvider", () => {
 
   it.effect("deleteVolume tolerates an already-gone volume (404)", () => {
     const fake = makeFakeCinder({ "DELETE /volumes/vol-1": () => ({ status: 404 }) })
+
     return Effect.gen(function*() {
       yield* deleteVolume({ id: "vol-1" })
     }).pipe(Effect.provide(fake.layer))
@@ -115,6 +125,7 @@ describe("volumes-cinder VolumeProvider", () => {
 
   it.effect("surfaces a genuine transport failure as a tagged VolumeError", () => {
     const fake = makeFakeCinder({ "DELETE /volumes/vol-1": () => ({ status: 500 }) })
+
     return Effect.gen(function*() {
       const failure = yield* Effect.flip(deleteVolume({ id: "vol-1" }))
       expect(failure).toBeInstanceOf(ProviderApiError)

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
-import { FastCheck as fc } from "effect/testing"
+import { Schema } from "effect"
 import { isValidLabel, ownershipLabels } from "../../src/distro/ownership.ts"
 
 describe("isValidLabel", () => {
@@ -34,8 +34,9 @@ describe("ownershipLabels", () => {
 
   // D14: core's configHash is 16 lowercase hex chars — well inside the
   // 63-char value budget, no encoding layer needed.
-  it.prop("core's configHash always satisfies UpCloud's value charset (D14)", [fc.jsonValue()], ([spec]) => {
+  it.prop("core's configHash always satisfies UpCloud's value charset (D14)", [Schema.Json], ([spec]) => {
     const labels = ownershipLabels({ spec, owner: "kumulo" })
+
     return labels.every(isValidLabel)
   })
 })

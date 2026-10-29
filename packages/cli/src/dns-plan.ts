@@ -1,5 +1,6 @@
+import { PlanAction } from "@kumulo/core"
 import { recordKind } from "@kumulo/core"
-import type { DnsRecordKind, PlanAction } from "@kumulo/core"
+import type { DnsRecordKind } from "@kumulo/core"
 import type { DnsTarget } from "./dns.ts"
 
 export type DnsPlanInput =
@@ -17,13 +18,11 @@ export interface DnsPlanTargets {
 
 const _kindOf = (target: string, targets: DnsPlanTargets): DnsRecordKind => {
   const kind = target === "api_server" || target === "ingress" ? targets[target] : undefined
+
   return kind === undefined ? recordKind(target) : kind === "ip" ? "A" : "CNAME"
 }
 
 export const dnsPlanActions = (
   { config, targets }: { readonly config: DnsPlanInput; readonly targets: DnsPlanTargets }
 ): ReadonlyArray<PlanAction> =>
-  config.module === "none" ? [] : config.records.map((record) => ({
-    _tag: "Create",
-    name: `dns/${config.zone}/${record.name} (${_kindOf(record.target, targets)})`
-  }))
+  config.module === "none" ? [] : config.records.map((record) => (PlanAction.Create({ name: `dns/${config.zone}/${record.name} (${_kindOf(record.target, targets)})` })))

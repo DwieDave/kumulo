@@ -29,14 +29,17 @@ describe("makeReleaseCache", () => {
     Effect.gen(function*() {
       let calls = 0
       let now = 0
+
       const cache = yield* makeReleaseCache({
         source: () => {
           calls += 1
+
           return ["v1.0.0"]
         },
         ttlMs: 100,
         now: () => now
       })
+
       yield* cache.list
       yield* cache.list
       expect(calls).toBe(1)

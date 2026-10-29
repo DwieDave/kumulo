@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Redacted } from "effect"
+import { Effect, Predicate, Redacted } from "effect"
 import { makeOvhObjectStorageProvider } from "../../src/provider/object-storage-provider.ts"
 import { makeFakeProject } from "./fake-project.ts"
 
@@ -61,10 +61,12 @@ describe("ovh storage-ovh provider — buckets", () => {
       const provider = makeOvhObjectStorageProvider({ storage: fake.storage, serviceName: _serviceName })
       const failure = yield* Effect.flip(provider.deleteBucket({ name: _spec.name, region: _spec.region }))
       assert.strictEqual(failure._tag, "BucketNotEmpty")
-      if (failure._tag === "BucketNotEmpty") {
+
+      if (Predicate.isTagged(failure, "BucketNotEmpty")) {
         assert.strictEqual(failure.bucket, _spec.name)
         assert.strictEqual(failure.objectCount, 3)
       }
+
       assert.isDefined(fake.peekContainer(_spec.region, _spec.name))
     }))
 })

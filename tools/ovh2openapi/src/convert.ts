@@ -25,20 +25,27 @@ export function typeToSchema(args: {
   readonly models: Record<string, OvhModel>
 }): Effect.Effect<OpenApiSchema, ConversionUnsupported> {
   const { fullType, models } = args
+
   if (fullType.endsWith("[]")) {
     return typeToSchema({ fullType: fullType.slice(0, -2), models }).pipe(
       Effect.map((items): OpenApiSchema => ({ type: "array", items }))
     )
   }
+
   const [, mapValueType] = /^map\[[^\]]+\](.+)$/.exec(fullType) ?? []
+
   if (mapValueType !== undefined) {
     return typeToSchema({ fullType: mapValueType, models }).pipe(
       Effect.map((additionalProperties): OpenApiSchema => ({ type: "object", additionalProperties }))
     )
   }
+
   const primitive = _primitiveSchema(fullType)
+
   if (primitive !== undefined) return Effect.succeed(primitive)
+
   if (fullType in models) return Effect.succeed({ $ref: `#/components/schemas/${fullType}` })
+
   return Effect.fail(new ConversionUnsupported({ construct: "type", detail: fullType }))
 }
 
@@ -46,6 +53,7 @@ function _enumModelSchema(enumType: string, values: readonly string[]): Effect.E
   if (enumType !== "string") {
     return Effect.fail(new ConversionUnsupported({ construct: "enumType", detail: enumType }))
   }
+
   return Effect.succeed({ type: "string", enum: values })
 }
 
@@ -58,6 +66,7 @@ function _objectModelSchema(
 ): Effect.Effect<OpenApiSchema, ConversionUnsupported> {
   const entries = Object.entries(properties).toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
   const required = entries.filter(([, property]) => property.required === true).map(([key]) => key)
+
   return Effect.reduce(entries, (): Record<string, OpenApiSchema> => ({}), (acc, [key, property]) =>
     typeToSchema({ fullType: property.fullType, models }).pipe(
       Effect.map((schema) => ({ ...acc, [key]: _nullable(schema, property.canBeNull) }))
@@ -70,6 +79,7 @@ export function modelToSchema(args: {
   readonly models: Record<string, OvhModel>
 }): Effect.Effect<OpenApiSchema, ConversionUnsupported> {
   const { model, models } = args
+
   return isEnumModel(model) ? _enumModelSchema(model.enumType, model.enum) : _objectModelSchema(model.properties, models)
 }
 
@@ -77,6 +87,7 @@ export function convertModels(
   models: Record<string, OvhModel>
 ): Effect.Effect<Record<string, OpenApiSchema>, ConversionUnsupported> {
   const entries = Object.entries(models).toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+
   return Effect.reduce(entries, (): Record<string, OpenApiSchema> => ({}), (acc, [key, model]) =>
     modelToSchema({ model, models }).pipe(Effect.map((schema) => ({ ...acc, [key]: schema })))
   )
@@ -84,6 +95,7 @@ export function convertModels(
 
 function _stableOperationId(method: string, path: string): string {
   const slug = path.replace(/[{}]/g, "").replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_|_$/g, "")
+
   return `${method.toLowerCase()}_${slug}`
 }
 
@@ -103,6 +115,7 @@ function _requestBodyFor(
   models: Record<string, OvhModel>
 ): Effect.Effect<OpenApiRequestBody | undefined, ConversionUnsupported> {
   if (param === undefined) return Effect.succeed(undefined)
+
   return typeToSchema({ fullType: param.fullType, models }).pipe(
     Effect.map((schema) => ({ required: param.required, content: { "application/json": { schema } } }))
   )
@@ -111,6 +124,7 @@ function _requestBodyFor(
 function _responses(responseType: string, models: Record<string, OvhModel>): Effect.Effect<OpenApiOperation["responses"], ConversionUnsupported> {
   // OVH's schema says "void" but the API answers 200 or 204 depending on the route
   if (responseType === "void") return Effect.succeed({ "200": { description: "OK" }, "204": { description: "No Content" } })
+
   return typeToSchema({ fullType: responseType, models }).pipe(
     Effect.map((schema) => ({ "200": { description: "OK", content: { "application/json": { schema } } } }))
   )
@@ -124,6 +138,7 @@ export function operationToOpenApi(args: {
   const { path, op, models } = args
   const bodyParam = op.parameters.find((p) => p.paramType === "body")
   const otherParams = op.parameters.filter((p) => p.paramType !== "body")
+
   return Effect.all([
     Effect.forEach(otherParams, (p) => _toOpenApiParam(p, models)),
     _requestBodyFor(bodyParam, models),
@@ -149,6 +164,7 @@ function _apiToPathItem(api: OvhApi, models: Record<string, OvhModel>): Effect.E
 
 export function convert(schema: OvhSchema): Effect.Effect<OpenApiDocument, ConversionUnsupported> {
   const sortedApis = schema.apis.toSorted((a, b) => a.path.localeCompare(b.path))
+
   return Effect.all([
     Effect.reduce(sortedApis, (): Record<string, Record<string, OpenApiOperation>> => ({}), (acc, api) =>
       _apiToPathItem(api, schema.models).pipe(Effect.map(([path, item]) => ({ ...acc, [path]: item })))

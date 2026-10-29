@@ -18,6 +18,7 @@ const RELATIVE_TS = /(from\s+|import\s*\(\s*)("|')(\.[^"']*)\.ts\2/g
 const _walk = function* (dir) {
 	for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
 		const full = path.join(dir, entry.name)
+
 		if (entry.isDirectory()) yield* _walk(full)
 		else if (entry.name.endsWith(".d.ts")) yield full
 	}
@@ -26,12 +27,15 @@ const _walk = function* (dir) {
 const _rewrite = (file) => {
 	const raw = fs.readFileSync(file, "utf8")
 	const next = raw.replace(RELATIVE_TS, "$1$2$3$2")
+
 	if (next !== raw) fs.writeFileSync(file, next)
 }
 
 const root = path.resolve(process.cwd(), process.argv[2] ?? "dist")
+
 if (!fs.existsSync(root)) {
 	console.error(`dts-ext: no such directory "${root}"`)
 	process.exit(1)
 }
+
 for (const file of _walk(root)) _rewrite(file)

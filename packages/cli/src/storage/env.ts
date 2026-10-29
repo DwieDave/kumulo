@@ -1,7 +1,7 @@
 import { Context, Effect, Layer } from "effect"
 import { FileSystem } from "effect/FileSystem"
-import * as HttpClient from "effect/unstable/http/HttpClient"
-import { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/unstable/process"
+import * as HttpClient from "effect/http/HttpClient"
+import { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/process"
 import { ConfigInvalid } from "@kumulo/core"
 import type { AuthenticationFailed, CredentialsSink, ObjectStorageProvider } from "@kumulo/core"
 import type { ClusterConfig } from "../cluster-config.ts"
@@ -11,18 +11,19 @@ import { MksEnv, ovhHttpClientFromEnv } from "../mks/env.ts"
 
 const ChildProcessSpawner = ChildProcessSpawnerNS.ChildProcessSpawner
 
-export interface StorageEnvShape {
+export interface StorageEnvFields {
   readonly storage: Storage
   readonly serviceName: string
 }
 
-export class StorageEnv extends Context.Service<StorageEnv, StorageEnvShape>()("@kumulo/cli/StorageEnv") {}
+export class StorageEnv extends Context.Service<StorageEnv, StorageEnvFields>()("@kumulo/cli/StorageEnv") {}
 
 export const StorageEnvLive: Layer.Layer<StorageEnv, AuthenticationFailed, MksEnv | HttpClient.HttpClient> = Layer.effect(
   StorageEnv,
   Effect.gen(function*() {
     const { serviceName } = yield* MksEnv
     const httpClient = yield* Effect.provide(HttpClient.HttpClient, ovhHttpClientFromEnv())
+
     return { storage: makeStorageClient(httpClient), serviceName }
   })
 )
@@ -49,5 +50,6 @@ export const storageLayers = (
     const sops = yield* _sopsConfig(config)
     const providerLayer = ovhObjectStorageProviderLive({ storage, serviceName })
     const sinkLayer = sopsCredentialsSinkLive({ dir: sops.dir, ageRecipient: sops.ageRecipient, spawner, fs })
+
     return Layer.merge(providerLayer, sinkLayer)
   })

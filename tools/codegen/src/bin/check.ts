@@ -10,7 +10,7 @@ import { Effect } from "effect"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import * as YAML from "yaml"
-import type { OpenAPISpec } from "effect/unstable/httpapi/OpenApi"
+import type { OpenAPISpec } from "effect/http-api/OpenApi"
 import { runPipeline } from "../pipeline.ts"
 import { checkNoop } from "../regenCheck.ts"
 import type { NamedPatch } from "../patch.ts"
@@ -36,17 +36,21 @@ const _loadService = (entry: ServiceEntry) =>
     const spec: OpenAPISpec = YAML.parse(readFileSync(join(root, entry.specPath), "utf8"))
     const allowlistDoc = JSON.parse(readFileSync(join(root, entry.allowlistPath), "utf8"))
     const allowlist: ReadonlyArray<string> = allowlistDoc.operationIds
+
     const patches: ReadonlyArray<NamedPatch> = entry.patchPaths.map((patchPath) => ({
       source: patchPath,
       patch: JSON.parse(_stripJsonComments(readFileSync(join(root, patchPath), "utf8")))
     }))
+
     const committed = readFileSync(join(root, entry.outputPath), "utf8")
+
     const { source } = yield* runPipeline({
       spec,
       allowlist,
       patches,
       generate: { name: entry.name, format: entry.format }
     })
+
     yield* checkNoop({ committedPath: entry.outputPath, committed, regenerated: source })
   })
 
@@ -91,6 +95,7 @@ const program = Effect.gen(function* () {
   yield* Effect.forEach(services, _loadService, { discard: true })
   const ovhPipelines = yield* _ovhPipelines
   yield* Effect.forEach(ovhPipelines, _loadOvhPipeline, { discard: true })
+
   return services.length + ovhPipelines.length
 })
 

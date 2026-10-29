@@ -1,6 +1,6 @@
 import type { Redacted } from "effect";
 import { Context, Effect, Layer } from "effect"
-import * as HttpClient from "effect/unstable/http/HttpClient"
+import * as HttpClient from "effect/http/HttpClient"
 import type { AuthenticationFailed } from "@kumulo/core"
 import type { DnsProvider, VolumeProvider } from "@kumulo/core"
 import type { ClusterConfig, K3sClusterConfig } from "../cluster-config.ts"
@@ -24,6 +24,7 @@ export const k3sDnsProviderLayer = (): Layer.Layer<DnsProvider, AuthenticationFa
   Layer.unwrap(
     Effect.gen(function*() {
       const httpClient = yield* Effect.provide(HttpClient.HttpClient, ovhHttpClientFromEnv())
+
       return ovhDnsProviderLive(makeDnsClient(httpClient))
     })
   )
@@ -33,6 +34,7 @@ export const k3sHetznerDnsProviderLayer = (): Layer.Layer<DnsProvider, Authentic
     Effect.gen(function*() {
       const token = yield* requiredRedactedEnv("HETZNER_DNS_TOKEN")
       const httpClient = yield* Effect.provide(HttpClient.HttpClient, HetznerHttpLive({ token }))
+
       return hetznerDnsProviderLive(makeHetznerDnsClient(httpClient))
     })
   )
@@ -42,7 +44,7 @@ export const k3sHetznerVolumeProviderLayer = (
 ): Layer.Layer<VolumeProvider, AuthenticationFailed, HttpClient.HttpClient> =>
   HcloudVolumeProviderLive({ tag: config.name, location: config.auth.region }).pipe(Layer.provide(hcloudHttpClientLayer()))
 
-export type CloudCredentialShape =
+export type CloudCredentialFields =
   | {
     readonly provider: "openstack"
     readonly authUrl: string
@@ -52,7 +54,7 @@ export type CloudCredentialShape =
   }
   | { readonly provider: "hetzner"; readonly token: Redacted.Redacted<string> }
 
-export class CloudCredentialEnv extends Context.Service<CloudCredentialEnv, CloudCredentialShape>()("@kumulo/cli/CloudCredentialEnv") {}
+export class CloudCredentialEnv extends Context.Service<CloudCredentialEnv, CloudCredentialFields>()("@kumulo/cli/CloudCredentialEnv") {}
 
 export const k3sCloudCredentialLayer = (
   config: K3sClusterConfig

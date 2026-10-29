@@ -1,5 +1,5 @@
 import { Context, Effect, Layer } from "effect"
-import * as HttpClient from "effect/unstable/http/HttpClient"
+import * as HttpClient from "effect/http/HttpClient"
 import type { AuthenticationFailed } from "@kumulo/core"
 import type { UksClients } from "@kumulo/distro-upcloud-uks"
 import type { ObjectStorageClient, StorageClient, ZoneClient } from "@kumulo/upcloud"
@@ -15,20 +15,21 @@ import {
 } from "@kumulo/upcloud"
 import { requiredRedactedEnv } from "../env.ts"
 
-export interface UpcloudEnvShape {
+export interface UpcloudEnvFields {
   readonly clients: UksClients
   readonly zones: ZoneClient
   readonly storage: StorageClient
   readonly objectStorage: ObjectStorageClient
 }
 
-export class UpcloudEnv extends Context.Service<UpcloudEnv, UpcloudEnvShape>()("@kumulo/cli/UpcloudEnv") {}
+export class UpcloudEnv extends Context.Service<UpcloudEnv, UpcloudEnvFields>()("@kumulo/cli/UpcloudEnv") {}
 
 export const UpcloudEnvLive: Layer.Layer<UpcloudEnv, AuthenticationFailed, HttpClient.HttpClient> = Layer.effect(
   UpcloudEnv,
   Effect.gen(function*() {
     const token = yield* requiredRedactedEnv("UPCLOUD_API_TOKEN")
     const httpClient = yield* Effect.provide(HttpClient.HttpClient, UpcloudHttpLive({ token }))
+
     return {
       clients: {
         uks: makeUksClient(httpClient),

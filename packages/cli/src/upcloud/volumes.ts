@@ -1,7 +1,8 @@
-import { Effect } from "effect"
-import * as HttpClient from "effect/unstable/http/HttpClient"
+import { PlanAction } from "@kumulo/core"
+import { Effect, Option, Schema } from "effect"
+import * as HttpClient from "effect/http/HttpClient"
 import { makeK8sClient, parseKubeconfig, ResourceNotFound } from "@kumulo/core"
-import type { K8sClient, K8sManifest, Kubeconfig, MksError, PlanAction, VolumeError, VolumeSpec } from "@kumulo/core"
+import type { K8sClient, K8sManifest, Kubeconfig, MksError, VolumeError, VolumeSpec } from "@kumulo/core"
 import { mapUpcloudError } from "@kumulo/upcloud"
 import { deleteVolume, ensureVolume, hasClusterLabel, listClusterVolumes, staticVolumeManifests } from "@kumulo/volumes-upcloud"
 import type { VolumeProviderOptions } from "@kumulo/volumes-upcloud"
@@ -28,13 +29,16 @@ export const volumePlanActions = (
   { config, live }: { readonly config: UpcloudUksClusterConfig; readonly live: ReadonlyArray<LiveVolume> }
 ): ReadonlyArray<PlanAction> => {
   const liveByName = new Map(live.map((v) => [v.name, v]))
+
   return managedUpcloudVolumes(config).map((entry) => {
     const name = uksVolumeRow(entry.name)
     const match = liveByName.get(entry.name)
-    if (match === undefined) return { _tag: "Create" as const, name }
+
+    if (match === undefined) return PlanAction.Create({ name })
+
     return match.tier === entry.type
-      ? { _tag: "NoOp" as const, name }
-      : { _tag: "ReplaceNeedsConfirm" as const, name, reason: `type: tier is immutable (${match.tier} -> ${entry.type})` }
+      ? PlanAction.NoOp({ name })
+      : PlanAction.ReplaceNeedsConfirm({ name, reason: `type: tier is immutable (${match.tier} -> ${entry.type})` })
   })
 }
 
@@ -45,6 +49,7 @@ export const lookupUpcloudVolumes = (
     if (config.volumes.module !== "upcloud" || config.volumes.managed.length === 0) return []
     const { storage } = yield* UpcloudEnv
     const all = yield* mapUpcloudError({ self: storage.list(), ctx: { kind: "storage", ref: config.name } })
+
     return all.filter((s) => hasClusterLabel({ labels: s.labels, tag: config.name })).map((s) => ({ name: s.title, tier: s.tier ?? "unknown" }))
   })
 
@@ -57,26 +62,28 @@ const _k8sClientFor = (
     const parsed = yield* parseKubeconfig(kubeconfig.content).pipe(
       Effect.mapError((cause) => new ResourceNotFound({ kind: "kubeconfig", ref: cause.issues.map((i) => i.message).join(", ") }))
     )
+
     const client = yield* Effect.provide(HttpClient.HttpClient, k8sHttpClientLayer({ auth: parsed.auth, caPem: parsed.caPem }))
+
     return makeK8sClient({ client, server: parsed.server })
   })
 
-const _isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null
+const _ManifestMeta = Schema.Struct({
+  metadata: Schema.optional(Schema.Struct({ name: Schema.optional(Schema.String), namespace: Schema.optional(Schema.String) }))
+})
 
-const _metaField = (manifest: K8sManifest, key: "name" | "namespace"): string | undefined => {
-  const meta = manifest["metadata"]
-  if (!_isRecord(meta)) return undefined
-  const value = meta[key]
-  return typeof value === "string" ? value : undefined
-}
+const _metaField = (manifest: K8sManifest, key: "name" | "namespace"): string | undefined =>
+  Option.getOrUndefined(Schema.decodeUnknownOption(_ManifestMeta)(manifest))?.metadata?.[key]
 
 const _refFor = (manifest: K8sManifest) => {
   const namespace = _metaField(manifest, "namespace")
   const name = _metaField(manifest, "name") ?? ""
   const plural = manifest.kind === "PersistentVolumeClaim" ? "persistentvolumeclaims" : "persistentvolumes"
+
   const path = namespace === undefined
     ? `/api/v1/${plural}/${name}`
     : `/api/v1/namespaces/${namespace}/${plural}/${name}`
+
   return { path, kind: manifest.kind }
 }
 
@@ -93,6 +100,7 @@ export const convergeUpcloudVolumes = (
 ): Effect.Effect<void, VolumeError | MksError, UpcloudEnv | HttpClient.HttpClient> =>
   Effect.gen(function*() {
     const managed = managedUpcloudVolumes(config)
+
     if (managed.length === 0) return
     const { storage } = yield* UpcloudEnv
     const options = _options(config)
@@ -115,20 +123,26 @@ export const reconcileUpcloudVolumesOnDelete = (
 > =>
   Effect.gen(function*() {
     const managed = managedUpcloudVolumes(config)
+
     if (managed.length === 0) return { kept: [], deleted: [] }
     const { storage } = yield* UpcloudEnv
     const existing = yield* listClusterVolumes({ client: storage, tag: config.name })
     const kept: Array<string> = []
     const deleted: Array<string> = []
+
     for (const entry of managed) {
       const vol = existing.find((v) => v.name === entry.name)
+
       if (vol === undefined) continue
+
       if (entry.retain) {
         kept.push(vol.name)
         continue
       }
+
       yield* deleteVolume({ client: storage, ref: { id: vol.id } })
       deleted.push(vol.name)
     }
+
     return { kept, deleted }
   })

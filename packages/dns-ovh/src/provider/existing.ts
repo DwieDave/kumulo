@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 import type { SchemaError } from "effect/Schema"
-import type * as HttpClientError from "effect/unstable/http/HttpClientError"
+import type * as HttpClientError from "effect/http/HttpClientError"
 import type { DnsError } from "@kumulo/core"
 import type { Dns } from "../generated/client.ts"
 import { toDnsError } from "./errors.ts"
@@ -34,5 +34,6 @@ export const recordsAt = (
     const ids = yield* _wrap(zone, name, dns.getRecords(zone, subDomain === undefined ? undefined : { params: { subDomain } }))
     // concurrency 4 — OVH client has no transport-level rate guard, keep it modest
     const raws = yield* Effect.forEach(ids, (id) => _wrap(zone, name, dns.getRecord(zone, String(id), undefined)), { concurrency: 4 })
+
     return raws.map(_toZoneRecord)
   })

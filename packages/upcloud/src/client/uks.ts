@@ -1,12 +1,13 @@
 // UKS responses are bare (list = JSON array, cluster = JSON object), unlike network.ts's double-wrapped envelope — don't copy that shape here
 import { Effect } from "effect"
 import * as Schema from "effect/Schema"
-import type * as HttpClient from "effect/unstable/http/HttpClient"
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
+import type * as HttpClient from "effect/http/HttpClient"
+import * as HttpClientRequest from "effect/http/HttpClientRequest"
 import { decodeOn2xx, decodeVoid, UpcloudLabel } from "./common.ts"
 import type { UpcloudRawError } from "./common.ts"
 
 export const UksState = Schema.Literals(["pending", "running", "scaling-up", "scaling-down", "terminating", "failed", "unknown"])
+
 export type UksState = typeof UksState.Type
 
 export const UksCluster = Schema.Struct({
@@ -24,9 +25,11 @@ export const UksCluster = Schema.Struct({
   private_node_groups: Schema.optionalKey(Schema.Boolean),
   labels: Schema.optionalKey(Schema.Array(UpcloudLabel))
 })
+
 export type UksCluster = typeof UksCluster.Type
 
 export const UksPlan = Schema.Struct({ name: Schema.String, description: Schema.optionalKey(Schema.String) })
+
 export type UksPlan = typeof UksPlan.Type
 
 const _ClustersResponse = Schema.Array(UksCluster)

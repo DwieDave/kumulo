@@ -14,6 +14,7 @@ const _packagesYaml = (packages: ReadonlyArray<string>): string => packages.map(
 // no password fallback.
 export const renderCloudInit = (args: CloudInitArgs): string => {
   const packages = args.packages ?? DEFAULT_PACKAGES
+
   return `#cloud-config
 preserve_hostname: false
 hostname: ${args.hostname}

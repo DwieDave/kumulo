@@ -1,7 +1,7 @@
 import type { Effect } from "effect";
 import { Context } from "effect"
 import type { ConfigInvalid } from "../errors/tagged.ts"
-import type { ClusterConfigShape } from "../domain/types.ts"
+import type { ClusterConfigFields } from "../domain/types.ts"
 
 export type ProfileError = ConfigInvalid
 
@@ -25,5 +25,5 @@ export class ProviderProfile extends Context.Service<ProviderProfile, {
     readonly imageAliases: Record<string, string>
     readonly dnsServers: ReadonlyArray<string>
   }
-  readonly validate: (config: ClusterConfigShape) => Effect.Effect<void, ProfileError>
+  readonly validate: (config: ClusterConfigFields) => Effect.Effect<void, ProfileError>
 }>()("@kumulo/core/ProviderProfile") {}

@@ -20,15 +20,18 @@ describe("readiness waits", () => {
   it.live("waitForDeploymentAvailable resolves once the Available condition flips to True", () =>
     Effect.gen(function*() {
       let calls = 0
+
       const get = (_ref: ResourceRef): Effect.Effect<K8sManifest, never> =>
         Effect.sync(() => {
           calls += 1
+
           return {
             apiVersion: "apps/v1",
             kind: "Deployment",
             status: { conditions: [{ type: "Available", status: calls < 2 ? "False" : "True" }] }
           }
         })
+
       const manifest = yield* waitForDeploymentAvailable({ get, ref, interval: "1 millis", timeout: "1 second" })
       expect(manifest["status"]).toEqual({ conditions: [{ type: "Available", status: "True" }] })
       expect(calls).toBeGreaterThanOrEqual(2)
@@ -42,6 +45,7 @@ describe("readiness waits", () => {
         interval: "1 millis",
         timeout: "10 millis"
       }))
+
       expect(error._tag).toBe("ProvisioningTimeout")
     }))
 
@@ -53,6 +57,7 @@ describe("readiness waits", () => {
         interval: "1 millis",
         timeout: "10 millis"
       }))
+
       expect(error._tag).toBe("ProvisioningTimeout")
     }))
 })

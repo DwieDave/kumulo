@@ -9,6 +9,7 @@ export const resourceResolutionCheck = (args: {
   readonly resolve: Effect.Effect<string, CloudError>
 }): DoctorCheck => {
   const name = `openstack-${args.kind}-resolution`
+
   return {
     name,
     run: args.resolve.pipe(

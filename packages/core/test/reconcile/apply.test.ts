@@ -10,6 +10,7 @@ const _blockOnSecondServerLive: Layer.Layer<CloudProvider> = Layer.effect(
   Effect.gen(function*() {
     const base = yield* CloudProvider
     const count = yield* Ref.make(0)
+
     return {
       ...base,
       ensureServer: (spec: ServerSpec) =>

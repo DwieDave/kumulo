@@ -2,6 +2,7 @@ import { Schema } from "effect"
 
 const octet = "(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)"
 const prefix = "(3[0-2]|[12]?\\d)"
+
 const isCidr = Schema.isPattern(new RegExp(`^${octet}\\.${octet}\\.${octet}\\.${octet}/${prefix}$`), {
   message: "must be a CIDR in a.b.c.d/n form with valid octets (0-255) and prefix (0-32)"
 })
@@ -12,6 +13,7 @@ export const cidrRange = (cidr: string): readonly [number, number] => {
   const [address = "", bits = "0"] = cidr.split("/")
   const size = 2 ** (32 - Number(bits))
   const first = Math.floor(address.split(".").reduce((acc, part) => acc * 256 + Number(part), 0) / size) * size
+
   return [first, first + size - 1]
 }
 
@@ -23,6 +25,7 @@ export const AuthMethod = Schema.Literals(["application_credential", "clouds_yam
 export const AccessMode = Schema.Literals(["ReadWriteOnce", "ReadWriteMany", "ReadOnlyMany"])
 
 export type Provider = typeof Provider.Type
+
 export type AuthMethod = typeof AuthMethod.Type
 
 // kumulo: any real object_storage.module requires a real secrets.sink
@@ -51,8 +54,10 @@ export const isVolumesModuleConsistentWithProvider = Schema.makeFilter(
   (config: { provider: string; volumes: { module: string } }) => {
     if (config.volumes.module === "hcloud" && config.provider !== "hetzner")
       return "volumes.module hcloud requires provider hetzner"
+
     if (config.volumes.module === "cinder" && config.provider === "hetzner")
       return "volumes.module cinder is not available on provider hetzner"
+
     return undefined
   }
 )
@@ -106,14 +111,17 @@ export const ManagedVolume = Schema.Struct({
 })
 
 export const NoVolumes = Schema.Struct({ module: Schema.Literal("none") })
+
 export const CinderVolumes = Schema.Struct({
   module: Schema.Literal("cinder"),
   managed: Schema.Array(ManagedVolume)
 })
+
 export const HcloudVolumes = Schema.Struct({
   module: Schema.Literal("hcloud"),
   managed: Schema.Array(ManagedVolume)
 })
+
 export const Volumes = Schema.Union([NoVolumes, CinderVolumes, HcloudVolumes])
 export const OpenStackVolumes = Schema.Union([NoVolumes, CinderVolumes])
 
@@ -158,6 +166,7 @@ export const Secrets = Schema.Union([
 ])
 
 export const OutputsFormat = Schema.Literals(["yaml", "json"])
+
 export type OutputsFormat = typeof OutputsFormat.Type
 
 export const Outputs = Schema.Struct({

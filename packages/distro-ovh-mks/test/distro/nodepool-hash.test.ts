@@ -25,6 +25,7 @@ const _setup = Effect.fn(function*() {
   const server = makeFakeMksServer({ readyAfterPolls: 0 })
   const mks = makeMksClient(server.httpClient)
   const info = yield* ensureCluster({ mks, config: _config })
+
   return { server, mks, ref: { serviceName: _config.serviceName, kubeId: info.id } }
 })
 

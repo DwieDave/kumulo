@@ -70,15 +70,17 @@ const PlanObjectMeta = Schema.Struct({
   namespace: Schema.optionalKey(Schema.String)
 })
 
-const _metadata = (manifest: K8sManifest): { name: string; namespace: string } => {
+const _metadata = (manifest: K8sManifest) => {
   const decoded = Result.getOrElse(
     Schema.decodeUnknownResult(PlanObjectMeta)(manifest.metadata),
     () => ({ name: undefined, namespace: undefined })
   )
+
   return { name: decoded.name ?? "", namespace: decoded.namespace ?? NAMESPACE }
 }
 
 export const refForPlan = (manifest: K8sManifest): ResourceRef => {
   const { name, namespace } = _metadata(manifest)
+
   return { path: `/apis/upgrade.cattle.io/v1/namespaces/${namespace}/plans/${name}`, kind: "Plan" }
 }

@@ -2,7 +2,7 @@ import { Effect } from "effect"
 import { mapUpcloudError } from "@kumulo/upcloud"
 import type { UksCluster } from "@kumulo/upcloud"
 import type { ManagedClusterInfo, MksError } from "@kumulo/core"
-import { clusterDrift, driftConflict } from "./cluster-drift.ts"
+import { clusterDrift, driftConflict, UksClusterDrift } from "./cluster-drift.ts"
 import type { UksClusterState } from "./cluster-drift.ts"
 import { ownershipLabels } from "./ownership.ts"
 import { pollUntil } from "./status.ts"
@@ -81,7 +81,9 @@ const _reconcilePatchable = (
   const desiredLabels = ownershipLabels({ spec: config, owner })
   const filterDrift = JSON.stringify(desiredFilter ?? []) !== JSON.stringify(cluster.control_plane_ip_filter ?? [])
   const labelDrift = JSON.stringify(desiredLabels) !== JSON.stringify(cluster.labels ?? [])
+
   if (!filterDrift && !labelDrift) return Effect.void
+
   return mapUpcloudError({
     self: clients.uks.patch(cluster.uuid, { control_plane_ip_filter: desiredFilter, labels: desiredLabels }),
     ctx: { kind: "uks-cluster", ref: cluster.uuid }
@@ -96,7 +98,8 @@ const _refuseCreationDrift = (
     desired: { zone: config.zone, plan: config.plan, networkCidr: config.network.cidr, storageEncryption: config.storage_encryption },
     actual: _toInfo(cluster)
   })
-  return drift._tag === "None" ? Effect.void : Effect.fail(driftConflict(drift))
+
+  return UksClusterDrift.$is("None")(drift) ? Effect.void : Effect.fail(driftConflict(drift))
 }
 
 export const ensureCluster = (
@@ -111,11 +114,14 @@ export const ensureCluster = (
     const existing = yield* mapUpcloudError({ self: clients.uks.list(), ctx: { kind: "uks-cluster", ref: config.name } }).pipe(
       Effect.map((clusters) => clusters.find((cluster) => cluster.name === config.name))
     )
+
     if (existing !== undefined) {
       yield* _refuseCreationDrift({ cluster: existing, config })
       yield* _reconcilePatchable({ clients, cluster: existing, config, owner })
     }
+
     const cluster = existing ?? (yield* _create({ clients, config, networkUuid, owner }))
     const ready = yield* _awaitRunning({ clients, uuid: cluster.uuid })
+
     return _toInfo(ready)
   })

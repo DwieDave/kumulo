@@ -1,11 +1,12 @@
 import { Effect } from "effect"
 import * as Schema from "effect/Schema"
-import type * as HttpClient from "effect/unstable/http/HttpClient"
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
+import type * as HttpClient from "effect/http/HttpClient"
+import * as HttpClientRequest from "effect/http/HttpClientRequest"
 import { decodeOn2xx, decodeVoid, UpcloudLabel } from "./common.ts"
 import type { UpcloudRawError } from "./common.ts"
 
 export const ObjectStorageConfiguredStatus = Schema.Literals(["started", "stopped"])
+
 export type ObjectStorageConfiguredStatus = typeof ObjectStorageConfiguredStatus.Type
 
 export const ObjectStorageNetwork = Schema.Struct({
@@ -14,6 +15,7 @@ export const ObjectStorageNetwork = Schema.Struct({
   family: Schema.String,
   uuid: Schema.optionalKey(Schema.String)
 })
+
 export type ObjectStorageNetwork = typeof ObjectStorageNetwork.Type
 
 export const ObjectStorageEndpoint = Schema.Struct({
@@ -22,6 +24,7 @@ export const ObjectStorageEndpoint = Schema.Struct({
   iam_url: Schema.optionalKey(Schema.String),
   sts_url: Schema.optionalKey(Schema.String)
 })
+
 export type ObjectStorageEndpoint = typeof ObjectStorageEndpoint.Type
 
 export const ObjectStorageService = Schema.Struct({
@@ -35,6 +38,7 @@ export const ObjectStorageService = Schema.Struct({
   networks: Schema.optionalKey(Schema.Array(ObjectStorageNetwork)),
   endpoints: Schema.optionalKey(Schema.Array(ObjectStorageEndpoint))
 })
+
 export type ObjectStorageService = typeof ObjectStorageService.Type
 
 export const BucketMetrics = Schema.Struct({
@@ -43,12 +47,15 @@ export const BucketMetrics = Schema.Struct({
   total_size_bytes: Schema.Number,
   deleted: Schema.Boolean
 })
+
 export type BucketMetrics = typeof BucketMetrics.Type
 
 export const ObjectStorageUser = Schema.Struct({ username: Schema.String })
+
 export type ObjectStorageUser = typeof ObjectStorageUser.Type
 
 export const AccessKeyStatus = Schema.Literals(["Active", "Inactive"])
+
 export type AccessKeyStatus = typeof AccessKeyStatus.Type
 
 export const AccessKey = Schema.Struct({
@@ -57,6 +64,7 @@ export const AccessKey = Schema.Struct({
   // kumulo: present ONLY in the create response — never on get/list, capture it then or it's gone.
   secret_access_key: Schema.optionalKey(Schema.String)
 })
+
 export type AccessKey = typeof AccessKey.Type
 
 export const ObjectStorageRegion = Schema.Struct({
@@ -64,6 +72,7 @@ export const ObjectStorageRegion = Schema.Struct({
   primary_zone: Schema.String,
   zones: Schema.optionalKey(Schema.Array(Schema.String))
 })
+
 export type ObjectStorageRegion = typeof ObjectStorageRegion.Type
 
 const _decodeService = decodeOn2xx(ObjectStorageService)

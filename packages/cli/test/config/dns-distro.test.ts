@@ -1,6 +1,5 @@
 import { describe, it } from "@effect/vitest"
-import { Effect } from "effect"
-import { FastCheck as fc } from "effect/testing"
+import { Effect, Predicate, Result, Schema } from "effect"
 import { decodeConfig } from "../../src/cluster-config.ts"
 import { validConfig } from "./fixtures.ts"
 
@@ -11,6 +10,7 @@ const realDns = { zone: "example.com", ttl: 300, records: [{ name: "api.prod-eu"
 
 const _forDistro = (distro: (typeof distros)[number]) => {
   const { network: _k3sOnly, ...withoutNetwork } = validConfig
+
   return distro === "k3s"
     ? { ...validConfig, distro, version: "v1.31.4+k3s1" }
     : { ...withoutNetwork, distro, version: "v1.31.4" }
@@ -19,47 +19,51 @@ const _forDistro = (distro: (typeof distros)[number]) => {
 describe("ClusterConfig — dns × distro", () => {
   it.prop(
     "accepts every real dns.module on every distro (dns is orthogonal to distro)",
-    [fc.constantFrom(...distros), fc.constantFrom(...dnsModules)],
+    [Schema.Literals(distros), Schema.Literals(dnsModules)],
     ([distro, module]) =>
       Effect.runSync(
         Effect.gen(function* () {
           const candidate = { ..._forDistro(distro), dns: { ...realDns, module } }
           const result = yield* Effect.result(decodeConfig(candidate))
-          return result._tag === "Success"
+
+          return Result.isSuccess(result)
         })
       )
   )
 
-  it.prop("accepts dns.module: none with no zone/ttl/records on every distro", [fc.constantFrom(...distros)], ([
+  it.prop("accepts dns.module: none with no zone/ttl/records on every distro", [Schema.Literals(distros)], ([
     distro
   ]) =>
     Effect.runSync(
       Effect.gen(function* () {
         const candidate = { ..._forDistro(distro), dns: { module: "none" as const } }
         const result = yield* Effect.result(decodeConfig(candidate))
-        return result._tag === "Success"
+
+        return Result.isSuccess(result)
       })
     ))
 
   it.prop(
     "rejects the unimplemented designate module on every distro",
-    [fc.constantFrom(...distros)],
+    [Schema.Literals(distros)],
     ([distro]) =>
       Effect.runSync(
         Effect.gen(function* () {
           const candidate = { ..._forDistro(distro), dns: { ...realDns, module: "designate" } }
           const failure = yield* Effect.flip(decodeConfig(candidate))
-          return failure._tag === "ConfigInvalid"
+
+          return Predicate.isTagged(failure, "ConfigInvalid")
         })
       )
   )
 
-  it.prop("rejects a real dns.module without a zone", [fc.constantFrom(...dnsModules)], ([module]) =>
+  it.prop("rejects a real dns.module without a zone", [Schema.Literals(dnsModules)], ([module]) =>
     Effect.runSync(
       Effect.gen(function* () {
         const { zone: _dropped, ...dns } = realDns
         const failure = yield* Effect.flip(decodeConfig({ ...validConfig, dns: { ...dns, module } }))
-        return failure._tag === "ConfigInvalid"
+
+        return Predicate.isTagged(failure, "ConfigInvalid")
       })
     ))
 })

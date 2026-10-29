@@ -1,7 +1,7 @@
 import { Effect, Layer, Redacted } from "effect"
 import { assert, it } from "@effect/vitest"
-import * as HttpClient from "effect/unstable/http/HttpClient"
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
+import * as HttpClient from "effect/http/HttpClient"
+import * as HttpClientResponse from "effect/http/HttpClientResponse"
 import { OvhAuth } from "../../src/auth/port.ts"
 import { OvhAuthLive } from "../../src/auth/live.ts"
 
@@ -10,10 +10,12 @@ const creds = { clientId: "id", clientSecret: Redacted.make("secret") }
 /** Fixture HttpClient: counts calls, replies with a fresh token each time (zero network). */
 const _fakeTransport = (expiresInSeconds: number) => {
   let calls = 0
+
   const layer = Layer.succeed(
     HttpClient.HttpClient,
     HttpClient.make((request) => {
       calls += 1
+
       return Effect.succeed(
         HttpClientResponse.fromWeb(
           request,
@@ -22,11 +24,13 @@ const _fakeTransport = (expiresInSeconds: number) => {
       )
     })
   )
+
   return { layer, callCount: () => calls }
 }
 
 it.effect("caches the token across calls within its expiry", () => {
   const transport = _fakeTransport(3600)
+
   return Effect.gen(function* () {
     const auth = yield* OvhAuth
     const first = yield* auth.token
@@ -39,6 +43,7 @@ it.effect("caches the token across calls within its expiry", () => {
 
 it.effect("refetches once the cached token is within the expiry skew window", () => {
   const transport = _fakeTransport(30) // < 60s skew — every call should refetch
+
   return Effect.gen(function* () {
     const auth = yield* OvhAuth
     const first = yield* auth.token
@@ -58,6 +63,7 @@ it.live("wraps a persistent token-endpoint failure as AuthenticationFailed", () 
     HttpClient.make((request) =>
       Effect.succeed(HttpClientResponse.fromWeb(request, new Response("forbidden", { status: 403 }))))
   )
+
   return Effect.gen(function* () {
     const auth = yield* OvhAuth
     const result = yield* Effect.flip(auth.token)

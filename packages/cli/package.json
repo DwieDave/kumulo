@@ -72,11 +72,11 @@
     "@effect/platform-node": "catalog:"
   },
   "devDependencies": {
-    "@effect/vitest": "catalog:",
-    "vitest": "catalog:",
-    "effect": "catalog:",
+    "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
-    "@effect/platform-bun": "catalog:"
+    "@effect/vitest": "catalog:",
+    "effect": "catalog:",
+    "vitest": "catalog:"
   },
   "scripts": {
     "build": "bash ../../scripts/build-package.sh src/main.ts",

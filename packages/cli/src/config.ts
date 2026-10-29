@@ -12,5 +12,6 @@ export const loadConfig = (
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const text = yield* fs.readFileString(path)
+
     return yield* parseConfigYaml(text)
   })

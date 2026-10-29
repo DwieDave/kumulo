@@ -1,19 +1,22 @@
 import { it } from "@effect/vitest"
-import { Effect } from "effect"
-import * as fc from "effect/testing/FastCheck"
+import { Effect, Schema } from "effect"
 import { convert } from "../src/convert.ts"
 import type { OvhModel, OvhSchema } from "../src/domain.ts"
 
-const _propName = fc.stringMatching(/^[a-z][a-zA-Z0-9]{0,8}$/)
-const _primitiveType = fc.constantFrom("string", "boolean", "long", "integer", "float", "double")
+const _propName = Schema.String.check(Schema.isPattern(/^[a-z][a-zA-Z0-9]{0,8}$/))
+const _primitiveType = Schema.Literals(["string", "boolean", "long", "integer", "float", "double"])
+const _property = Schema.Struct({ fullType: _primitiveType, required: Schema.Boolean })
+const _schemaFields = Schema.Record(_propName, Schema.Record(_propName, _property))
 
-const _objectModel: fc.Arbitrary<OvhModel> = fc
-  .dictionary(_propName, fc.record({ fullType: _primitiveType, required: fc.boolean() }), { maxKeys: 5 })
-  .map((properties): OvhModel => ({ id: "M", namespace: "x", properties }))
-
-const _schemaArb: fc.Arbitrary<OvhSchema> = fc
-  .dictionary(_propName.map((n: string) => `x.${n}`), _objectModel, { maxKeys: 5 })
-  .map((models): OvhSchema => ({ apis: [], models }))
+const _toSchema = (fields: typeof _schemaFields.Type): OvhSchema => ({
+  apis: [],
+  models: Object.fromEntries(
+    Object.entries(fields).map(([name, properties]): [string, OvhModel] => [
+      `x.${name}`,
+      { id: "M", namespace: "x", properties }
+    ])
+  )
+})
 
 const _reorderKeys = (schema: OvhSchema): OvhSchema => ({
   ...schema,
@@ -27,10 +30,12 @@ const _reorderKeys = (schema: OvhSchema): OvhSchema => ({
 
 it.prop(
   "converting structurally-equal schemas with different key insertion order yields byte-identical JSON",
-  [_schemaArb],
-  ([schema]) => {
+  [_schemaFields],
+  ([fields]) => {
+    const schema = _toSchema(fields)
     const original = JSON.stringify(Effect.runSync(convert(schema)))
     const reordered = JSON.stringify(Effect.runSync(convert(_reorderKeys(schema))))
+
     return original === reordered
   }
 )

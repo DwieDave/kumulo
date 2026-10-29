@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import * as Schema from "effect/Schema"
-import type * as HttpClient from "effect/unstable/http/HttpClient"
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
+import type * as HttpClient from "effect/http/HttpClient"
+import * as HttpClientRequest from "effect/http/HttpClientRequest"
 import { decodeOn2xx } from "./common.ts"
 import type { UpcloudRawError } from "./common.ts"
 
@@ -10,6 +10,7 @@ export const Zone = Schema.Struct({
   description: Schema.optionalKey(Schema.String),
   public: Schema.optionalKey(Schema.String)
 })
+
 export type Zone = typeof Zone.Type
 
 const _ZonesResponse = Schema.Struct({ zones: Schema.Struct({ zone: Schema.Array(Zone) }) })

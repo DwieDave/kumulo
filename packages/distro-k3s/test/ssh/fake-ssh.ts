@@ -24,11 +24,14 @@ export const flakyThenOk = (
   failures: number
 ): (host: SshHost, command: string) => Effect.Effect<string, SshCommandError> => {
   let calls = 0
+
   // kumulo: Effect.suspend is required — without it the call counter ticks once at construction, not per retry.
   return (host, command) =>
     Effect.suspend(() => {
       calls += 1
+
       if (calls <= failures) return Effect.fail(new SshCommandError({ host: host.ip, command, cause: "not ready" }))
+
       return Effect.succeed("ok")
     })
 }

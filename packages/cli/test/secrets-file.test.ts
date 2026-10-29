@@ -1,7 +1,7 @@
 import { resolve } from "node:path"
 import { assert, describe, it } from "@effect/vitest"
 import { ConfigProvider, Effect, Redacted, Sink, Stream } from "effect"
-import { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/unstable/process"
+import { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/process"
 import { requiredEnv, requiredRedactedEnv } from "../src/env.ts"
 import { resolveSecretsFile, secretsConfigProvider } from "../src/secrets-file.ts"
 
@@ -71,6 +71,7 @@ describe("secretsConfigProvider", () => {
       const secret = yield* requiredRedactedEnv("KUMULO_TEST_HCLOUD_TOKEN").pipe(
         _withSecretsFile({ file: "secrets.yaml", stdout: `{"KUMULO_TEST_HCLOUD_TOKEN":"from-sops"}` })
       )
+
       assert.strictEqual(Redacted.value(secret), "from-sops")
       assert.notMatch(String(secret), /from-sops/)
     }))
@@ -78,9 +79,11 @@ describe("secretsConfigProvider", () => {
   it.effect("prefers the real env var over the secrets file (R3)", () =>
     Effect.gen(function*() {
       process.env.KUMULO_TEST_OVH_CLIENT_ID = "from-env"
+
       const value = yield* requiredEnv("KUMULO_TEST_OVH_CLIENT_ID").pipe(
         _withSecretsFile({ file: "secrets.yaml", stdout: `{"KUMULO_TEST_OVH_CLIENT_ID":"from-sops"}` })
       ).pipe(Effect.ensuring(Effect.sync(() => { delete process.env.KUMULO_TEST_OVH_CLIENT_ID })))
+
       assert.strictEqual(value, "from-env")
     }))
 
@@ -90,6 +93,7 @@ describe("secretsConfigProvider", () => {
         _withSecretsFile({ file: "secrets.yaml", stdout: `{"OTHER":"x"}` }),
         Effect.flip
       )
+
       assert.strictEqual(failure._tag, "AuthenticationFailed")
       assert.match(failure.hint, /missing required env var KUMULO_TEST_ABSENT/)
     }))
@@ -100,6 +104,7 @@ describe("secretsConfigProvider", () => {
         _withSecretsFile({ file: "secrets.yaml", stderr: "Error: no key could decrypt\n", exitCode: 1 }),
         Effect.flip
       )
+
       assert.strictEqual(failure._tag, "AuthenticationFailed")
       assert.match(failure.hint, /no key could decrypt/)
       assert.include(failure.hint, resolve("secrets.yaml"))

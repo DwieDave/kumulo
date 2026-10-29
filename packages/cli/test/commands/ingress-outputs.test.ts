@@ -11,6 +11,7 @@ const _ingress = { load_balancer_id: "lb-1", floating_ip: "203.0.113.1" }
 
 const _store = () => {
   const files = new Map<string, string>()
+
   return {
     read: () => files.get(_path) ?? "",
     layer: layerNoop({
@@ -23,21 +24,25 @@ const _store = () => {
 
 it.effect("records the LB id and floating IP in <cluster>.outputs.yaml", () => {
   const store = _store()
+
   return Effect.gen(function*() {
     yield* recordIngressOutputs({ config: _config, configDir: "/cfg", ingress: _ingress })
     const text = store.read()
     assert.deepStrictEqual((yield* parseOutputsYaml(text)).ingress, _ingress)
+
     for (const secret of ["accessKey", "secretKey", "password", "token"]) assert.notInclude(text, secret)
   }).pipe(Effect.provide(store.layer))
 })
 
 it.effect("preserves volume ids the volumes step already recorded", () => {
   const store = _store()
+
   return Effect.gen(function*() {
     const seeded = upsertVolume({
       file: { cluster: _config.name, volumes: [] },
       volume: { name: "data", id: "vol-1", retain: true }
     })
+
     yield* writeOutputs({ dir: "/cfg", file: seeded })
     yield* recordIngressOutputs({ config: _config, configDir: "/cfg", ingress: _ingress })
     const file = yield* parseOutputsYaml(store.read())

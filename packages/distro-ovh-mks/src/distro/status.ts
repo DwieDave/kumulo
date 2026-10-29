@@ -15,10 +15,12 @@ export interface StatusPollOptions<Status> {
 export const pollUntil = <Status>(options: StatusPollOptions<Status>): Effect.Effect<Status, MksError> =>
   Effect.gen(function*() {
     const last = yield* Ref.make<Status | undefined>(undefined)
+
     const polled = options.check.pipe(
       Effect.tap((status) => Ref.set(last, status)),
       Effect.repeat({ until: options.isDone, schedule: Schedule.spaced(options.interval) })
     )
+
     return yield* polled.pipe(
       Effect.timeoutOrElse({
         duration: options.timeout,

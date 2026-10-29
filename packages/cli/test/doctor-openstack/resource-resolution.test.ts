@@ -18,6 +18,7 @@ it.effect("fails with an actionable message when the flavor can't be resolved", 
       ref: "b3-64",
       resolve: Effect.fail(new ResourceNotFound({ kind: "flavor", ref: "b3-64" }))
     })
+
     const result = yield* check.run
     assert.strictEqual(result.status, "fail")
     assert.match(result.message, /b3-64/)

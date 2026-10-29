@@ -8,11 +8,12 @@ import { assert, describe, it } from "@effect/vitest"
 const _mainTs = fileURLToPath(new URL("../src/main.ts", import.meta.url))
 const _configFixture = fileURLToPath(new URL("../../../examples/ovh-mks.yaml", import.meta.url))
 
-const _fixture = (sopsScript: string): { readonly dir: string; readonly secretsFile: string } => {
+const _fixture = (sopsScript: string) => {
   const dir = mkdtempSync(join(tmpdir(), "kumulo-sops-smoke-"))
   writeFileSync(join(dir, "sops"), sopsScript, { mode: 0o755 })
   const secretsFile = join(dir, "secrets.yaml")
   writeFileSync(secretsFile, "")
+
   return { dir, secretsFile }
 }
 
@@ -25,9 +26,10 @@ const _run = (
 ): string => {
   const result = spawnSync(
     process.execPath,
-    ["--experimental-strip-types", "--no-warnings", _mainTs, ...args],
+    ["--conditions=source", "--experimental-strip-types", "--no-warnings", _mainTs, ...args],
     { env, encoding: "utf8", timeout: 30_000 }
   )
+
   return `${result.stdout}${result.stderr}`
 }
 
@@ -41,10 +43,12 @@ describe("kumulo --secrets-file subprocess smoke", () => {
   it("feeds credential layer builds from the sops provider (broken file surfaces the sops error)", () => {
     const { dir, secretsFile } = _fixture("#!/bin/sh\necho 'Error: no key could decrypt' >&2\nexit 1\n")
     const env = _cleanEnv()
+
     const output = _run(
       ["apply", "--secrets-file", secretsFile, _configFixture],
       { ...env, PATH: `${dir}:${env.PATH ?? ""}` }
     )
+
     assert.include(output, "no key could decrypt")
     assert.notInclude(output, "missing required env var")
   })

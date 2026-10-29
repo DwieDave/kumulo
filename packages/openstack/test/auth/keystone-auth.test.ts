@@ -1,7 +1,8 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Effect, Exit, Layer } from "effect"
-import { HttpClient, HttpClientResponse } from "effect/unstable/http"
-import type { HttpClientRequest } from "effect/unstable/http"
+import { Effect, Exit, Layer, Predicate } from "effect"
+import type { Schema } from "effect"
+import { HttpClient, HttpClientResponse } from "effect/http"
+import type { HttpClientRequest } from "effect/http"
 import { KeystoneAuth, KeystoneAuthLive } from "../../src/auth/keystone-auth.ts"
 import type { ApplicationCredentialAuth } from "../../src/auth/credentials.ts"
 
@@ -38,28 +39,34 @@ interface FakeClient {
 
 const _fakeKeystone = (handler: (request: HttpClientRequest.HttpClientRequest, call: number) => Response): FakeClient => {
   let calls = 0
+
   const client = HttpClient.make((request) => {
     calls += 1
+
     return Effect.succeed(HttpClientResponse.fromWeb(request, handler(request, calls)))
   })
+
   return { client, callCount: () => calls }
 }
 
 const _layerFor = (fake: FakeClient, skewMs?: number) =>
   Layer.provide(KeystoneAuthLive({ credentials, skewMs }), Layer.succeed(HttpClient.HttpClient, fake.client))
 
-const _jsonBody = (request: HttpClientRequest.HttpClientRequest): unknown =>
-  request.body._tag === "Uint8Array" ? JSON.parse(new TextDecoder().decode(request.body.body)) : undefined
+const _jsonBody = (request: HttpClientRequest.HttpClientRequest): Schema.Json | undefined =>
+  Predicate.isTagged(request.body, "Uint8Array") ? JSON.parse(new TextDecoder().decode(request.body.body)) : undefined
 
 describe("KeystoneAuthLive", () => {
   // token requestBody has no `required` in the spec, so the encoder can silently emit an empty body -> real Keystone 400s
   it.effect("sends the application-credential body, not an empty request", () => {
     const farFuture = new Date(Date.now() + 3_600_000).toISOString()
     let sent: unknown = undefined
+
     const fake = _fakeKeystone((request) => {
       sent = _jsonBody(request)
+
       return _okResponse(farFuture)
     })
+
     return Effect.gen(function*() {
       yield* (yield* KeystoneAuth).token
       expect(sent).toEqual({
@@ -76,6 +83,7 @@ describe("KeystoneAuthLive", () => {
   it.effect("issues a token once and reuses it while valid", () => {
     const farFuture = new Date(Date.now() + 3_600_000).toISOString()
     const fake = _fakeKeystone(() => _okResponse(farFuture))
+
     return Effect.gen(function*() {
       const auth = yield* KeystoneAuth
       const first = yield* auth.token
@@ -89,6 +97,7 @@ describe("KeystoneAuthLive", () => {
   it.effect("re-issues once expired past the skew window", () => {
     const soon = new Date(Date.now() + 30_000).toISOString()
     const fake = _fakeKeystone(() => _okResponse(soon))
+
     return Effect.gen(function*() {
       const auth = yield* KeystoneAuth
       yield* auth.token
@@ -100,6 +109,7 @@ describe("KeystoneAuthLive", () => {
   it.effect("invalidate forces a re-issue on the next token request", () => {
     const farFuture = new Date(Date.now() + 3_600_000).toISOString()
     const fake = _fakeKeystone(() => _okResponse(farFuture))
+
     return Effect.gen(function*() {
       const auth = yield* KeystoneAuth
       yield* auth.token
@@ -112,6 +122,7 @@ describe("KeystoneAuthLive", () => {
   it.effect("resolves a service-catalog endpoint by service and region", () => {
     const farFuture = new Date(Date.now() + 3_600_000).toISOString()
     const fake = _fakeKeystone(() => _okResponse(farFuture))
+
     return Effect.gen(function*() {
       const auth = yield* KeystoneAuth
       const url = yield* auth.endpoint({ service: "compute", region: "gra" })
@@ -121,10 +132,13 @@ describe("KeystoneAuthLive", () => {
 
   it("fails with AuthenticationFailed when keystone returns a non-2xx status", async () => {
     const fake = _fakeKeystone(() => new Response("nope", { status: 401 }))
+
     const program = Effect.gen(function*() {
       const auth = yield* KeystoneAuth
+
       return yield* auth.token
     }).pipe(Effect.provide(_layerFor(fake)))
+
     const exit = await Effect.runPromiseExit(program)
     expect(Exit.isFailure(exit)).toBe(true)
   })

@@ -1,3 +1,4 @@
+import { PlanAction } from "@kumulo/core"
 import { assert, it } from "@effect/vitest"
 import { decodeUpcloudTestConfig } from "../fixtures.ts"
 import { validUpcloudUksConfig } from "../config/fixtures.ts"
@@ -33,8 +34,8 @@ const _withBuckets = decodeUpcloudTestConfig({
 it("plans Create for a managed volume with no matching live storage", () => {
   const actions = volumePlanActions({ config: _withVolumes, live: [] })
   assert.deepStrictEqual(actions, [
-    { _tag: "Create", name: uksVolumeRow("data") },
-    { _tag: "Create", name: uksVolumeRow("kept") }
+    PlanAction.Create({ name: uksVolumeRow("data") }),
+    PlanAction.Create({ name: uksVolumeRow("kept") })
   ])
 })
 
@@ -43,9 +44,10 @@ it("plans NoOp for a managed volume whose live tier matches", () => {
     config: _withVolumes,
     live: [{ name: "data", tier: "maxiops" }, { name: "kept", tier: "standard" }]
   })
+
   assert.deepStrictEqual(actions, [
-    { _tag: "NoOp", name: uksVolumeRow("data") },
-    { _tag: "NoOp", name: uksVolumeRow("kept") }
+    PlanAction.NoOp({ name: uksVolumeRow("data") }),
+    PlanAction.NoOp({ name: uksVolumeRow("kept") })
   ])
 })
 
@@ -53,22 +55,25 @@ it("refuses a changed tier as ReplaceNeedsConfirm, not a silent NoOp/Update", ()
   const actions = volumePlanActions({ config: _withVolumes, live: [{ name: "data", tier: "standard" }, { name: "kept", tier: "standard" }] })
   const drift = actions.find((a) => a.name === uksVolumeRow("data"))
   assert.strictEqual(drift?._tag, "ReplaceNeedsConfirm")
+
   if (drift?._tag === "ReplaceNeedsConfirm") assert.include(drift.reason, "immutable")
 })
 
 it("plans Create for a configured bucket with no live match, NoOp when it exists", () => {
   const noLive = bucketPlanActions({ config: _withBuckets, live: [] })
   assert.deepStrictEqual(noLive, [
-    { _tag: "Create", name: uksBucketRow("logs") },
-    { _tag: "Create", name: uksBucketRow("backups") }
+    PlanAction.Create({ name: uksBucketRow("logs") }),
+    PlanAction.Create({ name: uksBucketRow("backups") })
   ])
+
   const withLive = bucketPlanActions({
     config: _withBuckets,
     live: [{ name: "logs", region: "europe-1", endpoint: "logs.example" }, { name: "backups", region: "europe-1", endpoint: "backups.example" }]
   })
+
   assert.deepStrictEqual(withLive, [
-    { _tag: "NoOp", name: uksBucketRow("logs") },
-    { _tag: "NoOp", name: uksBucketRow("backups") }
+    PlanAction.NoOp({ name: uksBucketRow("logs") }),
+    PlanAction.NoOp({ name: uksBucketRow("backups") })
   ])
 })
 
@@ -78,6 +83,7 @@ it("buildUpcloudPlan appends volume and bucket rows to the cluster plan", () => 
     object_storage: _withBuckets.object_storage,
     secrets: _withBuckets.secrets
   })
+
   const inventory: UpcloudInventory = { clusterExists: false, nodeGroups: [], networkExists: false }
   const plan = buildUpcloudPlan({ config, inventory })
   const names = plan.actions.map((a) => a.name)
@@ -91,16 +97,18 @@ it("upcloudDeletePlanActions orders buckets and volumes ahead of the cluster row
     object_storage: _withBuckets.object_storage,
     secrets: _withBuckets.secrets
   })
+
   const bucketRows = config.object_storage.module === "upcloud"
     ? config.object_storage.buckets.map((b) =>
       b.retain
-        ? { _tag: "NoOp" as const, name: `${uksBucketRow(b.name)} (retained)` }
-        : { _tag: "Delete" as const, name: uksBucketRow(b.name) }
+        ? PlanAction.NoOp({ name: `${uksBucketRow(b.name)} (retained)` })
+        : PlanAction.Delete({ name: uksBucketRow(b.name) })
     )
     : []
+
   assert.deepStrictEqual(bucketRows, [
-    { _tag: "Delete", name: uksBucketRow("logs") },
-    { _tag: "NoOp", name: `${uksBucketRow("backups")} (retained)` }
+    PlanAction.Delete({ name: uksBucketRow("logs") }),
+    PlanAction.NoOp({ name: `${uksBucketRow("backups")} (retained)` })
   ])
   assert.isTrue(uksClusterRow(config.name).startsWith("uks-cluster/"))
 })

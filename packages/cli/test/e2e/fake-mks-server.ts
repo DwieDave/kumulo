@@ -1,7 +1,7 @@
-import { Effect } from "effect"
-import * as HttpClient from "effect/unstable/http/HttpClient"
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
+import { Effect, Predicate } from "effect"
+import * as HttpClient from "effect/http/HttpClient"
+import * as HttpClientRequest from "effect/http/HttpClientRequest"
+import * as HttpClientResponse from "effect/http/HttpClientResponse"
 
 const _baseUrl = "https://fixture.invalid"
 
@@ -14,6 +14,7 @@ interface FakeCluster {
   nodesSubnetId?: string
   loadBalancersSubnetId?: string
 }
+
 interface FakeTemplate {
   readonly metadata: {
     readonly annotations: { readonly [key: string]: string }
@@ -22,6 +23,7 @@ interface FakeTemplate {
   }
   readonly spec: { readonly taints: ReadonlyArray<unknown>; readonly unschedulable: boolean }
 }
+
 interface FakeBody {
   readonly name?: string
   readonly flavorName?: string
@@ -37,6 +39,7 @@ interface FakeBody {
   readonly nodesSubnetId?: string
   readonly loadBalancersSubnetId?: string
 }
+
 interface FakePool {
   id: string
   projectId: string
@@ -71,6 +74,7 @@ export const makeFakeMksServer = (
 
   const _create = (name: string, body: FakeBody) => {
     const id = `kube-${nextId++}`
+
     const cluster: FakeCluster = {
       id,
       name,
@@ -80,8 +84,10 @@ export const makeFakeMksServer = (
       nodesSubnetId: body.nodesSubnetId,
       loadBalancersSubnetId: body.loadBalancersSubnetId
     }
+
     clusters.set(id, cluster)
     pools.set(id, new Map())
+
     return cluster
   }
 
@@ -90,41 +96,56 @@ export const makeFakeMksServer = (
 
   const _handle = (request: HttpClientRequest.HttpClientRequest, body: FakeBody | undefined): Response => {
     const path = new URL(request.url).pathname
+
     if (path.match(/^\/cloud\/project\/[^/]+\/vrack$/) && request.method === "GET") {
       return vrackId === null ? new Response(JSON.stringify({ message: "not found" }), { status: 404 }) : _json({ id: vrackId })
     }
+
     if (path.match(/^\/cloud\/project\/[^/]+\/region\/[^/]+\/network\/[^/]+\/subnet\/[^/]+\/gateway$/) && request.method === "POST") {
       gateways.push({ model: body?.model ?? "", name: body?.name ?? "" })
+
       return _json({ id: "op-gateway-1", status: "completed" })
     }
+
     const kubeMatch = path.match(/^\/cloud\/project\/[^/]+\/kube$/)
+
     if (kubeMatch && request.method === "GET") return _json([...clusters.keys()])
+
     if (kubeMatch && request.method === "POST") {
       if (body === undefined) return _badRequest("cluster create sent an empty body")
       const name = body.name ?? ""
       const existing = [...clusters.values()].find((cluster) => cluster.name === name)
+
       return _json(existing ?? _create(name, body))
     }
 
     const idMatch = path.match(/^\/cloud\/project\/[^/]+\/kube\/([^/]+)$/)
+
     if (idMatch && request.method === "GET") return _json(clusters.get(idMatch[1] ?? ""))
+
     if (idMatch && request.method === "DELETE") {
       clusters.delete(idMatch[1] ?? "")
       pools.delete(idMatch[1] ?? "")
+
       // Delete op matches HTTP 200 only (OVH's actual contract), not 204.
       return new Response(null, { status: 200 })
     }
 
     const kubeconfigMatch = path.match(/^\/cloud\/project\/[^/]+\/kube\/([^/]+)\/kubeconfig$/)
+
     if (kubeconfigMatch && request.method === "POST") return _json({ content: "apiVersion: v1\nkind: Config\n" })
 
     const poolListMatch = path.match(/^\/cloud\/project\/[^/]+\/kube\/([^/]+)\/nodepool$/)
+
     if (poolListMatch && request.method === "GET") return _json([...(pools.get(poolListMatch[1] ?? "")?.values() ?? [])])
+
     if (poolListMatch && request.method === "POST") {
       if (body === undefined) return _badRequest("nodepool create sent an empty body")
+
       if (body.flavorName === undefined) return _badRequest("nodepool create is missing the required flavorName")
       const id = `pool-${nextId++}`
       const desiredNodes = body.desiredNodes ?? 0
+
       const pool: FakePool = {
         id,
         projectId: "service-1",
@@ -145,15 +166,20 @@ export const makeFakeMksServer = (
         createdAt: _timestamp,
         updatedAt: _timestamp
       }
+
       pools.get(poolListMatch[1] ?? "")?.set(id, pool)
+
       return _json(pool)
     }
 
     const poolIdMatch = path.match(/^\/cloud\/project\/[^/]+\/kube\/([^/]+)\/nodepool\/([^/]+)$/)
+
     if (poolIdMatch && request.method === "PUT") {
       const [, kubeId, poolId] = poolIdMatch
+
       if (body === undefined) return _badRequest("nodepool update sent an empty body")
       const pool = pools.get(kubeId ?? "")?.get(poolId ?? "")
+
       if (pool) {
         pool.desiredNodes = body.desiredNodes ?? pool.desiredNodes
         pool.minNodes = body.minNodes ?? pool.minNodes
@@ -164,11 +190,14 @@ export const makeFakeMksServer = (
         pool.upToDateNodes = pool.desiredNodes
         pool.updatedAt = _timestamp
       }
+
       return _json(pool)
     }
+
     if (poolIdMatch && request.method === "DELETE") {
       const [, kubeId, poolId] = poolIdMatch
       pools.get(kubeId ?? "")?.delete(poolId ?? "")
+
       return new Response(null, { status: 200 })
     }
 
@@ -177,18 +206,21 @@ export const makeFakeMksServer = (
 
   return { clusters, pools, gateways, httpClient: _fixtureHttpClient(_handle) }
 
-  function _fixtureHttpClient(handle: (request: HttpClientRequest.HttpClientRequest, body: FakeBody | undefined) => Response) {
-    return HttpClient.make((request) =>
-      Effect.gen(function*() {
-        const text = yield* _bodyText(request)
-        const body: FakeBody | undefined = text.length === 0 ? undefined : JSON.parse(text)
-        return HttpClientResponse.fromWeb(request, handle(request, body))
-      })
-    ).pipe(HttpClient.mapRequest(HttpClientRequest.prependUrl(_baseUrl)))
-  }
 }
 
-const _json = (value: unknown): Response => new Response(JSON.stringify(value), { status: 200 })
+const _json = <A>(value: A): Response => new Response(JSON.stringify(value), { status: 200 })
 
 const _bodyText = (request: HttpClientRequest.HttpClientRequest): Effect.Effect<string> =>
-  request.body._tag === "Uint8Array" ? Effect.succeed(new TextDecoder().decode(request.body.body)) : Effect.succeed("")
+  Predicate.isTagged(request.body, "Uint8Array") ? Effect.succeed(new TextDecoder().decode(request.body.body)) : Effect.succeed("")
+
+const _fixtureHttpClient = (
+  handle: (request: HttpClientRequest.HttpClientRequest, body: FakeBody | undefined) => Response
+) =>
+  HttpClient.make((request) =>
+    Effect.gen(function*() {
+      const text = yield* _bodyText(request)
+      const body: FakeBody | undefined = text.length === 0 ? undefined : JSON.parse(text)
+
+      return HttpClientResponse.fromWeb(request, handle(request, body))
+    })
+  ).pipe(HttpClient.mapRequest(HttpClientRequest.prependUrl(_baseUrl)))

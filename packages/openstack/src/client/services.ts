@@ -1,6 +1,6 @@
 // one module rather than five two-line files; split per service the day one of them needs more than a base URL.
 import { Effect } from "effect"
-import { HttpApiClient } from "effect/unstable/httpapi"
+import { HttpApiClient } from "effect/http-api"
 import { KeystoneAuth } from "../auth/keystone-auth.ts"
 import { Glance } from "../generated/glance.ts"
 import { Neutron } from "../generated/neutron.ts"
@@ -12,6 +12,7 @@ const _base = (service: string, region: string) =>
   Effect.gen(function*() {
     const auth = yield* KeystoneAuth
     const url = yield* auth.endpoint({ service, region })
+
     return url.replace(/\/+$/, "")
   })
 

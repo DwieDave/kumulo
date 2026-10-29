@@ -1,7 +1,7 @@
-import { Effect } from "effect"
-import * as HttpClient from "effect/unstable/http/HttpClient"
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
+import { Effect, Predicate } from "effect"
+import * as HttpClient from "effect/http/HttpClient"
+import * as HttpClientRequest from "effect/http/HttpClientRequest"
+import * as HttpClientResponse from "effect/http/HttpClientResponse"
 
 interface FakeCluster {
   id: string
@@ -79,14 +79,27 @@ interface UpdatePoolBody {
 // undefined here is a 400, not a silent success — the empty-body case every prior fake missed
 const _bodyOf = <Body>(request: HttpClientRequest.HttpClientRequest): Body | undefined => {
   const body = request.body
-  if (body._tag !== "Uint8Array") return undefined
+
+  if (!Predicate.isTagged(body, "Uint8Array")) return undefined
   const text = new TextDecoder().decode(body.body)
+
   if (text.length === 0) return undefined
   const parsed: Body = JSON.parse(text)
+
   return parsed
 }
 
 const _badRequest = (message: string): Response => new Response(JSON.stringify({ message }), { status: 400 })
+
+const _handleUpdate = (request: HttpClientRequest.HttpClientRequest): Response => {
+  const payload = _bodyOf<{ readonly strategy?: string }>(request)
+
+  if (payload === undefined) return _badRequest("cluster update sent an empty body")
+
+  if (payload.strategy === undefined) return _badRequest("cluster update is missing the required strategy")
+
+  return new Response(null, { status: 200 })
+}
 
 export const makeFakeMksServer = (options: { readonly readyAfterPolls?: number } = {}) => {
   const readyAfterPolls = options.readyAfterPolls ?? 2
@@ -97,10 +110,14 @@ export const makeFakeMksServer = (options: { readonly readyAfterPolls?: number }
 
   const _handleKube = (request: HttpClientRequest.HttpClientRequest, parts: ReadonlyArray<string>): Response | undefined => {
     if (parts.length !== 4) return undefined
+
     if (request.method === "GET") return new Response(JSON.stringify([...clusters.keys()]), { status: 200 })
+
     if (request.method === "POST") {
       const payload = _bodyOf<CreateClusterBody>(request)
+
       if (payload === undefined) return _badRequest("cluster create sent an empty body")
+
       if (payload.region === undefined) return _badRequest("cluster create is missing the required region")
       const id = freshId("kube")
       clusters.set(id, {
@@ -116,23 +133,31 @@ export const makeFakeMksServer = (options: { readonly readyAfterPolls?: number }
         loadBalancersSubnetId: payload.loadBalancersSubnetId
       })
       pools.set(id, new Map())
+
       return new Response(JSON.stringify(clusters.get(id)), { status: 200 })
     }
+
     return undefined
   }
 
   const _handleKubeId = (request: HttpClientRequest.HttpClientRequest, kubeId: string): Response | undefined => {
     if (request.method === "GET") {
       const cluster = clusters.get(kubeId)
+
       if (!cluster) return new Response(JSON.stringify({ message: "not found" }), { status: 404 })
+
       if (cluster.pollsRemaining > 0) cluster.pollsRemaining -= 1
       else cluster.status = "READY"
+
       return new Response(JSON.stringify(cluster), { status: 200 })
     }
+
     if (request.method === "DELETE") {
       clusters.delete(kubeId)
+
       return new Response(null, { status: 200 })
     }
+
     return undefined
   }
 
@@ -144,12 +169,16 @@ export const makeFakeMksServer = (options: { readonly readyAfterPolls?: number }
     if (rest.length === 1 && request.method === "GET") {
       return new Response(JSON.stringify([...(pools.get(kubeId)?.values() ?? [])]), { status: 200 })
     }
+
     if (rest.length === 1 && request.method === "POST") {
       const payload = _bodyOf<CreatePoolBody>(request)
+
       if (payload === undefined) return _badRequest("nodepool create sent an empty body")
+
       if (payload.flavorName === undefined) return _badRequest("nodepool create is missing the required flavorName")
       const id = freshId("pool")
       const desiredNodes = payload.desiredNodes ?? 0
+
       const pool: FakePool = {
         id,
         projectId: "service-1",
@@ -170,29 +199,32 @@ export const makeFakeMksServer = (options: { readonly readyAfterPolls?: number }
         createdAt: _timestamp,
         updatedAt: _timestamp
       }
+
       pools.get(kubeId)?.set(id, pool)
+
       return new Response(JSON.stringify(pool), { status: 200 })
     }
+
     const poolId = rest[1]
+
     if (rest.length === 2 && poolId !== undefined && request.method === "PUT") {
       const payload = _bodyOf<UpdatePoolBody>(request)
+
       if (payload === undefined) return _badRequest("nodepool update sent an empty body")
       const pool = pools.get(kubeId)?.get(poolId)
+
       if (pool) Object.assign(pool, payload, { updatedAt: _timestamp })
+
       return new Response(null, { status: 200 })
     }
+
     if (rest.length === 2 && poolId !== undefined && request.method === "DELETE") {
       pools.get(kubeId)?.delete(poolId)
+
       return new Response(null, { status: 200 })
     }
-    return undefined
-  }
 
-  const _handleUpdate = (request: HttpClientRequest.HttpClientRequest): Response => {
-    const payload = _bodyOf<{ readonly strategy?: string }>(request)
-    if (payload === undefined) return _badRequest("cluster update sent an empty body")
-    if (payload.strategy === undefined) return _badRequest("cluster update is missing the required strategy")
-    return new Response(null, { status: 200 })
+    return undefined
   }
 
   const _handle = (request: HttpClientRequest.HttpClientRequest): Response => {

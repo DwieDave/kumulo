@@ -1,4 +1,5 @@
 import { ResourceConflict } from "@kumulo/core"
+import { Data } from "effect"
 
 // network/version/region are immutable or update-restricted on OVH's side; drift here blocks instead of silently applying illegal changes.
 export interface MksClusterState {
@@ -17,17 +18,21 @@ export interface MksDesiredCluster {
   readonly loadBalancersSubnetId?: string | undefined
 }
 
-export type MksClusterDrift =
-  | { readonly _tag: "None" }
-  | { readonly _tag: "Upgrade"; readonly field: "version"; readonly from: string; readonly to: string }
-  | { readonly _tag: "Blocked"; readonly field: string; readonly reason: string }
+export type MksClusterDrift = Data.TaggedEnum<{
+  None: {}
+  Upgrade: { readonly field: "version"; readonly from: string; readonly to: string }
+  Blocked: { readonly field: string; readonly reason: string }
+}>
 
-const _NONE: MksClusterDrift = { _tag: "None" }
+export const MksClusterDrift = Data.taggedEnum<MksClusterDrift>()
 
-const _blocked = (field: string, reason: string): MksClusterDrift => ({ _tag: "Blocked", field, reason })
+const _NONE: MksClusterDrift = MksClusterDrift.None()
+
+const _blocked = (field: string, reason: string): MksClusterDrift => MksClusterDrift.Blocked({ field, reason })
 
 const _majorMinor = (version: string): readonly [number, number] | undefined => {
   const [major, minor] = version.replace(/^v/, "").split(".").map(Number)
+
   return major === undefined || minor === undefined || !Number.isInteger(major) || !Number.isInteger(minor)
     ? undefined
     : [major, minor]
@@ -40,13 +45,18 @@ const _versionDrift = (
 ): MksClusterDrift => {
   const from = _majorMinor(actual)
   const to = _majorMinor(desired)
+
   if (from === undefined || to === undefined) return _NONE
+
   if (from[0] === to[0] && from[1] === to[1]) return _NONE
   const move = `${_show(from)} → ${_show(to)}`
+
   if (from[0] !== to[0]) return _blocked("version", `cannot change the Kubernetes major version in place (${move})`)
+
   if (to[1] < from[1]) return _blocked("version", `cannot downgrade Kubernetes in place (${move})`)
+
   return to[1] === from[1] + 1
-    ? { _tag: "Upgrade", field: "version", from: _show(from), to: _show(to) }
+    ? MksClusterDrift.Upgrade({ field: "version", from: _show(from), to: _show(to) })
     : _blocked("version", `OVH upgrades one minor at a time; ${move} skips ${to[1] - from[1] - 1} — step through them`)
 }
 
@@ -69,7 +79,9 @@ const _networkDrift = (
 ): MksClusterDrift => {
   if (desired === undefined || actual === undefined) return _NONE
   const live = actual !== null && actual !== ""
+
   if (live === desired) return _NONE
+
   return _blocked(
     "network",
     desired
@@ -100,7 +112,8 @@ const _subnetDrift = (
     desired: desired.nodesSubnetId,
     slot: "nodes_subnet"
   })
-  return nodes._tag !== "None" ? nodes : _subnetSlotDrift({
+
+  return !MksClusterDrift.$is("None")(nodes) ? nodes : _subnetSlotDrift({
     actual: actual.loadBalancersSubnetId,
     desired: desired.loadBalancersSubnetId,
     slot: "load_balancers_subnet"
@@ -115,11 +128,15 @@ export const clusterDrift = (
   { actual, desired }: { readonly desired: MksDesiredCluster; readonly actual: MksClusterState }
 ): MksClusterDrift => {
   const network = _networkDrift({ actual: actual.privateNetworkId, desired: desired.privateNetwork })
-  if (network._tag !== "None") return network
+
+  if (!MksClusterDrift.$is("None")(network)) return network
   const subnets = _subnetDrift({ actual, desired })
-  if (subnets._tag !== "None") return subnets
+
+  if (!MksClusterDrift.$is("None")(subnets)) return subnets
   const region = _regionDrift({ actual: actual.region, desired: desired.region })
-  if (region._tag !== "None") return region
+
+  if (!MksClusterDrift.$is("None")(region)) return region
+
   return desired.version === undefined || actual.version === undefined
     ? _NONE
     : _versionDrift({ actual: actual.version, desired: desired.version })

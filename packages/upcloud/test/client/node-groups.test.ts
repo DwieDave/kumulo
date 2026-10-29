@@ -1,8 +1,9 @@
 import { Effect } from "effect"
+import type { Schema } from "effect"
 import { assert, it } from "@effect/vitest"
-import * as HttpClient from "effect/unstable/http/HttpClient"
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
+import * as HttpClient from "effect/http/HttpClient"
+import * as HttpClientRequest from "effect/http/HttpClientRequest"
+import * as HttpClientResponse from "effect/http/HttpClientResponse"
 import { makeNodeGroupsClient } from "../../src/client/node-groups.ts"
 import { capturedJson } from "./capture.ts"
 
@@ -13,7 +14,7 @@ const _rawHttpClient = (handle: (request: HttpClientRequest.HttpClientRequest) =
     HttpClient.mapRequest(HttpClientRequest.prependUrl(_fixtureBaseUrl))
   )
 
-const _fixtureHttpClient = (status: number, body: unknown) => _rawHttpClient(() => new Response(JSON.stringify(body), { status }))
+const _fixtureHttpClient = (status: number, body: Schema.Json) => _rawHttpClient(() => new Response(JSON.stringify(body), { status }))
 
 const _group = { name: "workers-ab12cd34", count: 3, plan: "2xCPU-4GB", state: "running" as const }
 
@@ -34,12 +35,15 @@ it.effect("decodes GET .../node-groups/{name} bare", () =>
 it.effect("PATCH only sends count (D8)", () =>
   Effect.gen(function*() {
     let captured: unknown
+
     const client = makeNodeGroupsClient(
       _rawHttpClient((request) => {
         captured = capturedJson(request)
+
         return new Response(JSON.stringify({ ..._group, count: 5 }), { status: 200 })
       })
     )
+
     const group = yield* client.patch("c1", "workers-ab12cd34", { count: 5 })
     assert.deepStrictEqual(captured, { count: 5 })
     assert.strictEqual(group.count, 5)
@@ -48,12 +52,15 @@ it.effect("PATCH only sends count (D8)", () =>
 it.effect("DELETE single node hits .../node-groups/{name}/{node}", () =>
   Effect.gen(function*() {
     let capturedPath: string | undefined
+
     const client = makeNodeGroupsClient(
       _rawHttpClient((request) => {
         capturedPath = request.url
+
         return new Response(null, { status: 204 })
       })
     )
+
     yield* client.deleteNode("c1", "workers-ab12cd34", "node-1")
     assert.strictEqual(capturedPath, `${_fixtureBaseUrl}/1.3/kubernetes/c1/node-groups/workers-ab12cd34/node-1`)
   }))

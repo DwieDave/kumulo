@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect"
-import type { HttpClient} from "effect/unstable/http";
-import { HttpClientRequest } from "effect/unstable/http"
+import type { HttpClient} from "effect/http";
+import { HttpClientRequest } from "effect/http"
 import type { DoctorCheck } from "../doctor/types.ts"
 import type { OpenStackEndpointResolver } from "./nova.ts"
 
@@ -56,6 +56,7 @@ export const quotaHeadroomCheck = (args: {
   run: args.limits.pipe(
     Effect.map((limits) => {
       const total = limits.totalInstancesUsed + args.plannedInstanceCount
+
       if (limits.maxTotalInstances >= 0 && total > limits.maxTotalInstances) {
         return {
           name: _name,
@@ -63,6 +64,7 @@ export const quotaHeadroomCheck = (args: {
           message: `Plan needs ${total} Nova instances (existing + planned), exceeding the quota of ${limits.maxTotalInstances}.`
         }
       }
+
       return { name: _name, status: "pass" as const, message: _passMessage(total, limits.maxTotalInstances) }
     })
   )

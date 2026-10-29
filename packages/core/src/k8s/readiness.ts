@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import { Exit, Schema } from "effect"
 import type { Duration , Effect} from "effect"
 import { pollUntil } from "../reconcile/poll.ts"
 import type { HttpTransportError, ProvisioningTimeout, ResourceNotFound } from "../errors/tagged.ts"
@@ -6,15 +6,17 @@ import type { K8sManifest } from "../domain/types.ts"
 import type { ResourceRef } from "./client.ts"
 
 // Missing/malformed status (e.g. brand-new Node) decodes to undefined conditions rather than failing.
-const _ConditionsShape = Schema.Struct({
+const _ConditionsFields = Schema.Struct({
   status: Schema.optional(Schema.Struct({
     conditions: Schema.optional(Schema.Array(Schema.Struct({ type: Schema.String, status: Schema.String })))
   }))
 })
 
 const _conditionStatus = (manifest: K8sManifest, type: string): string | undefined => {
-  const decoded = Schema.decodeUnknownExit(_ConditionsShape)(manifest)
-  if (decoded._tag !== "Success") return undefined
+  const decoded = Schema.decodeUnknownExit(_ConditionsFields)(manifest)
+
+  if (Exit.isFailure(decoded)) return undefined
+
   return decoded.value.status?.conditions?.find((c) => c.type === type)?.status
 }
 

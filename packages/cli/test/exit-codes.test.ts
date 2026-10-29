@@ -1,4 +1,4 @@
-import { Option, SchemaIssue } from "effect"
+import { SchemaIssue } from "effect"
 import { BadArgument, PlatformError } from "effect/PlatformError"
 import { assert, it } from "@effect/vitest"
 import { AddonInstallFailed, AuthenticationFailed, BootstrapFailed, BucketNotEmpty, CapabilityMissing, ConfigInvalid, HttpTransportError, PlanRejected, ProvisioningTimeout, ProviderApiError, QuotaExceeded, RateLimited, ResourceConflict, ResourceNotFound, ResponseDecodeError, SinkUnavailable } from "@kumulo/core"
@@ -12,7 +12,7 @@ const _samples: Record<KumuloErrorTag, KumuloError> = {
   HttpTransportError: new HttpTransportError({ cause: "ECONNRESET" }),
   ResponseDecodeError: new ResponseDecodeError({
     endpoint: "/flavors",
-    issue: new SchemaIssue.InvalidValue(Option.none(), { message: "missing field" })
+    issue: new SchemaIssue.InvalidValue(undefined, { message: "missing field" })
   }),
   AuthenticationFailed: new AuthenticationFailed({ hint: "bad token" }),
   QuotaExceeded: new QuotaExceeded({ resource: "instances", limit: 1, requested: 2 }),

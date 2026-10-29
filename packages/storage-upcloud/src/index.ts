@@ -9,4 +9,5 @@ export {
   makeUpcloudObjectStorageProvider,
   upcloudObjectStorageProviderLive
 } from "./provider/object-storage-provider.ts"
+
 export type { UpcloudObjectStorageOptions } from "./provider/object-storage-provider.ts"

@@ -1,4 +1,4 @@
-import { Effect } from "effect"
+import { Effect, Match, Predicate } from "effect"
 
 // module-level state, single CLI process only
 const _frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
@@ -22,12 +22,18 @@ let _rowsOffset = 0
 let _viewOn = false
 
 const _rowPrefix = (state: RowState): string =>
-  state === "running" ? `${_frames[_frame]} ` : state === "done" ? "\x1b[32m✓\x1b[0m " : "  "
+  Match.value(state).pipe(
+    Match.when("running", () => `${_frames[_frame]} `),
+    Match.when("done", () => "\x1b[32m✓\x1b[0m "),
+    Match.orElse(() => "  ")
+  )
 
 // cursor-up math assumes plan rows don't wrap, track wrapped heights if that bites
 const _renderRows = (): void => {
   let out = `\x1b[${_rows.length + _rowsOffset}A`
+
   for (const row of _rows) out += `${_erase}${_rowPrefix(row.state)}${row.text}\n`
+
   if (_rowsOffset > 0) out += `\x1b[${_rowsOffset}B\r`
   process.stdout.write(out)
 }
@@ -39,6 +45,7 @@ const _renderLine = (): void => {
 const _render = (): void => {
   _tick += 1
   _frame = (_frame + 1) % _frames.length
+
   if (_viewOn) _renderRows()
   else _renderLine()
 }
@@ -75,11 +82,14 @@ export const withSpinner = <A, E, R>(
   { effect, label }: { readonly label: string | ReadonlyArray<string>; readonly effect: Effect.Effect<A, E, R> }
 ): Effect.Effect<A, E, R> => {
   if (!process.stdout.isTTY) return effect
-  const render = typeof label === "string"
+
+  const render = Predicate.isString(label)
     ? () => label
     : () => label[Math.floor(_tick / _ticksPerPhrase) % label.length] ?? ""
+
   return Effect.suspend(() => {
     _start(render)
+
     return effect
   }).pipe(Effect.ensuring(Effect.sync(() => _stop(render))))
 }
@@ -97,6 +107,7 @@ export const withPlanView = <A, E, R>(
       _rowsOffset = offset
       _viewOn = true
       _ensureTimer()
+
       return effect
     }).pipe(Effect.ensuring(Effect.sync(() => {
       _renderRows()
@@ -112,6 +123,7 @@ export const withRowProgress = <A, E, R>(
   process.stdout.isTTY
     ? Effect.suspend(() => {
       for (const row of _rows) if (row.state === "pending" && match(row.name)) row.state = "running"
+
       return effect
     }).pipe(Effect.tap(() =>
       Effect.sync(() => {

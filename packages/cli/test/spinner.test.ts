@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest"
-import { Effect } from "effect"
+import { Effect, Exit } from "effect"
 import { logLine, withSpinner } from "../src/spinner.ts"
 
 // Non-TTY here (test runner), so the spinner is inert — this checks the
@@ -13,17 +13,20 @@ describe("withSpinner", () => {
   it.effect("passes failures through", () =>
     Effect.gen(function*() {
       const exit = yield* Effect.exit(withSpinner({ label: "x", effect: Effect.fail("boom") }))
-      assert.isTrue(exit._tag === "Failure")
+      assert.isTrue(Exit.isFailure(exit))
     }))
 
   it.effect("logLine writes the plain message when not a TTY", () =>
     Effect.gen(function*() {
       const writes: Array<string> = []
       const original = process.stdout.write.bind(process.stdout)
+
       const stub: typeof process.stdout.write = (chunk) => {
         writes.push(String(chunk))
+
         return true
       }
+
       process.stdout.write = stub
       yield* logLine("hello").pipe(
         Effect.ensuring(Effect.sync(() => {

@@ -1,5 +1,5 @@
-import { Effect, Layer, Redacted, Schema } from "effect"
-import * as HttpClient from "effect/unstable/http/HttpClient"
+import { Effect, Exit, Layer, Redacted, Schema } from "effect"
+import * as HttpClient from "effect/http/HttpClient"
 import { BootstrapFailed, CloudProvider, K8sClient, makeK8sClient, parseKubeconfig, PlanRejected, ResourceNotFound, VolumeProvider } from "@kumulo/core"
 import type { AddonContext, AddonError, AuthenticationFailed, Capability, CloudError, DnsError, HttpTransportError, K8sManifest, Kubeconfig, ServerInfo, ServerSpec, VolumeError, ConfigInvalid, DnsProvider } from "@kumulo/core"
 import type { K3sClusterConfig } from "../cluster-config.ts"
@@ -15,6 +15,7 @@ export type K3sError =
   | ResourceNotFound
   | AuthenticationFailed
   | HttpTransportError
+
 import type {
   Ssh} from "@kumulo/distro-k3s";
 import {
@@ -48,6 +49,7 @@ export interface K3sApplyResult {
 
 const CILIUM_CAPS: ReadonlyArray<Capability> = ["cilium"]
 const NO_CAPS: ReadonlyArray<Capability> = []
+
 const _capabilities = (config: K3sClusterConfig): ReadonlyArray<Capability> =>
   config.addons.cni === "cilium" ? CILIUM_CAPS : NO_CAPS
 
@@ -58,6 +60,7 @@ const _requireNonEmpty = <A>(
   what: string
 ): Effect.Effect<readonly [A, ...Array<A>], BootstrapFailed> => {
   const [first, ...rest] = items
+
   return first === undefined
     ? Effect.fail(new BootstrapFailed({ node: "-", phase: "nodes", log: `no ${what} servers were created` }))
     : Effect.succeed([first, ...rest])
@@ -65,8 +68,10 @@ const _requireNonEmpty = <A>(
 
 const _apiDnsFqdn = (config: K3sClusterConfig): string | undefined => {
   const dns = config.dns
+
   if (dns.module === "none") return undefined
   const name = dns.records.find((r) => r.target === "api_server")?.name
+
   return name === undefined ? undefined : `${name}.${dns.zone}`
 }
 
@@ -74,6 +79,7 @@ const _tlsSans = (
   args: { readonly config: K3sClusterConfig; readonly masterIps: ReadonlyArray<string>; readonly lbVip: string }
 ): ReadonlyArray<string> => {
   const fqdn = _apiDnsFqdn(args.config)
+
   return [...args.masterIps, args.lbVip, ...(fqdn === undefined ? [] : [fqdn])]
 }
 
@@ -90,7 +96,8 @@ const _refuseMasterReplace = (
   specs: ReadonlyArray<ServerSpec>,
   replace: ReadonlySet<string>
 ): Effect.Effect<void, PlanRejected> => {
-  const masters = specs.filter((spec) => spec.role === "master" && replace.has(spec.name)).map((spec) => spec.name)
+  const masters = specs.flatMap((spec) => spec.role === "master" && replace.has(spec.name) ? [spec.name] : [])
+
   return masters.length === 0 ? Effect.void : Effect.fail(
     new PlanRejected({
       reason:
@@ -120,23 +127,27 @@ const _provisionInfra = (
 ): Effect.Effect<Infra, CloudError | PlanRejected, CloudProvider> =>
   Effect.gen(function*() {
     const cloudProvider = yield* CloudProvider
+
     const lb = yield* withRowProgress({
       match: (name) =>
         name.startsWith("network/") || name.startsWith("security-group/") || name.startsWith("load-balancer/"),
       effect: Effect.gen(function*() {
         yield* cloudProvider.ensureNetwork({ cidr: config.network.cidr })
         yield* cloudProvider.ensureSecurityGroups({ rules: secGroupRules(config) })
+
         return yield* cloudProvider.ensureLoadBalancer({ members: [] })
       })
     })
 
     const specs = buildK3sServerSpecs(config)
     yield* _refuseMasterReplace(specs, replace)
+
     if (replace.size > 0) yield* _deleteDrifted({ config, replace })
     const masterSpecs = specs.filter((s) => s.role === "master")
     const workerSpecs = specs.filter((s) => s.role === "worker")
     const masterInfos = yield* Effect.forEach(masterSpecs, cloudProvider.ensureServer, { concurrency: masterSpecs.length })
     const workerInfos = yield* Effect.forEach(workerSpecs, cloudProvider.ensureServer, { concurrency: 10 })
+
     return { lbVip: lb.vip, masterInfos, workerInfos }
   })
 
@@ -153,6 +164,7 @@ const _bootstrap = (config: K3sClusterConfig, infra: Infra): Effect.Effect<SshHo
       extraServerArgs: config.k3s.extra_server_args,
       extraAgentArgs: config.k3s.extra_agent_args
     })
+
     return masters[0]
   })
 
@@ -165,6 +177,7 @@ export const k8sClientLive = (
       const raw = yield* fetchKubeconfig({ master1, clusterName: config.name, serverUrl: `https://${master1.ip}:6443` })
       const parsed = yield* parseKubeconfig(raw.content)
       const client = yield* Effect.provide(HttpClient.HttpClient, k8sHttpClientLayer({ auth: parsed.auth, caPem: parsed.caPem }))
+
       return makeK8sClient({ client, server: parsed.server })
     })
   )
@@ -173,6 +186,7 @@ const _installAddons = (config: K3sClusterConfig): Effect.Effect<void, AddonErro
   Effect.gen(function*() {
     const k8sClient = yield* K8sClient
     const cred = yield* CloudCredentialEnv
+
     const cloudCredential = cred.provider === "hetzner"
       ? { provider: "hetzner" as const, token: Redacted.value(cred.token) }
       : {
@@ -182,6 +196,7 @@ const _installAddons = (config: K3sClusterConfig): Effect.Effect<void, AddonErro
         applicationCredentialId: cred.applicationCredentialId,
         applicationCredentialSecret: cred.applicationCredentialSecret
       }
+
     const addons = resolveAddons({ distro: "k3s", addons: config.addons, capabilities: _capabilities(config), cloudCredential })
     const ctx: AddonContext = { clusterName: config.name, capabilities: _capabilities(config) }
     yield* installAddons({ k8sClient, addons, ctx })
@@ -189,6 +204,7 @@ const _installAddons = (config: K3sClusterConfig): Effect.Effect<void, AddonErro
 
 const _reconcileVolumes = (config: K3sClusterConfig): Effect.Effect<void, VolumeError, VolumeProvider> => {
   const volumes = config.volumes
+
   return volumes.module === "none"
     ? Effect.void
     : Effect.gen(function*() {
@@ -205,6 +221,7 @@ export const orphanedWorkers = (
   { config, workerInfos }: { readonly config: K3sClusterConfig; readonly workerInfos: ReadonlyArray<ServerInfo> }
 ): ReadonlyArray<ServerInfo> => {
   const desiredNames = new Set(buildK3sServerSpecs(config).filter((s) => s.role === "worker").map((s) => s.name))
+
   return workerInfos.filter((info) => !desiredNames.has(info.name))
 }
 
@@ -238,6 +255,7 @@ const _writeKubeconfig = (
     const kubeconfig = yield* fetchKubeconfig({ master1, clusterName: config.name, serverUrl })
     const path = `${configDir}/${config.name}.kubeconfig`
     yield* Effect.promise(() => import("node:fs/promises").then((fs) => fs.writeFile(path, kubeconfig.content, { mode: 0o600 })))
+
     return path
   })
 
@@ -263,18 +281,21 @@ export const applyK3sEffect = (
 ): Effect.Effect<K3sApplyResult, K3sError, CloudProvider | Ssh | DnsProvider | VolumeProvider | CloudCredentialEnv> =>
   Effect.gen(function*() {
     const nodeRow = (name: string): boolean => name.startsWith(`kumulo-${config.name}-`)
+
     const { infra, master1 } = yield* withRowProgress({
       match: nodeRow,
       effect: Effect.gen(function*() {
-        const infra = yield* _provisionInfra(config, replace)
-        const master1 = yield* _bootstrap(config, infra)
+        const provisioned = yield* _provisionInfra(config, replace)
+        const bootstrapped = yield* _bootstrap(config, provisioned)
         yield* Effect.gen(function*() {
           yield* _installAddons(config)
           yield* _drainOrphanedWorkers(config)
-        }).pipe(Effect.provide(k8sClientLayer({ config, master1 })))
-        return { infra, master1 }
+        }).pipe(Effect.provide(k8sClientLayer({ config, master1: bootstrapped })))
+
+        return { infra: provisioned, master1: bootstrapped }
       })
     })
+
     yield* withRowProgress({
       match: (name) => name.startsWith("dns/"),
       effect: reconcileDns({ config, targets: { api_server: { kind: "ip", value: infra.lbVip } } })
@@ -284,6 +305,7 @@ export const applyK3sEffect = (
       effect: _reconcileVolumes(config)
     })
     const kubeconfigPath = yield* _writeKubeconfig(config, master1, infra.lbVip, configDir)
+
     return { apiEndpoint: infra.lbVip, kubeconfigPath }
   })
 
@@ -305,18 +327,22 @@ export const deleteK3sEffect = (
     const volumeProvider = yield* VolumeProvider
     const cloudProvider = yield* CloudProvider
     const volumes = config.volumes
+
     if (volumes.module !== "none") {
       yield* withRowProgress({
         match: (name) => name.startsWith("volume/"),
         effect: Effect.gen(function*() {
           const existing = yield* volumeProvider.listClusterVolumes(config.name)
+
           for (const vol of existing) {
             const retained = volumes.managed.find((r) => r.name === vol.name)?.retain ?? false
+
             if (!retained) yield* volumeProvider.deleteVolume({ id: vol.id })
           }
         })
       })
     }
+
     yield* removeDns(config)
     yield* withRowProgress({
       match: (name) =>
@@ -338,9 +364,11 @@ export const kubeconfigK3sEffect = (config: K3sClusterConfig): Effect.Effect<Kub
     const cloudProvider = yield* CloudProvider
     const inventory = yield* cloudProvider.listClusterResources(config.name)
     const masterInfo = inventory.servers.find((s) => s.name.includes("-master-"))
+
     if (masterInfo === undefined) return yield* Effect.fail(new ResourceNotFound({ kind: "server", ref: config.name }))
     const lb = yield* cloudProvider.ensureLoadBalancer({ members: [] })
     const serverUrl = resolveServerUrl({ lbVip: lb.vip, apiDnsName: _apiDnsFqdn(config), masterIp: masterInfo.ip })
+
     return yield* fetchKubeconfig({ master1: _toHost(masterInfo), clusterName: config.name, serverUrl })
   })
 
@@ -365,24 +393,27 @@ export interface K3sStatus {
 
 const NODES_REF = { path: "/api/v1/nodes", kind: "Node" }
 
-const _NodeStatusShape = Schema.Struct({
+const _NodeStatusFields = Schema.Struct({
   metadata: Schema.optional(Schema.Struct({ name: Schema.optional(Schema.String) })),
   status: Schema.optional(Schema.Struct({
     conditions: Schema.optional(Schema.Array(Schema.Struct({ type: Schema.String, status: Schema.String })))
   }))
 })
 
-const _decodeNodeStatus = (manifest: K8sManifest) => Schema.decodeUnknownExit(_NodeStatusShape)(manifest)
+const _decodeNodeStatus = (manifest: K8sManifest) => Schema.decodeUnknownExit(_NodeStatusFields)(manifest)
 
 const _nodeReady = (manifest: K8sManifest): boolean => {
   const decoded = _decodeNodeStatus(manifest)
-  if (decoded._tag !== "Success") return false
+
+  if (!Exit.isSuccess(decoded)) return false
+
   return decoded.value.status?.conditions?.some((c) => c.type === "Ready" && c.status === "True") ?? false
 }
 
 const _nodeName = (manifest: K8sManifest): string => {
   const decoded = _decodeNodeStatus(manifest)
-  return decoded._tag === "Success" ? decoded.value.metadata?.name ?? "" : ""
+
+  return Exit.isSuccess(decoded) ? decoded.value.metadata?.name ?? "" : ""
 }
 
 export const k3sStatusEffect = (
@@ -397,13 +428,17 @@ export const k3sStatusEffect = (
     const cloudProvider = yield* CloudProvider
     const inventory = yield* cloudProvider.listClusterResources(config.name)
     const masterInfo = inventory.servers.find((s) => s.name.includes("-master-"))
+
     if (masterInfo === undefined) return { exists: false, nodes: [] }
     const lb = yield* cloudProvider.ensureLoadBalancer({ members: [] })
+
     const nodes = yield* Effect.gen(function*() {
       const client = yield* K8sClient
       const manifests = yield* client.list(NODES_REF)
+
       return manifests.map((m) => ({ name: _nodeName(m), ready: _nodeReady(m) }))
     }).pipe(Effect.provide(k8sClientLayer({ config, master1: _toHost(masterInfo) })))
+
     return { exists: true, apiEndpoint: lb.vip, nodes }
   })
 

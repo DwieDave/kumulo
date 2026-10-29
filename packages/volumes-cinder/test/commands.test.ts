@@ -20,12 +20,14 @@ describe("adoptVolume", () => {
 
   it("includes a PVC manifest when a pvc binding is given", () => {
     const spec = { name: "postgres-data", sizeGb: 100, type: "high-speed", retain: true }
+
     const { manifests } = adoptVolume({
       file: emptyOutputs("staging"),
       volumeId: "vol-1",
       spec,
       pvc: { namespace: "db", accessModes: ["ReadWriteOnce"] }
     })
+
     expect(manifests).toHaveLength(2)
   })
 })

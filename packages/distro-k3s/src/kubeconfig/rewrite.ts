@@ -8,6 +8,7 @@ export interface ResolveServerUrlArgs {
 
 export const resolveServerUrl = (args: ResolveServerUrlArgs): string => {
   const host = args.lbVip ?? args.apiDnsName ?? args.masterIp
+
   return `https://${host}:${args.port ?? 6443}`
 }
 

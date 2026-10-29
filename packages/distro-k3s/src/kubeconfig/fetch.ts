@@ -18,10 +18,12 @@ export interface FetchKubeconfigArgs {
 export const fetchKubeconfig = (args: FetchKubeconfigArgs): Effect.Effect<Kubeconfig, BootstrapFailed, Ssh> =>
   Effect.gen(function*() {
     const ssh = yield* Ssh
+
     const content = yield* ssh.readFile(args.master1, K3S_KUBECONFIG_PATH).pipe(
       Effect.mapError((error) =>
         new BootstrapFailed({ node: args.master1.ip, phase: "fetchKubeconfig", log: String(error.cause) })
       )
     )
+
     return { content: rewriteKubeconfig({ content, clusterName: args.clusterName, serverUrl: args.serverUrl }) }
   })

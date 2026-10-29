@@ -1,3 +1,4 @@
+import { PlanAction } from "@kumulo/core"
 import { CloudProvider, computePlan, resourceName } from "@kumulo/core"
 import type { CloudError, DesiredResource, Inventory, Plan, ServerSpec, TaggedResource } from "@kumulo/core"
 import type { K3sClusterConfig } from "../cluster-config.ts"
@@ -64,7 +65,7 @@ const _infraActions = (
     [k3sNetworkRow(config.name), infra.network],
     [k3sSecurityGroupRow(config.name), infra.securityGroups],
     [k3sLbRow(config.name), infra.loadBalancer]
-  ] as const).map(([name, exists]) => exists ? { _tag: "NoOp" as const, name } : { _tag: "Create" as const, name })
+  ] as const).map(([name, exists]) => exists ? PlanAction.NoOp({ name }) : PlanAction.Create({ name }))
 
 const NO_INFRA: K3sInfraObserved = { network: false, securityGroups: false, loadBalancer: false }
 
@@ -96,6 +97,7 @@ export const k3sPlanEffect = (
   Effect.gen(function*() {
     const cloudProvider = yield* CloudProvider
     const inventory = yield* cloudProvider.listClusterResources(config.name)
+
     return k3sPlanFor({
       config,
       observed: inventory.servers.map((server) => ({ name: server.name, configHash: server.configHash })),
@@ -111,20 +113,21 @@ export const k3sDeletePlanActions = (
     const inventory = yield* cloudProvider.listClusterResources(config.name)
     const liveNames = new Set(inventory.servers.map((server) => server.name))
     const desiredNames = buildK3sNodes(config).map((node) => node.spec.name)
+
     const nodeActions: Plan["actions"] = [
-      ...inventory.servers.map((server) => ({ _tag: "Delete" as const, name: server.name })),
-      ...desiredNames.filter((name) => !liveNames.has(name)).map((name) => ({
-        _tag: "NoOp" as const,
-        name: `${name} (already absent)`
-      }))
+      ...inventory.servers.map((server) => (PlanAction.Delete({ name: server.name }))),
+      ...desiredNames.filter((name) => !liveNames.has(name)).map((name) => (PlanAction.NoOp({ name: `${name} (already absent)` })))
     ]
+
     const infra = _observedInfra(inventory)
+
     const infraActions: Plan["actions"] = ([
       [k3sNetworkRow(config.name), infra.network],
       [k3sSecurityGroupRow(config.name), infra.securityGroups],
       [k3sLbRow(config.name), infra.loadBalancer]
     ] as const).map(([name, exists]) =>
-      exists ? { _tag: "Delete" as const, name } : { _tag: "NoOp" as const, name: `${name} (already absent)` }
+      exists ? PlanAction.Delete({ name }) : PlanAction.NoOp({ name: `${name} (already absent)` })
     )
+
     return [...nodeActions, ...infraActions]
   })

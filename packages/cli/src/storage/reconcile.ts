@@ -1,7 +1,8 @@
+import { PlanAction } from "@kumulo/core"
 import { Effect, Redacted } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import type { PlatformError } from "effect/PlatformError"
-import type { BucketInfo, BucketSpec, CredentialEntry, ObjectStorageError, PlanAction, S3Credentials } from "@kumulo/core"
+import type { BucketInfo, BucketSpec, CredentialEntry, ObjectStorageError, S3Credentials } from "@kumulo/core"
 import type { ClusterConfig } from "../cluster-config.ts"
 import { CredentialsSink, ObjectStorageProvider } from "@kumulo/core"
 import type { CredentialsSinkError } from "@kumulo/core"
@@ -34,6 +35,7 @@ const _bucketDiff = (
 ): Effect.Effect<BucketDiff, OutputsInvalid | PlatformError, FileSystem> =>
   Effect.gen(function*() {
     const file = yield* readOutputs({ dir: configDir, tag: config.name, format: config.outputs?.format })
+
     return diffBuckets({ desired: _desiredBuckets(config), existing: file.buckets })
   })
 
@@ -48,19 +50,17 @@ export const bucketPlanActions = (
       const regions = [...new Set(diff.noop.map((ref) => ref.region))]
       const live = yield* Effect.forEach(regions, provider.listBuckets, { concurrency: 4 })
       const liveNames = new Set(live.flat().map((bucket) => bucket.name))
+
       return [
-        ...diff.toCreate.map((b) => ({ _tag: "Create" as const, name: `bucket/${b.name}` })),
-        ...diff.toUpdate.map((u) => ({ _tag: "Update" as const, name: `bucket/${u.spec.name}`, reason: "versioning" })),
-        ...diff.toReplace.map((r) => ({
-          _tag: "ReplaceNeedsConfirm" as const,
-          name: `bucket/${r.spec.name}`,
-          reason: "region or encryption changed (immutable, delete+recreate)"
-        })),
-        ...diff.toDelete.map((ref) => ({ _tag: "Delete" as const, name: `bucket/${ref.name}` })),
+        ...diff.toCreate.map((b) => (PlanAction.Create({ name: `bucket/${b.name}` }))),
+        ...diff.toUpdate.map((u) => (PlanAction.Update({ name: `bucket/${u.spec.name}`, reason: "versioning" }))),
+        ...diff.toReplace.map((r) => (PlanAction.ReplaceNeedsConfirm({ name: `bucket/${r.spec.name}`,
+          reason: "region or encryption changed (immutable, delete+recreate)" }))),
+        ...diff.toDelete.map((ref) => (PlanAction.Delete({ name: `bucket/${ref.name}` }))),
         ...diff.noop.map((ref) =>
           liveNames.has(ref.name)
-            ? { _tag: "NoOp" as const, name: `bucket/${ref.name}` }
-            : { _tag: "Create" as const, name: `bucket/${ref.name}` }
+            ? PlanAction.NoOp({ name: `bucket/${ref.name}` })
+            : PlanAction.Create({ name: `bucket/${ref.name}` })
         )
       ]
     })
@@ -89,6 +89,7 @@ const _bucketInfosFor = (
     const regions = [...new Set(desired.map((bucket) => bucket.region))]
     const lists = yield* Effect.forEach(regions, provider.listBuckets, { concurrency: 4 })
     const names = new Set(desired.map((bucket) => bucket.name))
+
     return lists.flat().filter((bucket) => names.has(bucket.name))
   })
 
@@ -112,9 +113,11 @@ const _ensureCredentialsIfMissing = (
 ): Effect.Effect<void, BucketReconcileError, CredentialsSink | FileSystem> =>
   Effect.gen(function*() {
     const dir = _sopsDir(config)
+
     if (dir === undefined) return
     const fs = yield* FileSystem
     const path = credentialsPath({ dir, cluster: config.name })
+
     if (yield* fs.exists(path)) return
     const creds = yield* provider.ensureCredentials(config.name)
     const buckets = yield* _bucketInfosFor({ provider, desired })
@@ -153,16 +156,11 @@ export const bucketDeletePlanActions = (
     const file = yield* readOutputs({ dir: configDir, tag: config.name, format: config.outputs?.format })
     const diff = diffBuckets({ desired: [], existing: file.buckets })
     const recorded = new Set(file.buckets.map((bucket) => bucket.name))
+
     return [
-      ...diff.toDelete.map((ref) => ({ _tag: "Delete" as const, name: `bucket/${ref.name}` })),
-      ...file.buckets.filter((bucket) => bucket.retain).map((bucket) => ({
-        _tag: "NoOp" as const,
-        name: `bucket/${bucket.name} (retained)`
-      })),
-      ...config.object_storage.buckets.filter((bucket) => !recorded.has(bucket.name)).map((bucket) => ({
-        _tag: "NoOp" as const,
-        name: `bucket/${bucket.name} (already absent)`
-      }))
+      ...diff.toDelete.map((ref) => (PlanAction.Delete({ name: `bucket/${ref.name}` }))),
+      ...file.buckets.filter((bucket) => bucket.retain).map((bucket) => (PlanAction.NoOp({ name: `bucket/${bucket.name} (retained)` }))),
+      ...config.object_storage.buckets.filter((bucket) => !recorded.has(bucket.name)).map((bucket) => (PlanAction.NoOp({ name: `bucket/${bucket.name} (already absent)` })))
     ]
   })
 
@@ -177,6 +175,7 @@ export const reconcileBucketsOnDelete = (
     if (config.object_storage.module !== "ovh") return { kept: [], deleted: [] }
     const provider = yield* ObjectStorageProvider
     const file = yield* readOutputs({ dir: configDir, tag: config.name, format: config.outputs?.format })
+
     if (file.buckets.length === 0) return { kept: [], deleted: [] }
 
     const diff = diffBuckets({ desired: [], existing: file.buckets })
@@ -184,6 +183,7 @@ export const reconcileBucketsOnDelete = (
 
     const retained = file.buckets.filter((bucket) => bucket.retain)
     yield* writeOutputs({ dir: configDir, file: { cluster: config.name, buckets: retained }, format: config.outputs?.format })
+
     return { kept: retained.map((bucket) => bucket.name), deleted: diff.toDelete.map((ref) => ref.name) }
   })
 
@@ -199,8 +199,10 @@ export const bucketStatus = (
     const fs = yield* FileSystem
     const file = yield* readOutputs({ dir: configDir, tag: config.name, format: config.outputs?.format })
     const dir = _sopsDir(config)
+
     const credentialsExist = dir === undefined
       ? false
       : yield* fs.exists(credentialsPath({ dir, cluster: config.name }))
+
     return { buckets: file.buckets, credentialsExist }
   })

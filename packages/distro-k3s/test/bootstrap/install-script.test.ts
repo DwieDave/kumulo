@@ -1,25 +1,24 @@
 import { describe, expect, it } from "@effect/vitest"
-import { FastCheck } from "effect/testing"
-import type { ServerInstallArgs } from "../../src/bootstrap/install-script.ts"
+import { Schema } from "effect"
 import { renderAgentInstallScript, renderServerInstallScript } from "../../src/bootstrap/install-script.ts"
 
-const serverArgsArb: FastCheck.Arbitrary<ServerInstallArgs> = FastCheck.record({
-  k3sVersion: FastCheck.constant("v1.31.4+k3s1"),
-  token: FastCheck.string({ minLength: 8, maxLength: 16 }),
-  isFirstMaster: FastCheck.boolean(),
-  firstMasterIp: FastCheck.constant("10.0.0.1"),
-  privateIp: FastCheck.constant("10.0.0.2"),
-  publicIp: FastCheck.constant("203.0.113.2"),
-  tlsSans: FastCheck.constant(["10.0.0.1", "10.0.0.2", "cluster.example.com"]),
-  addons: FastCheck.record({
-    cloudControllerManager: FastCheck.boolean(),
-    cni: FastCheck.constantFrom("flannel", "cilium")
+const serverArgsSchema = Schema.Struct({
+  k3sVersion: Schema.Literal("v1.31.4+k3s1"),
+  token: Schema.String.check(Schema.isMinLength(8), Schema.isMaxLength(16)),
+  isFirstMaster: Schema.Boolean,
+  firstMasterIp: Schema.Literal("10.0.0.1"),
+  privateIp: Schema.Literal("10.0.0.2"),
+  publicIp: Schema.Literal("203.0.113.2"),
+  tlsSans: Schema.Tuple([Schema.Literal("10.0.0.1"), Schema.Literal("10.0.0.2"), Schema.Literal("cluster.example.com")]),
+  addons: Schema.Struct({
+    cloudControllerManager: Schema.Boolean,
+    cni: Schema.Literals(["flannel", "cilium"])
   }),
-  extraServerArgs: FastCheck.constant(["--kube-apiserver-arg=foo=bar"])
+  extraServerArgs: Schema.Tuple([Schema.Literal("--kube-apiserver-arg=foo=bar")])
 })
 
 describe("renderServerInstallScript", () => {
-  it.prop("is stable — same input renders byte-identical output", [serverArgsArb], ([args]) => {
+  it.prop("is stable — same input renders byte-identical output", [serverArgsSchema], ([args]) => {
     const first = renderServerInstallScript(args)
     const second = renderServerInstallScript(args)
     expect(first).toBe(second)
@@ -36,6 +35,7 @@ describe("renderServerInstallScript", () => {
       addons: { cloudControllerManager: false, cni: "flannel" as const },
       extraServerArgs: []
     }
+
     expect(renderServerInstallScript({ ...base, isFirstMaster: true })).toContain("--cluster-init")
     expect(renderServerInstallScript({ ...base, isFirstMaster: false })).toContain("--server https://10.0.0.1:6443")
   })
@@ -52,6 +52,7 @@ describe("renderServerInstallScript", () => {
       addons: { cloudControllerManager: false, cni: "flannel" },
       extraServerArgs: []
     })
+
     expect(script).toContain("--tls-san='127.0.0.1'")
     expect(script).toContain("--tls-san='10.0.0.2'")
     expect(script).toContain("--tls-san='api.example.com'")
@@ -70,6 +71,7 @@ describe("renderServerInstallScript", () => {
       addons: { cloudControllerManager: false, cni: "cilium" },
       extraServerArgs: []
     })
+
     expect(script).toContain("--flannel-backend=none")
     expect(script).toContain("--disable-network-policy")
   })
@@ -87,6 +89,7 @@ describe("renderAgentInstallScript", () => {
       nodeTaints: ["dedicated=gpu:NoSchedule"],
       extraAgentArgs: ["--kubelet-arg=foo=bar"]
     })
+
     expect(script).toContain('K3S_URL="https://10.0.0.1:6443"')
     expect(script).toContain("--node-label 'pool=workers'")
     expect(script).toContain("--node-taint 'dedicated=gpu:NoSchedule'")

@@ -49,18 +49,24 @@ export const decodeTestConfig = (encoded: ClusterConfigEncoded): ClusterConfig =
 
 export const decodeUpcloudTestConfig = (encoded: ClusterConfigEncoded): UpcloudUksClusterConfig => {
   const config = decodeTestConfig(encoded)
+
   if (config.distro !== "upcloud-uks") throw new Error(`expected an upcloud-uks config, got ${config.distro}`)
+
   return config
 }
 
 export const decodeMksTestConfig = (encoded: MksClusterConfigEncoded): MksClusterConfig => {
   const config = decodeTestConfig(encoded)
+
   if (config.distro !== "ovh-mks") throw new Error(`expected an ovh-mks config, got ${config.distro}`)
+
   return config
 }
 
 export const decodeK3sTestConfig = (encoded: K3sClusterConfigEncoded): K3sClusterConfig => {
   const config = decodeTestConfig(encoded)
+
   if (config.distro !== "k3s") throw new Error(`expected a k3s config, got ${config.distro}`)
+
   return config
 }

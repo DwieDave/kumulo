@@ -58,12 +58,15 @@ const _ensurePair = (
     const existingOther = existing.filter((r) => r.type !== "TXT")
     const existingOwnerTxt = existing.find((r) => r.type === "TXT" && ownerTagOf(r.records[0]?.value ?? "") !== undefined)
     const foreignOwnerTxt = existingOwnerTxt !== undefined && existingOwnerTxt.records[0]?.value !== ownerTarget
+
     if (foreignOwnerTxt || (existingOther.length > 0 && existingOwnerTxt === undefined)) {
       return yield* Effect.fail(new ResourceConflict({ kind: "dns-record", ref: `${zone}/${name}` }))
     }
+
     if (ownerTarget !== undefined) {
       yield* _ensureRaw({ dns, zone, name, target: ownerTarget, kind: "TXT", existing: existingOwnerTxt })
     }
+
     yield* _deleteStaleKinds({ dns, zone, name, kind, existingOther })
     const existingSame = existingOther.find((r) => r.type === kind)
     yield* _ensureRaw({ dns, zone, name, target, kind, existing: existingSame })
@@ -75,10 +78,12 @@ export const ensureRecords = (dns: HetznerDns) =>
       const rest = records.filter((r) => !_isOwnershipRecord(r))
       const pairedNames = new Set(rest.map((r) => r.name))
       const orphanTxt = records.filter((r) => _isOwnershipRecord(r) && !pairedNames.has(r.name))
+
       for (const record of rest) {
         const ownerTarget = _ownerTargetFor(records, record.name)
         yield* _ensurePair({ dns, zone, name: record.name, target: record.target, ownerTarget })
       }
+
       for (const record of orphanTxt) {
         const existing = yield* rrsetsAt({ dns, zone, name: record.name })
         yield* _ensureRaw({ dns, zone, name: record.name, target: record.target, kind: "TXT", existing: existing.find((r) => r.type === "TXT") })
@@ -86,7 +91,7 @@ export const ensureRecords = (dns: HetznerDns) =>
     })
 
 const _ownedNames = (rrsets: ReadonlyArray<HetznerRRset>, tag: ClusterTag): ReadonlySet<string> =>
-  new Set(rrsets.filter((r) => r.type === "TXT" && ownerTagOf(r.records[0]?.value ?? "") === tag).map((r) => r.name))
+  new Set(rrsets.flatMap((r) => r.type === "TXT" && ownerTagOf(r.records[0]?.value ?? "") === tag ? [r.name] : []))
 
 export const removeClusterRecords = (dns: HetznerDns) =>
   (zone: string, tag: ClusterTag): Effect.Effect<void, DnsError> =>
@@ -94,6 +99,7 @@ export const removeClusterRecords = (dns: HetznerDns) =>
       const all = yield* rrsetsAt({ dns, zone })
       const owned = _ownedNames(all, tag)
       const toDelete = all.filter((r) => owned.has(r.name))
+
       for (const record of toDelete) {
         yield* _wrap(zone, record.name, dns.deleteRRset(zone, record.name, record.type))
       }

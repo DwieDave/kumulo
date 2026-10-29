@@ -16,15 +16,18 @@ export const defaultLbInfo = { id: "lb-1", vip: "10.0.2.7", floatingIp: "203.0.1
 export const fakeCloudProvider = (info: NetworkInfo = defaultNetworkInfo) => {
   const specs: Array<NetworkSpec> = []
   const lbSpecs: Array<LbSpec> = []
+
   const layer = Layer.succeed(CloudProvider, {
     ensureNetwork: (spec: NetworkSpec) => {
       specs.push(spec)
+
       return Effect.succeed(info)
     },
     findNetwork: (_spec: NetworkSpec) => Effect.succeed(info),
     hasGateway: () => Effect.succeed(false),
     ensureLoadBalancer: (spec: LbSpec) => {
       lbSpecs.push(spec)
+
       return Effect.succeed(defaultLbInfo)
     },
     ensureSecurityGroups: _unused,
@@ -35,6 +38,7 @@ export const fakeCloudProvider = (info: NetworkInfo = defaultNetworkInfo) => {
     resolveImage: _unused,
     resolveFlavor: _unused
   })
+
   return { layer, specs, lbSpecs }
 }
 

@@ -29,6 +29,7 @@ describe("readiness gates", () => {
   it.live("_pollReady fails with BootstrapFailed carrying the phase once the deadline passes", () =>
     Effect.gen(function*() {
       const ssh = yield* Ssh
+
       const error = yield* _testPollReady({
         host,
         check: ssh.exec(host, "test -f marker").pipe(Effect.match({ onFailure: () => false, onSuccess: () => true })),
@@ -37,6 +38,7 @@ describe("readiness gates", () => {
         kind: "cloud-init",
         phase: "cloud-init"
       }).pipe(Effect.flip)
+
       expect(error._tag).toBe("BootstrapFailed")
       expect(error.node).toBe(host.ip)
       expect(error.phase).toBe("cloud-init")

@@ -11,6 +11,7 @@ export const zoneExistsCheck = (
   run: zones.list().pipe(
     Effect.map((known) => {
       const usable = known.filter((entry) => entry.public !== "no").map((entry) => entry.id)
+
       return usable.includes(zone)
         ? { name: _name, status: "pass" as const, message: `Zone "${zone}" exists.` }
         : {

@@ -25,6 +25,7 @@ const _page = (request: { readonly url: string }): string => new URL(request.url
 describe("hetzner CloudProvider", () => {
   it.effect("ensureNetwork creates then reuses by name", () => {
     let created = false
+
     const fake = makeFakeHcloud({
       "GET /networks": () => ({
         status: 200,
@@ -32,9 +33,11 @@ describe("hetzner CloudProvider", () => {
       }),
       "POST /networks": () => {
         created = true
+
         return { status: 201, body: { network: fixture.network({ id: 1, name: "kumulo-prod" }) } }
       }
     })
+
     return Effect.gen(function*() {
       const first = yield* ensureNetwork({ options, spec: { cidr: "10.0.0.0/24" } })
       const second = yield* ensureNetwork({ options, spec: { cidr: "10.0.0.0/24" } })
@@ -46,13 +49,16 @@ describe("hetzner CloudProvider", () => {
 
   it.effect("ensureNetwork sends the cluster label on create", () => {
     let payload: unknown
+
     const fake = makeFakeHcloud({
       "GET /networks": () => ({ status: 200, body: { networks: [], meta: fixture.meta() } }),
       "POST /networks": (request) => {
         payload = requestJson(request)
+
         return { status: 201, body: { network: fixture.network({ id: 1, name: "kumulo-prod" }) } }
       }
     })
+
     return Effect.gen(function*() {
       yield* ensureNetwork({ options, spec: { cidr: "10.0.0.0/24" } })
       expect(payload).toMatchObject({ labels: { "kumulo-cluster": "prod" } })
@@ -65,10 +71,12 @@ describe("hetzner CloudProvider", () => {
       "POST /firewalls": () => ({ status: 201, body: { firewall: fixture.firewall({ id: 5, name: "kumulo-prod" }) } }),
       "POST /firewalls/5/actions/set_rules": () => ({ status: 201, body: { actions: [] } })
     })
+
     const rules: ReadonlyArray<SecGroupRule> = [
       { protocol: "tcp", portMin: 22, portMax: 22, remoteCidr: "1.2.3.0/24" },
       { protocol: "tcp", remoteCidr: "10.0.0.0/24" }
     ]
+
     return Effect.gen(function*() {
       const info = yield* ensureSecurityGroups({ options, spec: { rules } })
       expect(info).toEqual({ id: "5" })
@@ -80,6 +88,7 @@ describe("hetzner CloudProvider", () => {
     const fake = makeFakeHcloud({
       "GET /firewalls": () => ({ status: 200, body: { firewalls: [fixture.firewall({ id: 5, name: "kumulo-prod" })], meta: fixture.meta() } })
     })
+
     return Effect.gen(function*() {
       const exit = yield* Effect.flip(ensureSecurityGroups({ options, spec: { rules: [{ protocol: "any", remoteCidr: "0.0.0.0/0" }] } }))
       expect(exit).toBeInstanceOf(ResourceNotFound)
@@ -91,13 +100,16 @@ describe("hetzner CloudProvider", () => {
   it.effect("ensureLoadBalancer creates targeting the cluster label selector, then reuses by name", () => {
     let created = false
     const lb = fixture.loadBalancer({ id: 7, name: "kumulo-prod", ip: "5.6.7.8" })
+
     const fake = makeFakeHcloud({
       "GET /load_balancers": () => ({ status: 200, body: { load_balancers: created ? [lb] : [], meta: fixture.meta() } }),
       "POST /load_balancers": () => {
         created = true
+
         return { status: 201, body: { load_balancer: lb, action: fixture.action({ id: 1 }) } }
       }
     })
+
     return Effect.gen(function*() {
       const first = yield* ensureLoadBalancer({ options, spec: { members: [] } })
       const second = yield* ensureLoadBalancer({ options, spec: { members: [] } })
@@ -113,6 +125,7 @@ describe("hetzner CloudProvider", () => {
         body: { placement_groups: [fixture.placementGroup({ id: 3, name: "kumulo-prod-masters" })], meta: fixture.meta() }
       })
     })
+
     return Effect.gen(function*() {
       const id = yield* ensurePlacementGroup({ options, role: "master" })
       expect(id).toBe(3)
@@ -137,6 +150,7 @@ describe("hetzner CloudProvider", () => {
       }),
       "GET /actions/99": () => ({ status: 200, body: { action: fixture.action({ id: 99 }) } })
     })
+
     return Effect.gen(function*() {
       const info = yield* ensureServer({ options, spec: { name: "master-1", role: "master", flavor: "cx22", image: "ubuntu-24.04", tag: "prod" } })
       expect(info).toEqual({ id: "10", name: "master-1", ip: "1.2.3.4" })
@@ -165,6 +179,7 @@ describe("hetzner CloudProvider", () => {
         body: { action: fixture.action({ id: 99, status: "error", error: { code: "boom", message: "quota" } }) }
       })
     })
+
     return Effect.gen(function*() {
       const exit = yield* Effect.flip(ensureServer({ options, spec: { name: "master-1", role: "master", flavor: "cx22", image: "ubuntu-24.04", tag: "prod" } }))
       expect(exit._tag).toBe("ProvisioningTimeout")
@@ -176,6 +191,7 @@ describe("hetzner CloudProvider", () => {
       "DELETE /servers/10": () => ({ status: 200, body: { action: fixture.action({ id: 100, status: "running" }) } }),
       "GET /actions/100": () => ({ status: 200, body: { action: fixture.action({ id: 100 }) } })
     })
+
     return Effect.gen(function*() {
       yield* deleteServer({ id: "10", name: "master-1", ip: "" })
       expect(fake.calls().some((call) => call.url.includes("/v1/actions/100"))).toBe(true)
@@ -184,6 +200,7 @@ describe("hetzner CloudProvider", () => {
 
   it.effect("deleteServer tolerates an already-gone (404) server", () => {
     const fake = makeFakeHcloud({ "DELETE /servers/10": () => ({ status: 404 }) })
+
     return Effect.gen(function*() {
       yield* deleteServer({ id: "10", name: "master-1", ip: "" })
     }).pipe(Effect.provide(fake.layer))
@@ -191,6 +208,7 @@ describe("hetzner CloudProvider", () => {
 
   it.effect("deleteByTag removes resources in reverse dependency order", () => {
     const deleted: Array<string> = []
+
     const fake = makeFakeHcloud({
       "GET /load_balancers": () => ({
         status: 200,
@@ -198,11 +216,13 @@ describe("hetzner CloudProvider", () => {
       }),
       "DELETE /load_balancers/1": () => {
         deleted.push("lb")
+
         return { status: 204 }
       },
       "GET /servers": () => ({ status: 200, body: { servers: [fixture.server({ id: 2, name: "kumulo-prod" })], meta: fixture.meta() } }),
       "DELETE /servers/2": () => {
         deleted.push("server")
+
         return { status: 200, body: {} }
       },
       "GET /placement_groups": () => ({
@@ -211,19 +231,23 @@ describe("hetzner CloudProvider", () => {
       }),
       "DELETE /placement_groups/3": () => {
         deleted.push("placement-group")
+
         return { status: 204 }
       },
       "GET /firewalls": () => ({ status: 200, body: { firewalls: [fixture.firewall({ id: 4, name: "kumulo-prod" })], meta: fixture.meta() } }),
       "DELETE /firewalls/4": () => {
         deleted.push("firewall")
+
         return { status: 204 }
       },
       "GET /networks": () => ({ status: 200, body: { networks: [fixture.network({ id: 5, name: "kumulo-prod" })], meta: fixture.meta() } }),
       "DELETE /networks/5": () => {
         deleted.push("network")
+
         return { status: 204 }
       }
     })
+
     return Effect.gen(function*() {
       yield* deleteByTag({ options })
       expect(deleted).toEqual(["lb", "server", "placement-group", "placement-group", "firewall", "network"])
@@ -240,6 +264,7 @@ describe("hetzner CloudProvider", () => {
       "GET /firewalls": () => ({ status: 200, body: { firewalls: [fixture.firewall({ id: 3, name: "kumulo-prod" })], meta: fixture.meta() } }),
       "GET /load_balancers": () => ({ status: 200, body: { load_balancers: [], meta: fixture.meta() } })
     })
+
     return Effect.gen(function*() {
       const inventory = yield* listClusterResources({ options })
       expect(inventory.servers).toEqual([{ id: "1", name: "master-1", ip: "1.2.3.4" }])
@@ -259,6 +284,7 @@ describe("hetzner CloudProvider", () => {
       "GET /firewalls": () => ({ status: 200, body: { firewalls: [], meta: fixture.meta() } }),
       "GET /load_balancers": () => ({ status: 200, body: { load_balancers: [], meta: fixture.meta() } })
     })
+
     return Effect.gen(function*() {
       const inventory = yield* listClusterResources({ options })
       expect(inventory.servers).toEqual([
@@ -271,10 +297,13 @@ describe("hetzner CloudProvider", () => {
 
   it.effect("deleteByTag deletes servers found on later pages", () => {
     const deleted: Array<string> = []
+
     const _ok = (id: string) => {
       deleted.push(id)
+
       return { status: 200, body: {} } as const
     }
+
     const fake = makeFakeHcloud({
       "GET /load_balancers": () => ({ status: 200, body: { load_balancers: [], meta: fixture.meta() } }),
       "GET /servers": (request) =>
@@ -287,6 +316,7 @@ describe("hetzner CloudProvider", () => {
       "GET /firewalls": () => ({ status: 200, body: { firewalls: [], meta: fixture.meta() } }),
       "GET /networks": () => ({ status: 200, body: { networks: [], meta: fixture.meta() } })
     })
+
     return Effect.gen(function*() {
       yield* deleteByTag({ options })
       expect(deleted).toEqual(["1", "2"])
@@ -297,13 +327,17 @@ describe("hetzner CloudProvider", () => {
     const fake = makeFakeHcloud({
       "GET /images": (request) => {
         const name = new URL(request.url).searchParams.get("name")
+
         if (name === "ubuntu-24.04") {
           return { status: 200, body: { images: [fixture.image({ id: 1, name: "ubuntu-24.04" })], meta: fixture.meta() } }
         }
+
         if (name === "debian-12") return { status: 200, body: { images: [], meta: fixture.meta() } }
+
         return { status: 200, body: { images: [fixture.image({ id: 2, name: "debian-12-generic-cloud" })], meta: fixture.meta() } }
       }
     })
+
     return Effect.gen(function*() {
       const exact = yield* resolveImage({ ref: "ubuntu-24.04" })
       expect(exact).toBe("1")
@@ -316,6 +350,7 @@ describe("hetzner CloudProvider", () => {
     const fake = makeFakeHcloud({
       "GET /server_types": () => ({ status: 200, body: { server_types: [], meta: fixture.meta() } })
     })
+
     return Effect.gen(function*() {
       const exit = yield* Effect.flip(resolveFlavor({ ref: "cx99" }))
       expect(exit).toBeInstanceOf(ResourceNotFound)

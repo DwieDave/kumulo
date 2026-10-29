@@ -1,8 +1,8 @@
 import { Effect, Redacted } from "effect"
 import { assert, it } from "@effect/vitest"
-import * as HttpClient from "effect/unstable/http/HttpClient"
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
+import * as HttpClient from "effect/http/HttpClient"
+import * as HttpClientRequest from "effect/http/HttpClientRequest"
+import * as HttpClientResponse from "effect/http/HttpClientResponse"
 import { makeUpcloudHttpClient } from "../../src/transport/http-client.ts"
 
 const _rawHttpClient = (handle: (request: HttpClientRequest.HttpClientRequest) => Response) =>
@@ -11,10 +11,13 @@ const _rawHttpClient = (handle: (request: HttpClientRequest.HttpClientRequest) =
 it.effect("sends the bearer token and prepends the UpCloud API base URL", () =>
   Effect.gen(function*() {
     let captured: { readonly url: string; readonly auth: string | undefined } | undefined
+
     const base = _rawHttpClient((request) => {
       captured = { url: request.url, auth: request.headers.authorization }
+
       return new Response(null, { status: 200 })
     })
+
     const client = makeUpcloudHttpClient({ base, token: Redacted.make("secret-token"), baseUrl: "https://fixture.invalid" })
     yield* client.execute(HttpClientRequest.get("/1.3/kubernetes"))
     assert.strictEqual(captured?.url, "https://fixture.invalid/1.3/kubernetes")
@@ -34,10 +37,13 @@ it("never leaks the token when the client (or an error carrying it) is rendered"
 
 it("retries on 429 and eventually succeeds", async () => {
   let calls = 0
+
   const base = _rawHttpClient(() => {
     calls++
+
     return new Response(null, { status: calls < 3 ? 429 : 200 })
   })
+
   const client = makeUpcloudHttpClient({ base, token: Redacted.make("secret-token"), baseUrl: "https://fixture.invalid" })
   const response = await Effect.runPromise(client.execute(HttpClientRequest.get("/1.3/kubernetes")))
   assert.strictEqual(response.status, 200)
@@ -46,10 +52,13 @@ it("retries on 429 and eventually succeeds", async () => {
 
 it("gives up after the max retry bound on a persistent 5xx", async () => {
   let calls = 0
+
   const base = _rawHttpClient(() => {
     calls++
+
     return new Response(null, { status: 503 })
   })
+
   const client = makeUpcloudHttpClient({ base, token: Redacted.make("secret-token"), baseUrl: "https://fixture.invalid" })
   const response = await Effect.runPromise(client.execute(HttpClientRequest.get("/1.3/kubernetes")))
   assert.strictEqual(response.status, 503)

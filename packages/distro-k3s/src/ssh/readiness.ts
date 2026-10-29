@@ -1,5 +1,5 @@
 import { Effect, Schedule } from "effect"
-import type { Context, Duration } from "effect"
+import type { Duration } from "effect"
 import { BootstrapFailed, pollUntil } from "@kumulo/core"
 import { Ssh } from "./port.ts"
 import type { SshHost } from "./port.ts"
@@ -65,7 +65,7 @@ export const sshReady = (host: SshHost): Effect.Effect<void, BootstrapFailed, Ss
 
 const _clusterInfoReady = (
   host: SshHost,
-  ssh: Context.Service.Shape<typeof Ssh>,
+  ssh: Ssh["Service"],
   args: { readonly attempts: number; readonly attemptTimeout: Duration.Input }
 ): Effect.Effect<void, BootstrapFailed> =>
   ssh.exec(host, "kubectl cluster-info").pipe(

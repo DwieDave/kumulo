@@ -2,11 +2,17 @@ import * as Data from "effect/Data"
 import * as Effect from "effect/Effect"
 import type { SchemaError } from "effect/Schema"
 import * as Schema from "effect/Schema"
-import type * as HttpClient from "effect/unstable/http/HttpClient"
-import * as HttpClientError from "effect/unstable/http/HttpClientError"
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
+import type * as HttpClient from "effect/http/HttpClient"
+import * as HttpClientError from "effect/http/HttpClientError"
+import * as HttpClientRequest from "effect/http/HttpClientRequest"
+import * as HttpClientResponse from "effect/http/HttpClientResponse"
 // non-recursive definitions
+export type Cloud_StorageObjectRestoreStatus = { readonly "expireDate"?: string | null, readonly "inProgress"?: boolean }
+export const Cloud_StorageObjectRestoreStatus = Schema.Struct({ "expireDate": Schema.optionalKey(Schema.Union([Schema.String.annotate({ "format": "date-time" }), Schema.Null])), "inProgress": Schema.optionalKey(Schema.Boolean) }).annotate({ "identifier": "cloud.StorageObjectRestoreStatus" })
+export type Cloud_storage_StorageClassEnum = "DEEP_ARCHIVE" | "GLACIER_IR" | "HIGH_PERF" | "STANDARD" | "STANDARD_IA"
+export const Cloud_storage_StorageClassEnum = Schema.Literals(["DEEP_ARCHIVE", "GLACIER_IR", "HIGH_PERF", "STANDARD", "STANDARD_IA"]).annotate({ "identifier": "cloud.storage.StorageClassEnum" })
+export type Cloud_storage_EncryptionAlgorithmEnum = "AES256" | "plaintext"
+export const Cloud_storage_EncryptionAlgorithmEnum = Schema.Literals(["AES256", "plaintext"]).annotate({ "identifier": "cloud.storage.EncryptionAlgorithmEnum" })
 export type Cloud_StorageLifecycleRuleAbortIncompleteMultipartUpload = { readonly "daysAfterInitiation": number }
 export const Cloud_StorageLifecycleRuleAbortIncompleteMultipartUpload = Schema.Struct({ "daysAfterInitiation": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })) }).annotate({ "identifier": "cloud.StorageLifecycleRuleAbortIncompleteMultipartUpload" })
 export type Cloud_StorageLifecycleRuleExpiration = { readonly "date"?: string | null, readonly "days"?: number | null, readonly "expiredObjectDeleteMarker"?: boolean | null }
@@ -15,14 +21,6 @@ export type Cloud_StorageLifecycleRuleFilter = { readonly "objectSizeGreaterThan
 export const Cloud_StorageLifecycleRuleFilter = Schema.Struct({ "objectSizeGreaterThan": Schema.optionalKey(Schema.Union([Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null])), "objectSizeLessThan": Schema.optionalKey(Schema.Union([Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null])), "prefix": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])), "tags": Schema.optionalKey(Schema.Union([Schema.Record(Schema.String, Schema.String), Schema.Null])) }).annotate({ "identifier": "cloud.StorageLifecycleRuleFilter" })
 export type Cloud_StorageLifecycleRuleNoncurrentVersionExpiration = { readonly "newerNoncurrentVersions"?: number | null, readonly "noncurrentDays"?: number | null }
 export const Cloud_StorageLifecycleRuleNoncurrentVersionExpiration = Schema.Struct({ "newerNoncurrentVersions": Schema.optionalKey(Schema.Union([Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null])), "noncurrentDays": Schema.optionalKey(Schema.Union([Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null])) }).annotate({ "identifier": "cloud.StorageLifecycleRuleNoncurrentVersionExpiration" })
-export type Cloud_StorageObjectRestoreStatus = { readonly "expireDate"?: string | null, readonly "inProgress"?: boolean }
-export const Cloud_StorageObjectRestoreStatus = Schema.Struct({ "expireDate": Schema.optionalKey(Schema.Union([Schema.String.annotate({ "format": "date-time" }), Schema.Null])), "inProgress": Schema.optionalKey(Schema.Boolean) }).annotate({ "identifier": "cloud.StorageObjectRestoreStatus" })
-export type Cloud_StorageReplicationRuleFilter = { readonly "prefix"?: string | null, readonly "tags"?: { readonly [x: string]: string } | null }
-export const Cloud_StorageReplicationRuleFilter = Schema.Struct({ "prefix": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])), "tags": Schema.optionalKey(Schema.Union([Schema.Record(Schema.String, Schema.String), Schema.Null])) }).annotate({ "identifier": "cloud.StorageReplicationRuleFilter" })
-export type Cloud_role_Role = { readonly "description"?: string, readonly "id"?: string, readonly "name"?: string, readonly "permissions"?: ReadonlyArray<string> }
-export const Cloud_role_Role = Schema.Struct({ "description": Schema.optionalKey(Schema.String), "id": Schema.optionalKey(Schema.String), "name": Schema.optionalKey(Schema.String), "permissions": Schema.optionalKey(Schema.Array(Schema.String)) }).annotate({ "identifier": "cloud.role.Role" })
-export type Cloud_storage_EncryptionAlgorithmEnum = "AES256" | "plaintext"
-export const Cloud_storage_EncryptionAlgorithmEnum = Schema.Literals(["AES256", "plaintext"]).annotate({ "identifier": "cloud.storage.EncryptionAlgorithmEnum" })
 export type Cloud_storage_LifecycleRuleStatusEnum = "disabled" | "enabled"
 export const Cloud_storage_LifecycleRuleStatusEnum = Schema.Literals(["disabled", "enabled"]).annotate({ "identifier": "cloud.storage.LifecycleRuleStatusEnum" })
 export type Cloud_storage_LifecycleRuleTransitionStorageClassEnum = "DEEP_ARCHIVE" | "GLACIER_IR" | "STANDARD" | "STANDARD_IA"
@@ -33,66 +31,68 @@ export type Cloud_storage_ObjectLockStatusEnum = "disabled" | "enabled"
 export const Cloud_storage_ObjectLockStatusEnum = Schema.Literals(["disabled", "enabled"]).annotate({ "identifier": "cloud.storage.ObjectLockStatusEnum" })
 export type Cloud_storage_ReplicationRuleDeleteMarkerReplicationStatusEnum = "disabled" | "enabled"
 export const Cloud_storage_ReplicationRuleDeleteMarkerReplicationStatusEnum = Schema.Literals(["disabled", "enabled"]).annotate({ "identifier": "cloud.storage.ReplicationRuleDeleteMarkerReplicationStatusEnum" })
-export type Cloud_storage_ReplicationRuleStatusEnum = "disabled" | "enabled"
-export const Cloud_storage_ReplicationRuleStatusEnum = Schema.Literals(["disabled", "enabled"]).annotate({ "identifier": "cloud.storage.ReplicationRuleStatusEnum" })
-export type Cloud_storage_StorageClassEnum = "DEEP_ARCHIVE" | "GLACIER_IR" | "HIGH_PERF" | "STANDARD" | "STANDARD_IA"
-export const Cloud_storage_StorageClassEnum = Schema.Literals(["DEEP_ARCHIVE", "GLACIER_IR", "HIGH_PERF", "STANDARD", "STANDARD_IA"]).annotate({ "identifier": "cloud.storage.StorageClassEnum" })
 export type Cloud_storage_StorageClassReplicationEnum = "DEEP_ARCHIVE" | "GLACIER" | "GLACIER_IR" | "HIGH_PERF" | "INTELLIGENT_TIERING" | "ONEZONE_IA" | "STANDARD" | "STANDARD_IA"
 export const Cloud_storage_StorageClassReplicationEnum = Schema.Literals(["DEEP_ARCHIVE", "GLACIER", "GLACIER_IR", "HIGH_PERF", "INTELLIGENT_TIERING", "ONEZONE_IA", "STANDARD", "STANDARD_IA"]).annotate({ "identifier": "cloud.storage.StorageClassReplicationEnum" })
+export type Cloud_StorageReplicationRuleFilter = { readonly "prefix"?: string | null, readonly "tags"?: { readonly [x: string]: string } | null }
+export const Cloud_StorageReplicationRuleFilter = Schema.Struct({ "prefix": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])), "tags": Schema.optionalKey(Schema.Union([Schema.Record(Schema.String, Schema.String), Schema.Null])) }).annotate({ "identifier": "cloud.StorageReplicationRuleFilter" })
+export type Cloud_storage_ReplicationRuleStatusEnum = "disabled" | "enabled"
+export const Cloud_storage_ReplicationRuleStatusEnum = Schema.Literals(["disabled", "enabled"]).annotate({ "identifier": "cloud.storage.ReplicationRuleStatusEnum" })
 export type Cloud_storage_VersioningStatusEnum = "disabled" | "enabled" | "suspended"
 export const Cloud_storage_VersioningStatusEnum = Schema.Literals(["disabled", "enabled", "suspended"]).annotate({ "identifier": "cloud.storage.VersioningStatusEnum" })
+export type Cloud_role_Role = { readonly "description"?: string, readonly "id"?: string, readonly "name"?: string, readonly "permissions"?: ReadonlyArray<string> }
+export const Cloud_role_Role = Schema.Struct({ "description": Schema.optionalKey(Schema.String), "id": Schema.optionalKey(Schema.String), "name": Schema.optionalKey(Schema.String), "permissions": Schema.optionalKey(Schema.Array(Schema.String)) }).annotate({ "identifier": "cloud.role.Role" })
+export type Cloud_user_UserStatusEnum = "creating" | "deleted" | "deleting" | "disabled" | "ok" | "updating"
+export const Cloud_user_UserStatusEnum = Schema.Literals(["creating", "deleted", "deleting", "disabled", "ok", "updating"]).annotate({ "identifier": "cloud.user.UserStatusEnum" })
 export type Cloud_user_RoleEnum = "administrator" | "ai_training_operator" | "ai_training_read" | "authentication" | "backup_operator" | "compute_operator" | "image_operator" | "infrastructure_supervisor" | "key-manager_operator" | "key-manager_read" | "load-balancer_operator" | "network_operator" | "network_security_operator" | "objectstore_operator" | "quantum_operator" | "quantum_reader" | "share_operator" | "volume_operator"
 export const Cloud_user_RoleEnum = Schema.Literals(["administrator", "ai_training_operator", "ai_training_read", "authentication", "backup_operator", "compute_operator", "image_operator", "infrastructure_supervisor", "key-manager_operator", "key-manager_read", "load-balancer_operator", "network_operator", "network_security_operator", "objectstore_operator", "quantum_operator", "quantum_reader", "share_operator", "volume_operator"]).annotate({ "identifier": "cloud.user.RoleEnum" })
 export type Cloud_user_S3Credentials = { readonly "access"?: string, readonly "tenantId"?: string, readonly "userId"?: string }
 export const Cloud_user_S3Credentials = Schema.Struct({ "access": Schema.optionalKey(Schema.String), "tenantId": Schema.optionalKey(Schema.String), "userId": Schema.optionalKey(Schema.String) }).annotate({ "identifier": "cloud.user.S3Credentials" })
 export type Cloud_user_S3CredentialsWithSecret = { readonly "access"?: string, readonly "secret"?: string, readonly "tenantId"?: string, readonly "userId"?: string }
 export const Cloud_user_S3CredentialsWithSecret = Schema.Struct({ "access": Schema.optionalKey(Schema.String), "secret": Schema.optionalKey(Schema.String.annotate({ "format": "password" })), "tenantId": Schema.optionalKey(Schema.String), "userId": Schema.optionalKey(Schema.String) }).annotate({ "identifier": "cloud.user.S3CredentialsWithSecret" })
-export type Cloud_user_UserStatusEnum = "creating" | "deleted" | "deleting" | "disabled" | "ok" | "updating"
-export const Cloud_user_UserStatusEnum = Schema.Literals(["creating", "deleted", "deleting", "disabled", "ok", "updating"]).annotate({ "identifier": "cloud.user.UserStatusEnum" })
+export type Cloud_StorageObjectList = { readonly "etag"?: string | null, readonly "isCommonPrefix"?: boolean | null, readonly "isDeleteMarker"?: boolean | null, readonly "isLatest"?: boolean | null, readonly "key"?: string, readonly "lastModified"?: string | null, readonly "restoreStatus"?: Cloud_StorageObjectRestoreStatus | null, readonly "size"?: number, readonly "storageClass"?: Cloud_storage_StorageClassEnum | null, readonly "versionId"?: string | null }
+export const Cloud_StorageObjectList = Schema.Struct({ "etag": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])), "isCommonPrefix": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])), "isDeleteMarker": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])), "isLatest": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])), "key": Schema.optionalKey(Schema.String), "lastModified": Schema.optionalKey(Schema.Union([Schema.String.annotate({ "format": "date-time" }), Schema.Null])), "restoreStatus": Schema.optionalKey(Schema.Union([Cloud_StorageObjectRestoreStatus, Schema.Null])), "size": Schema.optionalKey(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), "storageClass": Schema.optionalKey(Schema.Union([Cloud_storage_StorageClassEnum, Schema.Null])), "versionId": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])) }).annotate({ "identifier": "cloud.StorageObjectList" })
+export type Cloud_StorageLifecycleRuleNoncurrentVersionTransition = { readonly "newerNoncurrentVersions"?: number | null, readonly "noncurrentDays"?: number | null, readonly "storageClass"?: Cloud_storage_StorageClassEnum | null }
+export const Cloud_StorageLifecycleRuleNoncurrentVersionTransition = Schema.Struct({ "newerNoncurrentVersions": Schema.optionalKey(Schema.Union([Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null])), "noncurrentDays": Schema.optionalKey(Schema.Union([Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null])), "storageClass": Schema.optionalKey(Schema.Union([Cloud_storage_StorageClassEnum, Schema.Null])) }).annotate({ "identifier": "cloud.StorageLifecycleRuleNoncurrentVersionTransition" })
 export type Cloud_StorageEncryptionObject = { readonly "sseAlgorithm"?: Cloud_storage_EncryptionAlgorithmEnum | null }
 export const Cloud_StorageEncryptionObject = Schema.Struct({ "sseAlgorithm": Schema.optionalKey(Schema.Union([Cloud_storage_EncryptionAlgorithmEnum, Schema.Null])) }).annotate({ "identifier": "cloud.StorageEncryptionObject" })
 export type Cloud_StorageLifecycleRuleTransition = { readonly "date"?: string | null, readonly "days"?: number | null, readonly "storageClass"?: Cloud_storage_LifecycleRuleTransitionStorageClassEnum }
 export const Cloud_StorageLifecycleRuleTransition = Schema.Struct({ "date": Schema.optionalKey(Schema.Union([Schema.String.annotate({ "format": "date" }), Schema.Null])), "days": Schema.optionalKey(Schema.Union([Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null])), "storageClass": Schema.optionalKey(Cloud_storage_LifecycleRuleTransitionStorageClassEnum) }).annotate({ "identifier": "cloud.StorageLifecycleRuleTransition" })
 export type Cloud_StorageLockConfigurationRule = { readonly "mode"?: Cloud_storage_ObjectLockModeEnum, readonly "period"?: string }
 export const Cloud_StorageLockConfigurationRule = Schema.Struct({ "mode": Schema.optionalKey(Cloud_storage_ObjectLockModeEnum), "period": Schema.optionalKey(Schema.String.annotate({ "format": "duration" })) }).annotate({ "identifier": "cloud.StorageLockConfigurationRule" })
-export type Cloud_StorageLifecycleRuleNoncurrentVersionTransition = { readonly "newerNoncurrentVersions"?: number | null, readonly "noncurrentDays"?: number | null, readonly "storageClass"?: Cloud_storage_StorageClassEnum | null }
-export const Cloud_StorageLifecycleRuleNoncurrentVersionTransition = Schema.Struct({ "newerNoncurrentVersions": Schema.optionalKey(Schema.Union([Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null])), "noncurrentDays": Schema.optionalKey(Schema.Union([Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null])), "storageClass": Schema.optionalKey(Schema.Union([Cloud_storage_StorageClassEnum, Schema.Null])) }).annotate({ "identifier": "cloud.StorageLifecycleRuleNoncurrentVersionTransition" })
-export type Cloud_StorageObjectList = { readonly "etag"?: string | null, readonly "isCommonPrefix"?: boolean | null, readonly "isDeleteMarker"?: boolean | null, readonly "isLatest"?: boolean | null, readonly "key"?: string, readonly "lastModified"?: string | null, readonly "restoreStatus"?: Cloud_StorageObjectRestoreStatus | null, readonly "size"?: number, readonly "storageClass"?: Cloud_storage_StorageClassEnum | null, readonly "versionId"?: string | null }
-export const Cloud_StorageObjectList = Schema.Struct({ "etag": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])), "isCommonPrefix": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])), "isDeleteMarker": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])), "isLatest": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])), "key": Schema.optionalKey(Schema.String), "lastModified": Schema.optionalKey(Schema.Union([Schema.String.annotate({ "format": "date-time" }), Schema.Null])), "restoreStatus": Schema.optionalKey(Schema.Union([Cloud_StorageObjectRestoreStatus, Schema.Null])), "size": Schema.optionalKey(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), "storageClass": Schema.optionalKey(Schema.Union([Cloud_storage_StorageClassEnum, Schema.Null])), "versionId": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])) }).annotate({ "identifier": "cloud.StorageObjectList" })
-export type Cloud_StorageReplicationRuleDestination = { readonly "name"?: string, readonly "region"?: string | null, readonly "storageClass"?: Cloud_storage_StorageClassReplicationEnum | null }
-export const Cloud_StorageReplicationRuleDestination = Schema.Struct({ "name": Schema.optionalKey(Schema.String), "region": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])), "storageClass": Schema.optionalKey(Schema.Union([Cloud_storage_StorageClassReplicationEnum, Schema.Null])) }).annotate({ "identifier": "cloud.StorageReplicationRuleDestination" })
 export type Cloud_StorageReplicationRuleDestinationIn = { readonly "name"?: string, readonly "region": string, readonly "storageClass"?: Cloud_storage_StorageClassReplicationEnum | null }
 export const Cloud_StorageReplicationRuleDestinationIn = Schema.Struct({ "name": Schema.optionalKey(Schema.String), "region": Schema.String, "storageClass": Schema.optionalKey(Schema.Union([Cloud_storage_StorageClassReplicationEnum, Schema.Null])) }).annotate({ "identifier": "cloud.StorageReplicationRuleDestinationIn" })
+export type Cloud_StorageReplicationRuleDestination = { readonly "name"?: string, readonly "region"?: string | null, readonly "storageClass"?: Cloud_storage_StorageClassReplicationEnum | null }
+export const Cloud_StorageReplicationRuleDestination = Schema.Struct({ "name": Schema.optionalKey(Schema.String), "region": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])), "storageClass": Schema.optionalKey(Schema.Union([Cloud_storage_StorageClassReplicationEnum, Schema.Null])) }).annotate({ "identifier": "cloud.StorageReplicationRuleDestination" })
 export type Cloud_StorageVersioningObject = { readonly "status"?: Cloud_storage_VersioningStatusEnum | null }
 export const Cloud_StorageVersioningObject = Schema.Struct({ "status": Schema.optionalKey(Schema.Union([Cloud_storage_VersioningStatusEnum, Schema.Null])) }).annotate({ "identifier": "cloud.StorageVersioningObject" })
-export type Cloud_ProjectUserCreation = { readonly "description"?: string | null, readonly "role"?: Cloud_user_RoleEnum | null, readonly "roles"?: ReadonlyArray<Cloud_user_RoleEnum> | null }
-export const Cloud_ProjectUserCreation = Schema.Struct({ "description": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])), "role": Schema.optionalKey(Schema.Union([Cloud_user_RoleEnum, Schema.Null])), "roles": Schema.optionalKey(Schema.Union([Schema.Array(Cloud_user_RoleEnum), Schema.Null])) }).annotate({ "identifier": "cloud.ProjectUserCreation" })
 export type Cloud_user_User = { readonly "creationDate"?: string, readonly "description"?: string, readonly "id"?: number, readonly "openstackId"?: string | null, readonly "roles"?: ReadonlyArray<Cloud_role_Role>, readonly "status"?: Cloud_user_UserStatusEnum, readonly "username"?: string }
 export const Cloud_user_User = Schema.Struct({ "creationDate": Schema.optionalKey(Schema.String.annotate({ "format": "date-time" })), "description": Schema.optionalKey(Schema.String), "id": Schema.optionalKey(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), "openstackId": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])), "roles": Schema.optionalKey(Schema.Array(Cloud_role_Role)), "status": Schema.optionalKey(Cloud_user_UserStatusEnum), "username": Schema.optionalKey(Schema.String) }).annotate({ "identifier": "cloud.user.User" })
 export type Cloud_user_UserDetail = { readonly "creationDate"?: string, readonly "description"?: string, readonly "id"?: number, readonly "openstackId"?: string | null, readonly "password"?: string, readonly "roles"?: ReadonlyArray<Cloud_role_Role>, readonly "status"?: Cloud_user_UserStatusEnum, readonly "username"?: string }
 export const Cloud_user_UserDetail = Schema.Struct({ "creationDate": Schema.optionalKey(Schema.String.annotate({ "format": "date-time" })), "description": Schema.optionalKey(Schema.String), "id": Schema.optionalKey(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), "openstackId": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])), "password": Schema.optionalKey(Schema.String), "roles": Schema.optionalKey(Schema.Array(Cloud_role_Role)), "status": Schema.optionalKey(Cloud_user_UserStatusEnum), "username": Schema.optionalKey(Schema.String) }).annotate({ "identifier": "cloud.user.UserDetail" })
-export type Cloud_StorageLockConfiguration = { readonly "rule"?: Cloud_StorageLockConfigurationRule | null, readonly "status"?: Cloud_storage_ObjectLockStatusEnum }
-export const Cloud_StorageLockConfiguration = Schema.Struct({ "rule": Schema.optionalKey(Schema.Union([Cloud_StorageLockConfigurationRule, Schema.Null])), "status": Schema.optionalKey(Cloud_storage_ObjectLockStatusEnum) }).annotate({ "identifier": "cloud.StorageLockConfiguration" })
-export type Cloud_storage_LifecycleRule = { readonly "abortIncompleteMultipartUpload"?: Cloud_StorageLifecycleRuleAbortIncompleteMultipartUpload | null, readonly "expiration"?: Cloud_StorageLifecycleRuleExpiration | null, readonly "filter"?: Cloud_StorageLifecycleRuleFilter | null, readonly "id"?: string, readonly "noncurrentVersionExpiration"?: Cloud_StorageLifecycleRuleNoncurrentVersionExpiration | null, readonly "noncurrentVersionTransitions"?: ReadonlyArray<Cloud_StorageLifecycleRuleNoncurrentVersionTransition> | null, readonly "status": Cloud_storage_LifecycleRuleStatusEnum, readonly "transitions"?: ReadonlyArray<Cloud_StorageLifecycleRuleTransition> | null }
-export const Cloud_storage_LifecycleRule = Schema.Struct({ "abortIncompleteMultipartUpload": Schema.optionalKey(Schema.Union([Cloud_StorageLifecycleRuleAbortIncompleteMultipartUpload, Schema.Null])), "expiration": Schema.optionalKey(Schema.Union([Cloud_StorageLifecycleRuleExpiration, Schema.Null])), "filter": Schema.optionalKey(Schema.Union([Cloud_StorageLifecycleRuleFilter, Schema.Null])), "id": Schema.optionalKey(Schema.String), "noncurrentVersionExpiration": Schema.optionalKey(Schema.Union([Cloud_StorageLifecycleRuleNoncurrentVersionExpiration, Schema.Null])), "noncurrentVersionTransitions": Schema.optionalKey(Schema.Union([Schema.Array(Cloud_StorageLifecycleRuleNoncurrentVersionTransition), Schema.Null])), "status": Cloud_storage_LifecycleRuleStatusEnum, "transitions": Schema.optionalKey(Schema.Union([Schema.Array(Cloud_StorageLifecycleRuleTransition), Schema.Null])) }).annotate({ "identifier": "cloud.storage.LifecycleRule" })
+export type Cloud_ProjectUserCreation = { readonly "description"?: string | null, readonly "role"?: Cloud_user_RoleEnum | null, readonly "roles"?: ReadonlyArray<Cloud_user_RoleEnum> | null }
+export const Cloud_ProjectUserCreation = Schema.Struct({ "description": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])), "role": Schema.optionalKey(Schema.Union([Cloud_user_RoleEnum, Schema.Null])), "roles": Schema.optionalKey(Schema.Union([Schema.Array(Cloud_user_RoleEnum), Schema.Null])) }).annotate({ "identifier": "cloud.ProjectUserCreation" })
 export type Cloud_StorageContainerList = { readonly "createdAt"?: string, readonly "name"?: string, readonly "objects"?: ReadonlyArray<Cloud_StorageObjectList>, readonly "objectsCount"?: number, readonly "objectsSize"?: number, readonly "ownerId"?: number, readonly "region"?: string, readonly "virtualHost"?: string }
 export const Cloud_StorageContainerList = Schema.Struct({ "createdAt": Schema.optionalKey(Schema.String.annotate({ "format": "date-time" })), "name": Schema.optionalKey(Schema.String), "objects": Schema.optionalKey(Schema.Array(Cloud_StorageObjectList)), "objectsCount": Schema.optionalKey(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), "objectsSize": Schema.optionalKey(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), "ownerId": Schema.optionalKey(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), "region": Schema.optionalKey(Schema.String), "virtualHost": Schema.optionalKey(Schema.String) }).annotate({ "identifier": "cloud.StorageContainerList" })
-export type Cloud_storage_ReplicationRule = { readonly "deleteMarkerReplication"?: Cloud_storage_ReplicationRuleDeleteMarkerReplicationStatusEnum, readonly "destination"?: Cloud_StorageReplicationRuleDestination | null, readonly "filter"?: Cloud_StorageReplicationRuleFilter | null, readonly "id"?: string, readonly "priority"?: number, readonly "status"?: Cloud_storage_ReplicationRuleStatusEnum }
-export const Cloud_storage_ReplicationRule = Schema.Struct({ "deleteMarkerReplication": Schema.optionalKey(Cloud_storage_ReplicationRuleDeleteMarkerReplicationStatusEnum), "destination": Schema.optionalKey(Schema.Union([Cloud_StorageReplicationRuleDestination, Schema.Null])), "filter": Schema.optionalKey(Schema.Union([Cloud_StorageReplicationRuleFilter, Schema.Null])), "id": Schema.optionalKey(Schema.String), "priority": Schema.optionalKey(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), "status": Schema.optionalKey(Cloud_storage_ReplicationRuleStatusEnum) }).annotate({ "identifier": "cloud.storage.ReplicationRule" })
+export type Cloud_storage_LifecycleRule = { readonly "abortIncompleteMultipartUpload"?: Cloud_StorageLifecycleRuleAbortIncompleteMultipartUpload | null, readonly "expiration"?: Cloud_StorageLifecycleRuleExpiration | null, readonly "filter"?: Cloud_StorageLifecycleRuleFilter | null, readonly "id"?: string, readonly "noncurrentVersionExpiration"?: Cloud_StorageLifecycleRuleNoncurrentVersionExpiration | null, readonly "noncurrentVersionTransitions"?: ReadonlyArray<Cloud_StorageLifecycleRuleNoncurrentVersionTransition> | null, readonly "status": Cloud_storage_LifecycleRuleStatusEnum, readonly "transitions"?: ReadonlyArray<Cloud_StorageLifecycleRuleTransition> | null }
+export const Cloud_storage_LifecycleRule = Schema.Struct({ "abortIncompleteMultipartUpload": Schema.optionalKey(Schema.Union([Cloud_StorageLifecycleRuleAbortIncompleteMultipartUpload, Schema.Null])), "expiration": Schema.optionalKey(Schema.Union([Cloud_StorageLifecycleRuleExpiration, Schema.Null])), "filter": Schema.optionalKey(Schema.Union([Cloud_StorageLifecycleRuleFilter, Schema.Null])), "id": Schema.optionalKey(Schema.String), "noncurrentVersionExpiration": Schema.optionalKey(Schema.Union([Cloud_StorageLifecycleRuleNoncurrentVersionExpiration, Schema.Null])), "noncurrentVersionTransitions": Schema.optionalKey(Schema.Union([Schema.Array(Cloud_StorageLifecycleRuleNoncurrentVersionTransition), Schema.Null])), "status": Cloud_storage_LifecycleRuleStatusEnum, "transitions": Schema.optionalKey(Schema.Union([Schema.Array(Cloud_StorageLifecycleRuleTransition), Schema.Null])) }).annotate({ "identifier": "cloud.storage.LifecycleRule" })
+export type Cloud_StorageLockConfiguration = { readonly "rule"?: Cloud_StorageLockConfigurationRule | null, readonly "status"?: Cloud_storage_ObjectLockStatusEnum }
+export const Cloud_StorageLockConfiguration = Schema.Struct({ "rule": Schema.optionalKey(Schema.Union([Cloud_StorageLockConfigurationRule, Schema.Null])), "status": Schema.optionalKey(Cloud_storage_ObjectLockStatusEnum) }).annotate({ "identifier": "cloud.StorageLockConfiguration" })
 export type Cloud_storage_ReplicationRuleIn = { readonly "deleteMarkerReplication"?: Cloud_storage_ReplicationRuleDeleteMarkerReplicationStatusEnum, readonly "destination"?: Cloud_StorageReplicationRuleDestinationIn | null, readonly "filter"?: Cloud_StorageReplicationRuleFilter | null, readonly "id"?: string, readonly "priority"?: number, readonly "status"?: Cloud_storage_ReplicationRuleStatusEnum }
 export const Cloud_storage_ReplicationRuleIn = Schema.Struct({ "deleteMarkerReplication": Schema.optionalKey(Cloud_storage_ReplicationRuleDeleteMarkerReplicationStatusEnum), "destination": Schema.optionalKey(Schema.Union([Cloud_StorageReplicationRuleDestinationIn, Schema.Null])), "filter": Schema.optionalKey(Schema.Union([Cloud_StorageReplicationRuleFilter, Schema.Null])), "id": Schema.optionalKey(Schema.String), "priority": Schema.optionalKey(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), "status": Schema.optionalKey(Cloud_storage_ReplicationRuleStatusEnum) }).annotate({ "identifier": "cloud.storage.ReplicationRuleIn" })
+export type Cloud_storage_ReplicationRule = { readonly "deleteMarkerReplication"?: Cloud_storage_ReplicationRuleDeleteMarkerReplicationStatusEnum, readonly "destination"?: Cloud_StorageReplicationRuleDestination | null, readonly "filter"?: Cloud_StorageReplicationRuleFilter | null, readonly "id"?: string, readonly "priority"?: number, readonly "status"?: Cloud_storage_ReplicationRuleStatusEnum }
+export const Cloud_storage_ReplicationRule = Schema.Struct({ "deleteMarkerReplication": Schema.optionalKey(Cloud_storage_ReplicationRuleDeleteMarkerReplicationStatusEnum), "destination": Schema.optionalKey(Schema.Union([Cloud_StorageReplicationRuleDestination, Schema.Null])), "filter": Schema.optionalKey(Schema.Union([Cloud_StorageReplicationRuleFilter, Schema.Null])), "id": Schema.optionalKey(Schema.String), "priority": Schema.optionalKey(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), "status": Schema.optionalKey(Cloud_storage_ReplicationRuleStatusEnum) }).annotate({ "identifier": "cloud.storage.ReplicationRule" })
 export type Cloud_StorageLifecycleConfiguration = { readonly "rules": ReadonlyArray<Cloud_storage_LifecycleRule> | null }
 export const Cloud_StorageLifecycleConfiguration = Schema.Struct({ "rules": Schema.Union([Schema.Array(Cloud_storage_LifecycleRule), Schema.Null]) }).annotate({ "identifier": "cloud.StorageLifecycleConfiguration" })
-export type Cloud_StorageReplicationObject = { readonly "rules"?: ReadonlyArray<Cloud_storage_ReplicationRule> | null }
-export const Cloud_StorageReplicationObject = Schema.Struct({ "rules": Schema.optionalKey(Schema.Union([Schema.Array(Cloud_storage_ReplicationRule), Schema.Null])) }).annotate({ "identifier": "cloud.StorageReplicationObject" })
 export type Cloud_StorageReplicationObjectIn = { readonly "rules"?: ReadonlyArray<Cloud_storage_ReplicationRuleIn> | null }
 export const Cloud_StorageReplicationObjectIn = Schema.Struct({ "rules": Schema.optionalKey(Schema.Union([Schema.Array(Cloud_storage_ReplicationRuleIn), Schema.Null])) }).annotate({ "identifier": "cloud.StorageReplicationObjectIn" })
-export type Cloud_StorageContainer = { readonly "createdAt"?: string, readonly "encryption"?: Cloud_StorageEncryptionObject | null, readonly "lifecycle"?: Cloud_StorageLifecycleConfiguration | null, readonly "name"?: string, readonly "objectLock"?: Cloud_StorageLockConfiguration | null, readonly "objects"?: ReadonlyArray<Cloud_StorageObjectList>, readonly "objectsCount"?: number, readonly "objectsSize"?: number, readonly "ownerId"?: number, readonly "region"?: string, readonly "replication"?: Cloud_StorageReplicationObject | null, readonly "tags"?: { readonly [x: string]: string } | null, readonly "versioning"?: Cloud_StorageVersioningObject | null, readonly "virtualHost"?: string }
-export const Cloud_StorageContainer = Schema.Struct({ "createdAt": Schema.optionalKey(Schema.String.annotate({ "format": "date-time" })), "encryption": Schema.optionalKey(Schema.Union([Cloud_StorageEncryptionObject, Schema.Null])), "lifecycle": Schema.optionalKey(Schema.Union([Cloud_StorageLifecycleConfiguration, Schema.Null])), "name": Schema.optionalKey(Schema.String), "objectLock": Schema.optionalKey(Schema.Union([Cloud_StorageLockConfiguration, Schema.Null])), "objects": Schema.optionalKey(Schema.Array(Cloud_StorageObjectList)), "objectsCount": Schema.optionalKey(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), "objectsSize": Schema.optionalKey(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), "ownerId": Schema.optionalKey(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), "region": Schema.optionalKey(Schema.String), "replication": Schema.optionalKey(Schema.Union([Cloud_StorageReplicationObject, Schema.Null])), "tags": Schema.optionalKey(Schema.Union([Schema.Record(Schema.String, Schema.String), Schema.Null])), "versioning": Schema.optionalKey(Schema.Union([Cloud_StorageVersioningObject, Schema.Null])), "virtualHost": Schema.optionalKey(Schema.String) }).annotate({ "identifier": "cloud.StorageContainer" })
+export type Cloud_StorageReplicationObject = { readonly "rules"?: ReadonlyArray<Cloud_storage_ReplicationRule> | null }
+export const Cloud_StorageReplicationObject = Schema.Struct({ "rules": Schema.optionalKey(Schema.Union([Schema.Array(Cloud_storage_ReplicationRule), Schema.Null])) }).annotate({ "identifier": "cloud.StorageReplicationObject" })
 export type Cloud_StorageContainerCreation = { readonly "encryption"?: Cloud_StorageEncryptionObject | null, readonly "lifecycle"?: Cloud_StorageLifecycleConfiguration | null, readonly "name": string, readonly "objectLock"?: Cloud_StorageLockConfiguration | null, readonly "ownerId"?: number | null, readonly "replication"?: Cloud_StorageReplicationObjectIn | null, readonly "tags"?: { readonly [x: string]: string } | null, readonly "versioning"?: Cloud_StorageVersioningObject | null }
 export const Cloud_StorageContainerCreation = Schema.Struct({ "encryption": Schema.optionalKey(Schema.Union([Cloud_StorageEncryptionObject, Schema.Null])), "lifecycle": Schema.optionalKey(Schema.Union([Cloud_StorageLifecycleConfiguration, Schema.Null])), "name": Schema.String, "objectLock": Schema.optionalKey(Schema.Union([Cloud_StorageLockConfiguration, Schema.Null])), "ownerId": Schema.optionalKey(Schema.Union([Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null])), "replication": Schema.optionalKey(Schema.Union([Cloud_StorageReplicationObjectIn, Schema.Null])), "tags": Schema.optionalKey(Schema.Union([Schema.Record(Schema.String, Schema.String), Schema.Null])), "versioning": Schema.optionalKey(Schema.Union([Cloud_StorageVersioningObject, Schema.Null])) }).annotate({ "identifier": "cloud.StorageContainerCreation" })
 export type Cloud_StorageContainerUpdate = { readonly "encryption"?: Cloud_StorageEncryptionObject | null, readonly "lifecycle"?: Cloud_StorageLifecycleConfiguration | null, readonly "objectLock"?: Cloud_StorageLockConfiguration | null, readonly "replication"?: Cloud_StorageReplicationObjectIn | null, readonly "tags"?: { readonly [x: string]: string } | null, readonly "versioning"?: Cloud_StorageVersioningObject | null }
 export const Cloud_StorageContainerUpdate = Schema.Struct({ "encryption": Schema.optionalKey(Schema.Union([Cloud_StorageEncryptionObject, Schema.Null])), "lifecycle": Schema.optionalKey(Schema.Union([Cloud_StorageLifecycleConfiguration, Schema.Null])), "objectLock": Schema.optionalKey(Schema.Union([Cloud_StorageLockConfiguration, Schema.Null])), "replication": Schema.optionalKey(Schema.Union([Cloud_StorageReplicationObjectIn, Schema.Null])), "tags": Schema.optionalKey(Schema.Union([Schema.Record(Schema.String, Schema.String), Schema.Null])), "versioning": Schema.optionalKey(Schema.Union([Cloud_StorageVersioningObject, Schema.Null])) }).annotate({ "identifier": "cloud.StorageContainerUpdate" })
+export type Cloud_StorageContainer = { readonly "createdAt"?: string, readonly "encryption"?: Cloud_StorageEncryptionObject | null, readonly "lifecycle"?: Cloud_StorageLifecycleConfiguration | null, readonly "name"?: string, readonly "objectLock"?: Cloud_StorageLockConfiguration | null, readonly "objects"?: ReadonlyArray<Cloud_StorageObjectList>, readonly "objectsCount"?: number, readonly "objectsSize"?: number, readonly "ownerId"?: number, readonly "region"?: string, readonly "replication"?: Cloud_StorageReplicationObject | null, readonly "tags"?: { readonly [x: string]: string } | null, readonly "versioning"?: Cloud_StorageVersioningObject | null, readonly "virtualHost"?: string }
+export const Cloud_StorageContainer = Schema.Struct({ "createdAt": Schema.optionalKey(Schema.String.annotate({ "format": "date-time" })), "encryption": Schema.optionalKey(Schema.Union([Cloud_StorageEncryptionObject, Schema.Null])), "lifecycle": Schema.optionalKey(Schema.Union([Cloud_StorageLifecycleConfiguration, Schema.Null])), "name": Schema.optionalKey(Schema.String), "objectLock": Schema.optionalKey(Schema.Union([Cloud_StorageLockConfiguration, Schema.Null])), "objects": Schema.optionalKey(Schema.Array(Cloud_StorageObjectList)), "objectsCount": Schema.optionalKey(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), "objectsSize": Schema.optionalKey(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), "ownerId": Schema.optionalKey(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), "region": Schema.optionalKey(Schema.String), "replication": Schema.optionalKey(Schema.Union([Cloud_StorageReplicationObject, Schema.Null])), "tags": Schema.optionalKey(Schema.Union([Schema.Record(Schema.String, Schema.String), Schema.Null])), "versioning": Schema.optionalKey(Schema.Union([Cloud_StorageVersioningObject, Schema.Null])), "virtualHost": Schema.optionalKey(Schema.String) }).annotate({ "identifier": "cloud.StorageContainer" })
 // schemas
 export type GetStorageContainersOnRegion200 = ReadonlyArray<Cloud_StorageContainerList>
 export const GetStorageContainersOnRegion200 = Schema.Array(Cloud_StorageContainerList)
@@ -143,16 +143,18 @@ export interface OperationConfig {
  * of an operation based upon the value of the `includeResponse` configuration
  * option.
  */
-export type WithOptionalResponse<A, Config extends OperationConfig> = Config extends {
+export type WithOptionalResponse<A, Config extends OperationConfig | undefined> = Config extends {
   readonly includeResponse: true
-} ? [A, HttpClientResponse.HttpClientResponse] : A
+} ? [A, HttpClientResponse.HttpClientResponse]
+  : Config extends { readonly includeResponse?: false | undefined } | undefined ? A
+  : A | [A, HttpClientResponse.HttpClientResponse]
 
-export const make = (
-  httpClient: HttpClient.HttpClient,
+export const make = <E, R>(
+  httpClient: HttpClient.HttpClient.With<E, R>,
   options: {
-    readonly transformClient?: ((client: HttpClient.HttpClient) => Effect.Effect<HttpClient.HttpClient>) | undefined
+    readonly transformClient?: ((client: HttpClient.HttpClient.With<E, R>) => Effect.Effect<HttpClient.HttpClient.With<E, R>>) | undefined
   } = {}
-): Storage => {
+): Storage<E, R> => {
   const unexpectedStatus = (response: HttpClientResponse.HttpClientResponse) =>
     Effect.flatMap(
       Effect.orElseSucceed(response.json, () => "Unexpected status code"),
@@ -169,7 +171,7 @@ export const make = (
     )
   const withResponse = <Config extends OperationConfig>(config: Config | undefined) => (
     f: (response: HttpClientResponse.HttpClientResponse) => Effect.Effect<any, any>,
-  ): (request: HttpClientRequest.HttpClientRequest) => Effect.Effect<any, any> => {
+  ): (request: HttpClientRequest.HttpClientRequest) => Effect.Effect<any, any, R> => {
     const withOptionalResponse = (
       config?.includeResponse
         ? (response: HttpClientResponse.HttpClientResponse) => Effect.map(f(response), (a) => [a, response])
@@ -183,123 +185,210 @@ export const make = (
           )
       : (request) => Effect.flatMap(httpClient.execute(request), withOptionalResponse)
   }
+  const __encodePathParam = encodeURIComponent
+  const __makePathRequest = (
+    method: (url: string) => HttpClientRequest.HttpClientRequest,
+    parameters: ReadonlyArray<string>,
+    getPath: () => string,
+  ) => Effect.suspend(() => {
+    const fail = (description: string, cause?: unknown) => Effect.fail(
+      new HttpClientError.HttpClientError({
+        reason: new HttpClientError.InvalidUrlError({
+          request: method(""),
+          cause,
+          description,
+        }),
+      }),
+    )
+    if (parameters.some((value) => value === "" || /^(?:\.|%2e){1,2}$/i.test(value))) {
+      return fail("Path parameters must be non-empty and cannot be dot segments")
+    }
+    let path: string
+    try {
+      path = getPath()
+    } catch (cause) {
+      return fail("Failed to encode path parameter", cause)
+    }
+    if (path.split("/").some((segment) => /^(?:\.|%2e){1,2}$/i.test(segment))) {
+      return fail("Request paths cannot contain dot segments")
+    }
+    return Effect.succeed(method(path))
+  })
   const decodeSuccess =
     <Schema extends Schema.Constraint>(schema: Schema) =>
     (response: HttpClientResponse.HttpClientResponse) =>
       HttpClientResponse.schemaBodyJson(schema)(response)
-  const decodeError =
-    <const Tag extends string, Schema extends Schema.Constraint>(tag: Tag, schema: Schema) =>
-    (response: HttpClientResponse.HttpClientResponse) =>
-      Effect.flatMap(
-        HttpClientResponse.schemaBodyJson(schema)(response),
-        (cause) => Effect.fail(StorageError(tag, cause, response)),
-      )
   return {
     httpClient,
-    "getStorageContainersOnRegion": (serviceName, regionName, options) => HttpClientRequest.get(`/cloud/project/${serviceName}/region/${regionName}/storage`).pipe(
-    withResponse(options?.config)(HttpClientResponse.matchStatus({
+    "getStorageContainersOnRegion": (serviceName, regionName, options: Parameters<Storage["getStorageContainersOnRegion"]>[2]) => __makePathRequest(HttpClientRequest.get, [serviceName, regionName], () => "/cloud/project/" + __encodePathParam(serviceName) + "/region/" + __encodePathParam(regionName) + "/storage").pipe(
+    Effect.flatMap((request) => request.pipe(
+      withResponse(options?.config)(HttpClientResponse.matchStatus({
       "2xx": decodeSuccess(GetStorageContainersOnRegion200),
       orElse: unexpectedStatus
     }))
+    ))
   ),
-    "createStorageContainerOnRegion": (serviceName, regionName, options) => HttpClientRequest.post(`/cloud/project/${serviceName}/region/${regionName}/storage`).pipe(
-    HttpClientRequest.bodyJsonUnsafe(options.payload),
-    withResponse(options.config)(HttpClientResponse.matchStatus({
+    "createStorageContainerOnRegion": (serviceName, regionName, options: Parameters<Storage["createStorageContainerOnRegion"]>[2]) => __makePathRequest(HttpClientRequest.post, [serviceName, regionName], () => "/cloud/project/" + __encodePathParam(serviceName) + "/region/" + __encodePathParam(regionName) + "/storage").pipe(
+    Effect.flatMap((request) => request.pipe(
+      HttpClientRequest.bodyJsonUnsafe(options.payload),
+      withResponse(options.config)(HttpClientResponse.matchStatus({
       "2xx": decodeSuccess(CreateStorageContainerOnRegion200),
       orElse: unexpectedStatus
     }))
+    ))
   ),
-    "getStorageContainerOnRegion": (serviceName, regionName, name, options) => HttpClientRequest.get(`/cloud/project/${serviceName}/region/${regionName}/storage/${name}`).pipe(
-    HttpClientRequest.setUrlParams({ "limit": options?.params?.["limit"] as any, "marker": options?.params?.["marker"] as any, "noObjects": options?.params?.["noObjects"] as any, "prefix": options?.params?.["prefix"] as any }),
-    withResponse(options?.config)(HttpClientResponse.matchStatus({
+    "getStorageContainerOnRegion": (serviceName, regionName, name, options: Parameters<Storage["getStorageContainerOnRegion"]>[3]) => __makePathRequest(HttpClientRequest.get, [serviceName, regionName, name], () => "/cloud/project/" + __encodePathParam(serviceName) + "/region/" + __encodePathParam(regionName) + "/storage/" + __encodePathParam(name) + "").pipe(
+    Effect.flatMap((request) => request.pipe(
+      HttpClientRequest.setUrlParams({ "limit": options?.params?.["limit"] as any, "marker": options?.params?.["marker"] as any, "noObjects": options?.params?.["noObjects"] as any, "prefix": options?.params?.["prefix"] as any }),
+      withResponse(options?.config)(HttpClientResponse.matchStatus({
       "2xx": decodeSuccess(GetStorageContainerOnRegion200),
       orElse: unexpectedStatus
     }))
+    ))
   ),
-    "updateStorageContainerOnRegion": (serviceName, regionName, name, options) => HttpClientRequest.put(`/cloud/project/${serviceName}/region/${regionName}/storage/${name}`).pipe(
-    HttpClientRequest.bodyJsonUnsafe(options.payload),
-    withResponse(options.config)(HttpClientResponse.matchStatus({
+    "updateStorageContainerOnRegion": (serviceName, regionName, name, options: Parameters<Storage["updateStorageContainerOnRegion"]>[3]) => __makePathRequest(HttpClientRequest.put, [serviceName, regionName, name], () => "/cloud/project/" + __encodePathParam(serviceName) + "/region/" + __encodePathParam(regionName) + "/storage/" + __encodePathParam(name) + "").pipe(
+    Effect.flatMap((request) => request.pipe(
+      HttpClientRequest.bodyJsonUnsafe(options.payload),
+      withResponse(options.config)(HttpClientResponse.matchStatus({
       "2xx": decodeSuccess(UpdateStorageContainerOnRegion200),
       orElse: unexpectedStatus
     }))
+    ))
   ),
-    "deteteStorageContainerOnRegion": (serviceName, regionName, name, options) => HttpClientRequest.delete(`/cloud/project/${serviceName}/region/${regionName}/storage/${name}`).pipe(
-    withResponse(options?.config)(HttpClientResponse.matchStatus({
+    "deteteStorageContainerOnRegion": (serviceName, regionName, name, options: Parameters<Storage["deteteStorageContainerOnRegion"]>[3]) => __makePathRequest(HttpClientRequest.delete, [serviceName, regionName, name], () => "/cloud/project/" + __encodePathParam(serviceName) + "/region/" + __encodePathParam(regionName) + "/storage/" + __encodePathParam(name) + "").pipe(
+    Effect.flatMap((request) => request.pipe(
+      withResponse(options?.config)(HttpClientResponse.matchStatus({
       "200": () => Effect.void,
       "204": () => Effect.void,
       orElse: unexpectedStatus
     }))
+    ))
   ),
-    "getObjectsInformationOnContainerOnRegion": (serviceName, regionName, name, options) => HttpClientRequest.get(`/cloud/project/${serviceName}/region/${regionName}/storage/${name}/object`).pipe(
-    HttpClientRequest.setUrlParams({ "delimiter": options?.params?.["delimiter"] as any, "keyMarker": options?.params?.["keyMarker"] as any, "limit": options?.params?.["limit"] as any, "prefix": options?.params?.["prefix"] as any, "versionIdMarker": options?.params?.["versionIdMarker"] as any, "withVersions": options?.params?.["withVersions"] as any }),
-    withResponse(options?.config)(HttpClientResponse.matchStatus({
+    "getObjectsInformationOnContainerOnRegion": (serviceName, regionName, name, options: Parameters<Storage["getObjectsInformationOnContainerOnRegion"]>[3]) => __makePathRequest(HttpClientRequest.get, [serviceName, regionName, name], () => "/cloud/project/" + __encodePathParam(serviceName) + "/region/" + __encodePathParam(regionName) + "/storage/" + __encodePathParam(name) + "/object").pipe(
+    Effect.flatMap((request) => request.pipe(
+      HttpClientRequest.setUrlParams({ "delimiter": options?.params?.["delimiter"] as any, "keyMarker": options?.params?.["keyMarker"] as any, "limit": options?.params?.["limit"] as any, "prefix": options?.params?.["prefix"] as any, "versionIdMarker": options?.params?.["versionIdMarker"] as any, "withVersions": options?.params?.["withVersions"] as any }),
+      withResponse(options?.config)(HttpClientResponse.matchStatus({
       "2xx": decodeSuccess(GetObjectsInformationOnContainerOnRegion200),
       orElse: unexpectedStatus
     }))
+    ))
   ),
-    "getCloudProjectServiceNameUser": (serviceName, options) => HttpClientRequest.get(`/cloud/project/${serviceName}/user`).pipe(
-    withResponse(options?.config)(HttpClientResponse.matchStatus({
+    "getCloudProjectServiceNameUser": (serviceName, options: Parameters<Storage["getCloudProjectServiceNameUser"]>[1]) => __makePathRequest(HttpClientRequest.get, [serviceName], () => "/cloud/project/" + __encodePathParam(serviceName) + "/user").pipe(
+    Effect.flatMap((request) => request.pipe(
+      withResponse(options?.config)(HttpClientResponse.matchStatus({
       "2xx": decodeSuccess(GetCloudProjectServiceNameUser200),
       orElse: unexpectedStatus
     }))
+    ))
   ),
-    "postCloudProjectServiceNameUser": (serviceName, options) => HttpClientRequest.post(`/cloud/project/${serviceName}/user`).pipe(
-    HttpClientRequest.bodyJsonUnsafe(options.payload),
-    withResponse(options.config)(HttpClientResponse.matchStatus({
+    "postCloudProjectServiceNameUser": (serviceName, options: Parameters<Storage["postCloudProjectServiceNameUser"]>[1]) => __makePathRequest(HttpClientRequest.post, [serviceName], () => "/cloud/project/" + __encodePathParam(serviceName) + "/user").pipe(
+    Effect.flatMap((request) => request.pipe(
+      HttpClientRequest.bodyJsonUnsafe(options.payload),
+      withResponse(options.config)(HttpClientResponse.matchStatus({
       "2xx": decodeSuccess(PostCloudProjectServiceNameUser200),
       orElse: unexpectedStatus
     }))
+    ))
   ),
-    "getCloudProjectServiceNameUserUserId": (serviceName, userId, options) => HttpClientRequest.get(`/cloud/project/${serviceName}/user/${userId}`).pipe(
-    withResponse(options?.config)(HttpClientResponse.matchStatus({
+    "getCloudProjectServiceNameUserUserId": (serviceName, userId, options: Parameters<Storage["getCloudProjectServiceNameUserUserId"]>[2]) => __makePathRequest(HttpClientRequest.get, [serviceName, userId], () => "/cloud/project/" + __encodePathParam(serviceName) + "/user/" + __encodePathParam(userId) + "").pipe(
+    Effect.flatMap((request) => request.pipe(
+      withResponse(options?.config)(HttpClientResponse.matchStatus({
       "2xx": decodeSuccess(GetCloudProjectServiceNameUserUserId200),
       orElse: unexpectedStatus
     }))
+    ))
   ),
-    "deleteCloudProjectServiceNameUserUserId": (serviceName, userId, options) => HttpClientRequest.delete(`/cloud/project/${serviceName}/user/${userId}`).pipe(
-    withResponse(options?.config)(HttpClientResponse.matchStatus({
+    "deleteCloudProjectServiceNameUserUserId": (serviceName, userId, options: Parameters<Storage["deleteCloudProjectServiceNameUserUserId"]>[2]) => __makePathRequest(HttpClientRequest.delete, [serviceName, userId], () => "/cloud/project/" + __encodePathParam(serviceName) + "/user/" + __encodePathParam(userId) + "").pipe(
+    Effect.flatMap((request) => request.pipe(
+      withResponse(options?.config)(HttpClientResponse.matchStatus({
       "200": () => Effect.void,
       "204": () => Effect.void,
       orElse: unexpectedStatus
     }))
+    ))
   ),
-    "getCloudProjectServiceNameUserUserIdS3Credentials": (serviceName, userId, options) => HttpClientRequest.get(`/cloud/project/${serviceName}/user/${userId}/s3Credentials`).pipe(
-    withResponse(options?.config)(HttpClientResponse.matchStatus({
+    "getCloudProjectServiceNameUserUserIdS3Credentials": (serviceName, userId, options: Parameters<Storage["getCloudProjectServiceNameUserUserIdS3Credentials"]>[2]) => __makePathRequest(HttpClientRequest.get, [serviceName, userId], () => "/cloud/project/" + __encodePathParam(serviceName) + "/user/" + __encodePathParam(userId) + "/s3Credentials").pipe(
+    Effect.flatMap((request) => request.pipe(
+      withResponse(options?.config)(HttpClientResponse.matchStatus({
       "2xx": decodeSuccess(GetCloudProjectServiceNameUserUserIdS3Credentials200),
       orElse: unexpectedStatus
     }))
+    ))
   ),
-    "postCloudProjectServiceNameUserUserIdS3Credentials": (serviceName, userId, options) => HttpClientRequest.post(`/cloud/project/${serviceName}/user/${userId}/s3Credentials`).pipe(
-    withResponse(options?.config)(HttpClientResponse.matchStatus({
+    "postCloudProjectServiceNameUserUserIdS3Credentials": (serviceName, userId, options: Parameters<Storage["postCloudProjectServiceNameUserUserIdS3Credentials"]>[2]) => __makePathRequest(HttpClientRequest.post, [serviceName, userId], () => "/cloud/project/" + __encodePathParam(serviceName) + "/user/" + __encodePathParam(userId) + "/s3Credentials").pipe(
+    Effect.flatMap((request) => request.pipe(
+      withResponse(options?.config)(HttpClientResponse.matchStatus({
       "2xx": decodeSuccess(PostCloudProjectServiceNameUserUserIdS3Credentials200),
       orElse: unexpectedStatus
     }))
+    ))
   ),
-    "deleteCloudProjectServiceNameUserUserIdS3CredentialsAccess": (serviceName, userId, access, options) => HttpClientRequest.delete(`/cloud/project/${serviceName}/user/${userId}/s3Credentials/${access}`).pipe(
-    withResponse(options?.config)(HttpClientResponse.matchStatus({
+    "deleteCloudProjectServiceNameUserUserIdS3CredentialsAccess": (serviceName, userId, access, options: Parameters<Storage["deleteCloudProjectServiceNameUserUserIdS3CredentialsAccess"]>[3]) => __makePathRequest(HttpClientRequest.delete, [serviceName, userId, access], () => "/cloud/project/" + __encodePathParam(serviceName) + "/user/" + __encodePathParam(userId) + "/s3Credentials/" + __encodePathParam(access) + "").pipe(
+    Effect.flatMap((request) => request.pipe(
+      withResponse(options?.config)(HttpClientResponse.matchStatus({
       "200": () => Effect.void,
       "204": () => Effect.void,
       orElse: unexpectedStatus
     }))
+    ))
   )
   }
 }
 
-export interface Storage {
-  readonly httpClient: HttpClient.HttpClient
-  readonly "getStorageContainersOnRegion": <Config extends OperationConfig>(serviceName: string, regionName: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<typeof GetStorageContainersOnRegion200.Type, Config>, HttpClientError.HttpClientError | SchemaError>
-  readonly "createStorageContainerOnRegion": <Config extends OperationConfig>(serviceName: string, regionName: string, options: { readonly payload: typeof CreateStorageContainerOnRegionRequestJson.Encoded; readonly config?: Config | undefined }) => Effect.Effect<WithOptionalResponse<typeof CreateStorageContainerOnRegion200.Type, Config>, HttpClientError.HttpClientError | SchemaError>
-  readonly "getStorageContainerOnRegion": <Config extends OperationConfig>(serviceName: string, regionName: string, name: string, options: { readonly params?: typeof GetStorageContainerOnRegionParams.Encoded | undefined; readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<typeof GetStorageContainerOnRegion200.Type, Config>, HttpClientError.HttpClientError | SchemaError>
-  readonly "updateStorageContainerOnRegion": <Config extends OperationConfig>(serviceName: string, regionName: string, name: string, options: { readonly payload: typeof UpdateStorageContainerOnRegionRequestJson.Encoded; readonly config?: Config | undefined }) => Effect.Effect<WithOptionalResponse<typeof UpdateStorageContainerOnRegion200.Type, Config>, HttpClientError.HttpClientError | SchemaError>
-  readonly "deteteStorageContainerOnRegion": <Config extends OperationConfig>(serviceName: string, regionName: string, name: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<void, Config>, HttpClientError.HttpClientError | SchemaError>
-  readonly "getObjectsInformationOnContainerOnRegion": <Config extends OperationConfig>(serviceName: string, regionName: string, name: string, options: { readonly params?: typeof GetObjectsInformationOnContainerOnRegionParams.Encoded | undefined; readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<typeof GetObjectsInformationOnContainerOnRegion200.Type, Config>, HttpClientError.HttpClientError | SchemaError>
-  readonly "getCloudProjectServiceNameUser": <Config extends OperationConfig>(serviceName: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<typeof GetCloudProjectServiceNameUser200.Type, Config>, HttpClientError.HttpClientError | SchemaError>
-  readonly "postCloudProjectServiceNameUser": <Config extends OperationConfig>(serviceName: string, options: { readonly payload: typeof PostCloudProjectServiceNameUserRequestJson.Encoded; readonly config?: Config | undefined }) => Effect.Effect<WithOptionalResponse<typeof PostCloudProjectServiceNameUser200.Type, Config>, HttpClientError.HttpClientError | SchemaError>
-  readonly "getCloudProjectServiceNameUserUserId": <Config extends OperationConfig>(serviceName: string, userId: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<typeof GetCloudProjectServiceNameUserUserId200.Type, Config>, HttpClientError.HttpClientError | SchemaError>
-  readonly "deleteCloudProjectServiceNameUserUserId": <Config extends OperationConfig>(serviceName: string, userId: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<void, Config>, HttpClientError.HttpClientError | SchemaError>
-  readonly "getCloudProjectServiceNameUserUserIdS3Credentials": <Config extends OperationConfig>(serviceName: string, userId: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<typeof GetCloudProjectServiceNameUserUserIdS3Credentials200.Type, Config>, HttpClientError.HttpClientError | SchemaError>
-  readonly "postCloudProjectServiceNameUserUserIdS3Credentials": <Config extends OperationConfig>(serviceName: string, userId: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<typeof PostCloudProjectServiceNameUserUserIdS3Credentials200.Type, Config>, HttpClientError.HttpClientError | SchemaError>
-  readonly "deleteCloudProjectServiceNameUserUserIdS3CredentialsAccess": <Config extends OperationConfig>(serviceName: string, userId: string, access: string, options: { readonly config?: Config | undefined } | undefined) => Effect.Effect<WithOptionalResponse<void, Config>, HttpClientError.HttpClientError | SchemaError>
+export interface Storage<E = HttpClientError.HttpClientError, R = never> {
+  readonly httpClient: HttpClient.HttpClient.With<E, R>
+  readonly "getStorageContainersOnRegion": {
+    <Config extends OperationConfig | undefined = undefined>(serviceName: string, regionName: string, options: { readonly config: Config }): Effect.Effect<WithOptionalResponse<GetStorageContainersOnRegion200, Config>, E | HttpClientError.HttpClientError | SchemaError, R>;
+    <Config extends OperationConfig | undefined = undefined>(serviceName: string, regionName: string, options: { readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<GetStorageContainersOnRegion200, Config | undefined>, E | HttpClientError.HttpClientError | SchemaError, R>;
+  }
+  readonly "createStorageContainerOnRegion": {
+    <Config extends OperationConfig | undefined = undefined>(serviceName: string, regionName: string, options: { readonly payload: typeof CreateStorageContainerOnRegionRequestJson.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<CreateStorageContainerOnRegion200, Config>, E | HttpClientError.HttpClientError | SchemaError, R>;
+    <Config extends OperationConfig | undefined = undefined>(serviceName: string, regionName: string, options: { readonly payload: typeof CreateStorageContainerOnRegionRequestJson.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<CreateStorageContainerOnRegion200, Config | undefined>, E | HttpClientError.HttpClientError | SchemaError, R>;
+  }
+  readonly "getStorageContainerOnRegion": {
+    <Config extends OperationConfig | undefined = undefined>(serviceName: string, regionName: string, name: string, options: { readonly params?: typeof GetStorageContainerOnRegionParams.Encoded | undefined; readonly config: Config }): Effect.Effect<WithOptionalResponse<GetStorageContainerOnRegion200, Config>, E | HttpClientError.HttpClientError | SchemaError, R>;
+    <Config extends OperationConfig | undefined = undefined>(serviceName: string, regionName: string, name: string, options: { readonly params?: typeof GetStorageContainerOnRegionParams.Encoded | undefined; readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<GetStorageContainerOnRegion200, Config | undefined>, E | HttpClientError.HttpClientError | SchemaError, R>;
+  }
+  readonly "updateStorageContainerOnRegion": {
+    <Config extends OperationConfig | undefined = undefined>(serviceName: string, regionName: string, name: string, options: { readonly payload: typeof UpdateStorageContainerOnRegionRequestJson.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<UpdateStorageContainerOnRegion200, Config>, E | HttpClientError.HttpClientError | SchemaError, R>;
+    <Config extends OperationConfig | undefined = undefined>(serviceName: string, regionName: string, name: string, options: { readonly payload: typeof UpdateStorageContainerOnRegionRequestJson.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<UpdateStorageContainerOnRegion200, Config | undefined>, E | HttpClientError.HttpClientError | SchemaError, R>;
+  }
+  readonly "deteteStorageContainerOnRegion": {
+    <Config extends OperationConfig | undefined = undefined>(serviceName: string, regionName: string, name: string, options: { readonly config: Config }): Effect.Effect<WithOptionalResponse<void, Config>, E | HttpClientError.HttpClientError | SchemaError, R>;
+    <Config extends OperationConfig | undefined = undefined>(serviceName: string, regionName: string, name: string, options: { readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<void, Config | undefined>, E | HttpClientError.HttpClientError | SchemaError, R>;
+  }
+  readonly "getObjectsInformationOnContainerOnRegion": {
+    <Config extends OperationConfig | undefined = undefined>(serviceName: string, regionName: string, name: string, options: { readonly params?: typeof GetObjectsInformationOnContainerOnRegionParams.Encoded | undefined; readonly config: Config }): Effect.Effect<WithOptionalResponse<GetObjectsInformationOnContainerOnRegion200, Config>, E | HttpClientError.HttpClientError | SchemaError, R>;
+    <Config extends OperationConfig | undefined = undefined>(serviceName: string, regionName: string, name: string, options: { readonly params?: typeof GetObjectsInformationOnContainerOnRegionParams.Encoded | undefined; readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<GetObjectsInformationOnContainerOnRegion200, Config | undefined>, E | HttpClientError.HttpClientError | SchemaError, R>;
+  }
+  readonly "getCloudProjectServiceNameUser": {
+    <Config extends OperationConfig | undefined = undefined>(serviceName: string, options: { readonly config: Config }): Effect.Effect<WithOptionalResponse<GetCloudProjectServiceNameUser200, Config>, E | HttpClientError.HttpClientError | SchemaError, R>;
+    <Config extends OperationConfig | undefined = undefined>(serviceName: string, options: { readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<GetCloudProjectServiceNameUser200, Config | undefined>, E | HttpClientError.HttpClientError | SchemaError, R>;
+  }
+  readonly "postCloudProjectServiceNameUser": {
+    <Config extends OperationConfig | undefined = undefined>(serviceName: string, options: { readonly payload: typeof PostCloudProjectServiceNameUserRequestJson.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<PostCloudProjectServiceNameUser200, Config>, E | HttpClientError.HttpClientError | SchemaError, R>;
+    <Config extends OperationConfig | undefined = undefined>(serviceName: string, options: { readonly payload: typeof PostCloudProjectServiceNameUserRequestJson.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<PostCloudProjectServiceNameUser200, Config | undefined>, E | HttpClientError.HttpClientError | SchemaError, R>;
+  }
+  readonly "getCloudProjectServiceNameUserUserId": {
+    <Config extends OperationConfig | undefined = undefined>(serviceName: string, userId: string, options: { readonly config: Config }): Effect.Effect<WithOptionalResponse<GetCloudProjectServiceNameUserUserId200, Config>, E | HttpClientError.HttpClientError | SchemaError, R>;
+    <Config extends OperationConfig | undefined = undefined>(serviceName: string, userId: string, options: { readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<GetCloudProjectServiceNameUserUserId200, Config | undefined>, E | HttpClientError.HttpClientError | SchemaError, R>;
+  }
+  readonly "deleteCloudProjectServiceNameUserUserId": {
+    <Config extends OperationConfig | undefined = undefined>(serviceName: string, userId: string, options: { readonly config: Config }): Effect.Effect<WithOptionalResponse<void, Config>, E | HttpClientError.HttpClientError | SchemaError, R>;
+    <Config extends OperationConfig | undefined = undefined>(serviceName: string, userId: string, options: { readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<void, Config | undefined>, E | HttpClientError.HttpClientError | SchemaError, R>;
+  }
+  readonly "getCloudProjectServiceNameUserUserIdS3Credentials": {
+    <Config extends OperationConfig | undefined = undefined>(serviceName: string, userId: string, options: { readonly config: Config }): Effect.Effect<WithOptionalResponse<GetCloudProjectServiceNameUserUserIdS3Credentials200, Config>, E | HttpClientError.HttpClientError | SchemaError, R>;
+    <Config extends OperationConfig | undefined = undefined>(serviceName: string, userId: string, options: { readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<GetCloudProjectServiceNameUserUserIdS3Credentials200, Config | undefined>, E | HttpClientError.HttpClientError | SchemaError, R>;
+  }
+  readonly "postCloudProjectServiceNameUserUserIdS3Credentials": {
+    <Config extends OperationConfig | undefined = undefined>(serviceName: string, userId: string, options: { readonly config: Config }): Effect.Effect<WithOptionalResponse<PostCloudProjectServiceNameUserUserIdS3Credentials200, Config>, E | HttpClientError.HttpClientError | SchemaError, R>;
+    <Config extends OperationConfig | undefined = undefined>(serviceName: string, userId: string, options: { readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<PostCloudProjectServiceNameUserUserIdS3Credentials200, Config | undefined>, E | HttpClientError.HttpClientError | SchemaError, R>;
+  }
+  readonly "deleteCloudProjectServiceNameUserUserIdS3CredentialsAccess": {
+    <Config extends OperationConfig | undefined = undefined>(serviceName: string, userId: string, access: string, options: { readonly config: Config }): Effect.Effect<WithOptionalResponse<void, Config>, E | HttpClientError.HttpClientError | SchemaError, R>;
+    <Config extends OperationConfig | undefined = undefined>(serviceName: string, userId: string, access: string, options: { readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<void, Config | undefined>, E | HttpClientError.HttpClientError | SchemaError, R>;
+  }
 }
 
 export interface StorageError<Tag extends string, E> {

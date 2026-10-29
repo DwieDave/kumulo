@@ -2,8 +2,8 @@ import { dirname } from "node:path"
 import { Console, Effect } from "effect"
 import type { FileSystem } from "effect/FileSystem"
 import type { PlatformError } from "effect/PlatformError"
-import type { HttpClient } from "effect/unstable/http"
-import { Command, Flag } from "effect/unstable/cli"
+import type { HttpClient } from "effect/http"
+import { Command, Flag } from "effect/cli"
 import type { VolumeError, VolumeSpec } from "@kumulo/core"
 import type { ClusterConfig } from "../cluster-config.ts"
 import { ConfigInvalid, VolumeProvider } from "@kumulo/core"
@@ -20,10 +20,11 @@ import type { OutputsInvalid ,
 import { loadConfig } from "../config.ts"
 import { configArgument } from "../root.ts"
 
-const nameFlag = Flag.string("name").pipe(
+const nameFlag = Flag.String("name").pipe(
   Flag.withDescription("Name of the retained volume, matching an entry in the config's volumes.managed list")
 )
-const volumeIdFlag = Flag.string("volume-id").pipe(
+
+const volumeIdFlag = Flag.String("volume-id").pipe(
   Flag.withDescription("Existing Cinder volume ID to bind into this cluster's outputs + generated PVs")
 )
 
@@ -34,10 +35,13 @@ export const volumesList = Command.make(
     const config = yield* loadConfig(configPath)
     const outputs = yield* readOutputs({ dir: dirname(configPath), tag: config.name, format: config.outputs?.format })
     const volumes = listVolumes(outputs)
+
     if (volumes.length === 0) {
       yield* Console.log(`No recorded volumes for cluster "${config.name}".`)
+
       return
     }
+
     yield* Console.log(
       volumes.map((v) => `${v.name}  id=${v.id}  retain=${v.retain}`).join("\n")
     )
@@ -51,6 +55,7 @@ export const managedVolumes = (config: ClusterConfig): ReadonlyArray<ManagedVolu
 
 const _retainedSpec = (config: ClusterConfig, name: string): VolumeSpec | undefined => {
   const entry = managedVolumes(config).find((candidate) => candidate.name === name)
+
   return entry === undefined ? undefined : { name: entry.name, sizeGb: entry.size_gb, type: entry.type, retain: entry.retain }
 }
 
@@ -60,11 +65,13 @@ export const volumesAdopt = Command.make(
   Effect.fn(function*({ config: configPath, name, volumeId }) {
     const config = yield* loadConfig(configPath)
     const spec = _retainedSpec(config, name)
+
     if (spec === undefined) {
       return yield* Effect.fail(
         new ConfigInvalid({ issues: [{ path: ["volumes", "managed"], message: `no retained volume named "${name}"` }] })
       )
     }
+
     const entry = managedVolumes(config).find((candidate) => candidate.name === name)
     const dir = dirname(configPath)
     const file = yield* readOutputs({ dir, tag: config.name, format: config.outputs?.format })
@@ -95,6 +102,7 @@ export const lookupManagedVolumeNames = (
     if (config.volumes.module !== "cinder" || config.volumes.managed.length === 0) return new Set<string>()
     const provider = yield* Effect.provide(VolumeProvider, VolumeProviderLive({ tag: config.name }))
     const existing = yield* provider.listClusterVolumes(config.name)
+
     return new Set(existing.map((volume) => volume.name))
   })
 
@@ -106,10 +114,12 @@ export const convergeManagedVolumes = (
     if (config.volumes.module !== "cinder" || config.volumes.managed.length === 0) return
     const provider = yield* Effect.provide(VolumeProvider, VolumeProviderLive({ tag: config.name }))
     const file = yield* readOutputs({ dir: configDir, tag: config.name, format: config.outputs?.format })
+
     const ensured = yield* Effect.forEach(config.volumes.managed, (entry) =>
       provider.ensureVolume(_toManagedSpec(entry)).pipe(
         Effect.map((info) => ({ name: entry.name, id: info.id, retain: entry.retain }))
       ), { concurrency: 4 })
+
     const outputs = ensured.reduce((acc, volume) => upsertVolume({ file: acc, volume }), file)
     yield* writeOutputs({ dir: configDir, file: outputs, format: config.outputs?.format })
   })
@@ -128,15 +138,20 @@ export const reconcileVolumesOnDelete = (
     const existing = yield* provider.listClusterVolumes(config.name)
     const kept: Array<string> = []
     const deleted: Array<string> = []
+
     for (const entry of config.volumes.managed) {
       const vol = existing.find((v) => v.name === entry.name)
+
       if (vol === undefined) continue
+
       if (entry.retain) {
         kept.push(vol.name)
         continue
       }
+
       yield* provider.deleteVolume({ id: vol.id })
       deleted.push(vol.name)
     }
+
     return { kept, deleted }
   })

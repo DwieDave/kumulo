@@ -49,11 +49,13 @@ const _ccmAddon = (cloudCredential: CloudCredential): Addon["Service"] =>
 
 const _csiAddon = (input: AddonSelectionInput): Addon["Service"] | undefined => {
   const { cloudCredential } = input
+
   if (cloudCredential.provider === "hetzner") {
     return input.addons.hcloud_csi.enabled
       ? _asAddon({ name: "hcloud-csi", requiredCapabilities: [], manifests: hcloudCsiManifests({ token: cloudCredential.token }) })
       : undefined
   }
+
   return input.addons.cinder_csi.enabled
     ? _asAddon({
       name: "cinder-csi",
@@ -65,6 +67,7 @@ const _csiAddon = (input: AddonSelectionInput): Addon["Service"] | undefined => 
 
 const _toggledOn = (input: AddonSelectionInput): ReadonlyArray<Addon["Service"]> => {
   const csi = _csiAddon(input)
+
   return [
     ...(input.addons.cni === "cilium"
       ? [_asAddon({ name: "cilium", requiredCapabilities: ["cilium"], manifests: ciliumManifests() })]

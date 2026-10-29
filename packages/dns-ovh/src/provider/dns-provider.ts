@@ -1,6 +1,6 @@
 import { Effect, Layer } from "effect"
 import type { SchemaError } from "effect/Schema"
-import type * as HttpClientError from "effect/unstable/http/HttpClientError"
+import type * as HttpClientError from "effect/http/HttpClientError"
 import { DnsProvider, ownerTagOf, recordKind, ResourceConflict } from "@kumulo/core"
 import type { ClusterTag, DesiredRecord, DnsError } from "@kumulo/core"
 import type { Dns, Domain_zone_RecordTypeEnum } from "../generated/client.ts"
@@ -62,12 +62,15 @@ const _ensurePair = (
     const existingOther = existing.filter((r) => r.fieldType !== "TXT")
     const existingOwnerTxt = existing.find((r) => r.fieldType === "TXT" && ownerTagOf(r.target) !== undefined)
     const foreignOwnerTxt = existingOwnerTxt !== undefined && existingOwnerTxt.target !== ownerTarget
+
     if (foreignOwnerTxt || (existingOther.length > 0 && existingOwnerTxt === undefined)) {
       return yield* Effect.fail(new ResourceConflict({ kind: "dns-record", ref: `${zone}/${name}` }))
     }
+
     if (ownerTarget !== undefined) {
       yield* _ensureRaw({ dns, zone, name, target: ownerTarget, kind: "TXT", existingRecord: existingOwnerTxt })
     }
+
     yield* _deleteStaleKinds({ dns, zone, name, kind, existingOther })
     const existingSame = existingOther.find((r) => r.fieldType === kind)
     yield* _ensureRaw({ dns, zone, name, target, kind, existingRecord: existingSame })
@@ -79,10 +82,12 @@ export const ensureRecords = (dns: Dns) =>
       const rest = records.filter((r) => !_isOwnershipRecord(r))
       const pairedNames = new Set(rest.map((r) => r.name))
       const orphanTxt = records.filter((r) => _isOwnershipRecord(r) && !pairedNames.has(r.name))
+
       for (const record of rest) {
         const ownerTarget = _ownerTargetFor(records, record.name)
         yield* _ensurePair({ dns, zone, name: record.name, target: record.target, ownerTarget })
       }
+
       for (const record of orphanTxt) {
         const existing = yield* recordsAt({ dns, zone, subDomain: record.name })
         yield* _ensureRaw({
@@ -94,11 +99,12 @@ export const ensureRecords = (dns: Dns) =>
           existingRecord: existing.find((r) => r.fieldType === "TXT")
         })
       }
+
       if (records.length > 0) yield* _wrap(zone, "*", dns.refreshZone(zone, undefined))
     })
 
 const _ownedSubDomains = (records: ReadonlyArray<{ readonly fieldType: string; readonly subDomain: string; readonly target: string }>, tag: ClusterTag) =>
-  new Set(records.filter((r) => r.fieldType === "TXT" && ownerTagOf(r.target) === tag).map((r) => r.subDomain))
+  new Set(records.flatMap((r) => r.fieldType === "TXT" && ownerTagOf(r.target) === tag ? [r.subDomain] : []))
 
 export const removeClusterRecords = (dns: Dns) =>
   (zone: string, tag: ClusterTag): Effect.Effect<void, DnsError> =>
@@ -106,9 +112,11 @@ export const removeClusterRecords = (dns: Dns) =>
       const all = yield* recordsAt({ dns, zone })
       const owned = _ownedSubDomains(all, tag)
       const toDelete = all.filter((r) => owned.has(r.subDomain))
+
       for (const record of toDelete) {
         yield* _wrap(zone, record.subDomain, dns.deleteRecord(zone, String(record.id), undefined))
       }
+
       if (toDelete.length > 0) yield* _wrap(zone, "*", dns.refreshZone(zone, undefined))
     })
 

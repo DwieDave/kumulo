@@ -10,4 +10,4 @@ export const parseConfigYamlWith = <S extends Schema.Top>(schema: S) => (text: s
     catch: (cause) => new ConfigInvalid({ issues: [{ path: [], message: String(cause) }] })
   }).pipe(Effect.flatMap(decodeConfigWith(schema)))
 
-export const stringifyConfigYaml = (config: unknown): string => stringify(config)
+export const stringifyConfigYaml = <Config>(config: Config): string => stringify(config)

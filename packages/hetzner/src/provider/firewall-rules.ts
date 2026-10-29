@@ -8,9 +8,10 @@ export const HcloudFirewallRuleInput = Schema.Struct({
   port: Schema.optionalKey(Schema.String),
   sourceCidrs: Schema.Array(Schema.String)
 })
+
 export type HcloudFirewallRuleInput = typeof HcloudFirewallRuleInput.Type
 
-const _port = (port: number): { readonly portMin: number; readonly portMax: number } => ({ portMin: port, portMax: port })
+const _port = (port: number) => ({ portMin: port, portMax: port })
 
 const _forEachCidr = (
   cidrs: ReadonlyArray<string>,
@@ -25,6 +26,7 @@ export const buildHetznerSecGroupRules = (options: {
 }): ReadonlyArray<SecGroupRule> => {
   const wireguardPort = options.cni === "flannel" ? 51820 : 51871
   const remoteCidr = options.networkCidr
+
   return [
     ..._forEachCidr(options.allowedSshCidrs, (cidr) => ({ protocol: "tcp", ..._port(22), remoteCidr: cidr })),
     ..._forEachCidr(options.allowedApiCidrs, (cidr) => ({ protocol: "tcp", ..._port(6443), remoteCidr: cidr })),

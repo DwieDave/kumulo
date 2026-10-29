@@ -1,9 +1,9 @@
-import { Effect } from "effect"
+import { Effect, Result } from "effect"
 import { assert, it } from "@effect/vitest"
 import { genericProfile } from "../../src/profiles/generic.ts"
-import type { ClusterConfigShape } from "../../src/domain/types.ts"
+import type { ClusterConfigFields } from "../../src/domain/types.ts"
 
-const baseConfig: ClusterConfigShape = {
+const baseConfig: ClusterConfigFields = {
   distro: "k3s",
   worker_pools: [],
   addons: { cni: "flannel" },
@@ -28,14 +28,16 @@ it.effect("generic profile accepts any region/HA/volume-type combo (no assumptio
 // block silently dropped.
 it.effect("generic profile rejects autoscaling on a distro that cannot do it (AC8)", () =>
   Effect.gen(function*() {
-    const config: ClusterConfigShape = {
+    const config: ClusterConfigFields = {
       ...baseConfig,
       distro: "upcloud-uks",
       worker_pools: [{ name: "workers", autoscaling: { enabled: true } }]
     }
+
     const result = yield* Effect.result(genericProfile.validate(config))
-    assert.isTrue(result._tag === "Failure")
-    if (result._tag === "Failure") {
+    assert.isTrue(Result.isFailure(result))
+
+    if (Result.isFailure(result)) {
       assert.include(result.failure.issues[0]?.message ?? "", "upcloud-uks")
     }
   }))

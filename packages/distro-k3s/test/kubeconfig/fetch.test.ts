@@ -17,6 +17,7 @@ describe("fetchKubeconfig", () => {
       }).pipe(
         Effect.provide(FakeSshLive({ readFile: () => Effect.succeed(RAW) }))
       )
+
       expect(result.content).toContain("server: https://10.0.0.100:6443")
       expect(result.content).toContain("name: prod")
     }))
@@ -28,6 +29,7 @@ describe("fetchKubeconfig", () => {
         clusterName: "prod",
         serverUrl: "https://10.0.0.100:6443"
       }).pipe(Effect.provide(FakeSshLive({})), Effect.flip)
+
       expect(result._tag).toBe("BootstrapFailed")
     }))
 })

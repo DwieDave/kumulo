@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import * as Schema from "effect/Schema"
-import type * as HttpClient from "effect/unstable/http/HttpClient"
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
+import type * as HttpClient from "effect/http/HttpClient"
+import * as HttpClientRequest from "effect/http/HttpClientRequest"
 import { decodeOn2xx, decodeVoid, UpcloudLabel } from "./common.ts"
 import type { UpcloudRawError } from "./common.ts"
 
@@ -14,12 +14,15 @@ export const NodeGroupState = Schema.Literals([
   "failed",
   "unknown"
 ])
+
 export type NodeGroupState = typeof NodeGroupState.Type
 
 export const NodeGroupTaint = Schema.Struct({ key: Schema.String, value: Schema.String, effect: Schema.String })
+
 export type NodeGroupTaint = typeof NodeGroupTaint.Type
 
 export const NodeGroupStorage = Schema.Struct({ tier: Schema.optionalKey(Schema.String), size: Schema.optionalKey(Schema.Number) })
+
 export type NodeGroupStorage = typeof NodeGroupStorage.Type
 
 export const NodeGroup = Schema.Struct({
@@ -38,6 +41,7 @@ export const NodeGroup = Schema.Struct({
   utility_network_access: Schema.optionalKey(Schema.Boolean),
   storage_encryption: Schema.optionalKey(Schema.String)
 })
+
 export type NodeGroup = typeof NodeGroup.Type
 
 const _NodeGroupsResponse = Schema.Array(NodeGroup)

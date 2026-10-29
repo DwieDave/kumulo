@@ -1,6 +1,6 @@
 import { Effect, Layer } from "effect"
-import * as HttpClient from "effect/unstable/http/HttpClient"
-import { HttpClientError, TransportError } from "effect/unstable/http/HttpClientError"
+import * as HttpClient from "effect/http/HttpClient"
+import { HttpClientError, TransportError } from "effect/http/HttpClientError"
 import {
   makeNetworkClient,
   makeNodeGroupsClient,

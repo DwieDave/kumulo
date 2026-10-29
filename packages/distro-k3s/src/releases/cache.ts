@@ -25,6 +25,7 @@ export const makeReleaseCache = (args: MakeReleaseCacheArgs = {}): Effect.Effect
     const source = args.source ?? (() => K3S_RELEASE_FIXTURE)
     const ttlMs = args.ttlMs ?? DEFAULT_TTL_MS
     const now = args.now ?? (() => Date.now())
+
     const cache = yield* Ref.make<{ readonly versions: ReadonlyArray<string>; readonly fetchedAt: number } | undefined>(
       undefined
     )
@@ -33,6 +34,7 @@ export const makeReleaseCache = (args: MakeReleaseCacheArgs = {}): Effect.Effect
       Effect.flatMap((entry) => {
         if (entry !== undefined && now() - entry.fetchedAt < ttlMs) return Effect.succeed(entry.versions)
         const versions = source()
+
         return Ref.set(cache, { versions, fetchedAt: now() }).pipe(Effect.as(versions))
       })
     )

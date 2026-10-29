@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Option, SchemaIssue } from "effect"
+import { SchemaIssue } from "effect"
 import {
   AddonInstallFailed,
   AuthenticationFailed,
@@ -25,7 +25,7 @@ describe("tagged errors", () => {
   })
 
   it("ResponseDecodeError carries endpoint + issue", () => {
-    const issue = new SchemaIssue.InvalidValue(Option.some("bad"), { message: "invalid" })
+    const issue = new SchemaIssue.InvalidValue({ message: "invalid" })
     const error = new ResponseDecodeError({ endpoint: "/x", issue })
     expect(error._tag).toBe("ResponseDecodeError")
     expect(error.endpoint).toBe("/x")

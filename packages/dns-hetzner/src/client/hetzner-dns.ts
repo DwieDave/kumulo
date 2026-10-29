@@ -1,12 +1,13 @@
-import { Effect } from "effect"
+import { Effect, Predicate } from "effect"
 import type { SchemaError } from "effect/Schema"
 import * as Schema from "effect/Schema"
-import type * as HttpClient from "effect/unstable/http/HttpClient"
-import * as HttpClientError from "effect/unstable/http/HttpClientError"
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
+import type * as HttpClient from "effect/http/HttpClient"
+import * as HttpClientError from "effect/http/HttpClientError"
+import * as HttpClientRequest from "effect/http/HttpClientRequest"
+import * as HttpClientResponse from "effect/http/HttpClientResponse"
 
 export const HetznerRRsetRecord = Schema.Struct({ value: Schema.String })
+
 export type HetznerRRsetRecord = typeof HetznerRRsetRecord.Type
 
 export const HetznerRRset = Schema.Struct({
@@ -15,13 +16,16 @@ export const HetznerRRset = Schema.Struct({
   ttl: Schema.Number,
   records: Schema.Array(HetznerRRsetRecord)
 })
+
 export type HetznerRRset = typeof HetznerRRset.Type
 
 export const HetznerZone = Schema.Struct({ id: Schema.String, name: Schema.String })
+
 export type HetznerZone = typeof HetznerZone.Type
 
 const _ZoneResponse = Schema.Struct({ zone: HetznerZone })
 const _RRsetResponse = Schema.Struct({ rrset: HetznerRRset })
+
 const _RRsetsListResponse = Schema.Struct({
   rrsets: Schema.Array(HetznerRRset),
   meta: Schema.optionalKey(Schema.Struct({
@@ -58,7 +62,7 @@ const _unexpectedStatus = (response: HttpClientResponse.HttpClientResponse): Eff
           reason: new HttpClientError.StatusCodeError({
             request: response.request,
             response,
-            description: typeof description === "string" ? description : JSON.stringify(description)
+            description: Predicate.isString(description) ? description : JSON.stringify(description)
           })
         })
       )
@@ -73,6 +77,7 @@ const _decodeOn2xx = <A, I>(schema: Schema.Codec<A, I>) =>
 const _decodeZone = _decodeOn2xx(_ZoneResponse)
 const _decodeRRset = _decodeOn2xx(_RRsetResponse)
 const _decodeRRsetsList = _decodeOn2xx(_RRsetsListResponse)
+
 const _decodeVoid = (response: HttpClientResponse.HttpClientResponse): Effect.Effect<void, HetznerDnsError> =>
   _isOk(response) ? Effect.void : _unexpectedStatus(response)
 

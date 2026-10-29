@@ -50,10 +50,13 @@ export const ensureVolume = (
 ): R<VolumeInfo> =>
   Effect.gen(function*() {
     const existing = yield* _findByLabel({ client, tag: options.tag, name: spec.name })
+
     if (existing !== undefined) {
       const ready = existing.state === "online" ? existing : yield* _awaitOnline({ client, uuid: existing.uuid })
+
       return _volumeInfo(ready)
     }
+
     const created = yield* mapUpcloudError({
       self: client.create({
         size: spec.sizeGb,
@@ -64,7 +67,9 @@ export const ensureVolume = (
       }),
       ctx: { kind: "storage", ref: spec.name }
     })
+
     const ready = yield* _awaitOnline({ client, uuid: created.uuid })
+
     return _volumeInfo(ready)
   })
 

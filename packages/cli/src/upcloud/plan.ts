@@ -1,7 +1,9 @@
+import { PlanAction } from "@kumulo/core"
 import { Effect } from "effect"
-import type { BucketInfo, Plan, PlanAction } from "@kumulo/core"
+import type { BucketInfo, Plan } from "@kumulo/core"
 import {
   clusterDrift,
+  UksClusterDrift,
   findClusterByName,
   listNodeGroups,
   networkName,
@@ -19,6 +21,7 @@ import type { LiveVolume } from "./volumes.ts"
 export const uksClusterRow = (cluster: string): string => `uks-cluster/${cluster}`
 export const uksNetworkRow = (cluster: string): string => `network/${cluster}`
 export const uksRouterRow = (cluster: string): string => `router/${cluster}`
+
 export const uksPoolRow = ({ cluster, pool }: { readonly cluster: string; readonly pool: string }): string =>
   `uks-pool/${cluster}/${pool}`
 
@@ -45,6 +48,7 @@ export const lookupUpcloudInventory = (
     const networks = yield* mapUpcloudError({ self: clients.network.list(), ctx: { kind: "network", ref: config.name } })
     const volumes = yield* lookupUpcloudVolumes(config)
     const buckets = yield* lookupUpcloudBuckets(config)
+
     return {
       clusterExists: cluster !== undefined,
       uuid: cluster?.uuid,
@@ -59,14 +63,16 @@ export const lookupUpcloudInventory = (
     }
   })
 
-const _createOrNoOp = (exists: boolean, name: string): PlanAction => exists ? { _tag: "NoOp", name } : { _tag: "Create", name }
+const _createOrNoOp = (exists: boolean, name: string): PlanAction => exists ? PlanAction.NoOp({ name }) : PlanAction.Create({ name })
 
 // UKS has no PATCH for these fields, so any drift is ReplaceNeedsConfirm, never a silent Update
 const _clusterAction = (
   { config, inventory }: { readonly config: UpcloudUksClusterConfig; readonly inventory: UpcloudInventory }
 ): PlanAction => {
   const name = uksClusterRow(config.name)
-  if (!inventory.clusterExists) return { _tag: "Create", name }
+
+  if (!inventory.clusterExists) return PlanAction.Create({ name })
+
   const drift = clusterDrift({
     desired: { zone: config.zone, plan: config.plan, networkCidr: config.network.cidr, storageEncryption: config.storage_encryption },
     actual: {
@@ -76,7 +82,8 @@ const _clusterAction = (
       storageEncryption: inventory.storageEncryption
     }
   })
-  return drift._tag === "None" ? { _tag: "NoOp", name } : { _tag: "ReplaceNeedsConfirm", name, reason: `${drift.field}: ${drift.reason}` }
+
+  return UksClusterDrift.$is("None")(drift) ? PlanAction.NoOp({ name }) : PlanAction.ReplaceNeedsConfirm({ name, reason: `${drift.field}: ${drift.reason}` })
 }
 
 const _poolAction = (
@@ -84,11 +91,15 @@ const _poolAction = (
 ): PlanAction => {
   const name = uksPoolRow({ cluster, pool: pool.name })
   const match = inventory.nodeGroups.find((group) => group.poolLabel === pool.name)
-  if (match === undefined) return { _tag: "Create", name }
-  if (match.configHash === undefined) return { _tag: "NoOp", name }
+
+  if (match === undefined) return PlanAction.Create({ name })
+
+  if (match.configHash === undefined) return PlanAction.NoOp({ name })
   const hash = uksPoolHash(pool)
-  if (match.configHash !== hash) return { _tag: "ReplaceNeedsConfirm", name, reason: "config-hash drifted from desired spec" }
-  return match.count === pool.count ? { _tag: "NoOp", name } : { _tag: "Update", name, reason: "worker count drifted" }
+
+  if (match.configHash !== hash) return PlanAction.ReplaceNeedsConfirm({ name, reason: "config-hash drifted from desired spec" })
+
+  return match.count === pool.count ? PlanAction.NoOp({ name }) : PlanAction.Update({ name, reason: "worker count drifted" })
 }
 
 export const toUksPool = (
@@ -119,41 +130,50 @@ export const upcloudDeletePlanActions = (
 ): Effect.Effect<Plan["actions"], MksError | ObjectStorageError | VolumeError, UpcloudEnv> =>
   Effect.gen(function*() {
     const inventory = yield* lookupUpcloudInventory(config)
+
     const clusterAction: PlanAction = inventory.clusterExists
-      ? { _tag: "Delete", name: uksClusterRow(config.name) }
-      : { _tag: "NoOp", name: `${uksClusterRow(config.name)} (already absent)` }
+      ? PlanAction.Delete({ name: uksClusterRow(config.name) })
+      : PlanAction.NoOp({ name: `${uksClusterRow(config.name)} (already absent)` })
+
     const livePoolLabels = new Set(inventory.nodeGroups.map((group) => group.poolLabel ?? group.name))
+
     const poolActions: ReadonlyArray<PlanAction> = [
-      ...inventory.nodeGroups.map((group): PlanAction => ({
-        _tag: "Delete",
-        name: uksPoolRow({ cluster: config.name, pool: group.poolLabel ?? group.name })
-      })),
-      ...config.worker_pools.filter((pool) => !livePoolLabels.has(pool.name)).map((pool): PlanAction => ({
-        _tag: "NoOp",
-        name: `${uksPoolRow({ cluster: config.name, pool: pool.name })} (already absent)`
-      }))
+      ...inventory.nodeGroups.map((group) =>
+        PlanAction.Delete({ name: uksPoolRow({ cluster: config.name, pool: group.poolLabel ?? group.name }) })
+      ),
+      ...config.worker_pools.flatMap((pool) =>
+        livePoolLabels.has(pool.name)
+          ? []
+          : [PlanAction.NoOp({ name: `${uksPoolRow({ cluster: config.name, pool: pool.name })} (already absent)` })]
+      )
     ]
+
     const networkActions: ReadonlyArray<PlanAction> = [uksRouterRow(config.name), uksNetworkRow(config.name)].map((name) =>
       inventory.networkExists
-        ? { _tag: "Delete" as const, name }
-        : { _tag: "NoOp" as const, name: `${name} (already absent)` }
+        ? PlanAction.Delete({ name })
+        : PlanAction.NoOp({ name: `${name} (already absent)` })
     )
+
     // bucket/volume teardown ordered ahead of cluster to match deleteUpcloudUks's execution order
     const liveBucketNames = new Set((inventory.buckets ?? []).map((b) => b.name))
+
     const bucketActions: ReadonlyArray<PlanAction> = configuredUpcloudBuckets(config).map((bucket) =>
       !liveBucketNames.has(bucket.name)
-        ? { _tag: "NoOp" as const, name: `${uksBucketRow(bucket.name)} (already absent)` }
+        ? PlanAction.NoOp({ name: `${uksBucketRow(bucket.name)} (already absent)` })
         : bucket.retain
-        ? { _tag: "NoOp" as const, name: `${uksBucketRow(bucket.name)} (retained)` }
-        : { _tag: "Delete" as const, name: uksBucketRow(bucket.name) }
+        ? PlanAction.NoOp({ name: `${uksBucketRow(bucket.name)} (retained)` })
+        : PlanAction.Delete({ name: uksBucketRow(bucket.name) })
     )
+
     const liveVolumeNames = new Set((inventory.volumes ?? []).map((v) => v.name))
+
     const volumeActions: ReadonlyArray<PlanAction> = managedUpcloudVolumes(config).map((entry) =>
       !liveVolumeNames.has(entry.name)
-        ? { _tag: "NoOp" as const, name: `${uksVolumeRow(entry.name)} (already absent)` }
+        ? PlanAction.NoOp({ name: `${uksVolumeRow(entry.name)} (already absent)` })
         : entry.retain
-        ? { _tag: "NoOp" as const, name: `${uksVolumeRow(entry.name)} (retained)` }
-        : { _tag: "Delete" as const, name: uksVolumeRow(entry.name) }
+        ? PlanAction.NoOp({ name: `${uksVolumeRow(entry.name)} (retained)` })
+        : PlanAction.Delete({ name: uksVolumeRow(entry.name) })
     )
+
     return [...bucketActions, ...volumeActions, clusterAction, ...poolActions, ...networkActions]
   })

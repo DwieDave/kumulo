@@ -16,7 +16,7 @@ import type {
 } from "../errors/tagged.ts"
 import type {
   BootstrapPlan,
-  ClusterConfigShape,
+  ClusterConfigFields,
   Inventory,
   K8sManifest,
   Kubeconfig,
@@ -30,11 +30,11 @@ import type {
   Version
 } from "../domain/types.ts"
 
-export interface SelfManagedDistroShape {
+export interface SelfManagedDistroService {
   readonly kind: "self-managed"
   readonly name: string
   readonly planBootstrap: (
-    cluster: ClusterConfigShape,
+    cluster: ClusterConfigFields,
     inventory: Inventory
   ) => Effect.Effect<BootstrapPlan>
   readonly renderUserData: (role: NodeRole, ctx: NodeContext) => Effect.Effect<string>
@@ -59,16 +59,16 @@ export type MksError =
   | HttpTransportError
   | ResponseDecodeError
 
-export interface ManagedDistroShape {
+export interface ManagedDistroService {
   readonly kind: "managed"
   readonly name: string
-  readonly ensureCluster: (cfg: ClusterConfigShape) => Effect.Effect<ManagedClusterInfo, MksError>
-  readonly ensureNodePools: (cfg: ClusterConfigShape) => Effect.Effect<void, MksError>
+  readonly ensureCluster: (cfg: ClusterConfigFields) => Effect.Effect<ManagedClusterInfo, MksError>
+  readonly ensureNodePools: (cfg: ClusterConfigFields) => Effect.Effect<void, MksError>
   readonly fetchKubeconfig: (ref: ManagedClusterRef) => Effect.Effect<Kubeconfig, MksError>
   readonly upgrade: (target: Version) => Effect.Effect<void, MksError>
   readonly delete: (ref: ManagedClusterRef) => Effect.Effect<void, MksError>
 }
 
-export type DistroShape = SelfManagedDistroShape | ManagedDistroShape
+export type DistroService = SelfManagedDistroService | ManagedDistroService
 
-export class Distro extends Context.Service<Distro, DistroShape>()("@kumulo/core/Distro") {}
+export class Distro extends Context.Service<Distro, DistroService>()("@kumulo/core/Distro") {}

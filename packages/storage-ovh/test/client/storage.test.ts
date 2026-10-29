@@ -1,8 +1,8 @@
 import { Effect } from "effect"
 import { assert, it } from "@effect/vitest"
-import * as HttpClient from "effect/unstable/http/HttpClient"
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
+import * as HttpClient from "effect/http/HttpClient"
+import * as HttpClientRequest from "effect/http/HttpClientRequest"
+import * as HttpClientResponse from "effect/http/HttpClientResponse"
 import { makeStorageClient } from "../../src/client/storage.ts"
 
 const _fixtureBaseUrl = "https://fixture.invalid"
@@ -21,6 +21,7 @@ it.effect("lists storage containers (GET /region/{regionName}/storage)", () =>
       status: 200,
       body: [{ name: "staging-eu-backups", region: "DE1", createdAt: "2026-01-01T00:00:00Z" }]
     })
+
     const client = makeStorageClient(httpClient)
     const result = yield* client.getStorageContainersOnRegion("kumulo-project", "DE1", undefined)
     assert.strictEqual(result[0]?.name, "staging-eu-backups")
@@ -29,14 +30,19 @@ it.effect("lists storage containers (GET /region/{regionName}/storage)", () =>
 it.effect("creates a storage container against the target path", () =>
   Effect.gen(function* () {
     let capturedPath: string | undefined
+
     const httpClient = _rawHttpClient((request) => {
       capturedPath = request.url
+
       return new Response(JSON.stringify({ name: "staging-eu-backups", region: "DE1" }), { status: 200 })
     })
+
     const client = makeStorageClient(httpClient)
+
     const result = yield* client.createStorageContainerOnRegion("kumulo-project", "DE1", {
       payload: { name: "staging-eu-backups" }
     })
+
     assert.strictEqual(capturedPath, `${_fixtureBaseUrl}/cloud/project/kumulo-project/region/DE1/storage`)
     assert.strictEqual(result.name, "staging-eu-backups")
   }))
@@ -44,10 +50,13 @@ it.effect("creates a storage container against the target path", () =>
 it.effect("deletes a storage container (void response)", () =>
   Effect.gen(function* () {
     let capturedPath: string | undefined
+
     const httpClient = _rawHttpClient((request) => {
       capturedPath = request.url
+
       return new Response(null, { status: 204 })
     })
+
     const client = makeStorageClient(httpClient)
     yield* client.deteteStorageContainerOnRegion("kumulo-project", "DE1", "staging-eu-backups", undefined)
     assert.strictEqual(capturedPath, `${_fixtureBaseUrl}/cloud/project/kumulo-project/region/DE1/storage/staging-eu-backups`)
@@ -64,13 +73,17 @@ it.effect("lists objects in a container (emptiness check)", () =>
 it.effect("creates a project user, then issues S3 credentials for it", () =>
   Effect.gen(function* () {
     const capturedPaths: Array<string> = []
+
     const httpClient = _rawHttpClient((request) => {
       capturedPaths.push(request.url)
+
       if (request.url.endsWith("/s3Credentials")) {
         return new Response(JSON.stringify({ access: "AK", secret: "SK" }), { status: 200 })
       }
+
       return new Response(JSON.stringify({ id: 42, username: "kumulo-staging" }), { status: 200 })
     })
+
     const client = makeStorageClient(httpClient)
     const user = yield* client.postCloudProjectServiceNameUser("kumulo-project", { payload: { description: "kumulo-staging" } })
     const credentials = yield* client.postCloudProjectServiceNameUserUserIdS3Credentials("kumulo-project", String(user.id), undefined)

@@ -46,6 +46,7 @@ const _installMaster = (
 (host: SshHost, isFirstMaster: boolean): Effect.Effect<void, BootstrapFailed, Ssh> =>
   Effect.gen(function*() {
     yield* _gateBefore(host)
+
     const script = renderServerInstallScript({
       k3sVersion: args.k3sVersion,
       token,
@@ -57,7 +58,9 @@ const _installMaster = (
       addons: { cloudControllerManager: args.cloudControllerManager, cni: args.cni },
       extraServerArgs: args.extraServerArgs
     })
+
     yield* _exec(host, script, "install-master")
+
     if (isFirstMaster) yield* controlPlaneReady(host)
   })
 
@@ -69,6 +72,7 @@ const _installWorker = (
 (host: SshHost): Effect.Effect<void, BootstrapFailed, Ssh> =>
   Effect.gen(function*() {
     yield* _gateBefore(host)
+
     const script = renderAgentInstallScript({
       k3sVersion: args.k3sVersion,
       token,
@@ -79,6 +83,7 @@ const _installWorker = (
       nodeTaints: args.nodeTaints ?? [],
       extraAgentArgs: args.extraAgentArgs
     })
+
     yield* _exec(host, script, "install-worker")
   })
 
@@ -87,5 +92,6 @@ export const runBootstrap = (args: RunBootstrapArgs): Effect.Effect<BootstrapRes
     const { firstMaster, token } = yield* resolveToken(args.masters)
     yield* installMasters({ masters: args.masters, installOne: _installMaster(args, token, firstMaster) })
     yield* installWorkers({ workers: args.workers, installOne: _installWorker(args, token, firstMaster) })
+
     return { token, firstMaster }
   })

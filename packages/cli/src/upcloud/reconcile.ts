@@ -1,8 +1,8 @@
 import { Console, Effect } from "effect"
-import type * as HttpClient from "effect/unstable/http/HttpClient"
+import type * as HttpClient from "effect/http/HttpClient"
 import type { FileSystem } from "effect/FileSystem"
 import type { PlatformError } from "effect/PlatformError"
-import type { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/unstable/process"
+import type { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/process"
 import { ConfigInvalid, parseKubeconfig, PlanRejected, ResourceNotFound } from "@kumulo/core"
 import type { CredentialsSinkError, DnsError, DnsProvider, Kubeconfig, MksError, ObjectStorageError, VolumeError } from "@kumulo/core"
 import type { UpcloudUksClusterConfig } from "../cluster-config.ts"
@@ -51,7 +51,9 @@ const _poolsToReplace = (
       })
     )
   }
+
   const byRow = new Map(config.worker_pools.map((pool) => [uksPoolRow({ cluster: config.name, pool: pool.name }), pool.name]))
+
   return Effect.succeed(new Set([...replace].flatMap((row) => byRow.get(row) ?? [])))
 }
 
@@ -65,14 +67,17 @@ export const applyUpcloudUksEffect = (
   Effect.gen(function*() {
     const pools = yield* _poolsToReplace({ config, replace })
     const { clients } = yield* UpcloudEnv
+
     const network = yield* withRowProgress({
       match: (name) => name.startsWith("router/") || name.startsWith("network/"),
       effect: ensureNetwork({ clients, clusterName: config.name, zone: config.zone, cidr: config.network.cidr })
     })
+
     const info = yield* withRowProgress({
       match: (name) => name.startsWith("uks-cluster/"),
       effect: ensureCluster({ clients, config: _toUksConfig(config), networkUuid: network.networkUuid, owner: OWNER })
     })
+
     yield* withRowProgress({
       match: (name) => name.startsWith("uks-pool/"),
       effect: ensureNodePools({
@@ -84,9 +89,12 @@ export const applyUpcloudUksEffect = (
       })
     })
     const managedVolumes = managedUpcloudVolumes(config)
+
     if (config.dns.module !== "none" || managedVolumes.length > 0) {
       const kubeconfig = yield* fetchKubeconfig({ clients, uuid: info.uuid })
+
       if (config.dns.module !== "none") yield* reconcileUpcloudDns({ config, kubeconfig })
+
       if (managedVolumes.length > 0) {
         yield* withRowProgress({
           match: (name) => name.startsWith("volume/"),
@@ -94,10 +102,12 @@ export const applyUpcloudUksEffect = (
         })
       }
     }
+
     yield* withRowProgress({
       match: (name) => name.startsWith("bucket/"),
       effect: convergeUpcloudBuckets(config)
     })
+
     return info
   })
 
@@ -116,10 +126,12 @@ export const reconcileUpcloudDns = (
   Effect.gen(function*() {
     if (config.dns.module === "none") return
     const context = yield* parseKubeconfig(kubeconfig.content)
+
     const hostname = yield* Effect.try({
       try: () => new URL(context.server).hostname,
       catch: () => _serverInvalid(context.server)
     })
+
     if (hostname === "") return yield* Effect.fail(_serverInvalid(context.server))
     yield* reconcileDns({ config, targets: { api_server: { kind: "hostname", value: hostname } } })
   })
@@ -135,7 +147,9 @@ export const kubeconfigUpcloudUks = (
   Effect.gen(function*() {
     const { clients } = yield* UpcloudEnv
     const info = yield* findClusterByName({ clients, name: config.name })
+
     if (info === undefined) return yield* Effect.fail(new ResourceNotFound({ kind: "kube", ref: config.name }))
+
     return yield* fetchKubeconfig({ clients, uuid: info.uuid })
   })
 
@@ -157,6 +171,7 @@ const _deleteUpcloudUksEffect = (
       match: (name) => name.startsWith("uks-cluster/") || name.startsWith("uks-pool/"),
       effect: Effect.gen(function*() {
         const info = yield* findClusterByName({ clients, name: config.name })
+
         if (info !== undefined) {
           yield* deleteCluster({ clients, ref: { uuid: info.uuid, name: info.name } })
         }
@@ -177,10 +192,13 @@ export const deleteUpcloudUks = (
 export const statusUpcloudUks = Effect.fn(function*(config: UpcloudUksClusterConfig) {
   const { clients } = yield* UpcloudEnv
   const info = yield* findClusterByName({ clients, name: config.name })
+
   if (info === undefined) {
     yield* Console.log(`Cluster "${config.name}" does not exist.`)
+
     return
   }
+
   const pools = config.worker_pools.map((pool) => `${pool.name} (x${pool.count})`).join(", ") || "(none)"
   yield* Console.log(
     [`Cluster "${config.name}": ${info.status}`, `  Zone: ${info.zone}`, `  Worker pools: ${pools}`].join("\n")
@@ -193,10 +211,13 @@ export const upgradeUpcloudUks = (
   Effect.gen(function*() {
     if (!yes) {
       yield* Console.log(`Re-run with --yes to upgrade cluster "${config.name}" (strategy: ${strategy}).`)
+
       return
     }
+
     const { clients } = yield* UpcloudEnv
     const info = yield* findClusterByName({ clients, name: config.name })
+
     if (info === undefined) return yield* Effect.fail(new ResourceNotFound({ kind: "kube", ref: config.name }))
     yield* upgradeCluster({
       clients,

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { describe, expect, it } from "vitest"
 import { Effect } from "effect"
-import { computePlan, decidePlanAction, renderPlan, toTaggedResource } from "@kumulo/core"
+import { computePlan, decidePlanAction, PlanDecision, renderPlan, toTaggedResource } from "@kumulo/core"
 import { parseConfigYaml } from "../packages/cli/src/cluster-config.ts"
 import type { BucketSpec, DesiredResource, PlanAction, TaggedResource } from "@kumulo/core"
 import type { ClusterConfig } from "../packages/cli/src/cluster-config.ts"
@@ -74,7 +74,7 @@ for (const { file, label } of _cases) {
   describe(`dry-run plan against fake inventory (${label})`, () => {
     it("empty inventory -> all creates", () => {
       const plan = _fullPlan([], [])
-      expect(decidePlanAction({ plan, yes: false, dryRun: true })).toEqual({ _tag: "DryRun" })
+      expect(decidePlanAction({ plan, yes: false, dryRun: true })).toEqual(PlanDecision.DryRun())
       expect(renderPlan(plan)).toMatchSnapshot()
     })
 
@@ -88,7 +88,7 @@ for (const { file, label } of _cases) {
       const nodes: ReadonlyArray<TaggedResource> = _desired.map(toTaggedResource)
       const buckets = _desiredBkts.map(_toExisting)
       const plan = _fullPlan(nodes, buckets)
-      const expected = _volumeActions(_config).length > 0 ? { _tag: "NeedsConfirm" } : { _tag: "NothingToDo" }
+      const expected = _volumeActions(_config).length > 0 ? PlanDecision.NeedsConfirm() : PlanDecision.NothingToDo()
       expect(decidePlanAction({ plan, yes: false, dryRun: false })).toEqual(expected)
       expect(renderPlan(plan)).toMatchSnapshot()
     })
@@ -97,7 +97,7 @@ for (const { file, label } of _cases) {
       const nodes: ReadonlyArray<TaggedResource> = _desired.map((resource) => toTaggedResource({ ...resource, spec: { flavor: "drifted" } }))
       const buckets = _desiredBkts.map((bucket) => _toExisting({ ...bucket, encryption: !bucket.encryption }))
       const plan = _fullPlan(nodes, buckets)
-      expect(decidePlanAction({ plan, yes: false, dryRun: false })).toEqual({ _tag: "NeedsConfirm" })
+      expect(decidePlanAction({ plan, yes: false, dryRun: false })).toEqual(PlanDecision.NeedsConfirm())
       expect(renderPlan(plan)).toMatchSnapshot()
     })
   })

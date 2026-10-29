@@ -1,8 +1,9 @@
+import type { Schema } from "effect";
 import { Effect } from "effect"
 import { assert, it } from "@effect/vitest"
-import * as HttpClient from "effect/unstable/http/HttpClient"
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
+import * as HttpClient from "effect/http/HttpClient"
+import * as HttpClientRequest from "effect/http/HttpClientRequest"
+import * as HttpClientResponse from "effect/http/HttpClientResponse"
 import { makeUksClient, makeZoneClient } from "@kumulo/upcloud"
 import { authValidityCheck, controlPlanePlanCheck, nodeGroupPlansCheck, versionSupportedCheck, zoneExistsCheck } from "../../src/doctor/upcloud/index.ts"
 
@@ -11,7 +12,7 @@ const _http = (handle: (request: HttpClientRequest.HttpClientRequest) => Respons
     HttpClient.mapRequest(HttpClientRequest.prependUrl("https://fixture.invalid"))
   )
 
-const _json = (status: number, body: unknown) => _http(() => new Response(JSON.stringify(body), { status }))
+const _json = (status: number, body: Schema.Json) => _http(() => new Response(JSON.stringify(body), { status }))
 
 const _zones = { zones: { zone: [{ id: "de-fra1", public: "yes" }, { id: "fi-priv1", public: "no" }] } }
 

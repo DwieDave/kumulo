@@ -11,6 +11,7 @@ it.effect("passes when the plan fits within the quota", () =>
       plannedClusterCount: 1,
       maxClusters: 5
     })
+
     const result = yield* check.run
     assert.strictEqual(result.status, "pass")
     assert.match(result.message, /2\/5/)
@@ -24,6 +25,7 @@ it.effect("fails with an actionable message when the plan exceeds the quota", ()
       plannedClusterCount: 1,
       maxClusters: 2
     })
+
     const result = yield* check.run
     assert.strictEqual(result.status, "fail")
     assert.match(result.message, /exceeding the quota of 2/)
@@ -37,6 +39,7 @@ it.effect("fails when existing clusters can't be read", () =>
       plannedClusterCount: 1,
       maxClusters: 5
     })
+
     const result = yield* check.run
     assert.strictEqual(result.status, "fail")
     assert.match(result.message, /Could not read/)

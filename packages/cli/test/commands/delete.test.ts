@@ -3,8 +3,8 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Effect, Layer } from "effect"
 import * as BunServices from "@effect/platform-bun/BunServices"
-import { Command } from "effect/unstable/cli"
-import * as HttpClient from "effect/unstable/http/HttpClient"
+import { Command } from "effect/cli"
+import * as HttpClient from "effect/http/HttpClient"
 import { assert, it } from "@effect/vitest"
 import { makeStorageClient } from "@kumulo/storage-ovh"
 import { kumuloCli } from "../../src/commands.ts"
@@ -42,6 +42,7 @@ secrets:
 `
 
 const _configPath = join(mkdtempSync(join(tmpdir(), "kumulo-delete-")), "cluster.yaml")
+
 writeFileSync(_configPath, _yaml)
 
 process.stdout.isTTY = false
@@ -63,15 +64,19 @@ const _runDelete = (args: ReadonlyArray<string>) =>
     const server = makeFakeMksServer()
     server.clusters.set("kube-1", { id: "kube-1", name: "staging", status: "READY", url: "https://kube-1.fixture.mks.invalid" })
     server.pools.set("kube-1", new Map())
+
     const recordingMks = server.httpClient.pipe(
       HttpClient.mapRequest((request) => {
         timeline.push(`mks ${request.method} ${request.url}`)
+
         return request
       })
     )
+
     const cinder = makeFakeCinder({
       "GET /volumes/detail": () => {
         timeline.push("cinder list")
+
         return {
           status: 200,
           body: { volumes: [{ id: "vol-1", name: "drop-me", metadata: { kumulo_cluster: "staging" } }] }
@@ -79,9 +84,11 @@ const _runDelete = (args: ReadonlyArray<string>) =>
       },
       "DELETE /volumes/vol-1": () => {
         timeline.push("cinder delete")
+
         return { status: 202 }
       }
     })
+
     yield* Command.runWith(kumuloCli, { version: "test" })([...args]).pipe(
       Effect.provide(Layer.succeed(MksEnv, { mks: makeMksClient(recordingMks), serviceName: "service-1" })),
       Effect.provide(cinder),
@@ -91,6 +98,7 @@ const _runDelete = (args: ReadonlyArray<string>) =>
       Effect.provide(fakeCredentials),
       Effect.provide(BunServices.layer)
     )
+
     return { server, timeline }
   })
 
@@ -99,9 +107,11 @@ it.effect("delete tears the cluster down before its volumes", () =>
   Effect.gen(function*() {
     const { server, timeline } = yield* _runDelete(["delete", _configPath, "--yes"])
     assert.isFalse(server.clusters.has("kube-1"))
+
     const clusterDeleted = timeline.findIndex((entry) =>
       entry.startsWith("mks DELETE") && entry.endsWith("/cloud/project/service-1/kube/kube-1")
     )
+
     const volumeDeleted = timeline.indexOf("cinder delete")
     assert.isAbove(clusterDeleted, -1)
     assert.isAbove(volumeDeleted, -1)

@@ -1,8 +1,10 @@
+import { PlanAction } from "@kumulo/core"
+import type { Schema } from "effect";
 import { Effect, Layer } from "effect"
 import { layerNoop } from "effect/FileSystem"
-import * as HttpClient from "effect/unstable/http/HttpClient"
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
+import * as HttpClient from "effect/http/HttpClient"
+import * as HttpClientRequest from "effect/http/HttpClientRequest"
+import * as HttpClientResponse from "effect/http/HttpClientResponse"
 import { assert, it } from "@effect/vitest"
 import { dnsNoopLive } from "@kumulo/core"
 import { makeMksClient } from "@kumulo/distro-ovh-mks"
@@ -30,14 +32,16 @@ const _live = (state: MksInventory["clusterState"]): MksInventory => ({
 it("a kubernetes minor bump plans as an in-place Update on the cluster row", () => {
   const plan = buildMksPlan({ config: _config, inventory: _live({ region: "GRA5", version: "1.30.9" }) })
   assert.deepStrictEqual(plan.actions, [
-    { _tag: "Update", name: "mks-cluster/prod-eu", reason: "kubernetes version 1.30 → 1.31" }
+    PlanAction.Update({ name: "mks-cluster/prod-eu", reason: "kubernetes version 1.30 → 1.31" })
   ])
 })
 
 const _clusterRow = (inventory: MksInventory): readonly [string, string] => {
   const [action] = buildMksPlan({ config: _config, inventory }).actions
+
   if (action === undefined) return ["missing", ""]
-  return [action._tag, action._tag === "Update" || action._tag === "ReplaceNeedsConfirm" ? action.reason : ""]
+
+  return [action._tag, PlanAction.$is("Update")(action) || PlanAction.$is("ReplaceNeedsConfirm")(action) ? action.reason : ""]
 }
 
 it("a region change plans as ReplaceNeedsConfirm naming the field, never a silent NoOp", () => {
@@ -48,12 +52,12 @@ it("a region change plans as ReplaceNeedsConfirm naming the field, never a silen
 
 it("an unchanged cluster stays NoOp — patch level and region casing are not drift", () => {
   const plan = buildMksPlan({ config: _config, inventory: _live({ region: "gra5", version: "1.31.9" }) })
-  assert.deepStrictEqual(plan.actions, [{ _tag: "NoOp", name: "mks-cluster/prod-eu" }])
+  assert.deepStrictEqual(plan.actions, [PlanAction.NoOp({ name: "mks-cluster/prod-eu" })])
 })
 
 it("a cluster whose state was never read back is never treated as drifted", () => {
   const plan = buildMksPlan({ config: _config, inventory: _live(undefined) })
-  assert.deepStrictEqual(plan.actions, [{ _tag: "NoOp", name: "mks-cluster/prod-eu" }])
+  assert.deepStrictEqual(plan.actions, [PlanAction.NoOp({ name: "mks-cluster/prod-eu" })])
 })
 
 it("a downgrade is refused rather than planned as an upgrade", () => {
@@ -66,8 +70,10 @@ const _networked: MksPlanInput = { ..._config, network: { cidr: "10.0.0.0/16" } 
 
 const _networkedClusterRow = (inventory: MksInventory): readonly [string, string] => {
   const action = buildMksPlan({ config: _networked, inventory }).actions.find((a) => a.name === "mks-cluster/prod-eu")
+
   if (action === undefined) return ["missing", ""]
-  return [action._tag, action._tag === "Update" || action._tag === "ReplaceNeedsConfirm" ? action.reason : ""]
+
+  return [action._tag, PlanAction.$is("Update")(action) || PlanAction.$is("ReplaceNeedsConfirm")(action) ? action.reason : ""]
 }
 
 it("adding a network block to a cluster created without one plans as ReplaceNeedsConfirm saying recreate", () => {
@@ -117,22 +123,31 @@ const _fakeMks = (
 ) => {
   const mutations: Array<string> = []
   const body = { id: "kube-1", name: "prod-eu", status: "READY", url: "https://kube-1.mks.ovh", ...cluster }
+
   const _handle = (request: HttpClientRequest.HttpClientRequest): Response => {
     const path = new URL(request.url).pathname
+
     if (request.method !== "GET") mutations.push(`${request.method} ${path}`)
+
     if (path.endsWith("/kube") && request.method === "GET") return _json(["kube-1"])
+
     if (path.endsWith("/kube/kube-1") && request.method === "GET") return _json(body)
+
     if (path.endsWith("/nodepool") && request.method === "GET") return _json([])
+
     if (path.endsWith("/update") && request.method === "POST") return new Response(null, { status: 200 })
+
     return new Response(JSON.stringify({ message: `unhandled ${request.method} ${path}` }), { status: 500 })
   }
+
   const httpClient = HttpClient.make((request) => Effect.succeed(HttpClientResponse.fromWeb(request, _handle(request)))).pipe(
     HttpClient.mapRequest(HttpClientRequest.prependUrl("https://fixture.invalid"))
   )
+
   return { mutations, layer: Layer.succeed(MksEnv, { mks: makeMksClient(httpClient), serviceName: "service-1" }) }
 }
 
-const _json = (value: unknown): Response =>
+const _json = (value: Schema.Json): Response =>
   new Response(JSON.stringify(value), { status: 200, headers: { "content-type": "application/json" } })
 
 const _fsTestLayer = layerNoop({ readFileString: () => Effect.succeed(_yaml) })

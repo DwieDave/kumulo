@@ -9,6 +9,7 @@ const _zone = "example.com"
 describe("hetzner dns-hetzner provider — port contract", () => {
   runDnsProviderContractSuite(() => {
     const fake = makeFakeZone(_zone)
+
     return {
       zone: _zone,
       provider: makeHetznerDnsProvider(fake.dns),
@@ -16,7 +17,7 @@ describe("hetzner dns-hetzner provider — port contract", () => {
       seedForeign: (subDomain, target) => fake.seed({ type: "A", name: subDomain, target }),
       seedForeignKind: (subDomain, fieldType, target) => fake.seed({ type: fieldType, name: subDomain, target }),
       seedForeignOwnerTxt: (subDomain, tag) => fake.seed({ type: "TXT", name: subDomain, target: `kumulo.cluster=${tag}` }),
-      kindsAt: (subDomain) => fake.peekAll().filter((r) => r.name === subDomain).map((r) => r.type).sort()
+      kindsAt: (subDomain) => fake.peekAll().flatMap((r) => r.name === subDomain ? [r.type] : []).toSorted()
     }
   })
 })
@@ -26,10 +27,12 @@ describe("hetzner dns-hetzner provider — fixture-replay specifics", () => {
     Effect.gen(function*() {
       const fake = makeFakeZone(_zone)
       const provider = makeHetznerDnsProvider(fake.dns)
+
       const desired = [
         { name: "api.example.com", target: "kumulo.cluster=cluster-a" },
         { name: "api.example.com", target: "10.0.0.1" }
       ]
+
       yield* provider.ensureRecords(_zone, desired)
       yield* provider.ensureRecords(_zone, desired)
       assert.strictEqual(fake.peekAll().length, 2)

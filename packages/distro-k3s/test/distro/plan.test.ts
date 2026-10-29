@@ -15,6 +15,7 @@ describe("bootstrapOrder", () => {
       securityGroups: [],
       loadBalancers: []
     }
+
     const order = bootstrapOrder(inventory)
     expect(order.slice(0, 2).toSorted()).toEqual(["master-1", "master-2"])
     expect(order.slice(2).toSorted()).toEqual(["worker-1", "worker-2"])

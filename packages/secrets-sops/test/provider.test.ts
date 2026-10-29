@@ -1,21 +1,20 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Config, ConfigProvider, Effect, Sink, Stream } from "effect"
-import * as fc from "effect/testing/FastCheck"
-import { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/unstable/process"
-import type { ChildProcess } from "effect/unstable/process"
+import { Config, ConfigProvider, Effect, Schema, Sink, Stream } from "effect"
+import { ChildProcess as ChildProcessNS, ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/process"
+import type { ChildProcess, CommandLine } from "effect/process"
 import { decryptSopsFile, sopsConfigProvider } from "../src/provider.ts"
 
-type ChildProcessSpawnerService = (typeof ChildProcessSpawnerNS.ChildProcessSpawner)["Service"]
-
-type Invocation = { readonly command: string; readonly args: ReadonlyArray<string> }
+type Invocation = { readonly command: string; readonly args: ReadonlyArray<CommandLine.Word> }
 
 const _fakeSpawner = (
   { stdout = "", stderr = "", exitCode = 0 }: { readonly stdout?: string; readonly stderr?: string; readonly exitCode?: number }
-): { readonly spawner: ChildProcessSpawnerService; readonly invocations: Array<Invocation> } => {
+) => {
   const invocations: Array<Invocation> = []
+
   const spawner = ChildProcessSpawnerNS.make((command: ChildProcess.Command) =>
     Effect.sync(() => {
-      if (command._tag === "StandardCommand") invocations.push({ command: command.command, args: command.args })
+      if (ChildProcessNS.isStandardCommand(command)) invocations.push({ command: command.command, args: command.args })
+
       return ChildProcessSpawnerNS.makeHandle({
         pid: ChildProcessSpawnerNS.ProcessId(1),
         exitCode: Effect.succeed(ChildProcessSpawnerNS.ExitCode(exitCode)),
@@ -31,6 +30,7 @@ const _fakeSpawner = (
       })
     })
   )
+
   return { spawner, invocations }
 }
 
@@ -79,7 +79,7 @@ describe("decryptSopsFile", () => {
 })
 
 const _read = (provider: ConfigProvider.ConfigProvider, key: string) =>
-  Effect.provideService(Config.string(key), ConfigProvider.ConfigProvider, provider)
+  Effect.provideService(Config.String(key), ConfigProvider.ConfigProvider, provider)
 
 describe("sopsConfigProvider", () => {
   it.effect("serves decrypted keys to Config reads", () =>
@@ -133,28 +133,34 @@ describe("sopsConfigProvider", () => {
   it.effect("env values win when the sops provider is the fallback (R3)", () =>
     Effect.gen(function*() {
       const { spawner } = _fakeSpawner({ stdout: `{"A":"from-sops","B":"from-sops"}` })
+
       const provider = ConfigProvider.orElse(
         ConfigProvider.fromEnv({ env: { A: "from-env" } }),
         sopsConfigProvider({ file: "/secrets/staging.yaml", spawner })
       )
+
       expect(yield* _read(provider, "A")).toBe("from-env")
       expect(yield* _read(provider, "B")).toBe("from-sops")
     }))
 
-  const _pairs = fc.uniqueArray(
-    fc.tuple(fc.string({ minLength: 1, maxLength: 12 }).filter((s) => /^[A-Z_]+$/.test(s)), fc.string({ maxLength: 20 })),
-    { selector: ([key]: readonly [string, string]) => key }
+  const _pairs = Schema.Array(
+    Schema.Tuple([
+      Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(12), Schema.isPattern(/^[A-Z_]+$/)),
+      Schema.String.check(Schema.isMaxLength(20))
+    ])
   )
 
-  it.effect("every key of an arbitrary flat string record round-trips through the provider (R1)", () =>
-    Effect.promise(() =>
-      fc.assert(fc.asyncProperty(_pairs, async (pairs) => {
-        const secrets: Record<string, string> = Object.fromEntries(pairs)
+  it.effect.prop(
+    "every key of an arbitrary flat string record round-trips through the provider (R1)",
+    [_pairs],
+    ([raw]) =>
+      Effect.gen(function*() {
+        const secrets: Record<string, string> = Object.fromEntries(new Map(raw))
         const { invocations, spawner } = _fakeSpawner({ stdout: JSON.stringify(secrets) })
         const provider = sopsConfigProvider({ file: "/secrets/staging.yaml", spawner })
-        const values = await Effect.runPromise(Effect.forEach(Object.keys(secrets), (key) => _read(provider, key)))
+        const values = yield* Effect.forEach(Object.keys(secrets), (key) => _read(provider, key))
         expect(values).toEqual(Object.values(secrets))
         expect(invocations.length).toBeLessThanOrEqual(1)
-      }))
-    ))
+      })
+  )
 })

@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 import type { SchemaError } from "effect/Schema"
-import * as HttpClientError from "effect/unstable/http/HttpClientError"
+import * as HttpClientError from "effect/http/HttpClientError"
 import {
   AuthenticationFailed,
   HttpTransportError,
@@ -31,12 +31,17 @@ const _byStatus = (
   }
 ): MksError => {
   if (status === 404) return new ResourceNotFound(ctx)
+
   if (status === 409) return new ResourceConflict(ctx)
+
   if ((status === 402 || status === 403) && _quotaMessage.test(cause.message)) {
     return new QuotaExceeded({ resource: ctx.kind })
   }
+
   if (status === 401 || status === 403) return new AuthenticationFailed({ hint: `${ctx.kind} ${ctx.ref}: ${cause.message}` })
+
   if (status === 413 || status === 429) return new RateLimited({ ...ctx, retryAfter: _retryAfter(cause) })
+
   return new ProviderApiError({ operation: `${ctx.kind} ${ctx.ref}`, status, body: cause.message })
 }
 
@@ -46,7 +51,9 @@ export const toMksError = (
   if (!HttpClientError.isHttpClientError(cause)) {
     return new ResponseDecodeError({ endpoint: `${ctx.kind}/${ctx.ref}`, issue: cause.issue })
   }
+
   const status = cause.response?.status
+
   return status === undefined ? new HttpTransportError({ cause }) : _byStatus({ cause, ctx, status })
 }
 

@@ -58,6 +58,7 @@ describe("ClusterConfig — hetzner fields", () => {
         version: "v1.31.4",
         auth: { ...validConfig.auth, method: "api_token" as const }
       }
+
       const failure = yield* Effect.flip(decodeConfig(candidate))
       expect(failure._tag).toBe("ConfigInvalid")
     }))
@@ -75,6 +76,7 @@ describe("ClusterConfig — hetzner fields", () => {
         ...hetznerConfig,
         volumes: { module: "cinder" as const, managed: [] }
       }
+
       const failure = yield* Effect.flip(decodeConfig(candidate))
       expect(failure._tag).toBe("ConfigInvalid")
     }))
@@ -85,6 +87,7 @@ describe("ClusterConfig — hetzner fields", () => {
         ...validConfig,
         addons: { ...validConfig.addons, hcloud_csi: { enabled: true } }
       }
+
       const failure = yield* Effect.flip(decodeConfig(candidate))
       expect(failure._tag).toBe("ConfigInvalid")
     }))
@@ -95,6 +98,7 @@ describe("ClusterConfig — hetzner fields", () => {
         ...hetznerConfig,
         addons: { ...hetznerConfig.addons, cinder_csi: { enabled: true, default_volume_type: "high-speed" } }
       }
+
       const failure = yield* Effect.flip(decodeConfig(candidate))
       expect(failure._tag).toBe("ConfigInvalid")
     }))

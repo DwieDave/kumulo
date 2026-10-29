@@ -1,9 +1,10 @@
-import { Effect, Layer } from "effect"
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { Effect, Layer, Predicate, Redacted } from "effect"
+import type { Schema } from "effect"
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { KeystoneAuth } from "../../src/auth/keystone-auth.ts"
 
-export const requestJson = (request: HttpClientRequest.HttpClientRequest): unknown =>
-  request.body._tag === "Uint8Array" ? JSON.parse(new TextDecoder().decode(request.body.body)) : undefined
+export const requestJson = (request: HttpClientRequest.HttpClientRequest): Schema.Json | undefined =>
+  Predicate.isTagged(request.body, "Uint8Array") ? JSON.parse(new TextDecoder().decode(request.body.body)) : undefined
 
 export type RouteHandler = (
   request: HttpClientRequest.HttpClientRequest
@@ -18,28 +19,35 @@ export const makeFakeOpenStack = (
   routes: Record<string, RouteHandler>
 ): FakeOpenStack => {
   const calls: Array<{ method: string; url: string }> = []
+
   const client = HttpClient.make((request) => {
     // HttpClientRequest keeps the query in urlParams, not .url; merge like a real client does
     const url = new URL(request.url)
-    for (const [key, value] of request.urlParams) url.searchParams.append(key, value)
+
+    for (const [key, value] of request.urlParams) url.searchParams.append(key, Predicate.isString(value) ? value : Redacted.value(value))
     calls.push({ method: request.method, url: url.toString() })
     const key = `${request.method} ${url.pathname}`
     const handler = routes[key]
+
     if (handler === undefined) {
       return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("not found", { status: 404 })))
     }
+
     const result = handler(HttpClientRequest.setUrl(request, url.toString()))
     const nullBodyStatus = result.status === 204 || result.status === 304
     const responseBody = nullBodyStatus || result.body === undefined ? null : JSON.stringify(result.body)
+
     return Effect.succeed(
       HttpClientResponse.fromWeb(request, new Response(responseBody, { status: result.status }))
     )
   })
+
   const auth = Layer.succeed(KeystoneAuth, {
     token: Effect.succeed("tok"),
     invalidate: Effect.void,
     endpoint: ({ service }) => Effect.succeed(`https://${service}.example.com/`)
   })
+
   return {
     layer: Layer.merge(auth, Layer.succeed(HttpClient.HttpClient, client)),
     calls: () => calls

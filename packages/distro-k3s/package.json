@@ -54,9 +54,9 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
-    "vitest": "catalog:",
     "@types/ssh2": "catalog:",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "vitest": "catalog:"
   },
   "scripts": {
     "build": "bash ../../scripts/build-package.sh",

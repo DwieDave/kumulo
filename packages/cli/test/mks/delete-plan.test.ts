@@ -1,7 +1,7 @@
 import { Effect, Layer, Sink, Stream } from "effect"
+import type { Types } from "effect"
 import { layerNoop } from "effect/FileSystem"
-import { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/unstable/process"
-import { FastCheck as fc } from "effect/testing"
+import { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/process"
 import { assert, it } from "@effect/vitest"
 import { makeMksClient } from "@kumulo/distro-ovh-mks"
 import type { MksClusterConfigEncoded } from "../../src/cluster-config.ts"
@@ -14,6 +14,7 @@ import { makeFakeCinder } from "../commands/fake-cinder.ts"
 import { baseMksEncodedConfig, decodeMksTestConfig } from "../fixtures.ts"
 
 const _fsLayer = layerNoop({})
+
 const _spawnerLayer = Layer.succeed(
   ChildProcessSpawnerNS.ChildProcessSpawner,
   ChildProcessSpawnerNS.make(() =>
@@ -45,19 +46,22 @@ const _network = { cidr: "10.0.0.0/16", nodes_subnet: "10.0.1.0/24", load_balanc
 
 const _encoded = (
   { ingress, network }: { readonly network: boolean; readonly ingress: boolean }
-): MksClusterConfigEncoded => ({
-  ...baseMksEncodedConfig,
-  name: "c1",
-  worker_pools: [],
-  ...(network ? { network: _network } : {}),
-  ...(ingress ? { ingress: {} } : {})
-})
+): MksClusterConfigEncoded => {
+  const config: Types.Mutable<MksClusterConfigEncoded> = { ...baseMksEncodedConfig, name: "c1", worker_pools: [] }
+
+  if (network) config.network = _network
+
+  if (ingress) config.ingress = {}
+
+  return config
+}
 
 const _rows = (encoded: MksClusterConfigEncoded) =>
   Effect.gen(function*() {
     const server = makeFakeMksServer()
     server.clusters.set("kube-1", { id: "kube-1", name: "c1", status: "READY", url: "https://kube-1.fixture.mks.invalid" })
     server.pools.set("kube-1", new Map())
+
     return yield* mksEntry.deletePlanActions(decodeMksTestConfig(encoded)).pipe(
       Effect.provide(Layer.succeed(MksEnv, { mks: makeMksClient(server.httpClient), serviceName: "service-1" })),
       Effect.provide(makeFakeCinder({})),
@@ -85,7 +89,7 @@ it.effect("the delete plan lists every resource the teardown removes, in teardow
 it.effect("infra rows follow the network block, ingress declared or not, and are never retained", () =>
   Effect.gen(function*() {
     yield* Effect.forEach(
-      fc.sample(fc.record({ network: fc.boolean(), ingress: fc.boolean() }), 8),
+      [false, true].flatMap((network) => [false, true].map((ingress) => ({ network, ingress }))),
       (flags) =>
         Effect.gen(function*() {
           // ingress without network is rejected by the schema (isIngressPlaceable)

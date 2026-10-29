@@ -1,3 +1,4 @@
+import { PlanAction } from "@kumulo/core"
 import { assert, it } from "@effect/vitest"
 import { dnsPlanActions } from "../src/dns-plan.ts"
 import { buildK3sPlan } from "../src/k3s/plan.ts"
@@ -20,27 +21,27 @@ const _ingressDns = {
 
 it("plans an A record for the k3s api server and a CNAME for a hostname target", () => {
   assert.deepStrictEqual(dnsPlanActions({ config: _dns, targets: { api_server: "ip" } }), [
-    { _tag: "Create", name: "dns/example.com/api (A)" },
-    { _tag: "Create", name: "dns/example.com/www (CNAME)" }
+    PlanAction.Create({ name: "dns/example.com/api (A)" }),
+    PlanAction.Create({ name: "dns/example.com/www (CNAME)" })
   ])
 })
 
 it("plans a CNAME for the mks api server (hostname target)", () => {
   assert.deepStrictEqual(dnsPlanActions({ config: _dns, targets: { api_server: "hostname" } }), [
-    { _tag: "Create", name: "dns/example.com/api (CNAME)" },
-    { _tag: "Create", name: "dns/example.com/www (CNAME)" }
+    PlanAction.Create({ name: "dns/example.com/api (CNAME)" }),
+    PlanAction.Create({ name: "dns/example.com/www (CNAME)" })
   ])
 })
 
 it("plans an A record for an ingress target the apply will resolve", () => {
   assert.deepStrictEqual(dnsPlanActions({ config: _ingressDns, targets: { api_server: "hostname", ingress: "ip" } }), [
-    { _tag: "Create", name: "dns/example.com/www (A)" }
+    PlanAction.Create({ name: "dns/example.com/www (A)" })
   ])
 })
 
 it("plans an unresolvable ingress target as the literal CNAME the apply writes", () => {
   assert.deepStrictEqual(dnsPlanActions({ config: _ingressDns, targets: { api_server: "hostname" } }), [
-    { _tag: "Create", name: "dns/example.com/www (CNAME)" }
+    PlanAction.Create({ name: "dns/example.com/www (CNAME)" })
   ])
 })
 
@@ -64,6 +65,7 @@ it("mks plan output includes DNS rows", () => {
     },
     inventory: emptyMksInventory
   })
+
   assert.deepStrictEqual(plan.actions.map((a) => a.name), [
     "mks-cluster/prod-eu",
     "mks-pool/prod-eu/workers",
@@ -72,19 +74,16 @@ it("mks plan output includes DNS rows", () => {
   ])
 })
 
-it("mks plan renders an ingress record as an A record exactly when the config declares an ingress LB", () => {
-  const _plan = (ingress?: { readonly flavor_id?: string }) =>
-    buildMksPlan({
-      config: {
-        name: "prod-eu",
-        worker_pools: [],
-        volumes: { module: "none" },
-        dns: _ingressDns,
-        ...(ingress === undefined ? {} : { network: { cidr: "10.0.0.0/16" }, ingress })
-      },
-      inventory: emptyMksInventory
-    }).actions.map((a) => a.name)
+const _plan = (ingress?: { readonly flavor_id?: string }) => {
+  const base = { name: "prod-eu", worker_pools: [], volumes: { module: "none" as const }, dns: _ingressDns }
 
+  return buildMksPlan({
+    config: ingress === undefined ? base : { ...base, network: { cidr: "10.0.0.0/16" }, ingress },
+    inventory: emptyMksInventory
+  }).actions.map((a) => a.name)
+}
+
+it("mks plan renders an ingress record as an A record exactly when the config declares an ingress LB", () => {
   assert.include(_plan({}), "dns/example.com/www (A)")
   assert.include(_plan(), "dns/example.com/www (CNAME)")
 })

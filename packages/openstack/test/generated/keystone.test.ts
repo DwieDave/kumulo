@@ -13,6 +13,7 @@ it("decodes a 200 unscoped token response (happy path)", () => {
       }
     }
   })
+
   assert.deepStrictEqual(decoded.token?.methods, ["password"])
 })
 
@@ -24,6 +25,7 @@ it("decodes a 401 auth-receipt error body (error-mapping)", () => {
       required_auth_methods: ["totp"]
     }
   })
+
   assert.deepStrictEqual(decoded.required_auth_methods, ["totp"])
 })
 

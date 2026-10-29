@@ -61,7 +61,9 @@ const _ensureService = (
   Effect.gen(function*() {
     const { client, cluster, region } = options
     const existing = yield* _findService({ client, cluster })
+
     if (existing !== undefined && existing.operational_state === "running") return existing
+
     const service = existing ?? (yield* mapUpcloudError({
       self: client.services.create({
         name: _serviceName(cluster),
@@ -71,6 +73,7 @@ const _ensureService = (
       }),
       ctx: { kind: "object-storage-service", ref: cluster }
     }))
+
     return yield* _awaitRunning({ client, uuid: service.uuid, cluster, pollInterval: options.pollInterval ?? "3 seconds" })
   })
 
@@ -80,6 +83,7 @@ const _ensureBucketInService = (
   Effect.gen(function*() {
     const ctx = { kind: "bucket", ref: `${serviceUuid}/${spec.name}` }
     const buckets = yield* mapUpcloudError({ self: client.buckets.list(serviceUuid), ctx })
+
     if (buckets.some((b) => b.name === spec.name && !b.deleted)) return
     yield* mapUpcloudError({ self: client.buckets.create(serviceUuid, spec.name), ctx })
   })
@@ -88,12 +92,16 @@ export const listBuckets = (options: UpcloudObjectStorageOptions) =>
   (_region: string): Effect.Effect<ReadonlyArray<BucketInfo>, ObjectStorageError> =>
     Effect.gen(function*() {
       const service = yield* _findService(options)
+
       if (service === undefined) return []
+
       const buckets = yield* mapUpcloudError({
         self: options.client.buckets.list(service.uuid),
         ctx: { kind: "object-storage-service", ref: options.cluster }
       })
+
       const endpoint = _publicEndpoint(service)
+
       return buckets.filter((b) => !b.deleted).map((b) => ({ name: b.name, region: options.region, endpoint }))
     })
 
@@ -102,6 +110,7 @@ export const ensureBucket = (options: UpcloudObjectStorageOptions) =>
     Effect.gen(function*() {
       const service = yield* _ensureService(options)
       yield* _ensureBucketInService({ client: options.client, serviceUuid: service.uuid, spec })
+
       return { name: spec.name, region: options.region, endpoint: _publicEndpoint(service) }
     })
 
@@ -110,14 +119,18 @@ export const deleteBucket = (options: UpcloudObjectStorageOptions) =>
   (ref: BucketRef): Effect.Effect<void, ObjectStorageError> =>
     Effect.gen(function*() {
       const service = yield* _findService(options)
+
       if (service === undefined) return
       const ctx = { kind: "bucket", ref: `${service.uuid}/${ref.name}` }
       const buckets = yield* mapUpcloudError({ self: options.client.buckets.list(service.uuid), ctx })
       const bucket = buckets.find((b) => b.name === ref.name && !b.deleted)
+
       if (bucket === undefined) return
+
       if (bucket.total_objects > 0) {
         return yield* Effect.fail(new BucketNotEmpty({ bucket: ref.name, objectCount: bucket.total_objects }))
       }
+
       yield* mapUpcloudError({ self: options.client.buckets.delete(service.uuid, ref.name), ctx }).pipe(
         Effect.catchTag("ResourceConflict", () => Effect.fail(new BucketNotEmpty({ bucket: ref.name, objectCount: bucket.total_objects })))
       )
@@ -128,9 +141,11 @@ const _ensureUser = (
 ): Effect.Effect<void, ObjectStorageError> =>
   Effect.gen(function*() {
     const ctx = { kind: "object-storage-user", ref: username }
+
     const found = yield* mapUpcloudError({ self: client.users.get(serviceUuid, username), ctx }).pipe(
       Effect.catchTag("ResourceNotFound", () => Effect.succeed(undefined))
     )
+
     if (found !== undefined) return
     yield* mapUpcloudError({ self: client.users.create(serviceUuid, username), ctx })
   })
@@ -146,6 +161,7 @@ const _rotateAccessKey = (
       (key) => mapUpcloudError({ self: client.accessKeys.delete(serviceUuid, username, key.access_key_id), ctx }),
       { discard: true }
     )
+
     return yield* mapUpcloudError({ self: client.accessKeys.create(serviceUuid, username), ctx })
   })
 
@@ -156,9 +172,11 @@ export const ensureCredentials = (options: UpcloudObjectStorageOptions) =>
       const username = _username(clusterName)
       yield* _ensureUser({ client: options.client, serviceUuid: service.uuid, username })
       const key = yield* _rotateAccessKey({ client: options.client, serviceUuid: service.uuid, username })
+
       if (key.secret_access_key === undefined) {
         return yield* Effect.fail(new ResourceNotFound({ kind: "object-storage-access-key", ref: username }))
       }
+
       return {
         user: username,
         accessKey: Redacted.make(key.access_key_id),

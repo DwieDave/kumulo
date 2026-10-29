@@ -34,6 +34,7 @@ export const objectStorageRegionCheck = (
   run: objectStorage.regions().pipe(
     Effect.map((regions): DoctorCheckResult => {
       const names = regions.map((r) => r.name)
+
       return names.includes(region)
         ? { name: _regionName, status: "pass", message: `Region "${region}" exists.` }
         : { name: _regionName, status: "fail", message: `Region "${region}" is not one of UpCloud's object-storage regions (${names.join(", ")}).` }

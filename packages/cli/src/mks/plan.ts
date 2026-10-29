@@ -1,5 +1,6 @@
-import type { NetworkInfo, Plan, PlanAction } from "@kumulo/core"
-import { clusterDrift, mksPoolHash, type MksClusterState, type MksWorkerPoolConfig } from "@kumulo/distro-ovh-mks"
+import { PlanAction } from "@kumulo/core"
+import type { NetworkInfo, Plan } from "@kumulo/core"
+import { clusterDrift, MksClusterDrift, mksPoolHash, type MksClusterState, type MksWorkerPoolConfig } from "@kumulo/distro-ovh-mks"
 import { type DnsPlanInput, dnsPlanActions, type DnsPlanTargets } from "../dns-plan.ts"
 
 export interface MksPoolInput {
@@ -34,6 +35,7 @@ export const toMksPool = (pool: MksPoolInput): MksWorkerPoolConfig => ({
 })
 
 export const mksClusterRow = (cluster: string): string => `mks-cluster/${cluster}`
+
 export const mksPoolRow = (
   { cluster, pool }: { readonly cluster: string; readonly pool: string }
 ): string => `mks-pool/${cluster}/${pool}`
@@ -54,7 +56,7 @@ export const emptyMksInventory: MksInventory = {
 }
 
 const _createOrNoOp = ({ exists, name }: { readonly exists: boolean; readonly name: string }): PlanAction =>
-  exists ? { _tag: "NoOp", name } : { _tag: "Create", name }
+  exists ? PlanAction.NoOp({ name }) : PlanAction.Create({ name })
 
 const _poolAction = (
   { cluster, inventory, pool }: {
@@ -65,19 +67,24 @@ const _poolAction = (
 ): PlanAction => {
   const name = mksPoolRow({ cluster, pool: pool.name })
   const exists = inventory.clusterExists && inventory.poolNames.has(pool.name)
-  if (!exists) return { _tag: "Create", name }
+
+  if (!exists) return PlanAction.Create({ name })
   const actual = inventory.poolHashes?.get(pool.name)
+
   return actual === undefined || actual === mksPoolHash(toMksPool(pool))
-    ? { _tag: "NoOp", name }
-    : { _tag: "ReplaceNeedsConfirm", name, reason: "config-hash drifted from desired spec" }
+    ? PlanAction.NoOp({ name })
+    : PlanAction.ReplaceNeedsConfirm({ name, reason: "config-hash drifted from desired spec" })
 }
 
 const _clusterAction = (
   { config, inventory }: { readonly config: MksPlanInput; readonly inventory: MksInventory }
 ): PlanAction => {
   const name = mksClusterRow(config.name)
-  if (!inventory.clusterExists) return { _tag: "Create", name }
-  if (config.auth === undefined || inventory.clusterState === undefined) return { _tag: "NoOp", name }
+
+  if (!inventory.clusterExists) return PlanAction.Create({ name })
+
+  if (config.auth === undefined || inventory.clusterState === undefined) return PlanAction.NoOp({ name })
+
   const drift = clusterDrift({
     desired: {
       region: config.auth.region,
@@ -88,10 +95,12 @@ const _clusterAction = (
     },
     actual: inventory.clusterState
   })
-  if (drift._tag === "None") return { _tag: "NoOp", name }
-  return drift._tag === "Upgrade"
-    ? { _tag: "Update", name, reason: `kubernetes version ${drift.from} → ${drift.to}` }
-    : { _tag: "ReplaceNeedsConfirm", name, reason: `${drift.field}: ${drift.reason}` }
+
+  if (MksClusterDrift.$is("None")(drift)) return PlanAction.NoOp({ name })
+
+  return MksClusterDrift.$is("Upgrade")(drift)
+    ? PlanAction.Update({ name, reason: `kubernetes version ${drift.from} → ${drift.to}` })
+    : PlanAction.ReplaceNeedsConfirm({ name, reason: `${drift.field}: ${drift.reason}` })
 }
 
 // an orphaned network plans Create and no-ops on apply (ensureNetwork is create-if-missing); add a read-only Neutron lookup if that
@@ -102,6 +111,7 @@ const _networkActions = (
   if (config.network === undefined) return []
   const id = inventory.clusterState?.privateNetworkId
   const exists = id !== undefined && id !== null && id !== ""
+
   return [
     `network/${config.name}`,
     `subnet/${config.name}/nodes`,
@@ -120,10 +130,8 @@ const _ingressActions = (
     `floating-ip/${config.name}/ingress`
   ].map((name) => _createOrNoOp({ exists: inventory.clusterExists, name }))
 
-const _dnsTargets = (config: MksPlanInput): DnsPlanTargets => ({
-  api_server: "hostname",
-  ...(config.ingress === undefined ? {} : { ingress: "ip" as const })
-})
+const _dnsTargets = (config: MksPlanInput): DnsPlanTargets =>
+  config.ingress === undefined ? { api_server: "hostname" } : { api_server: "hostname", ingress: "ip" }
 
 export const buildMksPlan = (
   { config, inventory }: { readonly config: MksPlanInput; readonly inventory: MksInventory }

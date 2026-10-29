@@ -1,8 +1,8 @@
 import type { Effect } from "effect"
 import type { FileSystem } from "effect/FileSystem"
 import type { PlatformError } from "effect/PlatformError"
-import type * as HttpClient from "effect/unstable/http/HttpClient"
-import type { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/unstable/process"
+import type * as HttpClient from "effect/http/HttpClient"
+import type { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/process"
 import type { BucketNotEmpty, ConfigInvalid, CredentialsSinkError, DistroKind, Kubeconfig, MksError, Plan } from "@kumulo/core"
 import type { ClusterConfig } from "../cluster-config.ts"
 import type { CinderAuth, OutputsIngress } from "@kumulo/volumes-cinder"
@@ -20,6 +20,7 @@ export type DistroServices =
   | UpcloudEnv
   | FileSystem
   | ChildProcessSpawnerNS.ChildProcessSpawner
+
 export type DistroFailure = MksError | K3sError | ConfigInvalid | BucketNotEmpty | CredentialsSinkError | PlatformError
 
 export interface DistroApplyResult {

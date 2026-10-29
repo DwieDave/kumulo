@@ -20,6 +20,7 @@ export const projectAccessCheck = (args: {
           message: `No access to OVH project "${args.serviceName}" — check the API application's project scope.`
         }
       }
+
       if (status === "unauthenticated") {
         return {
           name: _name,
@@ -27,6 +28,7 @@ export const projectAccessCheck = (args: {
           message: "Cannot verify project access: authentication failed (see ovh-auth-validity)."
         }
       }
+
       return { name: _name, status: "pass" as const, message: `Project "${args.serviceName}" is reachable.` }
     })
   )

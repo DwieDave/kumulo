@@ -1,6 +1,6 @@
 import { Context, Effect, Option, Schema } from "effect"
-import type { HttpClient} from "effect/unstable/http";
-import { HttpClientRequest } from "effect/unstable/http"
+import type { HttpClient} from "effect/http";
+import { HttpClientRequest } from "effect/http"
 import { HttpTransportError, ResourceConflict, ResourceNotFound } from "../errors/tagged.ts"
 import type { K8sManifest } from "../domain/types.ts"
 
@@ -31,13 +31,14 @@ const _statusError = (ref: ResourceRef, status: number): ResourceNotFound | Http
 
 const K8sManifestSchema = Schema.StructWithRest(
   Schema.Struct({ apiVersion: Schema.String, kind: Schema.String }),
-  [Schema.Record(Schema.String, Schema.Unknown)]
+  [Schema.Record(Schema.String, Schema.Json)]
 )
 
 const K8sListSchema = Schema.Struct({
   items: Schema.optional(Schema.Array(Schema.Unknown))
 })
-const _emptyListing: { items?: ReadonlyArray<unknown> } = { items: [] }
+
+const _emptyListing = { items: [] }
 
 export interface K8sClientOptions {
   readonly client: HttpClient.HttpClient
@@ -46,15 +47,9 @@ export interface K8sClientOptions {
 
 const _url = (server: string, path: string): URL => new URL(path, server)
 
-const _decodeManifest = (
-  body: unknown
-): Effect.Effect<K8sManifest, HttpTransportError> =>
-  Schema.decodeUnknownEffect(K8sManifestSchema)(body).pipe(
-    Effect.mapError(() => _transportError("response body was not a K8s manifest"))
-  )
+const _decodeManifest = Schema.decodeUnknownEffect(K8sManifestSchema)
 
-const _decodeManifestOption = (item: unknown): Effect.Effect<Option.Option<K8sManifest>> =>
-  Schema.decodeUnknownEffect(K8sManifestSchema)(item).pipe(Effect.option)
+const _manifestError = () => _transportError("response body was not a K8s manifest")
 
 export const makeK8sClient = (options: K8sClientOptions): K8sClient["Service"] => {
   const { client, server } = options
@@ -64,9 +59,11 @@ export const makeK8sClient = (options: K8sClientOptions): K8sClient["Service"] =
       const response = yield* client.execute(HttpClientRequest.get(_url(server, ref.path))).pipe(
         Effect.mapError(_transportError)
       )
+
       if (response.status !== 200) return yield* Effect.fail(_statusError(ref, response.status))
       const body = yield* response.json.pipe(Effect.mapError(_transportError))
-      return yield* _decodeManifest(body)
+
+      return yield* _decodeManifest(body).pipe(Effect.mapError(_manifestError))
     })
 
   const list: K8sClient["Service"]["list"] = (ref) =>
@@ -74,12 +71,16 @@ export const makeK8sClient = (options: K8sClientOptions): K8sClient["Service"] =
       const response = yield* client.execute(HttpClientRequest.get(_url(server, ref.path))).pipe(
         Effect.mapError(_transportError)
       )
+
       if (response.status !== 200) return yield* Effect.fail(_transportError(`status ${response.status}`))
       const body = yield* response.json.pipe(Effect.mapError(_transportError))
+
       const listing = yield* Schema.decodeUnknownEffect(K8sListSchema)(body).pipe(
         Effect.orElseSucceed(() => _emptyListing)
       )
-      const decoded = yield* Effect.forEach(listing.items ?? [], _decodeManifestOption)
+
+      const decoded = yield* Effect.forEach(listing.items ?? [], (item) => Effect.option(_decodeManifest(item)))
+
       return decoded.flatMap(Option.toArray)
     })
 
@@ -89,13 +90,18 @@ export const makeK8sClient = (options: K8sClientOptions): K8sClient["Service"] =
       const request = HttpClientRequest.patch(_url(server, `${ref.path}?fieldManager=kumulo&force=true`)).pipe(
         HttpClientRequest.bodyText(_toYaml(manifest), "application/apply-patch+yaml")
       )
+
       const response = yield* client.execute(request).pipe(Effect.mapError(_transportError))
+
       if (response.status === 409) return yield* Effect.fail(new ResourceConflict({ kind: ref.kind, ref: ref.path }))
+
       if (response.status !== 200 && response.status !== 201) {
         return yield* Effect.fail(_transportError(`status ${response.status}`))
       }
+
       const body = yield* response.json.pipe(Effect.mapError(_transportError))
-      return yield* _decodeManifest(body)
+
+      return yield* _decodeManifest(body).pipe(Effect.mapError(_manifestError))
     })
 
   const deleteResource: K8sClient["Service"]["delete"] = (ref) =>
@@ -112,13 +118,19 @@ export const makeK8sClient = (options: K8sClientOptions): K8sClient["Service"] =
     Effect.gen(function*() {
       const path = `/api/v1/namespaces/${namespace}/pods/${pod}/eviction`
       const body = { apiVersion: "policy/v1", kind: "Eviction", metadata: { name: pod, namespace } }
+
       const request = HttpClientRequest.post(_url(server, path)).pipe(
         HttpClientRequest.bodyText(JSON.stringify(body), "application/json")
       )
+
       const response = yield* client.execute(request).pipe(Effect.mapError(_transportError))
+
       if (response.status === 200 || response.status === 201) return
+
       if (response.status === 404) return yield* Effect.fail(new ResourceNotFound({ kind: "Pod", ref: path }))
+
       if (response.status === 409) return yield* Effect.fail(new ResourceConflict({ kind: "Pod", ref: path }))
+
       return yield* Effect.fail(_transportError(`status ${response.status}`))
     })
 

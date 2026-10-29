@@ -13,6 +13,7 @@ const _withMissingKey = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.sync(() => {
       const previous = process.env["KUMULO_SSH_PRIVATE_KEY_PATH"]
       process.env["KUMULO_SSH_PRIVATE_KEY_PATH"] = missingKey
+
       return previous
     }),
     () => effect,
@@ -40,10 +41,12 @@ describe("SshLive with a missing private key", () => {
     _withMissingKey(
       Effect.gen(function*() {
         const ssh = yield* Ssh
+
         const error = yield* ssh.exec(host, "true").pipe(
           Effect.mapError((cause) => new BootstrapFailed({ node: host.ip, phase: "install", log: String(cause.cause) })),
           Effect.flip
         )
+
         expect(error._tag).toBe("BootstrapFailed")
         expect(error.log).toContain("ssh key not found at")
       }).pipe(Effect.provide(SshLive))

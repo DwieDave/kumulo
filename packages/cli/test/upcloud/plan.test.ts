@@ -1,3 +1,4 @@
+import { PlanAction } from "@kumulo/core"
 import { assert, it } from "@effect/vitest"
 import { decodeUpcloudTestConfig } from "../fixtures.ts"
 import { validUpcloudUksConfig } from "../config/fixtures.ts"
@@ -25,16 +26,16 @@ const _live: UpcloudInventory = {
 it("plans router, network, cluster and one row per pool on an empty inventory", () => {
   const plan = buildUpcloudPlan({ config: _config, inventory: _empty })
   assert.deepStrictEqual(plan.actions, [
-    { _tag: "Create", name: "router/staging-eu" },
-    { _tag: "Create", name: "network/staging-eu" },
-    { _tag: "Create", name: "uks-cluster/staging-eu" },
-    { _tag: "Create", name: uksPoolRow({ cluster: "staging-eu", pool: "general" }) }
+    PlanAction.Create({ name: "router/staging-eu" }),
+    PlanAction.Create({ name: "network/staging-eu" }),
+    PlanAction.Create({ name: "uks-cluster/staging-eu" }),
+    PlanAction.Create({ name: uksPoolRow({ cluster: "staging-eu", pool: "general" }) })
   ])
 })
 
 it("is all NoOp against a converged inventory (AC2 at plan level)", () => {
   const plan = buildUpcloudPlan({ config: _config, inventory: _live })
-  assert.isTrue(plan.actions.every((action) => action._tag === "NoOp"), JSON.stringify(plan.actions))
+  assert.isTrue(plan.actions.every((action) => PlanAction.$is("NoOp")(action)), JSON.stringify(plan.actions))
 })
 
 // AC6: creation-time drift must be named at PLAN time, not discovered at apply.
@@ -43,8 +44,10 @@ it("names a changed network CIDR as ReplaceNeedsConfirm, never a silent NoOp", (
     config: { ..._config, network: { cidr: "10.9.0.0/16" } },
     inventory: _live
   })
+
   const cluster = plan.actions.find((action) => action.name === "uks-cluster/staging-eu")
   assert.strictEqual(cluster?._tag, "ReplaceNeedsConfirm")
+
   if (cluster?._tag === "ReplaceNeedsConfirm") assert.include(cluster.reason, "network_cidr")
 })
 
@@ -59,8 +62,9 @@ it("plans a Create for a pool the cluster does not have yet", () => {
     config: { ..._config, worker_pools: [..._config.worker_pools, { name: "gpu", flavor: "4xCPU-8GB", count: 2 }] },
     inventory: _live
   })
+
   assert.deepStrictEqual(
     plan.actions.find((action) => action.name === uksPoolRow({ cluster: "staging-eu", pool: "gpu" })),
-    { _tag: "Create", name: uksPoolRow({ cluster: "staging-eu", pool: "gpu" }) }
+    PlanAction.Create({ name: uksPoolRow({ cluster: "staging-eu", pool: "gpu" }) })
   )
 })

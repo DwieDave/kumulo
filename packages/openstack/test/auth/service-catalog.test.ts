@@ -7,6 +7,7 @@ describe("catalogOf", () => {
     const catalog = catalogOf({
       token: { catalog: [{ type: "compute", endpoints: [{ interface: "public", url: "https://nova.example.com" }] }] }
     })
+
     expect(catalog).toEqual([
       { type: "compute", endpoints: [{ interface: "public", region: "", url: "https://nova.example.com" }] }
     ])
@@ -19,6 +20,7 @@ describe("catalogOf", () => {
     const exit = await Effect.runPromiseExit(
       resolveEndpoint({ catalog: catalogOf({ token: {} }), service: "compute", region: "gra" })
     )
+
     expect(Exit.isFailure(exit)).toBe(true)
   })
 })
@@ -31,6 +33,7 @@ describe("resolveEndpoint", () => {
         service: "compute",
         region: "gra"
       })
+
       expect(url).toBe("https://nova.bhs.example.com")
     }))
 })

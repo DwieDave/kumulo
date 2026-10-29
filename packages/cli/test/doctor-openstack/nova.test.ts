@@ -11,6 +11,7 @@ it.effect("passes when Nova accepts the pinned microversion", () =>
       region: "GRA9",
       microversion: NOVA_MICROVERSION
     })
+
     const result = yield* microversionCheck({ probe, microversion: NOVA_MICROVERSION }).run
     assert.strictEqual(result.status, "pass")
   }))
@@ -23,6 +24,7 @@ it.effect("fails with an actionable message on a 406", () =>
       region: "GRA9",
       microversion: NOVA_MICROVERSION
     })
+
     const result = yield* microversionCheck({ probe, microversion: NOVA_MICROVERSION }).run
     assert.strictEqual(result.status, "fail")
     assert.match(result.message, /rejected microversion/)
@@ -36,6 +38,7 @@ it.effect("fails when Nova is unreachable", () =>
       region: "GRA9",
       microversion: NOVA_MICROVERSION
     })
+
     const result = yield* microversionCheck({ probe, microversion: NOVA_MICROVERSION }).run
     assert.strictEqual(result.status, "fail")
     assert.match(result.message, /Could not reach Nova/)

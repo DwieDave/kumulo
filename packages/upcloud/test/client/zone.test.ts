@@ -1,11 +1,12 @@
 import { Effect } from "effect"
+import type { Schema } from "effect"
 import { assert, it } from "@effect/vitest"
-import * as HttpClient from "effect/unstable/http/HttpClient"
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
+import * as HttpClient from "effect/http/HttpClient"
+import * as HttpClientRequest from "effect/http/HttpClientRequest"
+import * as HttpClientResponse from "effect/http/HttpClientResponse"
 import { makeZoneClient } from "../../src/client/zone.ts"
 
-const _client = (status: number, body: unknown) =>
+const _client = (status: number, body: Schema.Json) =>
   makeZoneClient(
     HttpClient.make((request) => Effect.succeed(HttpClientResponse.fromWeb(request, new Response(JSON.stringify(body), { status })))).pipe(
       HttpClient.mapRequest(HttpClientRequest.prependUrl("https://fixture.invalid"))
@@ -17,6 +18,7 @@ it.effect("GET /1.3/zone decodes UpCloud's nested {zones:{zone:[...]}} envelope"
     const zones = yield* _client(200, {
       zones: { zone: [{ id: "de-fra1", description: "Frankfurt #1", public: "yes" }, { id: "es-mad1" }] }
     }).list()
+
     assert.deepStrictEqual(zones.map((zone) => zone.id), ["de-fra1", "es-mad1"])
   }))
 

@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import type { SchemaError } from "effect/Schema"
-import * as HttpClientError from "effect/unstable/http/HttpClientError"
-import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
+import * as HttpClientError from "effect/http/HttpClientError"
+import type * as HttpClientResponse from "effect/http/HttpClientResponse"
 import {
   AuthenticationFailed,
   HttpTransportError,
@@ -42,18 +42,19 @@ interface Classified extends ErrorContext {
 const _QUOTA_CODES = ["resource_limit_exceeded", "quota_exceeded"]
 const _isQuota = (body: string): boolean => _QUOTA_CODES.some((code) => body.includes(code))
 
-const _byStatus: Record<number, (c: Classified) => HcloudError> = {
-  401: (c) => new AuthenticationFailed({ hint: `${_op(c)}: hcloud rejected the API token` }),
-  403: (c) => new AuthenticationFailed({ hint: `${_op(c)}: hcloud API token lacks permission` }),
-  404: (c) => new ResourceNotFound({ kind: c.kind, ref: c.ref }),
-  409: (c) => new ResourceConflict({ kind: c.kind, ref: c.ref }),
-  423: (c) => new ResourceConflict({ kind: c.kind, ref: c.ref }),
-  429: (c) => new RateLimited({ kind: c.kind, ref: c.ref, retryAfter: c.retryAfter })
-}
+const _byStatus = new Map<number, (c: Classified) => HcloudError>([
+  [401, (c) => new AuthenticationFailed({ hint: `${_op(c)}: hcloud rejected the API token` })],
+  [403, (c) => new AuthenticationFailed({ hint: `${_op(c)}: hcloud API token lacks permission` })],
+  [404, (c) => new ResourceNotFound({ kind: c.kind, ref: c.ref })],
+  [409, (c) => new ResourceConflict({ kind: c.kind, ref: c.ref })],
+  [423, (c) => new ResourceConflict({ kind: c.kind, ref: c.ref })],
+  [429, (c) => new RateLimited({ kind: c.kind, ref: c.ref, retryAfter: c.retryAfter })]
+])
 
 const _classify = (c: Classified): HcloudError => {
   if (_isQuota(c.body)) return new QuotaExceeded({ resource: c.kind })
-  const mapped = _byStatus[c.status]
+  const mapped = _byStatus.get(c.status)
+
   return mapped === undefined
     ? new ProviderApiError({ operation: _op(c), status: c.status, body: c.body.slice(0, 512) })
     : mapped(c)
@@ -71,8 +72,11 @@ export const toHcloudError = (
   if (!HttpClientError.isHttpClientError(cause)) {
     return Effect.succeed(new ResponseDecodeError({ endpoint: _op(ctx), issue: cause.issue }))
   }
+
   const response = cause.response
+
   if (response === undefined) return Effect.succeed(new HttpTransportError({ cause }))
+
   return Effect.map(
     _bodyText(response),
     (body) => _classify({ ...ctx, status: response.status, body, retryAfter: _retryAfter(response) })

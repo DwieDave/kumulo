@@ -1,8 +1,9 @@
 import { Effect } from "effect"
+import type { Schema } from "effect"
 import { assert, it } from "@effect/vitest"
-import * as HttpClient from "effect/unstable/http/HttpClient"
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
+import * as HttpClient from "effect/http/HttpClient"
+import * as HttpClientRequest from "effect/http/HttpClientRequest"
+import * as HttpClientResponse from "effect/http/HttpClientResponse"
 import { makeNetworkClient, makeRouterClient } from "../../src/client/network.ts"
 import { capturedJson } from "./capture.ts"
 
@@ -13,7 +14,7 @@ const _rawHttpClient = (handle: (request: HttpClientRequest.HttpClientRequest) =
     HttpClient.mapRequest(HttpClientRequest.prependUrl(_fixtureBaseUrl))
   )
 
-const _fixtureHttpClient = (status: number, body: unknown) => _rawHttpClient(() => new Response(JSON.stringify(body), { status }))
+const _fixtureHttpClient = (status: number, body: Schema.Json) => _rawHttpClient(() => new Response(JSON.stringify(body), { status }))
 
 const _network = {
   uuid: "net-1",
@@ -25,17 +26,21 @@ const _network = {
     ip_network: [{ address: "10.0.0.0/24", dhcp: "yes" as const, dhcp_default_route: "no" as const, family: "IPv4" as const }]
   }
 }
+
 const _router = { uuid: "router-1", name: "kumulo-demo", type: "normal", attached_networks: { network: [] } }
 
 it.effect("POST /1.3/network sends {network: body} and decodes {network: {...}}", () =>
   Effect.gen(function*() {
     let captured: unknown
+
     const client = makeNetworkClient(
       _rawHttpClient((request) => {
         captured = capturedJson(request)
+
         return new Response(JSON.stringify({ network: _network }), { status: 200 })
       })
     )
+
     const ipNetworks = { ip_network: [{ address: "10.0.0.0/24", dhcp: "yes" as const, family: "IPv4" as const }] }
     const created = yield* client.create({ name: "kumulo-demo", zone: "de-fra1", ip_networks: ipNetworks })
     assert.deepStrictEqual(captured, { network: { name: "kumulo-demo", zone: "de-fra1", ip_networks: ipNetworks } })
@@ -52,12 +57,15 @@ it.effect("GET /1.3/network decodes the double-wrapped {networks: {network: [...
 it.effect("DELETE /1.3/network/{uuid} hits the right path", () =>
   Effect.gen(function*() {
     let capturedPath: string | undefined
+
     const client = makeNetworkClient(
       _rawHttpClient((request) => {
         capturedPath = request.url
+
         return new Response(null, { status: 204 })
       })
     )
+
     yield* client.delete("net-1")
     assert.strictEqual(capturedPath, `${_fixtureBaseUrl}/1.3/network/net-1`)
   }))

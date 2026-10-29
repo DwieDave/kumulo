@@ -1,6 +1,11 @@
 export { filterAllowlist } from "./allowlist.ts"
+
 export { applyPatches, type NamedPatch } from "./patch.ts"
+
 export { generateSource, type GenerateOptions, type GenerateResult } from "./generate.ts"
+
 export { checkNoop } from "./regenCheck.ts"
+
 export { runPipeline, type PipelineInput } from "./pipeline.ts"
+
 export * from "./errors.ts"

@@ -1,8 +1,8 @@
 import { Effect } from "effect"
 import { assert, it } from "@effect/vitest"
 import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient"
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient"
-import * as HttpClient from "effect/unstable/http/HttpClient"
+import * as FetchHttpClient from "effect/http/FetchHttpClient"
+import * as HttpClient from "effect/http/HttpClient"
 import { isBun, platformHttpClient } from "../src/runtime-http.ts"
 
 // landmine: @effect/platform-node's client calls dispatcher.destroy() on finalization, which Bun does not implement

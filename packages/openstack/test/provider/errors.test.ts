@@ -8,10 +8,9 @@ import {
   ResponseDecodeError
 } from "@kumulo/core"
 import { describe, expect, it } from "@effect/vitest"
-import { Effect } from "effect"
+import { Effect, Predicate } from "effect"
 import * as Schema from "effect/Schema"
-import { FastCheck as fc } from "effect/testing"
-import { HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { statusError, toOpenStackError } from "../../src/provider/errors.ts"
 
 const _at = (status: number, body = "") => statusError({ status, kind: "server", ref: "v2.1/servers", body })
@@ -28,14 +27,15 @@ describe("statusError", () => {
     const quota = _at(403, "Quota exceeded for instances")
     expect(quota).toBeInstanceOf(QuotaExceeded)
     expect(quota).toMatchObject({ resource: "server" })
-    if (quota._tag !== "QuotaExceeded") throw new Error(`expected QuotaExceeded, got ${quota._tag}`)
+
+    if (!Predicate.isTagged(quota, "QuotaExceeded")) throw new Error(`expected QuotaExceeded, got ${quota._tag}`)
     expect(quota.limit).toBeUndefined()
     expect(quota.requested).toBeUndefined()
     expect(_at(403, "Policy doesn't allow os_compute_api:servers:create")).toBeInstanceOf(AuthenticationFailed)
   })
 
   // The whole point of the mapping: an outage must not read as bad credentials.
-  it.prop("every 5xx is a provider error, never an auth failure", [fc.integer({ min: 500, max: 599 })], ([status]) => {
+  it.prop("every 5xx is a provider error, never an auth failure", [Schema.Int.check(Schema.isBetween({ minimum: 500, maximum: 599 }))], ([status]) => {
     const error = _at(status, "gateway blew up")
     expect(error).toBeInstanceOf(ProviderApiError)
     expect(error).not.toBeInstanceOf(AuthenticationFailed)
@@ -59,6 +59,7 @@ const _map = toOpenStackError({ kind: "keystone-token", ref: "/v3/auth/tokens" }
 const _clientError = (status: number, body: string, headers: Record<string, string> = {}) => {
   const request = HttpClientRequest.post("https://keystone.example.com/v3/auth/tokens")
   const response = HttpClientResponse.fromWeb(request, new Response(body, { status, headers }))
+
   return new HttpClientError.HttpClientError({
     reason: new HttpClientError.StatusCodeError({ request, response, description: body })
   })

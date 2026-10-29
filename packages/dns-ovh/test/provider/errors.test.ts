@@ -1,8 +1,8 @@
 import { assert, describe, it } from "@effect/vitest"
-import { Effect } from "effect"
-import * as HttpClient from "effect/unstable/http/HttpClient"
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
+import { Effect, Predicate } from "effect"
+import * as HttpClient from "effect/http/HttpClient"
+import * as HttpClientRequest from "effect/http/HttpClientRequest"
+import * as HttpClientResponse from "effect/http/HttpClientResponse"
 import { makeDnsClient } from "../../src/client/dns.ts"
 import { toDnsError } from "../../src/provider/errors.ts"
 
@@ -47,13 +47,13 @@ describe("toDnsError — status → tag", () => {
   it.effect("429 carries the Retry-After header verbatim", () =>
     Effect.gen(function*() {
       const error = yield* _errorFor({ status: 429, headers: { "retry-after": "12" } })
-      assert.strictEqual(error._tag === "RateLimited" ? error.retryAfter : undefined, "12")
+      assert.strictEqual(Predicate.isTagged(error, "RateLimited") ? error.retryAfter : undefined, "12")
     }))
 
   it.effect("a DNS outage keeps its real status instead of reading as a conflict", () =>
     Effect.gen(function*() {
       const error = yield* _errorFor({ status: 503 })
-      assert.strictEqual(error._tag === "ProviderApiError" ? error.status : undefined, 503)
+      assert.strictEqual(Predicate.isTagged(error, "ProviderApiError") ? error.status : undefined, 503)
     }))
 
   it.effect("a malformed body becomes ResponseDecodeError — never a success, conflict or auth error", () =>

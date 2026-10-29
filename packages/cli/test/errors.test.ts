@@ -1,5 +1,5 @@
-import { Option, SchemaIssue } from "effect"
-import { HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { SchemaIssue } from "effect"
+import { HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { assert, it } from "@effect/vitest"
 import { AddonInstallFailed, AuthenticationFailed, BootstrapFailed, BucketNotEmpty, CapabilityMissing, ConfigInvalid, HttpTransportError, PlanRejected, ProvisioningTimeout, QuotaExceeded, ResourceConflict, ResourceNotFound, ResponseDecodeError, SinkUnavailable } from "@kumulo/core"
 import { DistroNotWired } from "../src/distro-not-wired.ts"
@@ -24,13 +24,16 @@ it("renders an HttpTransportError wrapping a StatusCodeError as an indented bloc
   const url = "https://eu.api.ovh.com/1.0/cloud/project/p/kube/k"
   const request = HttpClientRequest.make("DELETE")(url)
   const response = HttpClientResponse.fromWeb(request, new Response(null, { status: 400 }))
+
   const description = JSON.stringify({
     class: "Client::BadRequest",
     message: "[IntegrityError] 400: Cannot delete Service: pool is INSTALLING (request ID: d2cf0d60)"
   })
+
   const cause = new HttpClientError.HttpClientError({
     reason: new HttpClientError.StatusCodeError({ request, response, description })
   })
+
   const message = renderCliError(new HttpTransportError({ cause }))
   assert.deepStrictEqual(message.split("\n"), [
     "Provider API request failed:",
@@ -41,7 +44,7 @@ it("renders an HttpTransportError wrapping a StatusCodeError as an indented bloc
 })
 
 it("renders ResponseDecodeError", () => {
-  const issue = new SchemaIssue.InvalidValue(Option.none(), { message: "missing field" })
+  const issue = new SchemaIssue.InvalidValue(undefined, { message: "missing field" })
   const message = renderCliError(new ResponseDecodeError({ endpoint: "/v3/tokens", issue }))
   assert.match(message, /\/v3\/tokens/)
 })
@@ -104,12 +107,14 @@ it("renders a CLI-only DistroNotWired error", () => {
 // landmine: empty MksEnv.serviceName fails at request time, not layer build — the request's hint is the only clue what's unset
 it("renders the credential hint carried by a TransportError, not just the URL", () => {
   const request = HttpClientRequest.make("GET")("/cloud/project//kube")
+
   const cause = new HttpClientError.HttpClientError({
     reason: new HttpClientError.TransportError({
       request,
       description: "OVH credentials unavailable (OVH_CLIENT_ID / OVH_CLIENT_SECRET / OVH_SERVICE_NAME)"
     })
   })
+
   const message = renderCliError(new HttpTransportError({ cause }))
   assert.match(message, /OVH_SERVICE_NAME/)
 })

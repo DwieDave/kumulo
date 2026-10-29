@@ -9,6 +9,7 @@ export const SecurityGroupRuleInput = Schema.Struct({
   remoteCidr: Schema.optionalKey(Schema.String),
   remoteGroupSelf: Schema.optionalKey(Schema.Boolean)
 })
+
 export type SecurityGroupRuleInput = typeof SecurityGroupRuleInput.Type
 
 const _forEachCidr = (
@@ -25,6 +26,7 @@ export const buildFr57Rules = (options: {
   readonly cni: "flannel" | "cilium"
 }): ReadonlyArray<SecurityGroupRuleInput> => {
   const wireguardPort = options.cni === "flannel" ? 51820 : 51871
+
   return [
     ..._forEachCidr(options.allowedSshCidrs, (remoteCidr) => ({ protocol: "tcp", portMin: 22, portMax: 22, remoteCidr })),
     ..._forEachCidr(options.allowedApiCidrs, (remoteCidr) => ({ protocol: "tcp", portMin: 6443, portMax: 6443, remoteCidr })),

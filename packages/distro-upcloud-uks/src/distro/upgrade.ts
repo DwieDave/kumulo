@@ -1,8 +1,12 @@
+import { Data } from "effect"
 import type { UksUpgradeStrategy } from "./types.ts"
 
-export type UpgradeTarget =
-  | { readonly _tag: "Upgrade"; readonly version: string }
-  | { readonly _tag: "AlreadyCurrent" }
+export type UpgradeTarget = Data.TaggedEnum<{
+  Upgrade: { readonly version: string }
+  AlreadyCurrent: {}
+}>
+
+export const UpgradeTarget = Data.taggedEnum<UpgradeTarget>()
 
 // LATEST_PATCH always resolves AlreadyCurrent — UKS is minor-only, no patch granularity exists
 export const resolveUpgradeTarget = (
@@ -12,7 +16,8 @@ export const resolveUpgradeTarget = (
     readonly availableUpgrades: ReadonlyArray<string>
   }
 ): UpgradeTarget => {
-  if (strategy === "LATEST_PATCH") return { _tag: "AlreadyCurrent" }
+  if (strategy === "LATEST_PATCH") return UpgradeTarget.AlreadyCurrent()
   const [next] = availableUpgrades
-  return next === undefined ? { _tag: "AlreadyCurrent" } : { _tag: "Upgrade", version: next }
+
+  return next === undefined ? UpgradeTarget.AlreadyCurrent() : UpgradeTarget.Upgrade({ version: next })
 }

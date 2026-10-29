@@ -1,15 +1,17 @@
 // /1.3/storage envelopes are WRAPPED ({"storage":{...}}), unlike uks.ts's bare shape
 import { Effect } from "effect"
 import * as Schema from "effect/Schema"
-import type * as HttpClient from "effect/unstable/http/HttpClient"
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
+import type * as HttpClient from "effect/http/HttpClient"
+import * as HttpClientRequest from "effect/http/HttpClientRequest"
 import { decodeOn2xx, decodeVoid, UpcloudBoolean, UpcloudLabel } from "./common.ts"
 import type { UpcloudRawError } from "./common.ts"
 
 export const StorageTier = Schema.Literals(["maxiops", "standard", "hdd"])
+
 export type StorageTier = typeof StorageTier.Type
 
 export const StorageState = Schema.Literals(["online", "maintenance", "cloning", "backuping", "syncing", "error"])
+
 export type StorageState = typeof StorageState.Type
 
 export const Storage = Schema.Struct({
@@ -22,6 +24,7 @@ export const Storage = Schema.Struct({
   state: StorageState,
   labels: Schema.optionalKey(Schema.Array(UpcloudLabel))
 })
+
 export type Storage = typeof Storage.Type
 
 const _StorageResponse = Schema.Struct({ storage: Storage })

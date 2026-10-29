@@ -1,3 +1,4 @@
+import { PlanAction } from "@kumulo/core"
 import { assert, it } from "@effect/vitest"
 import { mksEntry } from "../../src/distro/mks-entry.ts"
 import { buildMksPlan, emptyMksInventory, type MksInventory, type MksPlanInput } from "../../src/mks/plan.ts"
@@ -11,9 +12,9 @@ const _config: MksPlanInput = {
 it("one Create action per cluster plus one per worker pool on empty inventory", () => {
   const plan = buildMksPlan({ config: _config, inventory: emptyMksInventory })
   assert.deepStrictEqual(plan.actions, [
-    { _tag: "Create", name: "mks-cluster/prod-eu" },
-    { _tag: "Create", name: "mks-pool/prod-eu/workers" },
-    { _tag: "Create", name: "mks-pool/prod-eu/gpu" }
+    PlanAction.Create({ name: "mks-cluster/prod-eu" }),
+    PlanAction.Create({ name: "mks-pool/prod-eu/workers" }),
+    PlanAction.Create({ name: "mks-pool/prod-eu/gpu" })
   ])
 })
 
@@ -22,12 +23,13 @@ it("adds a Create action per managed volume when volumes.module is cinder", () =
     config: { ..._config, volumes: { module: "cinder", managed: [{ name: "data" }, { name: "logs" }] } },
     inventory: emptyMksInventory
   })
+
   assert.deepStrictEqual(plan.actions, [
-    { _tag: "Create", name: "mks-cluster/prod-eu" },
-    { _tag: "Create", name: "mks-pool/prod-eu/workers" },
-    { _tag: "Create", name: "mks-pool/prod-eu/gpu" },
-    { _tag: "Create", name: "volume/data" },
-    { _tag: "Create", name: "volume/logs" }
+    PlanAction.Create({ name: "mks-cluster/prod-eu" }),
+    PlanAction.Create({ name: "mks-pool/prod-eu/workers" }),
+    PlanAction.Create({ name: "mks-pool/prod-eu/gpu" }),
+    PlanAction.Create({ name: "volume/data" }),
+    PlanAction.Create({ name: "volume/logs" })
   ])
 })
 
@@ -36,10 +38,11 @@ it("shows no volume actions when volumes.module isn't cinder, even with managed 
     config: { ..._config, volumes: { module: "hcloud", managed: [{ name: "data" }] } },
     inventory: emptyMksInventory
   })
+
   assert.deepStrictEqual(plan.actions, [
-    { _tag: "Create", name: "mks-cluster/prod-eu" },
-    { _tag: "Create", name: "mks-pool/prod-eu/workers" },
-    { _tag: "Create", name: "mks-pool/prod-eu/gpu" }
+    PlanAction.Create({ name: "mks-cluster/prod-eu" }),
+    PlanAction.Create({ name: "mks-pool/prod-eu/workers" }),
+    PlanAction.Create({ name: "mks-pool/prod-eu/gpu" })
   ])
 })
 
@@ -49,16 +52,18 @@ it("existing resources plan as NoOp; missing ones as Create", () => {
     poolNames: new Set(["workers"]),
     volumeNames: new Set(["data"])
   }
+
   const plan = buildMksPlan({
     config: { ..._config, volumes: { module: "cinder", managed: [{ name: "data" }, { name: "logs" }] } },
     inventory
   })
+
   assert.deepStrictEqual(plan.actions, [
-    { _tag: "NoOp", name: "mks-cluster/prod-eu" },
-    { _tag: "NoOp", name: "mks-pool/prod-eu/workers" },
-    { _tag: "Create", name: "mks-pool/prod-eu/gpu" },
-    { _tag: "NoOp", name: "volume/data" },
-    { _tag: "Create", name: "volume/logs" }
+    PlanAction.NoOp({ name: "mks-cluster/prod-eu" }),
+    PlanAction.NoOp({ name: "mks-pool/prod-eu/workers" }),
+    PlanAction.Create({ name: "mks-pool/prod-eu/gpu" }),
+    PlanAction.NoOp({ name: "volume/data" }),
+    PlanAction.Create({ name: "volume/logs" })
   ])
 })
 
@@ -73,7 +78,7 @@ it("plans the gateway alongside the network it is created with", () => {
   const plan = buildMksPlan({ config: _networked, inventory: emptyMksInventory })
   assert.deepStrictEqual(
     plan.actions.filter((a) => a.name.startsWith("gateway/")),
-    [{ _tag: "Create", name: "gateway/prod-eu" }]
+    [PlanAction.Create({ name: "gateway/prod-eu" })]
   )
 })
 
@@ -85,11 +90,11 @@ it("plans no gateway when the config declares no network block", () => {
 it("plans the network and both subnets ahead of the cluster when a network block is declared", () => {
   const plan = buildMksPlan({ config: _networked, inventory: emptyMksInventory })
   assert.deepStrictEqual(plan.actions.slice(0, 5), [
-    { _tag: "Create", name: "network/prod-eu" },
-    { _tag: "Create", name: "subnet/prod-eu/nodes" },
-    { _tag: "Create", name: "subnet/prod-eu/load-balancers" },
-    { _tag: "Create", name: "gateway/prod-eu" },
-    { _tag: "Create", name: "mks-cluster/prod-eu" }
+    PlanAction.Create({ name: "network/prod-eu" }),
+    PlanAction.Create({ name: "subnet/prod-eu/nodes" }),
+    PlanAction.Create({ name: "subnet/prod-eu/load-balancers" }),
+    PlanAction.Create({ name: "gateway/prod-eu" }),
+    PlanAction.Create({ name: "mks-cluster/prod-eu" })
   ])
 })
 
@@ -105,18 +110,21 @@ it("a cluster already on its private network plans the network rows as NoOp", ()
     volumeNames: new Set(),
     clusterState: { region: "GRA5", privateNetworkId: "net-1" }
   }
+
   assert.deepStrictEqual(buildMksPlan({ config: _networked, inventory }).actions.slice(0, 3), [
-    { _tag: "NoOp", name: "network/prod-eu" },
-    { _tag: "NoOp", name: "subnet/prod-eu/nodes" },
-    { _tag: "NoOp", name: "subnet/prod-eu/load-balancers" }
+    PlanAction.NoOp({ name: "network/prod-eu" }),
+    PlanAction.NoOp({ name: "subnet/prod-eu/nodes" }),
+    PlanAction.NoOp({ name: "subnet/prod-eu/load-balancers" })
   ])
 })
 
 it("every row buildMksPlan emits for the cluster step matches an mksEntry appliedPrefix", () => {
   const owned = ["volume/", "bucket/", "dns/"]
+
   const rows = buildMksPlan({ config: _networked, inventory: emptyMksInventory }).actions
     .map((action) => action.name)
     .filter((name) => !owned.some((prefix) => name.startsWith(prefix)))
+
   assert.deepStrictEqual(rows.filter((name) => !mksEntry.appliedPrefixes.some((prefix) => name.startsWith(prefix))), [])
 })
 
@@ -146,9 +154,10 @@ it("plans the ingress rows as NoOp once the cluster exists", () => {
     volumeNames: new Set(),
     clusterState: { region: "GRA5", privateNetworkId: "net-1" }
   }
+
   assert.deepStrictEqual(buildMksPlan({ config: _ingress, inventory }).actions.slice(-2), [
-    { _tag: "NoOp", name: "load-balancer/prod-eu/ingress" },
-    { _tag: "NoOp", name: "floating-ip/prod-eu/ingress" }
+    PlanAction.NoOp({ name: "load-balancer/prod-eu/ingress" }),
+    PlanAction.NoOp({ name: "floating-ip/prod-eu/ingress" })
   ])
 })
 
@@ -196,5 +205,6 @@ it("claims no drift when the network does not exist yet", () => {
     clusterExists: true,
     clusterState: { region: "GRA5", privateNetworkId: "net-1", nodesSubnetId: "sub-a", loadBalancersSubnetId: "sub-x" }
   })
+
   assert.strictEqual(row?._tag, "NoOp")
 })

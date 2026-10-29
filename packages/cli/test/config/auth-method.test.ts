@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
-import { FastCheck as fc } from "effect/testing"
+import { Schema } from "effect"
 import { authMethodsByProvider } from "@kumulo/core"
 import type { AuthMethod, Provider } from "@kumulo/core"
 
@@ -34,10 +34,11 @@ describe("authMethodsByProvider", () => {
 
   it.prop(
     "for every (provider, method) pair, the map accepts exactly the pairs in the ground truth",
-    [fc.constantFrom(...providers), fc.constantFrom(...methods)],
+    [Schema.Literals(providers), Schema.Literals(methods)],
     ([provider, method]) => {
       const actual = authMethodsByProvider[provider].includes(method)
       const wanted = expected[provider].includes(method)
+
       return actual === wanted
     }
   )

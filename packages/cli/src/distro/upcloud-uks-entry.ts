@@ -15,6 +15,7 @@ import type { DistroEntry } from "./types.ts"
 
 const _upcloudDoctorChecks = Effect.fn(function*({ config }: { readonly config: UpcloudUksClusterConfig }) {
   const { clients, zones, storage, objectStorage } = yield* UpcloudEnv
+
   return [
     authValidityCheck({ uks: clients.uks }),
     zoneExistsCheck({ zone: config.zone, zones }),

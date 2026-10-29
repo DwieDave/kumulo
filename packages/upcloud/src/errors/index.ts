@@ -1,8 +1,8 @@
 // UpCloud's 4xx error body shape is unconfirmed (needs a live probe); quota detection is status-only (402), not body-sniffed.
-import { Effect } from "effect"
+import { Effect, Match } from "effect"
 import type { SchemaError } from "effect/Schema"
-import * as HttpClientError from "effect/unstable/http/HttpClientError"
-import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
+import * as HttpClientError from "effect/http/HttpClientError"
+import type * as HttpClientResponse from "effect/http/HttpClientResponse"
 import {
   AuthenticationFailed,
   HttpTransportError,
@@ -39,21 +39,16 @@ export interface Classified extends ErrorContext {
   readonly retryAfter: string | undefined
 }
 
-const _byStatus: Record<number, (c: Classified) => UpcloudError> = {
-  401: (c) => new AuthenticationFailed({ hint: `${_op(c)}: UpCloud rejected the API token` }),
-  402: (c) => new QuotaExceeded({ resource: c.kind }),
-  403: (c) => new AuthenticationFailed({ hint: `${_op(c)}: UpCloud API token lacks permission` }),
-  404: (c) => new ResourceNotFound({ kind: c.kind, ref: c.ref }),
-  409: (c) => new ResourceConflict({ kind: c.kind, ref: c.ref }),
-  429: (c) => new RateLimited({ kind: c.kind, ref: c.ref, retryAfter: c.retryAfter })
-}
-
-export const statusError = (c: Classified): UpcloudError => {
-  const mapped = _byStatus[c.status]
-  return mapped === undefined
-    ? new ProviderApiError({ operation: _op(c), status: c.status, body: c.body.slice(0, 512) })
-    : mapped(c)
-}
+export const statusError = (c: Classified): UpcloudError =>
+  Match.value(c.status).pipe(
+    Match.when(401, () => new AuthenticationFailed({ hint: `${_op(c)}: UpCloud rejected the API token` })),
+    Match.when(402, () => new QuotaExceeded({ resource: c.kind })),
+    Match.when(403, () => new AuthenticationFailed({ hint: `${_op(c)}: UpCloud API token lacks permission` })),
+    Match.when(404, () => new ResourceNotFound({ kind: c.kind, ref: c.ref })),
+    Match.when(409, () => new ResourceConflict({ kind: c.kind, ref: c.ref })),
+    Match.when(429, () => new RateLimited({ kind: c.kind, ref: c.ref, retryAfter: c.retryAfter })),
+    Match.orElse(() => new ProviderApiError({ operation: _op(c), status: c.status, body: c.body.slice(0, 512) }))
+  )
 
 const _retryAfter = (response: HttpClientResponse.HttpClientResponse): string | undefined =>
   response.headers["retry-after"] ?? response.headers["ratelimit-reset"]
@@ -67,8 +62,11 @@ export const toUpcloudError = (
   if (!HttpClientError.isHttpClientError(cause)) {
     return Effect.succeed(new ResponseDecodeError({ endpoint: _op(ctx), issue: cause.issue }))
   }
+
   const response = cause.response
+
   if (response === undefined) return Effect.succeed(new HttpTransportError({ cause }))
+
   return Effect.map(
     _bodyText(response),
     (body) => statusError({ ...ctx, status: response.status, body, retryAfter: _retryAfter(response) })

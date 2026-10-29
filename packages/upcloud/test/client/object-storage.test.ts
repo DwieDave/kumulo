@@ -1,8 +1,9 @@
 import { Effect } from "effect"
+import type { Schema } from "effect"
 import { assert, it } from "@effect/vitest"
-import * as HttpClient from "effect/unstable/http/HttpClient"
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
+import * as HttpClient from "effect/http/HttpClient"
+import * as HttpClientRequest from "effect/http/HttpClientRequest"
+import * as HttpClientResponse from "effect/http/HttpClientResponse"
 import { makeObjectStorageClient } from "../../src/client/object-storage.ts"
 import { makeFakeObjectStorageServer } from "./fake-object-storage-server.ts"
 
@@ -13,7 +14,7 @@ const _rawHttpClient = (handle: (request: HttpClientRequest.HttpClientRequest) =
     HttpClient.mapRequest(HttpClientRequest.prependUrl(_fixtureBaseUrl))
   )
 
-const _fixtureHttpClient = (status: number, body: unknown) => _rawHttpClient(() => new Response(JSON.stringify(body), { status }))
+const _fixtureHttpClient = (status: number, body: Schema.Json) => _rawHttpClient(() => new Response(JSON.stringify(body), { status }))
 
 const _service = {
   uuid: "svc1",
@@ -58,10 +59,12 @@ it.effect("fake server: service walks setup-* to running", () =>
     const created = yield* client.services.create({ name: "demo-objsto", region: "europe-1", configured_status: "started" })
     assert.strictEqual(created.operational_state, "setup-network")
     const states: Array<string> = []
+
     for (let i = 0; i < 5; i++) {
       const polled = yield* client.services.get(created.uuid)
       states.push(polled.operational_state)
     }
+
     assert.deepStrictEqual(states, ["setup-service", "setup-dns", "setup-checkup", "running", "running"])
   }))
 

@@ -1,12 +1,13 @@
 // list envelopes here are DOUBLE-nested ({"networks":{"network":[...]}}), unlike the bare UKS endpoints in uks.ts
 import { Effect } from "effect"
 import * as Schema from "effect/Schema"
-import type * as HttpClient from "effect/unstable/http/HttpClient"
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
+import type * as HttpClient from "effect/http/HttpClient"
+import * as HttpClientRequest from "effect/http/HttpClientRequest"
 import { decodeOn2xx, decodeVoid } from "./common.ts"
 import type { UpcloudRawError } from "./common.ts"
 
 export const UpcloudBool = Schema.Literals(["yes", "no"])
+
 export type UpcloudBool = typeof UpcloudBool.Type
 
 export const IpNetwork = Schema.Struct({
@@ -17,6 +18,7 @@ export const IpNetwork = Schema.Struct({
   family: Schema.Literals(["IPv4", "IPv6"]),
   gateway: Schema.optionalKey(Schema.String)
 })
+
 export type IpNetwork = typeof IpNetwork.Type
 
 export const Network = Schema.Struct({
@@ -27,6 +29,7 @@ export const Network = Schema.Struct({
   router: Schema.optionalKey(Schema.String),
   ip_networks: Schema.Struct({ ip_network: Schema.Array(IpNetwork) })
 })
+
 export type Network = typeof Network.Type
 
 export const Router = Schema.Struct({
@@ -35,6 +38,7 @@ export const Router = Schema.Struct({
   type: Schema.optionalKey(Schema.String),
   attached_networks: Schema.optionalKey(Schema.Struct({ network: Schema.Array(Schema.Unknown) }))
 })
+
 export type Router = typeof Router.Type
 
 const _NetworkResponse = Schema.Struct({ network: Network })

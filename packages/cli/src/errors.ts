@@ -1,8 +1,9 @@
-import { SchemaIssue } from "effect"
+import { Predicate, SchemaIssue } from "effect"
 import type { PlatformError } from "effect/PlatformError"
-import { HttpClientError } from "effect/unstable/http"
+import { HttpClientError } from "effect/http"
 
 const _formatIssue = SchemaIssue.makeFormatterDefault()
+
 import type { KumuloError, RendererRegistry } from "@kumulo/core"
 import { renderError } from "@kumulo/core"
 import type { OutputsInvalid as StorageOutputsInvalid } from "@kumulo/storage-ovh"
@@ -19,31 +20,39 @@ const _block = (
 const _messageDetails = (text: string): ReadonlyArray<string> => {
   if (text === "") return []
   let message = text
+
   try {
     const parsed: unknown = JSON.parse(text)
-    if (typeof parsed === "object" && parsed !== null && "message" in parsed && typeof parsed.message === "string") {
+
+    if (Predicate.hasProperty(parsed, "message") && Predicate.isString(parsed.message)) {
       message = parsed.message
     }
   } catch {
   }
+
   const match = message.match(/^(.*?)\s*\(request ID: ([^)]+)\)\s*$/s)
   const body = (match?.[1] ?? message).replace(/^\[\w+\] \d+: /, "")
   const requestId = match?.[2]
+
   return requestId === undefined ? [body] : [body, `request ID: ${requestId}`]
 }
 
 const _causeDetails = (cause: unknown): ReadonlyArray<string> => {
   if (HttpClientError.isHttpClientError(cause)) {
     const status = cause.response?.status
-    const description = "description" in cause.reason && typeof cause.reason.description === "string"
+
+    const description = Predicate.hasProperty(cause.reason, "description") && Predicate.isString(cause.reason.description)
       ? cause.reason.description
       : ""
+
     return [
       `${cause.request.method} ${cause.request.url}${status === undefined ? "" : ` → ${status}`}`,
       ..._messageDetails(description)
     ]
   }
+
   if (cause instanceof Error) return _messageDetails(cause.message)
+
   return _messageDetails(String(cause))
 }
 
@@ -81,8 +90,11 @@ export const cliErrorRegistry: RendererRegistry = {
 export type CliDomainError = KumuloError | DistroNotWired | VolumesOutputsInvalid | StorageOutputsInvalid | PlatformError
 
 export const renderCliError = (error: CliDomainError): string => {
-  if (error._tag === "PlatformError") return `File error: ${error.message}`
-  if (error._tag === "DistroNotWired") return `distro "${error.distro}" is not wired into the CLI yet`
-  if (error._tag === "OutputsInvalid") return `Outputs file is invalid: ${error.message}`
+  if (Predicate.isTagged(error, "PlatformError")) return `File error: ${error.message}`
+
+  if (Predicate.isTagged(error, "DistroNotWired")) return `distro "${error.distro}" is not wired into the CLI yet`
+
+  if (Predicate.isTagged(error, "OutputsInvalid")) return `Outputs file is invalid: ${error.message}`
+
   return renderError({ registry: cliErrorRegistry, error })
 }

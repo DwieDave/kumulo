@@ -1,8 +1,8 @@
 import { ResourceConflict, VolumeProvider } from "@kumulo/core"
 import type { ClusterTag, VolumeError, VolumeInfo, VolumeRef, VolumeSpec } from "@kumulo/core"
 import { Effect, Layer } from "effect"
-import type { HttpClient } from "effect/unstable/http"
-import { makeHcloudClient, type HcloudClient } from "../client/hcloud.ts"
+import type { HttpClient } from "effect/http"
+import { hcloudClient, type HcloudClient } from "../client/hcloud.ts"
 import { ignoreMissing, mapHcloudError } from "../provider/errors.ts"
 import { listAll } from "../provider/paginate.ts"
 import { staticPvManifest } from "./manifests.ts"
@@ -14,6 +14,7 @@ export interface VolumeProviderOptions {
 }
 
 type Deps = HttpClient.HttpClient
+
 type R<A> = Effect.Effect<A, VolumeError, Deps>
 
 interface VolumeRecord {
@@ -22,7 +23,7 @@ interface VolumeRecord {
   readonly size: number
 }
 
-const _clusterLabel = (options: VolumeProviderOptions): Record<string, string> => ({ "kumulo-cluster": options.tag })
+const _clusterLabel = (options: VolumeProviderOptions) => ({ "kumulo-cluster": options.tag })
 const _labelSelector = (options: VolumeProviderOptions): string => `kumulo-cluster=${options.tag}`
 
 const _volumeInfo = (record: VolumeRecord): VolumeInfo => ({ id: String(record.id), name: record.name })
@@ -59,7 +60,9 @@ const _reconcileSize = (
   if (size < existing.size) {
     return Effect.fail(new ResourceConflict({ kind: "volume-shrink", ref: `${spec.name}: ${existing.size}Gi -> ${size}Gi` }))
   }
+
   if (size === existing.size) return Effect.succeed(_volumeInfo(existing))
+
   return mapHcloudError({
     self: client["Volume Actions"].resizeVolume({ params: { id: existing.id }, payload: { size } }),
     ctx: { kind: "volume", ref: spec.name }
@@ -71,31 +74,37 @@ const _reconcileSize = (
 
 export const ensureVolume = ({ options, spec }: { readonly options: VolumeProviderOptions; readonly spec: VolumeSpec }): R<VolumeInfo> =>
   Effect.gen(function*() {
-    const client = yield* makeHcloudClient
+    const client = yield* hcloudClient
     const size = enforceMinimumVolumeSize(spec.sizeGb)
+
     if (size !== spec.sizeGb) {
       yield* Effect.logWarning(`volume "${spec.name}" requested ${spec.sizeGb}Gi rounded up to hcloud's ${size}Gi minimum`)
     }
+
     const existing = yield* _findByName({ client, name: spec.name })
+
     if (existing === undefined) return yield* _createVolume({ client, options, spec, size })
+
     return yield* _reconcileSize({ client, existing, size, spec })
   })
 
 export const listClusterVolumes = ({ options }: { readonly options: VolumeProviderOptions }): R<ReadonlyArray<VolumeInfo>> =>
   Effect.gen(function*() {
-    const client = yield* makeHcloudClient
+    const client = yield* hcloudClient
+
     const records = yield* listAll((query) =>
       mapHcloudError({
         self: client.Volumes.listVolumes({ query: { ...query, label_selector: _labelSelector(options) } }),
         ctx: { kind: "volume", ref: options.tag }
       }).pipe(Effect.map((response) => ({ items: response.volumes, meta: response.meta })))
     )
+
     return records.map(_volumeInfo)
   })
 
 export const deleteVolume = (ref: VolumeRef): R<void> =>
   Effect.gen(function*() {
-    const client = yield* makeHcloudClient
+    const client = yield* hcloudClient
     yield* ignoreMissing(
       mapHcloudError({ self: client.Volumes.deleteVolume({ params: { id: Number(ref.id) } }), ctx: { kind: "volume", ref: ref.id } })
     )
@@ -107,6 +116,7 @@ export const VolumeProviderLive = (options: VolumeProviderOptions): Layer.Layer<
     Effect.gen(function*() {
       const context = yield* Effect.context<Deps>()
       const run = <A>(effect: R<A>) => Effect.provide(effect, context)
+
       return {
         ensureVolume: (spec: VolumeSpec) => run(ensureVolume({ options, spec })),
         listClusterVolumes: (_tag: ClusterTag) => run(listClusterVolumes({ options })),

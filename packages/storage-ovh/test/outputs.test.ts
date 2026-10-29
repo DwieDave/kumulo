@@ -1,20 +1,22 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Effect } from "effect"
-import * as fc from "effect/testing/FastCheck"
+import { Effect, Schema } from "effect"
 import { layerNoop } from "effect/FileSystem"
 import { emptyOutputs, outputsPath, parseOutputsYaml, readOutputs, stringifyOutputsYaml, toOutputsBucket, writeOutputs } from "../src/outputs.ts"
 
-const outputsBucketArb = fc.record({
-  name: fc.string({ minLength: 1, maxLength: 20 }).filter((s) => s.trim().length > 0),
-  region: fc.string({ minLength: 1, maxLength: 10 }).filter((s) => s.trim().length > 0),
-  versioning: fc.boolean(),
-  encryption: fc.boolean(),
-  retain: fc.boolean()
+const _text = (maxLength: number) =>
+  Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(maxLength), Schema.isPattern(/\S/))
+
+const outputsBucketArb = Schema.Struct({
+  name: _text(20),
+  region: _text(10),
+  versioning: Schema.Boolean,
+  encryption: Schema.Boolean,
+  retain: Schema.Boolean
 })
 
-const outputsFileArb = fc.record({
-  cluster: fc.string({ minLength: 1, maxLength: 20 }).filter((s) => s.trim().length > 0),
-  buckets: fc.array(outputsBucketArb, { maxLength: 5 })
+const outputsFileArb = Schema.Struct({
+  cluster: _text(20),
+  buckets: Schema.Array(outputsBucketArb).check(Schema.isMaxLength(5))
 })
 
 describe("outputs file YAML round-trip", () => {
@@ -46,11 +48,13 @@ describe("readOutputs / writeOutputs (in-memory FileSystem)", () => {
   it.effect("write then read recovers the same outputs file", () =>
     Effect.gen(function*() {
       const store = new Map<string, string>()
+
       const fs = layerNoop({
         exists: (path) => Effect.succeed(store.has(path)),
         writeFileString: (path, data) => Effect.sync(() => void store.set(path, data)),
         readFileString: (path) => Effect.succeed(store.get(path) ?? "")
       })
+
       const file = { cluster: "prod", buckets: [{ name: "staging-eu-backups", region: "DE1", versioning: false, encryption: false, retain: true }] }
       yield* writeOutputs({ dir: "/out", file }).pipe(Effect.provide(fs))
       const roundTripped = yield* readOutputs({ dir: "/out", tag: "prod" }).pipe(Effect.provide(fs))

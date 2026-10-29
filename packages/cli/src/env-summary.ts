@@ -84,14 +84,18 @@ export const missingCredentials = (
 export const requireCredentials = (config: ClusterConfig): Effect.Effect<void, AuthenticationFailed> =>
   Effect.gen(function*() {
     const names = _requiredVars(config)
+
     const entries = yield* Effect.all(
       names.map((name) =>
-        Config.option(Config.redacted(name)).pipe(Effect.map((value) => [name, Option.isSome(value)] as const))
+        Config.option(Config.Redacted(name)).pipe(Effect.map((value) => [name, Option.isSome(value)] as const))
       )
     ).pipe(Effect.orDie)
+
     const set = new Map(entries)
     const missing = missingCredentials({ config, present: (name) => set.get(name) === true })
+
     if (missing.length === 0) return
+
     return yield* Effect.fail(
       new AuthenticationFailed({
         hint: `missing required environment variable${missing.length === 1 ? "" : "s"}: ${
@@ -105,11 +109,14 @@ export const envSummary = (config: ClusterConfig): Effect.Effect<string> =>
   Effect.gen(function*() {
     const sections = providerSections(config)
     const names = [...new Set(sections.flatMap((section) => section.vars))]
+
     const entries = yield* Effect.all(
       names.map((name) =>
-        Config.option(Config.redacted(name)).pipe(Effect.map((value) => [name, Option.isSome(value)] as const))
+        Config.option(Config.Redacted(name)).pipe(Effect.map((value) => [name, Option.isSome(value)] as const))
       )
     ).pipe(Effect.orDie)
+
     const set = new Map(entries)
+
     return renderEnvSummary({ sections, present: (name) => set.get(name) === true })
   })

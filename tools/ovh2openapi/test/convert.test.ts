@@ -8,6 +8,7 @@ import { ConversionUnsupported } from "../src/errors.ts"
 
 function _loadFixture(name: string): OvhSchema {
   const raw = JSON.parse(readFileSync(join(import.meta.dirname, "..", "fixtures", name), "utf8"))
+
   return raw
 }
 
@@ -79,6 +80,7 @@ describe("convert", () => {
         properties: { labels: { fullType: "map[string]string", required: false } }
       }
     }))
+
     assert.deepStrictEqual(schema["cloud.kube.NodePoolTemplateMetadata"], {
       type: "object",
       properties: { labels: { type: "object", additionalProperties: { type: "string" } } },
@@ -103,6 +105,7 @@ describe("convert", () => {
         }
       })
     )
+
     assert.deepStrictEqual(doc.components.schemas["cloud.kube.Cluster"], {
       type: "object",
       properties: {
@@ -121,6 +124,7 @@ describe("convert", () => {
         properties: { date: { fullType: "date", required: false } }
       }
     }))
+
     assert.deepStrictEqual(schema["cloud.StorageLifecycleRuleExpiration"], {
       type: "object",
       properties: { date: { type: "string", format: "date" } },

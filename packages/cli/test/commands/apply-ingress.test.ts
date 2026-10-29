@@ -1,11 +1,11 @@
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Option, Predicate, Schema } from "effect"
 import * as BunServices from "@effect/platform-bun/BunServices"
-import { Command } from "effect/unstable/cli"
-import * as HttpClient from "effect/unstable/http/HttpClient"
-import type { HttpClientRequest } from "effect/unstable/http"
+import { Command } from "effect/cli"
+import * as HttpClient from "effect/http/HttpClient"
+import type { HttpClientRequest } from "effect/http"
 import { assert, it } from "@effect/vitest"
 import { makeStorageClient } from "@kumulo/storage-ovh"
 import { parseOutputsYaml } from "@kumulo/volumes-cinder"
@@ -46,6 +46,7 @@ secrets:
 
 const _configDir = mkdtempSync(join(tmpdir(), "kumulo-apply-ingress-"))
 const _configPath = join(_configDir, "cluster.yaml")
+
 writeFileSync(_configPath, _yaml)
 
 process.stdout.isTTY = false
@@ -65,23 +66,25 @@ const _openStackEnvLayer = Layer.succeed(OpenStackEnv, {
   unavailableReason: undefined
 })
 
-const _json = (request: HttpClientRequest.HttpClientRequest): Record<string, unknown> =>
-  request.body._tag === "Uint8Array" ? JSON.parse(new TextDecoder().decode(request.body.body)) : {}
+const _PostedSubnet = Schema.fromJsonString(Schema.Struct({ subnet: Schema.Struct({ cidr: Schema.String }) }))
+
+const _bodyText = (request: HttpClientRequest.HttpClientRequest): string =>
+  Predicate.isTagged(request.body, "Uint8Array") ? new TextDecoder().decode(request.body.body) : ""
 
 /** Query values live in `urlParams`, not in `request.url`. */
 const _param = (request: HttpClientRequest.HttpClientRequest, key: string): string | undefined =>
-  [...request.urlParams].find(([name]) => name === key)?.[1]
+  [...request.urlParams].flatMap(([name, value]) => name === key && Predicate.isString(value) ? [value] : [])[0]
 
 const _postedCidr = (request: HttpClientRequest.HttpClientRequest): string => {
-  const subnet = _json(request)["subnet"]
-  return typeof subnet === "object" && subnet !== null && "cidr" in subnet && typeof subnet.cidr === "string"
-    ? subnet.cidr
-    : ""
+  const decoded = Schema.decodeUnknownOption(_PostedSubnet)(_bodyText(request))
+
+  return Option.isSome(decoded) ? decoded.value.subnet.cidr : ""
 }
 
 const _fakeOpenStack = () => {
   const networks: Array<{ readonly id: string }> = []
   const subnets: Array<{ readonly id: string; readonly cidr: string }> = []
+
   return makeFakeCinder({
     "GET /v2.0/networks": (request) =>
       _param(request, "router:external") === "true"
@@ -89,6 +92,7 @@ const _fakeOpenStack = () => {
         : { status: 200, body: { networks } },
     "POST /v2.0/networks": () => {
       networks.push({ id: "net-1" })
+
       return { status: 201, body: { network: { id: "net-1" } } }
     },
     "GET /v2.0/subnets": () => ({ status: 200, body: { subnets } }),
@@ -99,6 +103,7 @@ const _fakeOpenStack = () => {
       const cidr = _postedCidr(request)
       const subnet = { id: `sub-${cidr.replace("/", "-")}`, cidr }
       subnets.push(subnet)
+
       return { status: 201, body: { subnet } }
     },
     "GET /v2/lbaas/loadbalancers": () => ({ status: 200, body: { loadbalancers: [] } }),

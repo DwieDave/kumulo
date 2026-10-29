@@ -5,7 +5,7 @@ import * as BunServices from "@effect/platform-bun/BunServices"
 import { afterEach, describe, expect, it } from "@effect/vitest"
 import { Effect, Redacted } from "effect"
 import { FileSystem } from "effect/FileSystem"
-import { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/unstable/process"
+import { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/process"
 import { CredentialsSink } from "@kumulo/core"
 import type { CredentialEntry } from "@kumulo/core"
 import { credentialsPath, sopsCredentialsSinkLive } from "../src/sink.ts"
@@ -18,13 +18,14 @@ const originalPath = process.env.PATH
 
 // Puts a fixture script on PATH under the literal name "sops" (per test, in
 // its own temp dir) so it's found the same way a real `sops` binary would be.
-const _installFakeSops = (script: string): { readonly captureDir: string } => {
+const _installFakeSops = (script: string) => {
   const binDir = mkdtempSync(join(tmpdir(), "kumulo-fake-sops-bin-"))
   copyFileSync(_fixture(script), join(binDir, "sops"))
   chmodSync(join(binDir, "sops"), 0o755)
   const captureDir = mkdtempSync(join(tmpdir(), "kumulo-fake-sops-capture-"))
   process.env.PATH = `${binDir}:${originalPath}`
   process.env.SOPS_CAPTURE_DIR = captureDir
+
   return { captureDir }
 }
 

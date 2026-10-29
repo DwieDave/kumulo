@@ -31,8 +31,10 @@ const _ensureRouter = (
   Effect.gen(function*() {
     const name = routerName(clusterName)
     const existing = yield* _findRouterByName({ clients, name })
+
     if (existing !== undefined) return existing
     const created = yield* mapUpcloudError({ self: clients.router.create({ name }), ctx: { kind: "router", ref: name } })
+
     return created.uuid
   })
 
@@ -48,7 +50,9 @@ const _ensureUksNetwork = (
   Effect.gen(function*() {
     const name = networkName(clusterName)
     const existing = yield* _findNetworkByName({ clients, name })
+
     if (existing !== undefined) return existing
+
     const created = yield* mapUpcloudError({
       self: clients.network.create({
         name,
@@ -59,6 +63,7 @@ const _ensureUksNetwork = (
       }),
       ctx: { kind: "network", ref: name }
     })
+
     return created.uuid
   })
 
@@ -73,6 +78,7 @@ export const ensureNetwork = (
   Effect.gen(function*() {
     const routerUuid = yield* _ensureRouter({ clients, clusterName })
     const networkUuid = yield* _ensureUksNetwork({ clients, clusterName, zone, cidr, routerUuid })
+
     return { networkUuid, routerUuid }
   })
 
@@ -82,10 +88,13 @@ export const deleteNetwork = (
   Effect.gen(function*() {
     // Delete network before router: router delete 409s while a network is still attached.
     const networkUuid = yield* _findNetworkByName({ clients, name: networkName(clusterName) })
+
     if (networkUuid !== undefined) {
       yield* ignoreMissing(mapUpcloudError({ self: clients.network.delete(networkUuid), ctx: { kind: "network", ref: networkUuid } }))
     }
+
     const routerUuid = yield* _findRouterByName({ clients, name: routerName(clusterName) })
+
     if (routerUuid !== undefined) {
       yield* ignoreMissing(mapUpcloudError({ self: clients.router.delete(routerUuid), ctx: { kind: "router", ref: routerUuid } }))
     }

@@ -8,7 +8,8 @@ import type { SshHost } from "./port.ts"
 import { shellQuote } from "./shell.ts"
 
 const SSH_USER = "root"
-const _privateKeyPath: Effect.Effect<string> = Config.string("KUMULO_SSH_PRIVATE_KEY_PATH").pipe(
+
+const _privateKeyPath: Effect.Effect<string> = Config.String("KUMULO_SSH_PRIVATE_KEY_PATH").pipe(
   Config.withDefault(`${homedir()}/.ssh/id_ed25519`),
   Effect.orDie
 )
@@ -21,6 +22,7 @@ const _withSession = <A>(
 ): Effect.Effect<A, SshCommandError> =>
   Effect.gen(function*() {
     const privateKeyPath = yield* _privateKeyPath
+
     const privateKey = yield* Effect.try({
       try: () => readFileSync(privateKeyPath),
       catch: (cause) =>
@@ -30,6 +32,7 @@ const _withSession = <A>(
           cause: `ssh key not found at ${privateKeyPath} (set KUMULO_SSH_PRIVATE_KEY_PATH): ${String(cause)}`
         })
     })
+
     return yield* Effect.callback<A, SshCommandError>((resume) => {
       const client = new Client()
       client
@@ -43,6 +46,7 @@ const _withSession = <A>(
           // trust-on-first-use, no known_hosts yet; pin the provider's reported host key if that's ever needed
           hostVerifier: () => true
         })
+
       return Effect.sync(() => client.end())
     })
   })
@@ -52,14 +56,17 @@ const _exec = (host: SshHost, command: string): Effect.Effect<string, SshCommand
     client.exec(command, (err, stream) => {
       if (err) {
         reject(new SshCommandError({ host: host.ip, command, cause: err }))
+
         return
       }
+
       let out = ""
       let errOut = ""
       stream
         .on("data", (chunk: Buffer) => (out += chunk.toString()))
         .on("close", (code: number) => {
           client.end()
+
           if (code !== 0) reject(new SshCommandError({ host: host.ip, command, cause: `exit ${code}: ${errOut}` }))
           else resolve(out.trim())
         })

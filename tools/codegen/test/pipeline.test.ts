@@ -13,6 +13,7 @@ describe("runPipeline", () => {
         patches: [{ source: "rename.patch.json", patch: [{ op: "replace", path: "/info/title", value: "Widgets API" }] }],
         generate: { name: "Widgets", format: "httpclient" }
       })
+
       expect(source.length).toBeGreaterThan(0)
     }))
 
@@ -24,6 +25,7 @@ describe("runPipeline", () => {
         patches: [],
         generate: { name: "Widgets", format: "httpclient" as const }
       }
+
       const first = yield* runPipeline(input)
       const second = yield* runPipeline(input)
       yield* checkNoop({ committedPath: "committed.ts", committed: first.source, regenerated: second.source })
@@ -39,6 +41,7 @@ describe("runPipeline", () => {
           generate: { name: "Widgets", format: "httpclient" }
         })
       )
+
       expect(result._tag).toEqual("AllowlistOperationNotFound")
     }))
 
@@ -52,7 +55,9 @@ describe("runPipeline", () => {
           generate: { name: "Widgets", format: "httpclient" }
         })
       )
+
       expect(Exit.isFailure(exit)).toBe(true)
+
       if (Exit.isFailure(exit)) {
         expect(Cause.hasDies(exit.cause)).toBe(true)
       }

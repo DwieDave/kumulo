@@ -18,7 +18,9 @@ export const distroFor = (
 export const onDistro = (config: ClusterConfig) =>
 <A>(f: <C extends ClusterConfig>(a: { readonly entry: DistroEntry<C>; readonly config: C }) => A): A => {
   if (config.distro === "k3s") return f({ entry: k3sEntry, config })
+
   if (config.distro === "ovh-mks") return f({ entry: mksEntry, config })
+
   return f({ entry: upcloudUksEntry, config })
 }
 

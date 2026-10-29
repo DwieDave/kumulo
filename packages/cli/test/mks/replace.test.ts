@@ -26,6 +26,7 @@ const _converged = Effect.fn(function*() {
   yield* applyMksEffect({ config: _config }).pipe(Effect.provide(mksEnv), Effect.provide(dnsNoopLive), Effect.provide(cloudProviderNever))
   const [kubeId] = [...server.clusters.keys()]
   const pools = () => [...(server.pools.get(kubeId ?? "")?.values() ?? [])]
+
   return { mksEnv, pools }
 })
 
@@ -59,6 +60,7 @@ it.effect("an unconfirmed replace mutates nothing", () =>
 it.effect("an unconfirmed replace plan exits non-zero instead of applying", () =>
   Effect.gen(function*() {
     const drifted = _withFlavor("b3-32")
+
     const plan = buildMksPlan({
       config: drifted,
       inventory: {
@@ -68,6 +70,7 @@ it.effect("an unconfirmed replace plan exits non-zero instead of applying", () =
         poolHashes: new Map([["general", mksPoolHash(toMksPool({ name: "general", flavor: "b3-16", count: 2 }))]])
       }
     })
+
     assert.deepStrictEqual(namesToReplace(plan), new Set([_poolRow]))
 
     const failure = yield* rejectUnconfirmedReplace(plan).pipe(Effect.flip)
@@ -99,6 +102,7 @@ it("a pool with no stamped config hash plans as NoOp, never a replace", () => {
       poolHashes: new Map([["general", undefined]])
     }
   })
+
   assert.deepStrictEqual(plan.actions.map((a) => a._tag), ["NoOp", "NoOp"])
 })
 
@@ -106,6 +110,7 @@ it("a pool stamped with the desired hash plans as NoOp (re-plan after a replace)
   const desired = _withFlavor("b3-32")
   const [pool] = desired.worker_pools
   assert.ok(pool)
+
   const plan = buildMksPlan({
     config: desired,
     inventory: {
@@ -115,6 +120,7 @@ it("a pool stamped with the desired hash plans as NoOp (re-plan after a replace)
       poolHashes: new Map([["general", mksPoolHash(toMksPool(pool))]])
     }
   })
+
   assert.deepStrictEqual(plan.actions.map((a) => a._tag), ["NoOp", "NoOp"])
   assert.deepStrictEqual(namesToReplace(plan), new Set())
 })
@@ -123,6 +129,7 @@ it("scaling a stamped pool is not a replace", () => {
   const scaled: MksClusterConfig = { ..._config, worker_pools: _config.worker_pools.map((pool) => ({ ...pool, count: 9 })) }
   const [pool] = _config.worker_pools
   assert.ok(pool)
+
   const plan = buildMksPlan({
     config: scaled,
     inventory: {
@@ -132,6 +139,7 @@ it("scaling a stamped pool is not a replace", () => {
       poolHashes: new Map([["general", mksPoolHash(toMksPool(pool))]])
     }
   })
+
   assert.deepStrictEqual(plan.actions.map((a) => a._tag), ["NoOp", "NoOp"])
 })
 

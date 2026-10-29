@@ -1,8 +1,8 @@
 import { AuthenticationFailed } from "@kumulo/core"
 import { Context, Effect, Layer, Option, Ref } from "effect"
-import { Headers } from "effect/unstable/http"
-import type { HttpClient } from "effect/unstable/http"
-import { makeKeystoneClient } from "../client/keystone.ts"
+import { Headers } from "effect/http"
+import type { HttpClient } from "effect/http"
+import { keystoneClient } from "../client/keystone.ts"
 import type { AuthTokensPostRequest } from "../generated/keystone.ts"
 import { toOpenStackError } from "../provider/errors.ts"
 import type { OpenStackError } from "../provider/errors.ts"
@@ -62,6 +62,7 @@ const _authBody = (credentials: OpenStackCredentials): AuthTokensPostRequest =>
 
 const _expiresAtMs = (raw: string | undefined): number => {
   const parsed = raw === undefined ? NaN : Date.parse(raw)
+
   return Number.isNaN(parsed) ? Date.now() : parsed
 }
 
@@ -73,15 +74,19 @@ const _issueToken = (options: {
   readonly skewMs: number
 }): Effect.Effect<CachedToken, OpenStackError, HttpClient.HttpClient> =>
   Effect.gen(function*() {
-    const client = yield* makeKeystoneClient(options.credentials.authUrl)
+    const client = yield* keystoneClient(options.credentials.authUrl)
+
     const [body, response] = yield* client.auth.authTokensPost({
       payload: _authBody(options.credentials),
       responseMode: "decoded-and-response"
     }).pipe(Effect.mapError(toOpenStackError(_tokenRef)))
+
     const token = Option.getOrUndefined(Headers.get(response.headers, "x-subject-token"))
+
     if (token === undefined) {
       return yield* Effect.fail(new AuthenticationFailed({ hint: "keystone response missing X-Subject-Token header" }))
     }
+
     return {
       token,
       expiresAtMs: _expiresAtMs(body.token?.expires_at) - options.skewMs,
@@ -112,7 +117,9 @@ export const KeystoneAuthLive = (
       const current: Effect.Effect<CachedToken, OpenStackError> = Effect.gen(function*() {
         const now = Date.now()
         const cached = yield* Ref.get(cache)
+
         if (Option.isSome(cached) && cached.value.expiresAtMs > now) return cached.value
+
         return yield* refresh
       })
 

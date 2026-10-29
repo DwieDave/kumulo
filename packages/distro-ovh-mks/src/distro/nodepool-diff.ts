@@ -54,6 +54,7 @@ export const diffNodePools = (
 
   for (const pool of desired) {
     const match = byName.get(pool.name)
+
     if (!match) {
       toCreate.push(pool)
     } else if (_isImmutableDiff(pool, match)) {
@@ -64,5 +65,6 @@ export const diffNodePools = (
   }
 
   const toDelete = existing.filter((pool) => !desiredNames.has(pool.name)).map((pool) => pool.id)
+
   return { toCreate, toReplace, toUpdate, toDelete }
 }

@@ -1,7 +1,7 @@
-import { Effect } from "effect"
-import * as HttpClient from "effect/unstable/http/HttpClient"
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
+import { Effect, Predicate } from "effect"
+import * as HttpClient from "effect/http/HttpClient"
+import * as HttpClientRequest from "effect/http/HttpClientRequest"
+import * as HttpClientResponse from "effect/http/HttpClientResponse"
 
 interface FakeLabel {
   readonly key: string
@@ -104,17 +104,20 @@ interface CreateRouterBody {
 /** `undefined` means the request carried no body at all — an empty-body call is a 400, not a silent success. */
 const _bodyOf = <Body>(request: HttpClientRequest.HttpClientRequest): Body | undefined => {
   const body = request.body
-  if (body._tag !== "Uint8Array") return undefined
+
+  if (!Predicate.isTagged(body, "Uint8Array")) return undefined
   const text = new TextDecoder().decode(body.body)
+
   if (text.length === 0) return undefined
   const parsed: Body = JSON.parse(text)
+
   return parsed
 }
 
 const _badRequest = (message: string): Response => new Response(JSON.stringify({ message }), { status: 400 })
 const _notFound = (message: string): Response => new Response(JSON.stringify({ message }), { status: 404 })
 const _conflict = (message: string): Response => new Response(JSON.stringify({ message }), { status: 409 })
-const _ok = (body: unknown): Response => new Response(JSON.stringify(body), { status: 200 })
+const _ok = <Body>(body: Body): Response => new Response(JSON.stringify(body), { status: 200 })
 const _empty = (): Response => new Response(null, { status: 200 })
 
 export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number } = {}) => {
@@ -131,12 +134,16 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number }
 
   const _handleClusters = (request: HttpClientRequest.HttpClientRequest): Response => {
     if (request.method === "GET") return _ok([...clusters.values()])
+
     if (request.method === "POST") {
       const payload = _bodyOf<CreateClusterBody>(request)
+
       if (payload === undefined) return _badRequest("cluster create sent an empty body")
+
       if (payload.zone === undefined || payload.network === undefined || payload.version === undefined) {
         return _badRequest("cluster create is missing a required field")
       }
+
       const uuid = freshUuid("uks")
       clusters.set(uuid, {
         uuid,
@@ -155,33 +162,46 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number }
       })
       nodeGroups.set(uuid, new Map())
       upgrades.set(uuid, [])
+
       return _ok(clusters.get(uuid))
     }
+
     return _badRequest(`unsupported method ${request.method}`)
   }
 
   const _handleClusterOne = (request: HttpClientRequest.HttpClientRequest, uuid: string): Response => {
     const cluster = clusters.get(uuid)
+
     if (request.method === "GET") {
       if (!cluster) return _notFound("cluster not found")
+
       if (cluster.pollsRemaining > 0) cluster.pollsRemaining -= 1
       else cluster.state = "running"
+
       return _ok(cluster)
     }
+
     if (request.method === "PATCH") {
       if (!cluster) return _notFound("cluster not found")
       const payload = _bodyOf<PatchClusterBody>(request)
+
       if (payload === undefined) return _badRequest("cluster patch sent an empty body")
+
       if (payload.control_plane_ip_filter !== undefined) cluster.control_plane_ip_filter = payload.control_plane_ip_filter
+
       if (payload.labels !== undefined) cluster.labels = payload.labels
+
       return _ok(cluster)
     }
+
     if (request.method === "DELETE") {
       if (!cluster) return _notFound("cluster not found")
       clusters.delete(uuid)
       nodeGroups.delete(uuid)
+
       return _empty()
     }
+
     return _badRequest(`unsupported method ${request.method}`)
   }
 
@@ -190,12 +210,18 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number }
     uuid: string
   ): Response => {
     const groups = nodeGroups.get(uuid)
+
     if (!groups) return _notFound("cluster not found")
+
     if (request.method === "GET") return _ok([...groups.values()])
+
     if (request.method === "POST") {
       const payload = _bodyOf<CreateNodeGroupBody>(request)
+
       if (payload === undefined) return _badRequest("node group create sent an empty body")
+
       if (payload.name === undefined || payload.plan === undefined) return _badRequest("node group create is missing a required field")
+
       const group: FakeNodeGroup = {
         name: payload.name,
         count: payload.count ?? 0,
@@ -209,10 +235,13 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number }
         utility_network_access: payload.utility_network_access,
         pollsRemaining: readyAfterPolls
       }
+
       groups.set(group.name, group)
       const { state: _state, ...createResponse } = group
+
       return _ok(createResponse)
     }
+
     return _badRequest(`unsupported method ${request.method}`)
   }
 
@@ -222,37 +251,52 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number }
     name: string
   ): Response => {
     const groups = nodeGroups.get(uuid)
+
     if (!groups) return _notFound("cluster not found")
     const group = groups.get(name)
+
     if (request.method === "GET") {
       if (!group) return _notFound("node group not found")
+
       if (group.pollsRemaining > 0) group.pollsRemaining -= 1
       else group.state = "running"
+
       return _ok(group)
     }
+
     if (request.method === "PATCH") {
       if (!group) return _notFound("node group not found")
       const payload = _bodyOf<PatchNodeGroupBody>(request)
+
       if (payload === undefined) return _badRequest("node group patch sent an empty body")
+
       if (payload.count !== undefined) group.count = payload.count
+
       return _ok(group)
     }
+
     if (request.method === "DELETE") {
       if (!group) return _notFound("node group not found")
       groups.delete(name)
+
       return _empty()
     }
+
     return _badRequest(`unsupported method ${request.method}`)
   }
 
   const _handleNetworks = (request: HttpClientRequest.HttpClientRequest): Response => {
     if (request.method === "GET") return _ok({ networks: { network: [...networks.values()] } })
+
     if (request.method === "POST") {
       const payload = _bodyOf<CreateNetworkBody>(request)
       const body = payload?.network
+
       if (body === undefined) return _badRequest("network create sent an empty body")
+
       if (body.zone === undefined) return _badRequest("network create is missing the required zone")
       const uuid = freshUuid("net")
+
       const network: FakeNetwork = {
         uuid,
         name: body.name ?? "",
@@ -260,73 +304,99 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number }
         router: body.router,
         ip_networks: body.ip_networks ?? { ip_network: [] }
       }
+
       networks.set(uuid, network)
+
       return _ok({ network })
     }
+
     return _badRequest(`unsupported method ${request.method}`)
   }
 
   const _handleNetworkOne = (request: HttpClientRequest.HttpClientRequest, uuid: string): Response => {
     const network = networks.get(uuid)
+
     if (request.method === "GET") {
       if (!network) return _notFound("network not found")
+
       return _ok({ network })
     }
+
     if (request.method === "DELETE") {
       if (!network) return _notFound("network not found")
       networks.delete(uuid)
+
       return _empty()
     }
+
     return _badRequest(`unsupported method ${request.method}`)
   }
 
   const _handleRouters = (request: HttpClientRequest.HttpClientRequest): Response => {
     if (request.method === "GET") return _ok({ routers: { router: [...routers.values()] } })
+
     if (request.method === "POST") {
       const payload = _bodyOf<CreateRouterBody>(request)
       const body = payload?.router
+
       if (body === undefined) return _badRequest("router create sent an empty body")
       const uuid = freshUuid("rtr")
       const router: FakeRouter = { uuid, name: body.name ?? "", attached_networks: { network: [] } }
       routers.set(uuid, router)
+
       return _ok({ router })
     }
+
     return _badRequest(`unsupported method ${request.method}`)
   }
 
   const _handleRouterOne = (request: HttpClientRequest.HttpClientRequest, uuid: string): Response => {
     const router = routers.get(uuid)
+
     if (request.method === "GET") {
       if (!router) return _notFound("router not found")
+
       return _ok({ router })
     }
+
     if (request.method === "DELETE") {
       if (!router) return _notFound("router not found")
       // quirk: a router with an attached network 409s, network must be detached first
       const attached = [...networks.values()].some((network) => network.router === uuid)
+
       if (attached) return _conflict(`router conflict: ${uuid}`)
       routers.delete(uuid)
+
       return _empty()
     }
+
     return _badRequest(`unsupported method ${request.method}`)
   }
 
   const _handleUpgrade = (request: HttpClientRequest.HttpClientRequest, uuid: string): Response => {
     const rest = new URL(request.url, "https://fixture.invalid").pathname.split("/").filter(Boolean).slice(3)
+
     if (rest[0] === "available-upgrades" && request.method === "GET") {
       return _ok({ versions: upgrades.get(uuid) ?? [] })
     }
+
     if (rest[0] === "upgrade" && request.method === "POST") {
       const payload = _bodyOf<{ readonly version?: string; readonly strategy?: string }>(request)
+
       if (payload === undefined) return _badRequest("upgrade sent an empty body")
+
       if (payload.version === undefined || payload.strategy === undefined) return _badRequest("upgrade is missing a required field")
       const cluster = clusters.get(uuid)
+
       if (cluster) cluster.version = payload.version
+
       return _empty()
     }
+
     if (rest[0] === "kubeconfig" && request.method === "GET") {
       return _ok({ kubeconfig: `apiVersion: v1\nkind: Config\n# ${uuid}\n` })
     }
+
     return _badRequest("unhandled fixture route")
   }
 
@@ -337,29 +407,44 @@ export const makeFakeUksServer = (options: { readonly readyAfterPolls?: number }
 
     if (resource === "kubernetes") {
       if (rest.length === 0) return _handleClusters(request)
+
       if (rest[0] === "plans" && request.method === "GET") {
         return _ok([{ name: "dev-md" }, { name: "prod-md" }])
       }
+
       const uuid = rest[0]
+
       if (uuid === undefined) return _badRequest("unhandled fixture route")
+
       if (rest.length === 1) return _handleClusterOne(request, uuid)
+
       if (rest[1] === "node-groups" && rest.length === 2) return _handleNodeGroups(request, uuid)
+
       if (rest[1] === "node-groups" && rest.length >= 3) {
         const name = rest[2]
+
         if (name === undefined) return _badRequest("unhandled fixture route")
+
         if (rest.length === 3) return _handleNodeGroupOne(request, uuid, name)
+
         if (rest.length === 4 && request.method === "DELETE") return _empty()
       }
+
       return _handleUpgrade(request, uuid)
     }
+
     if (resource === "network") {
       const uuid = rest[0]
+
       return uuid === undefined ? _handleNetworks(request) : _handleNetworkOne(request, uuid)
     }
+
     if (resource === "router") {
       const uuid = rest[0]
+
       return uuid === undefined ? _handleRouters(request) : _handleRouterOne(request, uuid)
     }
+
     return _badRequest("unhandled fixture route")
   }
 

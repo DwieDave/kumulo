@@ -55,7 +55,6 @@
   "devDependencies": {
     "@effect/platform-bun": "catalog:",
     "@effect/vitest": "catalog:",
-    "fast-check": "catalog:",
     "vitest": "catalog:",
     "effect": "catalog:"
   },

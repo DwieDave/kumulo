@@ -1,8 +1,8 @@
 import { KeystoneAuth } from "../auth/keystone-auth.ts"
 import { Effect, Layer, Schedule, Semaphore } from "effect"
 import type { Duration } from "effect"
-import { HttpClient, HttpClientError, HttpClientRequest } from "effect/unstable/http"
-import type { HttpClientResponse } from "effect/unstable/http"
+import { HttpClient, HttpClientError, HttpClientRequest } from "effect/http"
+import type { HttpClientResponse } from "effect/http"
 
 export const NOVA_API_MICROVERSION = "2.79"
 
@@ -17,6 +17,7 @@ export const DEFAULT_REQUEST_TIMEOUT: Duration.Input = "30 seconds"
 export const transportRetrySchedule: Schedule.Schedule<Duration.Duration> = Schedule.exponential("200 millis", 2).pipe(
   Schedule.jittered
 )
+
 export const transportMaxRetries = 5
 
 const _BODY_LIMIT = 512
@@ -67,10 +68,12 @@ export const makeOpenStackHttpClient = (
         const token = yield* auth.token.pipe(
           Effect.mapError((cause) => _authError(request, cause, "keystone token unavailable"))
         )
+
         const authed = HttpClientRequest.setHeaders(request, {
           "X-Auth-Token": token,
           "X-OpenStack-Nova-API-Version": NOVA_API_MICROVERSION
         })
+
         return yield* base.execute(authed).pipe(
           Effect.timeoutOrElse({
             duration,
@@ -82,8 +85,10 @@ export const makeOpenStackHttpClient = (
     const withReauth = (request: HttpClientRequest.HttpClientRequest) =>
       Effect.gen(function*() {
         const response = yield* attempt(request)
+
         if (response.status !== 401) return response
         yield* auth.invalidate
+
         return yield* attempt(request)
       })
 

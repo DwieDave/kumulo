@@ -1,7 +1,7 @@
 import type { OpenStackError } from "@kumulo/openstack"
 import { Effect } from "effect"
-import type { HttpClient} from "effect/unstable/http";
-import { HttpClientRequest } from "effect/unstable/http"
+import type { HttpClient} from "effect/http";
+import { HttpClientRequest } from "effect/http"
 import type { DoctorCheck } from "../doctor/types.ts"
 
 export const NOVA_MICROVERSION = "2.96"
@@ -32,6 +32,7 @@ export const probeMicroversion = (args: {
     ),
     Effect.map((response): MicroversionStatus => {
       if (response.status === 406) return "rejected"
+
       return response.status >= 200 && response.status < 300 ? "accepted" : "unreachable"
     }),
     Effect.orElseSucceed((): MicroversionStatus => "unreachable")
@@ -49,6 +50,7 @@ export const microversionCheck = (args: {
       if (status === "accepted") {
         return { name: _name, status: "pass" as const, message: `Nova accepts microversion ${args.microversion}.` }
       }
+
       if (status === "rejected") {
         return {
           name: _name,
@@ -56,6 +58,7 @@ export const microversionCheck = (args: {
           message: `Nova rejected microversion ${args.microversion} (HTTP 406) — this cloud's Nova is outside kumulo's supported range.`
         }
       }
+
       return { name: _name, status: "fail" as const, message: "Could not reach Nova to verify microversion support." }
     })
   )

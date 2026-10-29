@@ -2,9 +2,9 @@
 import { NodeRuntime } from "@effect/platform-node"
 import * as NodeServices from "@effect/platform-node/NodeServices"
 import { ConfigProvider, Console, Effect, Layer, Option } from "effect"
-import { CliError, Command } from "effect/unstable/cli"
-import * as HttpClient from "effect/unstable/http/HttpClient"
-import { HttpClientError, TransportError } from "effect/unstable/http/HttpClientError"
+import { CliError, Command } from "effect/cli"
+import * as HttpClient from "effect/http/HttpClient"
+import { HttpClientError, TransportError } from "effect/http/HttpClientError"
 import { makeMksClient } from "@kumulo/distro-ovh-mks"
 import { makeStorageClient } from "@kumulo/storage-ovh"
 import {
@@ -16,7 +16,7 @@ import {
   makeUksClient,
   makeZoneClient
 } from "@kumulo/upcloud"
-import { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/unstable/process"
+import { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/process"
 import { kumuloCli } from "./commands.ts"
 import { resolveSecretsFile, secretsConfigProvider } from "./secrets-file.ts"
 import { OpenStackEnvLive } from "./doctor-openstack/env.ts"
@@ -41,10 +41,12 @@ const _mksLive = Layer.catchCause(
   MksEnvLive,
   () => Layer.succeed(MksEnv, { mks: makeMksClient(_unavailable(OVH_HINT)), serviceName: "" })
 )
+
 const _storageLive = Layer.catchCause(
   StorageEnvLive.pipe(Layer.provide(_mksLive)),
   () => Layer.succeed(StorageEnv, { storage: makeStorageClient(_unavailable(OVH_HINT)), serviceName: "" })
 )
+
 const _upcloudLive = Layer.catchCause(
   UpcloudEnvLive,
   () =>
@@ -79,6 +81,7 @@ const _liveFor = (secretsFile: string | undefined) => {
       (spawner) => secretsConfigProvider({ file: secretsFile, spawner })
     )
   ).pipe(Layer.provide(NodeServices.layer))
+
   return MainLive.pipe(Layer.provideMerge(secretsProvider))
 }
 

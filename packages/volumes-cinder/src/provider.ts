@@ -1,9 +1,9 @@
 import { VolumeProvider } from "@kumulo/core"
 import type { ClusterTag, VolumeInfo, VolumeRef, VolumeSpec } from "@kumulo/core"
 import { Effect, Layer } from "effect"
-import type { HttpClient } from "effect/unstable/http"
+import type { HttpClient } from "effect/http"
 import type { CinderAuth } from "./auth.ts"
-import { makeCinderClient, type CinderClient } from "./client/cinder.ts"
+import { cinderClient, type CinderClient } from "./client/cinder.ts"
 import { mapCinderError, type CinderError } from "./errors.ts"
 import type { VolumeRecord, VolumesDetailResponse } from "./generated/cinder.ts"
 import { staticPvManifest } from "./manifests.ts"
@@ -13,6 +13,7 @@ export interface VolumeProviderOptions {
 }
 
 type Deps = CinderAuth | HttpClient.HttpClient
+
 type R<A> = Effect.Effect<A, CinderError, Deps>
 
 const _tagMetadataKey = "kumulo_cluster"
@@ -31,8 +32,10 @@ const _pageSize = 100
 
 export const nextMarker = (list: VolumesDetailResponse): string | undefined => {
   const next = list.volumes_links?.find((link) => link.rel === "next")
+
   if (next === undefined) return undefined
   const marker = new URL(next.href, "http://cinder.invalid/").searchParams.get("marker")
+
   return marker ?? list.volumes.at(-1)?.id
 }
 
@@ -40,7 +43,7 @@ const _listPage = (
   { client, marker }: { readonly client: CinderClient; readonly marker: string | undefined }
 ): Effect.Effect<VolumesDetailResponse, CinderError> =>
   mapCinderError({
-    self: client.volumes.volumesDetailGet({ query: { limit: _pageSize, ...(marker === undefined ? {} : { marker }) } }),
+    self: client.volumes.volumesDetailGet({ query: marker === undefined ? { limit: _pageSize } : { limit: _pageSize, marker } }),
     ref: _listRef
   })
 
@@ -54,6 +57,7 @@ const _listFrom = (
   _listPage({ client, marker }).pipe(Effect.flatMap((page) => {
     const acc = [...seen, ...page.volumes]
     const next = nextMarker(page)
+
     // also stops on a non-advancing marker — otherwise loops forever
     return next === undefined || page.volumes.length === 0 || next === marker
       ? Effect.succeed(acc)
@@ -67,32 +71,32 @@ export const ensureVolume = (
   { options, spec }: { readonly options: VolumeProviderOptions; readonly spec: VolumeSpec }
 ): R<VolumeInfo> =>
   Effect.gen(function*() {
-    const client = yield* makeCinderClient
+    const client = yield* cinderClient
     const all = yield* _listAll(client)
     const existing = all.find((record) => (record.name ?? "") === spec.name && _metadataTag(record) === options.tag)
+
     if (existing !== undefined) return _volumeInfo(existing)
+
     const created = yield* mapCinderError({
       self: client.volumes.volumesPost({
         payload: {
-          volume: {
-            name: spec.name,
-            size: spec.sizeGb,
-            ...(spec.type === undefined ? {} : { volume_type: spec.type }),
-            metadata: { [_tagMetadataKey]: options.tag }
-          }
+          volume: spec.type === undefined
+            ? { name: spec.name, size: spec.sizeGb, metadata: { [_tagMetadataKey]: options.tag } }
+            : { name: spec.name, size: spec.sizeGb, volume_type: spec.type, metadata: { [_tagMetadataKey]: options.tag } }
         }
       }),
       ref: spec.name
     })
+
     return _volumeInfo(created.volume)
   })
 
 export const listClusterVolumes = (tag: ClusterTag): R<ReadonlyArray<VolumeInfo>> =>
-  Effect.flatMap(makeCinderClient, (client) =>
+  Effect.flatMap(cinderClient, (client) =>
     Effect.map(_listAll(client), (all) => all.filter((record) => _metadataTag(record) === tag).map(_volumeInfo)))
 
 export const deleteVolume = (ref: VolumeRef): R<void> =>
-  Effect.flatMap(makeCinderClient, (client) =>
+  Effect.flatMap(cinderClient, (client) =>
     mapCinderError({ self: client.volumes.volumesIdDelete({ params: { id: ref.id } }), ref: ref.id }).pipe(
       Effect.catchTag("ResourceNotFound", () => Effect.void),
       Effect.asVoid
@@ -104,6 +108,7 @@ export const VolumeProviderLive = (options: VolumeProviderOptions): Layer.Layer<
     Effect.gen(function*() {
       const context = yield* Effect.context<Deps>()
       const run = <A>(effect: R<A>) => Effect.provide(effect, context)
+
       return {
         ensureVolume: (spec: VolumeSpec) => run(ensureVolume({ options, spec })),
         listClusterVolumes: (tag: ClusterTag) => run(listClusterVolumes(tag)),

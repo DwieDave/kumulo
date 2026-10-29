@@ -23,6 +23,7 @@ describe("OVH-pipeline regen-noop coverage", () => {
       Effect.gen(function* () {
         const { generate }: { readonly generate: () => Effect.Effect<{ readonly source: string }, unknown> } =
           yield* Effect.promise(() => import(join(import.meta.dirname, pkgDir, "scripts/generate.ts")))
+
         const { source } = yield* generate()
         const committed = readFileSync(join(import.meta.dirname, pkgDir, "src/generated/client.ts"), "utf8")
         yield* checkNoop({ committedPath: `${pkgDir}/src/generated/client.ts`, committed, regenerated: source })

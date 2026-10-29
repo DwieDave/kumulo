@@ -27,6 +27,7 @@ const _from = <A, E, R>(
     Effect.flatMap(({ items, meta }) => {
       const all = [...acc, ...items]
       const next = meta.pagination.next_page
+
       return next === null ? Effect.succeed(all) : _from({ fetchPage, page: next, acc: all })
     })
   )

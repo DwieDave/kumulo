@@ -21,6 +21,7 @@ describe("checkNoop", () => {
           regenerated: "line1\nCHANGED\nline3\n"
         })
       )
+
       expect(result._tag).toEqual("DriftDetected")
       expect(result.committedPath).toEqual("generated/widgets.ts")
       expect(result.firstDiffLine).toEqual(2)

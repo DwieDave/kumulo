@@ -53,8 +53,10 @@ export const diffNodePools = (
     const generations = byPoolLabel.get(pool.name) ?? []
     const match = _liveGeneration(generations, uksPoolHash(pool))
     const confirmed = replace.has(pool.name)
+
     if (!match) {
       toCreate.push(pool)
+
       if (confirmed) stale.push(...generations.map((group) => group.name))
     } else if (match.configHash !== uksPoolHash(pool)) {
       if (confirmed) {
@@ -70,17 +72,21 @@ export const diffNodePools = (
   const undesired = existing
     .filter((group) => group.poolLabel !== undefined && !desiredPoolNames.has(group.poolLabel))
     .map((group) => group.name)
+
   return { toCreate, toReplace, toUpdate, toDelete: [...undesired, ...stale] }
 }
 
 const _groupByPoolLabel = (existing: ReadonlyArray<ExistingNodeGroup>): Map<string, Array<ExistingNodeGroup>> => {
   const byLabel = new Map<string, Array<ExistingNodeGroup>>()
+
   for (const group of existing) {
     if (group.poolLabel === undefined) continue
     const bucket = byLabel.get(group.poolLabel)
+
     if (bucket) bucket.push(group)
     else byLabel.set(group.poolLabel, [group])
   }
+
   return byLabel
 }
 

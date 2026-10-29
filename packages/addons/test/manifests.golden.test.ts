@@ -1,4 +1,5 @@
 import { assert, it } from "@effect/vitest"
+import type { Schema } from "effect"
 import { readFileSync } from "node:fs"
 import { ciliumManifests } from "../src/manifests/cilium.ts"
 import { cinderCsiManifests } from "../src/manifests/cinder-csi.ts"
@@ -16,7 +17,7 @@ const conf = {
 
 const credential = { token: "hcloud-token", network: "kumulo-prod" }
 
-const _golden = (name: string): unknown =>
+const _golden = (name: string): Schema.Json =>
   JSON.parse(readFileSync(new URL(`fixtures/${name}.json`, import.meta.url), "utf8"))
 
 it("openstack-ccm manifests match the golden fixture", () => {

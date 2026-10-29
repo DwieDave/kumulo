@@ -1,6 +1,6 @@
 import { dirname } from "node:path"
 import { Console, Effect } from "effect"
-import { Command } from "effect/unstable/cli"
+import { Command } from "effect/cli"
 import type { ClusterConfig } from "../cluster-config.ts"
 import { loadConfig } from "../config.ts"
 import { onDistro, wantsObjectStorage } from "../distro/registry.ts"
@@ -11,9 +11,11 @@ import { configArgument } from "../root.ts"
 const _statusBuckets = Effect.fn(function*(config: ClusterConfig, configDir: string) {
   if (!wantsObjectStorage(config)) return
   const info = yield* bucketStatus({ config, configDir })
+
   const buckets = info.buckets.length === 0
     ? "(none)"
     : info.buckets.map((b) => `${b.name} (${b.region}${b.retain ? ", retained" : ""})`).join(", ")
+
   yield* Console.log(`  Buckets: ${buckets}`)
   yield* Console.log(`  Credentials file: ${info.credentialsExist ? "present" : "missing"}`)
 })

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Effect, Layer, Ref } from "effect"
-import { FastCheck as fc } from "effect/testing"
+import { Effect, Layer, Ref, Schema } from "effect"
+import { PlanAction } from "@kumulo/core"
 import { CloudProvider, configHash, DnsProvider, VolumeProvider } from "@kumulo/core"
 import { namesToReplace } from "@kumulo/core"
 import type { ServerInfo, ServerSpec, TaggedResource } from "@kumulo/core"
@@ -57,6 +57,7 @@ const _withWorkerFlavor = (flavor: string) => decodeK3sTestConfig({ ..._encoded,
 const _withMasterFlavor = (flavor: string) => decodeK3sTestConfig({ ..._encoded, masters: { ..._encoded.masters, flavor } })
 
 type Event = { readonly kind: "create" | "delete"; readonly name: string }
+
 interface Store {
   readonly events: Array<Event>
   readonly servers: Ref.Ref<ReadonlyMap<string, ServerInfo>>
@@ -73,14 +74,18 @@ const _recordingCloudProvider = (store: Store): Layer.Layer<CloudProvider> =>
       Ref.get(store.servers).pipe(
         Effect.flatMap((map) => {
           const existing = map.get(spec.name)
+
           if (existing !== undefined) return Effect.succeed(existing)
+
           const info: ServerInfo = {
             id: `srv-${store.events.length + 1}`,
             name: spec.name,
             ip: `10.0.0.${map.size + 1}`,
             configHash: configHash(spec)
           }
+
           store.events.push({ kind: "create", name: spec.name })
+
           return Ref.update(store.servers, (current) => new Map(current).set(spec.name, info)).pipe(Effect.as(info))
         })
       ),
@@ -108,12 +113,14 @@ const _FakeSshLive = Layer.succeed(Ssh, {
 })
 
 const _FakeDns = Layer.succeed(DnsProvider, { ensureRecords: () => Effect.void, removeClusterRecords: () => Effect.void })
+
 const _FakeVolumes = Layer.succeed(VolumeProvider, {
   ensureVolume: (v: { readonly name: string }) => Effect.succeed({ id: `vol-${v.name}`, name: v.name }),
   listClusterVolumes: () => Effect.succeed([]),
   deleteVolume: () => Effect.void,
   staticPvManifest: () => ({ apiVersion: "v1", kind: "PersistentVolume" })
 })
+
 const _FakeCred = Layer.succeed(CloudCredentialEnv, {
   provider: "openstack",
   authUrl: "",
@@ -170,7 +177,7 @@ describe("confirmed replace actually executes", () => {
       yield* _run(store, applyK3sEffect({ config: drifted, configDir: "/tmp", replace: namesToReplace(plan) }))
 
       const replanned = yield* _run(store, _planFor(drifted, store))
-      expect(replanned.actions.every((a) => a._tag === "NoOp")).toBe(true)
+      expect(replanned.actions.every((a) => PlanAction.$is("NoOp")(a))).toBe(true)
     }))
 
   it.effect("without confirmation nothing is deleted or created", () =>
@@ -206,7 +213,7 @@ describe("confirmed replace actually executes", () => {
 
       const drifted = _withWorkerFlavor("b3-32")
       const plan = yield* _run(store, _planFor(drifted, store))
-      expect(plan.actions.every((a) => a._tag === "NoOp")).toBe(true)
+      expect(plan.actions.every((a) => PlanAction.$is("NoOp")(a))).toBe(true)
       yield* _run(store, applyK3sEffect({ config: drifted, configDir: "/tmp", replace: namesToReplace(plan) }))
       expect(store.events).toEqual([])
     }))
@@ -219,17 +226,19 @@ describe("confirmed replace actually executes", () => {
 
       const drifted = _withMasterFlavor("b3-16")
       const plan = yield* _run(store, _planFor(drifted, store))
+
       const error = yield* _run(
         store,
         Effect.flip(applyK3sEffect({ config: drifted, configDir: "/tmp", replace: namesToReplace(plan) }))
       )
+
       expect(error._tag).toBe("PlanRejected")
       expect(store.events).toEqual([])
     }))
 
   it.effect.prop(
     "apply against an inventory stamped from the same config mutates nothing",
-    [fc.integer({ min: 0, max: 3 }), fc.constantFrom("b3-8", "b3-16", "b3-32")],
+    [Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 3 })), Schema.Literals(["b3-8", "b3-16", "b3-32"])],
     ([workers, flavor]) =>
       Effect.gen(function*() {
         const config = decodeK3sTestConfig({ ..._encoded, worker_pools: [{ name: "general", flavor, count: workers }] })
@@ -239,7 +248,8 @@ describe("confirmed replace actually executes", () => {
 
         const plan = yield* _run(store, _planFor(config, store))
         yield* _run(store, applyK3sEffect({ config, configDir: "/tmp", replace: namesToReplace(plan) }))
-        return store.events.length === 0 && plan.actions.every((a) => a._tag === "NoOp")
+
+        return store.events.length === 0 && plan.actions.every((a) => PlanAction.$is("NoOp")(a))
       })
   )
 })

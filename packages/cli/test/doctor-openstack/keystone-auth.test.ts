@@ -15,6 +15,7 @@ it.effect("fails with an actionable message when auth fails", () =>
     const check = keystoneAuthCheck({
       token: Effect.fail(new AuthenticationFailed({ hint: "keystone token issue failed with status 401" }))
     })
+
     const result = yield* check.run
     assert.strictEqual(result.status, "fail")
     assert.match(result.message, /OS_\* env vars or clouds\.yaml/)

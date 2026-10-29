@@ -1,6 +1,6 @@
 import { Effect } from "effect"
-import { HttpClient, HttpClientResponse } from "effect/unstable/http"
-import type { HttpClientRequest } from "effect/unstable/http"
+import { HttpClient, HttpClientResponse } from "effect/http"
+import type { HttpClientRequest } from "effect/http"
 import type { OpenStackEndpointResolver } from "../../src/doctor-openstack/nova.ts"
 
 /** A `KeystoneAuth.endpoint`-shaped fake — always resolves to the same fixed base URL. */
@@ -13,6 +13,7 @@ export const fakeHttpClient = (response: { readonly status: number; readonly bod
   HttpClient.make((request: HttpClientRequest.HttpClientRequest) => {
     const nullBodyStatus = response.status === 204 || response.status === 304
     const responseBody = nullBodyStatus || response.body === undefined ? null : JSON.stringify(response.body)
+
     return Effect.succeed(
       HttpClientResponse.fromWeb(request, new Response(responseBody, { status: response.status }))
     )

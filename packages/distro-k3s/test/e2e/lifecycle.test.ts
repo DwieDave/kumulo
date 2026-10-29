@@ -7,6 +7,7 @@ import { installMasters, installWorkers } from "../../src/bootstrap/orchestrate.
 import type { NonEmptyMasters } from "../../src/bootstrap/token.ts"
 import { resolveToken } from "../../src/bootstrap/token.ts"
 import { makeSelfManagedDistro } from "../../src/distro/index.ts"
+import { makeReleaseCache } from "../../src/releases/cache.ts"
 import { SshCommandError } from "../../src/ssh/errors.ts"
 import type { SshHost } from "../../src/ssh/port.ts"
 import { FakeSshLive } from "../ssh/fake-ssh.ts"
@@ -19,6 +20,7 @@ const FakeCloudProviderLive: Layer.Layer<CloudProvider> = Layer.effect(
   Effect.gen(function*() {
     const servers = yield* Ref.make<ReadonlyMap<string, ServerInfo>>(new Map())
     const lb = yield* Ref.make<{ readonly id: string; readonly vip: string } | undefined>(undefined)
+
     return {
       ensureNetwork: (spec) => Effect.succeed({ id: "net-1", cidr: spec.cidr }),
       findNetwork: (spec) => Effect.succeed({ id: "net-1", cidr: spec.cidr }),
@@ -29,6 +31,7 @@ const FakeCloudProviderLive: Layer.Layer<CloudProvider> = Layer.effect(
           Effect.flatMap((existing) => {
             if (existing !== undefined) return Effect.succeed(existing)
             const info = { id: "lb-1", vip: "10.0.0.100" }
+
             return Ref.set(lb, info).pipe(Effect.as(info))
           })
         ),
@@ -36,8 +39,10 @@ const FakeCloudProviderLive: Layer.Layer<CloudProvider> = Layer.effect(
         Ref.get(servers).pipe(
           Effect.flatMap((map) => {
             const existing = map.get(spec.name)
+
             if (existing !== undefined) return Effect.succeed(existing)
             const info: ServerInfo = { id: `srv-${map.size + 1}`, name: spec.name, ip: `10.0.0.${map.size + 1}` }
+
             return Ref.update(servers, (current) => new Map(current).set(spec.name, info)).pipe(Effect.as(info))
           })
         ),
@@ -113,10 +118,12 @@ describe("k3s full lifecycle", () => {
         { ip: "10.0.0.2", port: 22 },
         { ip: "10.0.0.3", port: 22 }
       ]
+
       const workerHosts: ReadonlyArray<SshHost> = [
         { ip: "10.0.0.4", port: 22 },
         { ip: "10.0.0.5", port: 22 }
       ]
+
       const sshLayer = FakeSshLive({
         readFile: (host, path) => Effect.fail(new SshCommandError({ host: host.ip, command: `cat ${path}`, cause: "no token file yet" }))
       })
@@ -170,10 +177,15 @@ describe("k3s full lifecycle", () => {
           })
       })
       expect(renderedWorkerScripts).toHaveLength(2)
+
       for (const script of renderedWorkerScripts) expect(script).toContain(`K3S_TOKEN='${token}'`)
 
       const lb = yield* cloudProvider.ensureLoadBalancer({ members: [] })
+
+      const releases = yield* makeReleaseCache()
+
       const distro = makeSelfManagedDistro({
+        releases,
         clusterName: "e2e-cluster",
         sshPublicKey: "ssh-ed25519 AAAA...",
         ssh: { exec: () => Effect.succeed("ok"), readFile: () => Effect.succeed(K3S_YAML), waitReady: () => Effect.void },

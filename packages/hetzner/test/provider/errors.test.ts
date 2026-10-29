@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Effect } from "effect"
+import { Effect, Predicate } from "effect"
 import { deleteVolume } from "../../src/volume/provider.ts"
 import { resolveFlavor } from "../../src/provider/cloud-provider.ts"
 import { makeFakeHcloud } from "./fake-hcloud.ts"
@@ -11,6 +11,7 @@ const _statusFails = (
   const fake = makeFakeHcloud({
     "GET /server_types": () => ({ status, body: { error: { code: "not_found", message: "nope" } }, headers })
   })
+
   return Effect.flip(resolveFlavor({ ref: "cx22" })).pipe(Effect.provide(fake.layer))
 }
 
@@ -32,23 +33,23 @@ describe("hcloud error taxonomy", () => {
     Effect.gen(function*() {
       const failure = yield* _statusFails({ status: 429, headers: { "retry-after": "7" } })
       expect(failure._tag).toBe("RateLimited")
-      expect(failure._tag === "RateLimited" ? failure.retryAfter : undefined).toBe("7")
+      expect(Predicate.isTagged(failure, "RateLimited") ? failure.retryAfter : undefined).toBe("7")
     }))
 
   it.effect("429 falls back to RateLimit-Reset when Retry-After is absent", () =>
     Effect.gen(function*() {
       const failure = yield* _statusFails({ status: 429, headers: { "ratelimit-reset": "1800000000" } })
-      expect(failure._tag === "RateLimited" ? failure.retryAfter : undefined).toBe("1800000000")
+      expect(Predicate.isTagged(failure, "RateLimited") ? failure.retryAfter : undefined).toBe("1800000000")
     }))
 
   it.effect("422 and 5xx surface as ProviderApiError with the real status and body", () =>
     Effect.gen(function*() {
       const validation = yield* _statusFails({ status: 422 })
       expect(validation._tag).toBe("ProviderApiError")
-      expect(validation._tag === "ProviderApiError" ? validation.status : 0).toBe(422)
+      expect(Predicate.isTagged(validation, "ProviderApiError") ? validation.status : 0).toBe(422)
       const outage = yield* _statusFails({ status: 503 })
       expect(outage._tag).toBe("ProviderApiError")
-      expect(outage._tag === "ProviderApiError" ? outage.body : "").toContain("not_found")
+      expect(Predicate.isTagged(outage, "ProviderApiError") ? outage.body : "").toContain("not_found")
     }))
 
   // `QuotaExceeded` is raised only on hcloud's own quota error code — and
@@ -61,9 +62,10 @@ describe("hcloud error taxonomy", () => {
           body: { error: { code: "resource_limit_exceeded", message: "server limit reached" } }
         })
       })
+
       const failure = yield* Effect.flip(resolveFlavor({ ref: "cx22" })).pipe(Effect.provide(fake.layer))
       expect(failure._tag).toBe("QuotaExceeded")
-      expect(failure._tag === "QuotaExceeded" ? failure.limit : 0).toBeUndefined()
+      expect(Predicate.isTagged(failure, "QuotaExceeded") ? failure.limit : 0).toBeUndefined()
     }))
 
   it.effect("a malformed response body maps to ResponseDecodeError", () =>
@@ -71,6 +73,7 @@ describe("hcloud error taxonomy", () => {
       const fake = makeFakeHcloud({
         "GET /server_types": () => ({ status: 200, body: { server_types: [{ id: "not-a-number" }], meta: fixture.meta() } })
       })
+
       const failure = yield* Effect.flip(resolveFlavor({ ref: "cx22" })).pipe(Effect.provide(fake.layer))
       expect(failure._tag).toBe("ResponseDecodeError")
     }))

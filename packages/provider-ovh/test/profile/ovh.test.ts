@@ -1,9 +1,9 @@
 import { Effect } from "effect"
 import { assert, it } from "@effect/vitest"
-import type { ClusterConfigShape } from "@kumulo/core"
+import type { ClusterConfigFields } from "@kumulo/core"
 import { makeOvhProfile } from "../../src/profile/ovh.ts"
 
-const baseConfig: ClusterConfigShape = {
+const baseConfig: ClusterConfigFields = {
   distro: "k3s",
   worker_pools: [],
   addons: { cni: "flannel" },
@@ -50,12 +50,14 @@ it.effect("rejects an unsupported volume type", () =>
 it.effect("rejects cilium under ovh-mks (cross-distro rule reused)", () =>
   Effect.gen(function*() {
     const profile = makeOvhProfile("GRA5")
-    const config: ClusterConfigShape = {
+
+    const config: ClusterConfigFields = {
       ...baseConfig,
       distro: "ovh-mks",
       api_server: { high_availability: false },
       addons: { cni: "cilium" }
     }
+
     const result = yield* Effect.flip(profile.validate(config))
     assert.isTrue(result.issues.some((issue) => issue.message.includes("cilium")))
   }))

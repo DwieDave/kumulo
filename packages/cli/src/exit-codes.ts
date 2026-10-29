@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import type { KumuloErrorTag } from "@kumulo/core"
 import type { CliDomainError } from "./errors.ts"
 
@@ -29,8 +30,11 @@ const _outputsInvalidCode = 22
 const _defaultCode = 1
 
 export const exitCodeFor = (error: CliExitError): number => {
-  if (error._tag === "DistroNotWired") return _distroNotWiredCode
-  if (error._tag === "PlatformError") return _platformErrorCode
-  if (error._tag === "OutputsInvalid") return _outputsInvalidCode
+  if (Predicate.isTagged(error, "DistroNotWired")) return _distroNotWiredCode
+
+  if (Predicate.isTagged(error, "PlatformError")) return _platformErrorCode
+
+  if (Predicate.isTagged(error, "OutputsInvalid")) return _outputsInvalidCode
+
   return _codeByTag[error._tag] ?? _defaultCode
 }

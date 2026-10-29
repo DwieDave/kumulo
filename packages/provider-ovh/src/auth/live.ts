@@ -1,8 +1,8 @@
 import { Clock, Effect, Layer, Redacted, Ref, Schedule } from "effect"
 import * as Schema from "effect/Schema"
-import * as HttpClient from "effect/unstable/http/HttpClient"
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
+import * as HttpClient from "effect/http/HttpClient"
+import * as HttpClientRequest from "effect/http/HttpClientRequest"
+import * as HttpClientResponse from "effect/http/HttpClientResponse"
 import { AuthenticationFailed } from "@kumulo/core"
 import { OvhAuth } from "./port.ts"
 
@@ -35,7 +35,9 @@ const _requestToken = (creds: OvhCredentials, httpClient: HttpClient.HttpClient)
         scope: creds.scope ?? "all"
       })
     )
+
     const response = yield* httpClient.execute(request).pipe(Effect.flatMap(HttpClientResponse.filterStatusOk))
+
     return yield* HttpClientResponse.schemaBodyJson(TokenResponse)(response)
   }).pipe(
     Effect.retry(_retrySchedule),
@@ -51,10 +53,12 @@ const _getToken = (creds: OvhCredentials, httpClient: HttpClient.HttpClient, cac
   Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis
     const cached = yield* Ref.get(cache)
+
     if (cached && cached.expiresAt - _skewMillis > now) return cached.accessToken
 
     const fresh = yield* _requestToken(creds, httpClient)
     yield* Ref.set(cache, { accessToken: fresh.access_token, expiresAt: now + fresh.expires_in * 1000 })
+
     return fresh.access_token
   })
 
@@ -66,6 +70,7 @@ export const OvhAuthLive = (
     Effect.gen(function* () {
       const httpClient = yield* HttpClient.HttpClient
       const cache = yield* Ref.make<CachedToken | undefined>(undefined)
+
       return { token: _getToken(creds, httpClient, cache) }
     })
   )

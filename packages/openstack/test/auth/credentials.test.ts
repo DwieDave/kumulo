@@ -11,6 +11,7 @@ describe("credentialsFromEnv", () => {
         OS_APPLICATION_CREDENTIAL_ID: "app-id",
         OS_APPLICATION_CREDENTIAL_SECRET: "app-secret"
       })
+
       expect(credentials).toEqual({
         method: "application_credential",
         authUrl: "https://keystone.example.com/v3",
@@ -29,6 +30,7 @@ describe("credentialsFromEnv", () => {
         OS_PASSWORD: "hunter2",
         OS_PROJECT_NAME: "kumulo"
       })
+
       expect(credentials).toEqual({
         method: "password",
         authUrl: "https://keystone.example.com/v3",
@@ -80,6 +82,7 @@ describe("loadCredentials", () => {
         OS_APPLICATION_CREDENTIAL_ID: "app-id",
         OS_APPLICATION_CREDENTIAL_SECRET: "app-secret"
       })
+
       expect(credentials.authUrl).toBe("https://keystone.example.com/v3")
     }))
 
@@ -87,6 +90,7 @@ describe("loadCredentials", () => {
     const exit = await Effect.runPromiseExit(
       loadCredentials({ OS_CLIENT_CONFIG_FILE: "/nonexistent/clouds.yaml" })
     )
+
     expect(Exit.isFailure(exit)).toBe(true)
   })
 })

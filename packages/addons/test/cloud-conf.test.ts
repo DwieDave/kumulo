@@ -1,4 +1,5 @@
 import { assert, it } from "@effect/vitest"
+import { Option, Schema } from "effect"
 import { cloudConfSecretManifest, renderCloudConfIni } from "../src/cloud-conf.ts"
 
 const conf = {
@@ -23,13 +24,13 @@ it("renders a minimal-scope cloud.conf ini", () => {
   )
 })
 
+const _stringData = Schema.decodeUnknownOption(Schema.Struct({ "cloud.conf": Schema.String }))
+
 it("wraps cloud.conf in a Secret in kube-system", () => {
   const secret = cloudConfSecretManifest(conf)
   assert.strictEqual(secret.kind, "Secret")
   assert.deepStrictEqual(secret.metadata, { name: "cloud-config", namespace: "kube-system" })
-  const stringData = secret.stringData
-  const cloudConfIni = typeof stringData === "object" && stringData !== null && "cloud.conf" in stringData
-    ? stringData["cloud.conf"]
-    : undefined
+  const cloudConfIni = Option.getOrUndefined(_stringData(secret.stringData))?.["cloud.conf"]
+
   assert.match(String(cloudConfIni), /application-credential-id=app-id/)
 })

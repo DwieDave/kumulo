@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import type { OpenAPISpec } from "effect/unstable/httpapi/OpenApi"
+import type { OpenAPISpec } from "effect/http-api/OpenApi"
 import { filterAllowlist } from "./allowlist.ts"
 import { applyPatches, type NamedPatch } from "./patch.ts"
 import { generateSource, type GenerateOptions, type GenerateResult } from "./generate.ts"
@@ -19,14 +19,14 @@ export interface PipelineInput {
 // on are checked; every other field (paths' contents, components, ...) passes through
 // untouched (handled leniently downstream), so this intentionally isn't a full OpenAPISpec
 // schema.
-const OpenApiSpecShape = Schema.Struct({
+const OpenApiSpecFields = Schema.Struct({
   openapi: Schema.Unknown,
   paths: Schema.Unknown
 })
 
 // A real runtime type guard (no `as` cast) built from the schema above.
-const _matchesOpenApiSpecShape = Schema.is(OpenApiSpecShape)
-const _isOpenApiSpec = (value: unknown): value is OpenAPISpec => _matchesOpenApiSpecShape(value)
+const _matchesOpenApiSpecFields = Schema.is(OpenApiSpecFields)
+const _isOpenApiSpec = (value: unknown): value is OpenAPISpec => _matchesOpenApiSpecFields(value)
 
 /** Runs allowlist filter -> patch apply -> generator invocation, in that order. */
 export const runPipeline = (

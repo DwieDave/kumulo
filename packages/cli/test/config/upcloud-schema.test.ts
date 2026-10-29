@@ -22,6 +22,7 @@ describe("UpcloudUksClusterConfig", () => {
       const failure = yield* Effect.flip(
         decodeConfig({ ...validUpcloudUksConfig, volumes: { module: "cinder", managed: [] } })
       )
+
       expect(failure._tag).toBe("ConfigInvalid")
     }))
 })
@@ -33,6 +34,7 @@ describe("upcloud volumes and object storage modules", () => {
     type: "maxiops",
     retain: true
   }
+
   const sops = { sink: "sops", dir: ".", sops: { age_recipient: "age1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq" } } as const
 
   it.effect("decodes volumes.module upcloud with a maxiops managed volume", () =>
@@ -41,6 +43,7 @@ describe("upcloud volumes and object storage modules", () => {
         ...validUpcloudUksConfig,
         volumes: { module: "upcloud", managed: [upcloudVolume] }
       })
+
       expect(decoded.volumes.module).toBe("upcloud")
     }))
 
@@ -50,6 +53,7 @@ describe("upcloud volumes and object storage modules", () => {
         ...validUpcloudUksConfig,
         volumes: { module: "upcloud", managed: [{ ...upcloudVolume, type: "ssd" }] }
       }))
+
       expect(failure._tag).toBe("ConfigInvalid")
     }))
 
@@ -64,6 +68,7 @@ describe("upcloud volumes and object storage modules", () => {
         },
         secrets: sops
       })
+
       expect(decoded.object_storage.module).toBe("upcloud")
     }))
 
@@ -77,6 +82,7 @@ describe("upcloud volumes and object storage modules", () => {
           buckets: [{ name: "artifacts", retain: false }]
         }
       }))
+
       expect(failure._tag).toBe("ConfigInvalid")
     }))
 })

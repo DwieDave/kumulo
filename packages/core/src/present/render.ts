@@ -1,16 +1,17 @@
-import type { Plan, PlanAction } from "../plan/types.ts"
+import { PlanAction } from "../plan/types.ts"
+import type { Plan } from "../plan/types.ts"
 
 // Terraform-plan-style, one line per action.
-const _renderLine = (action: PlanAction): string => {
-  if (action._tag === "Create") return `  + ${action.name}`
-  if (action._tag === "Delete") return `  - ${action.name}`
-  if (action._tag === "NoOp") return `  = ${action.name}`
-  if (action._tag === "Update") return `  ~ ${action.name} (${action.reason})`
-  return `  -/+ ${action.name} (${action.reason})`
-}
+const _renderLine = PlanAction.$match({
+  Create: ({ name }) => `  + ${name}`,
+  Delete: ({ name }) => `  - ${name}`,
+  NoOp: ({ name }) => `  = ${name}`,
+  Update: ({ name, reason }) => `  ~ ${name} (${reason})`,
+  ReplaceNeedsConfirm: ({ name, reason }) => `  -/+ ${name} (${reason})`
+})
 
 const _count = (actions: ReadonlyArray<PlanAction>, tag: PlanAction["_tag"]): number =>
-  actions.filter((action) => action._tag === tag).length
+  actions.filter(PlanAction.$is(tag)).length
 
 // Grouping order mirrors `terraform plan`: additions, then changes, then
 // removals, unchanged resources last.
@@ -22,7 +23,9 @@ export const renderPlan = (plan: Plan): string => {
   } to delete, ${_count(plan.actions, "Update")} to update, ${
     _count(plan.actions, "ReplaceNeedsConfirm")
   } to replace, ${_count(plan.actions, "NoOp")} unchanged.`
+
   if (plan.actions.length === 0) return summary
-  const grouped = _groupOrder.flatMap((tag) => plan.actions.filter((action) => action._tag === tag))
+  const grouped = _groupOrder.flatMap((tag) => plan.actions.filter(PlanAction.$is(tag)))
+
   return [summary, "", ...grouped.map(_renderLine)].join("\n")
 }

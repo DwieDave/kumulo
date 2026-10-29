@@ -1,13 +1,13 @@
-import { Effect } from "effect"
-import * as HttpClientError from "effect/unstable/http/HttpClientError"
+import { Effect, Predicate } from "effect"
+import * as HttpClientError from "effect/http/HttpClientError"
 import type { UksClient } from "@kumulo/upcloud"
 import type { DoctorCheck } from "../types.ts"
 
 const _name = "upcloud-auth-validity"
 
-const _isUnauthenticated = (error: unknown): boolean =>
-  HttpClientError.isHttpClientError(error) && error.reason._tag === "StatusCodeError" &&
-  (error.reason.response.status === 401 || error.reason.response.status === 403)
+const _isUnauthenticated = (cause: unknown): boolean =>
+  HttpClientError.isHttpClientError(cause) && Predicate.isTagged(cause.reason, "StatusCodeError") &&
+  (cause.reason.response.status === 401 || cause.reason.response.status === 403)
 
 /** UpCloud auth validity: a 401/403 on any authenticated call means a bad/expired/under-scoped token. */
 export const authValidityCheck = (args: { readonly uks: UksClient }): DoctorCheck => ({

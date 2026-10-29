@@ -1,6 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Redacted } from "effect"
-import * as fc from "effect/testing/FastCheck"
+import { Redacted, Schema } from "effect"
 import type { CredentialEntry } from "@kumulo/core"
 import { buildCredentialsPayload } from "../src/entries.ts"
 
@@ -27,6 +26,7 @@ describe("buildCredentialsPayload", () => {
       _entry("s3.buckets.1.region", "DE1"),
       _entry("s3.buckets.1.endpoint", "https://s3.de1.io.cloud.ovh.net")
     ]
+
     expect(buildCredentialsPayload(entries)).toEqual({
       cluster: "staging",
       s3: {
@@ -48,16 +48,17 @@ describe("buildCredentialsPayload", () => {
   it.prop(
     "every flat (non-dotted) key round-trips to its own top-level value",
     {
-      pairs: fc.uniqueArray(
-        fc.tuple(
-          fc.string({ minLength: 1, maxLength: 10 }).filter((s) => /^[a-zA-Z]+$/.test(s)),
-          fc.string({ minLength: 1, maxLength: 10 })
-        ),
-        { selector: ([key]) => key }
+      raw: Schema.Array(
+        Schema.Tuple([
+          Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(10), Schema.isPattern(/^[a-zA-Z]+$/)),
+          Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(10))
+        ])
       )
     },
-    ({ pairs }) => {
+    ({ raw }) => {
+      const pairs = [...new Map(raw).entries()]
       const payload = buildCredentialsPayload(pairs.map(([key, value]) => _entry(key, value)))
+
       for (const [key, value] of pairs) {
         expect(payload[key]).toBe(value)
       }

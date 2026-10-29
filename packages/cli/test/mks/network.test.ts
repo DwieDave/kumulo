@@ -1,6 +1,6 @@
 import { Effect, Layer } from "effect"
 import { layerNoop } from "effect/FileSystem"
-import * as HttpClient from "effect/unstable/http/HttpClient"
+import * as HttpClient from "effect/http/HttpClient"
 import { assert, it } from "@effect/vitest"
 import { dnsNoopLive } from "@kumulo/core"
 import { makeMksClient } from "@kumulo/distro-ovh-mks"
@@ -44,6 +44,7 @@ const _run = (
 ) =>
   Effect.gen(function*() {
     const config = yield* loadConfig("cluster.yaml")
+
     return yield* applyMksEffect({ config })
   }).pipe(
     Effect.provide(Layer.succeed(MksEnv, { mks: makeMksClient(server.httpClient), serviceName: "service-1" })),

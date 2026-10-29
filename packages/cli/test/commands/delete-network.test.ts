@@ -3,9 +3,10 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Effect, Layer } from "effect"
 import * as BunServices from "@effect/platform-bun/BunServices"
-import { Command } from "effect/unstable/cli"
-import * as HttpClient from "effect/unstable/http/HttpClient"
+import { Command } from "effect/cli"
+import * as HttpClient from "effect/http/HttpClient"
 import { assert, expect, it } from "@effect/vitest"
+import { ResourceConflict } from "@kumulo/core"
 import { makeStorageClient } from "@kumulo/storage-ovh"
 import { makeMksClient } from "@kumulo/distro-ovh-mks"
 import { kumuloCli } from "../../src/commands.ts"
@@ -45,6 +46,7 @@ secrets:
 `
 
 const _configPath = join(mkdtempSync(join(tmpdir(), "kumulo-delete-network-")), "cluster.yaml")
+
 writeFileSync(_configPath, _yaml)
 
 process.stdout.isTTY = false
@@ -67,6 +69,7 @@ const _openStackEnvLayer = Layer.succeed(OpenStackEnv, {
 const _fakeOpenStack = (timeline: Array<string>, networkDelete: RouteHandler) => {
   const record = (entry: string) => timeline.push(entry)
   const lb = { status: "ACTIVE" }
+
   return makeFakeCinder({
     "GET /v2/lbaas/loadbalancers": () => {
       // The amphora teardown finishes between the DELETE and the first poll.
@@ -74,6 +77,7 @@ const _fakeOpenStack = (timeline: Array<string>, networkDelete: RouteHandler) =>
         timeline.push("lb-poll")
         lb.status = "DELETED"
       }
+
       return {
         status: 200,
         body: { loadbalancers: [{ id: "lb-1", name: "kumulo-staging", vip_port_id: "port-vip", provisioning_status: lb.status }] }
@@ -82,11 +86,13 @@ const _fakeOpenStack = (timeline: Array<string>, networkDelete: RouteHandler) =>
     "DELETE /v2/lbaas/loadbalancers/lb-1": () => {
       record("lb")
       lb.status = "PENDING_DELETE"
+
       return { status: 204 }
     },
     "GET /v2.0/floatingips": () => ({ status: 200, body: { floatingips: [{ id: "fip-1", floating_ip_address: "203.0.113.1" }] } }),
     "DELETE /v2.0/floatingips/fip-1": () => {
       record("floating-ip")
+
       return { status: 204 }
     },
     "GET /v2.1/servers/detail": () => ({ status: 200, body: { servers: [] } }),
@@ -97,6 +103,7 @@ const _fakeOpenStack = (timeline: Array<string>, networkDelete: RouteHandler) =>
     "GET /v2.0/routers": () => ({ status: 200, body: { routers: [] } }),
     "DELETE /v2.0/networks/net-1": (request) => {
       record("network")
+
       return networkDelete(request)
     }
   })
@@ -115,14 +122,19 @@ const _runDelete = (networkDelete: RouteHandler = _deleted) =>
     const server = makeFakeMksServer()
     server.clusters.set("kube-1", { id: "kube-1", name: "staging", status: "READY", url: "https://kube-1.fixture.mks.invalid" })
     server.pools.set("kube-1", new Map())
+
     const recordingMks = server.httpClient.pipe(
       HttpClient.mapRequest((request) => {
         const path = new URL(request.url).pathname
+
         if (request.method === "DELETE" && path.endsWith("/kube/kube-1")) timeline.push("cluster")
+
         if (request.method === "GET" && path.endsWith("/kube")) timeline.push("cluster-poll")
+
         return request
       })
     )
+
     yield* Command.runWith(kumuloCli, { version: "test" })(["delete", _configPath, "--yes"]).pipe(
       Effect.provide(Layer.succeed(MksEnv, { mks: makeMksClient(recordingMks), serviceName: "service-1" })),
       Effect.provide(_fakeOpenStack(timeline, networkDelete)),
@@ -132,6 +144,7 @@ const _runDelete = (networkDelete: RouteHandler = _deleted) =>
       Effect.provide(fakeCredentials),
       Effect.provide(BunServices.layer)
     )
+
     return { server, timeline }
   })
 
@@ -169,8 +182,8 @@ it.effect("delete waits for the load balancer to be gone before touching the net
 it.live("a network delete blocked by a remaining port fails the command loudly", () =>
   Effect.gen(function*() {
     const failure = yield* Effect.flip(_runDelete(_inUse))
+    expect(failure).toBeInstanceOf(ResourceConflict)
     expect(failure).toMatchObject({
-      _tag: "ResourceConflict",
       kind: "network-in-use",
       ref: expect.stringContaining("net-1")
     })

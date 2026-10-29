@@ -1,5 +1,5 @@
 import { Config, Effect, Layer, Redacted } from "effect"
-import type * as HttpClient from "effect/unstable/http/HttpClient"
+import type * as HttpClient from "effect/http/HttpClient"
 import { AuthenticationFailed, CloudProvider } from "@kumulo/core"
 import type { SecGroupSpec } from "@kumulo/core"
 import type { ClusterConfig, K3sClusterConfig } from "../cluster-config.ts"
@@ -8,9 +8,9 @@ import type { CloudProviderOptions } from "@kumulo/openstack"
 import { buildHetznerSecGroupRules, CloudProviderLive as HcloudCloudProviderLive, hcloudHttpClientLive } from "@kumulo/hetzner"
 import { hasOctavia } from "@kumulo/provider-ovh"
 import { OpenStackEnv } from "../doctor-openstack/env.ts"
-import type { OpenStackEnvShape } from "../doctor-openstack/env.ts"
+import type { OpenStackEnvService } from "../doctor-openstack/env.ts"
 import { requiredRedactedEnv } from "../env.ts"
-import type { CloudCredentialShape } from "../k3s/env.ts"
+import type { CloudCredentialFields } from "../k3s/env.ts"
 
 export type ProviderKind = ClusterConfig["provider"]
 
@@ -19,7 +19,7 @@ export interface ProviderEntry {
   readonly cloudProviderLayer: (
     config: K3sClusterConfig
   ) => Layer.Layer<CloudProvider, AuthenticationFailed, OpenStackEnv | HttpClient.HttpClient>
-  readonly cloudCredential: (config: K3sClusterConfig) => Effect.Effect<CloudCredentialShape, AuthenticationFailed, OpenStackEnv>
+  readonly cloudCredential: (config: K3sClusterConfig) => Effect.Effect<CloudCredentialFields, AuthenticationFailed, OpenStackEnv>
   readonly secGroupRules: (config: K3sClusterConfig) => SecGroupSpec["rules"]
   readonly requiredEnvVars: ReadonlyArray<string>
   readonly credentialsFromDistro: boolean
@@ -29,6 +29,7 @@ type OpenStackCloudProviderLayer = Layer.Layer<CloudProvider, AuthenticationFail
 
 const _unavailableCloudProvider = (hint: string): Layer.Layer<CloudProvider> => {
   const reject = () => Effect.fail(new AuthenticationFailed({ hint }))
+
   return Layer.succeed(CloudProvider, {
     ensureNetwork: reject,
     findNetwork: reject,
@@ -48,11 +49,12 @@ const _unavailableCloudProvider = (hint: string): Layer.Layer<CloudProvider> => 
 const _liveCloudProvider = (
   { auth, options, region }: {
     readonly options: Omit<CloudProviderOptions, "region">
-    readonly auth: NonNullable<OpenStackEnvShape["keystone"]>
+    readonly auth: NonNullable<OpenStackEnvService["keystone"]>
     readonly region: string
   }
 ): Layer.Layer<CloudProvider, never, HttpClient.HttpClient> => {
   const keystone = Layer.succeed(KeystoneAuth, auth)
+
   return CloudProviderLive({ ...options, region }).pipe(
     Layer.provide(OpenStackHttpLive().pipe(Layer.provide(keystone))),
     Layer.provide(keystone)
@@ -93,13 +95,15 @@ export const k3sHetznerCloudProviderLayer = (
 ): Layer.Layer<CloudProvider, AuthenticationFailed, HttpClient.HttpClient> =>
   HcloudCloudProviderLive({ tag: config.name, location: config.auth.region }).pipe(Layer.provide(hcloudHttpClientLayer()))
 
-const _openStackCredentialFromEnv = (region: string): Effect.Effect<CloudCredentialShape> =>
+const _openStackCredentialFromEnv = (region: string): Effect.Effect<CloudCredentialFields> =>
   Effect.gen(function*() {
-    const authUrl = yield* Config.string("OS_AUTH_URL").pipe(Config.withDefault(""))
-    const applicationCredentialId = yield* Config.string("OS_APPLICATION_CREDENTIAL_ID").pipe(Config.withDefault(""))
-    const applicationCredentialSecret = yield* Config.redacted("OS_APPLICATION_CREDENTIAL_SECRET").pipe(
+    const authUrl = yield* Config.String("OS_AUTH_URL").pipe(Config.withDefault(""))
+    const applicationCredentialId = yield* Config.String("OS_APPLICATION_CREDENTIAL_ID").pipe(Config.withDefault(""))
+
+    const applicationCredentialSecret = yield* Config.Redacted("OS_APPLICATION_CREDENTIAL_SECRET").pipe(
       Config.withDefault(Redacted.make(""))
     )
+
     return {
       provider: "openstack" as const,
       authUrl,
@@ -109,10 +113,10 @@ const _openStackCredentialFromEnv = (region: string): Effect.Effect<CloudCredent
     }
   }).pipe(Effect.orDie)
 
-const _openStackCredential = (): Effect.Effect<CloudCredentialShape, AuthenticationFailed, OpenStackEnv> =>
+const _openStackCredential = (): Effect.Effect<CloudCredentialFields, AuthenticationFailed, OpenStackEnv> =>
   Effect.flatMap(OpenStackEnv, (env) => _openStackCredentialFromEnv(env.region ?? ""))
 
-const _hetznerCredential = (): Effect.Effect<CloudCredentialShape, AuthenticationFailed> =>
+const _hetznerCredential = (): Effect.Effect<CloudCredentialFields, AuthenticationFailed> =>
   Effect.map(requiredRedactedEnv("HCLOUD_TOKEN"), (token) => ({ provider: "hetzner" as const, token }))
 
 const _ruleOptions = (config: K3sClusterConfig) => ({

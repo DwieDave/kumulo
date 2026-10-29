@@ -23,5 +23,6 @@ export const applyPatches = (args: {
   readonly document: unknown
 }): Effect.Effect<unknown, OpenApiPatch.JsonPatchAggregateError> => {
   const jsonDocument = JSON.parse(JSON.stringify(args.document))
+
   return OpenApiPatch.applyPatches(args.patches, jsonDocument)
 }

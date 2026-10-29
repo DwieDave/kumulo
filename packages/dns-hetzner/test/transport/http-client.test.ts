@@ -1,8 +1,8 @@
 import { Effect, Redacted } from "effect"
 import { assert, it } from "@effect/vitest"
-import * as HttpClient from "effect/unstable/http/HttpClient"
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
+import * as HttpClient from "effect/http/HttpClient"
+import * as HttpClientRequest from "effect/http/HttpClientRequest"
+import * as HttpClientResponse from "effect/http/HttpClientResponse"
 import { makeHetznerHttpClient } from "../../src/transport/http-client.ts"
 
 const _rawHttpClient = (handle: (request: HttpClientRequest.HttpClientRequest) => Response) =>
@@ -11,10 +11,13 @@ const _rawHttpClient = (handle: (request: HttpClientRequest.HttpClientRequest) =
 it.effect("sends the bearer token and prepends the Hetzner API base URL", () =>
   Effect.gen(function*() {
     let captured: { readonly url: string; readonly auth: string | undefined } | undefined
+
     const base = _rawHttpClient((request) => {
       captured = { url: request.url, auth: request.headers.authorization }
+
       return new Response(null, { status: 200 })
     })
+
     const client = makeHetznerHttpClient({ base, token: Redacted.make("secret-token"), baseUrl: "https://fixture.invalid" })
     yield* client.execute(HttpClientRequest.get("/zones/example.com"))
     assert.strictEqual(captured?.url, "https://fixture.invalid/zones/example.com")
@@ -27,10 +30,13 @@ it.effect("sends the bearer token and prepends the Hetzner API base URL", () =>
 // (mirrors openstack/test/transport/http-client.test.ts).
 it("retries on 429 and eventually succeeds", async () => {
   let calls = 0
+
   const base = _rawHttpClient(() => {
     calls++
+
     return new Response(null, { status: calls < 3 ? 429 : 200 })
   })
+
   const client = makeHetznerHttpClient({ base, token: Redacted.make("secret-token"), baseUrl: "https://fixture.invalid" })
   const response = await Effect.runPromise(client.execute(HttpClientRequest.get("/zones/example.com")))
   assert.strictEqual(response.status, 200)
@@ -39,10 +45,13 @@ it("retries on 429 and eventually succeeds", async () => {
 
 it("gives up after the max retry bound on a persistent 5xx", async () => {
   let calls = 0
+
   const base = _rawHttpClient(() => {
     calls++
+
     return new Response(null, { status: 503 })
   })
+
   const client = makeHetznerHttpClient({ base, token: Redacted.make("secret-token"), baseUrl: "https://fixture.invalid" })
   const response = await Effect.runPromise(client.execute(HttpClientRequest.get("/zones/example.com")))
   assert.strictEqual(response.status, 503)

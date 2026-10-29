@@ -2,6 +2,7 @@ import type { K8sManifest } from "@kumulo/core"
 import { HCLOUD_NAMESPACE, HCLOUD_SECRET_NAME, hcloudSecretManifest, type HcloudCredential } from "../hcloud-secret.ts"
 
 const SERVICE_ACCOUNT = "hcloud-cloud-controller-manager"
+
 // kumulo: pinned >= v1.30.1 (2026-07-01 removed `server.datacenter`, breaks <= v1.30.0); never pin `:latest`.
 const IMAGE = "hetznercloud/hcloud-cloud-controller-manager:v1.34.0"
 

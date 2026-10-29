@@ -19,15 +19,16 @@ const _mksPlanLive = (config: MksClusterConfig) =>
     const volumeNames = yield* lookupManagedVolumeNames(config)
     // delete plan must never reach OpenStack (read-only network resolution belongs to apply only)
     const resolvedNetwork = yield* resolveMksNetwork(config)
-    return buildMksPlan({
-      config,
-      inventory: { ...mks, volumeNames, ...(resolvedNetwork === undefined ? {} : { resolvedNetwork }) }
-    })
+
+    const resolved = resolvedNetwork === undefined ? undefined : { resolvedNetwork }
+
+    return buildMksPlan({ config, inventory: { ...mks, volumeNames, ...resolved } })
   }).pipe(Effect.provide(mksCloudProviderLayer(config)))
 
 // teardown order: load balancer, floating IP, then network with its subnets
 const _infraDeleteRows = (config: ClusterConfig): ReadonlyArray<string> => {
   if (config.distro !== "ovh-mks" || config.network === undefined) return []
+
   return [
     `load-balancer/${config.name}/ingress`,
     `floating-ip/${config.name}/ingress`,
@@ -40,9 +41,11 @@ const _infraDeleteRows = (config: ClusterConfig): ReadonlyArray<string> => {
 const _deletePlanActions = (config: ClusterConfig) =>
   Effect.gen(function*() {
     const inventory = yield* lookupMksInventory(config)
+
     const clusterAction = inventory.clusterExists
       ? { _tag: "Delete" as const, name: `mks-cluster/${config.name}` }
       : { _tag: "NoOp" as const, name: `mks-cluster/${config.name} (already absent)` }
+
     const poolActions = [
       ...[...inventory.poolNames].toSorted().map((pool) => ({
         _tag: "Delete" as const,
@@ -53,20 +56,26 @@ const _deletePlanActions = (config: ClusterConfig) =>
         name: `mks-pool/${config.name}/${pool.name} (already absent)`
       }))
     ]
+
     const infraActions = _infraDeleteRows(config).map((name) => ({ _tag: "Delete" as const, name }))
+
     return [clusterAction, ...poolActions, ...infraActions]
   }).pipe(Effect.provide(mksCloudProviderLayer(config)))
 
 const _statusMks = Effect.fn(function*(config: ClusterConfig) {
   const { mks, serviceName } = yield* MksEnv
+
   const info = yield* findClusterByName({
     mks,
     config: { serviceName, name: config.name, region: config.auth.region, worker_pools: [] }
   })
+
   if (info === undefined) {
     yield* Console.log(`Cluster "${config.name}" does not exist.`)
+
     return
   }
+
   const pools = config.worker_pools.map((pool) => `${pool.name} (x${pool.count})`).join(", ") || "(none)"
   yield* Console.log(
     [`Cluster "${config.name}": ${info.status}`, `  API endpoint: ${info.apiEndpoint}`, `  Worker pools: ${pools}`]
@@ -78,10 +87,13 @@ const _upgradeMksEntry = ({ config, strategy, yes }: DistroUpgradeArgs) =>
   Effect.gen(function*() {
     if (!yes) {
       yield* Console.log(`Re-run with --yes to upgrade cluster "${config.name}" (strategy: ${strategy}).`)
+
       return
     }
+
     const { mks, serviceName } = yield* MksEnv
     const info = yield* findClusterByName({ mks, config: { serviceName, name: config.name, region: config.auth.region, worker_pools: [] } })
+
     if (info === undefined) return yield* Effect.fail(new ResourceNotFound({ kind: "kube", ref: config.name }))
     yield* upgradeMks({ mks, ref: { serviceName, kubeId: info.id }, strategy })
     yield* Console.log(`Upgrade requested for cluster "${config.name}" (strategy: ${strategy}).`)
@@ -95,6 +107,7 @@ const _OVH_MAX_CLUSTERS = 10
 const _mksDoctorChecks = Effect.fn(function*({ config }: { readonly config: ClusterConfig }) {
   const { mks: client, serviceName } = yield* MksEnv
   const mks = { getCloudProjectServiceNameKube: (name: string) => client.getCloudProjectServiceNameKube(name, undefined) }
+
   return [
     authValidityCheck({ mks, serviceName }),
     projectAccessCheck({ mks, serviceName }),

@@ -9,12 +9,14 @@ export const OutputsVolume = Schema.Struct({
   id: Schema.NonEmptyString,
   retain: Schema.Boolean
 })
+
 export type OutputsVolume = Schema.Schema.Type<typeof OutputsVolume>
 
 export const OutputsIngress = Schema.Struct({
   load_balancer_id: Schema.NonEmptyString,
   floating_ip: Schema.NonEmptyString
 })
+
 export type OutputsIngress = Schema.Schema.Type<typeof OutputsIngress>
 
 export const OutputsFile = Schema.Struct({
@@ -22,6 +24,7 @@ export const OutputsFile = Schema.Struct({
   volumes: Schema.Array(OutputsVolume),
   ingress: Schema.optionalKey(OutputsIngress)
 })
+
 export type OutputsFile = Schema.Schema.Type<typeof OutputsFile>
 
 export class OutputsInvalid extends Data.TaggedError("OutputsInvalid")<{
@@ -32,7 +35,7 @@ export const outputsPath = (
   { dir, format = "yaml", tag }: { readonly dir: string; readonly tag: ClusterTag; readonly format?: OutputsFormat }
 ): string => `${dir.endsWith("/") ? dir.slice(0, -1) : dir}/${tag}.outputs.${format}`
 
-export const decodeOutputs = (input: unknown): Effect.Effect<OutputsFile, OutputsInvalid> =>
+export const decodeOutputs = (input: Schema.Json): Effect.Effect<OutputsFile, OutputsInvalid> =>
   Schema.decodeUnknownEffect(OutputsFile)(input).pipe(
     Effect.mapError((cause) => new OutputsInvalid({ message: String(cause) }))
   )
@@ -45,11 +48,10 @@ export const parseOutputsYaml = (text: string): Effect.Effect<OutputsFile, Outpu
 export const stringifyOutputs = (
   { file, format = "yaml" }: { readonly file: OutputsFile; readonly format?: OutputsFormat }
 ): string => {
-  const ordered = {
-    cluster: file.cluster,
-    volumes: file.volumes,
-    ...(file.ingress === undefined ? {} : { ingress: file.ingress })
-  }
+  const ordered = file.ingress === undefined
+    ? { cluster: file.cluster, volumes: file.volumes }
+    : { cluster: file.cluster, volumes: file.volumes, ingress: file.ingress }
+
   return format === "json" ? `${JSON.stringify(ordered, null, 2)}\n` : stringify(ordered)
 }
 
@@ -63,10 +65,13 @@ export const readOutputs = (
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const other: OutputsFormat = format === "yaml" ? "json" : "yaml"
+
     for (const candidate of [format, other]) {
       const path = outputsPath({ dir, tag, format: candidate })
+
       if (yield* fs.exists(path)) return yield* parseOutputsYaml(yield* fs.readFileString(path))
     }
+
     return emptyOutputs(tag)
   })
 

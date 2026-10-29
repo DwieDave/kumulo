@@ -36,9 +36,11 @@ export interface ResolveEndpointOptions {
 
 export const resolveEndpoint = (options: ResolveEndpointOptions): Effect.Effect<string, ResourceNotFound> => {
   const entry = options.catalog.find((candidate) => candidate.type === options.service)
+
   const endpoint = entry?.endpoints.find((candidate) =>
     candidate.interface === "public" && candidate.region === options.region
   ) ?? entry?.endpoints.find((candidate) => candidate.interface === "public")
+
   return endpoint === undefined
     ? Effect.fail(new ResourceNotFound({ kind: "service-catalog-endpoint", ref: `${options.service}@${options.region}` }))
     : Effect.succeed(endpoint.url)

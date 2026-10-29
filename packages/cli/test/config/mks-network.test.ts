@@ -1,6 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Effect } from "effect"
-import { FastCheck as fc } from "effect/testing"
+import { Effect, Predicate, Schema } from "effect"
 import { decodeConfig } from "../../src/cluster-config.ts"
 import { validMksConfig, validMksNetwork } from "./fixtures.ts"
 
@@ -8,6 +7,7 @@ const _fields = ["cidr", "nodes_subnet", "load_balancers_subnet"] as const
 
 const _without = (field: (typeof _fields)[number]) => {
   const { [field]: _dropped, ...rest } = validMksNetwork
+
   return rest
 }
 
@@ -30,54 +30,58 @@ describe("MksClusterConfig — network", () => {
       const failure = yield* Effect.flip(
         decodeConfig({ ...validMksConfig, network: { cidr: "10.0.0.0/16", public_access: "nat" } })
       )
+
       expect(failure._tag).toBe("ConfigInvalid")
     }))
 
-  it.prop("rejects a network block missing any one of its three cidrs", [fc.constantFrom(..._fields)], ([field]) =>
+  it.prop("rejects a network block missing any one of its three cidrs", [Schema.Literals(_fields)], ([field]) =>
     Effect.runSync(
       Effect.gen(function*() {
         const failure = yield* Effect.flip(decodeConfig({ ...validMksConfig, network: _without(field) }))
-        return failure._tag === "ConfigInvalid" && failure.issues.some((issue) => issue.path.includes("network"))
+
+        return Predicate.isTagged(failure, "ConfigInvalid") && failure.issues.some((issue) => issue.path.includes("network"))
       })
     ))
 
   it.prop(
     "rejects a subnet that falls outside the declared cidr",
     [
-      fc.constantFrom("nodes_subnet" as const, "load_balancers_subnet" as const),
-      fc.constantFrom("192.168.7.0/24", "10.1.0.0/24", "10.0.0.0/8")
+      Schema.Literals(["nodes_subnet", "load_balancers_subnet"]),
+      Schema.Literals(["192.168.7.0/24", "10.1.0.0/24", "10.0.0.0/8"])
     ],
     ([field, outside]) =>
       Effect.runSync(
         Effect.gen(function*() {
           const network = { ...validMksNetwork, [field]: outside }
           const failure = yield* Effect.flip(decodeConfig({ ...validMksConfig, network }))
-          return failure._tag === "ConfigInvalid" && failure.issues.some((issue) => issue.path.includes("network"))
+
+          return Predicate.isTagged(failure, "ConfigInvalid") && failure.issues.some((issue) => issue.path.includes("network"))
         })
       )
   )
 
   it.prop(
     "rejects any network field that is not a cidr",
-    [fc.constantFrom(..._fields), fc.constantFrom("10.0.0.0", "10.0.0.0/33", "300.0.0.0/16", "", "not-a-cidr")],
+    [Schema.Literals(_fields), Schema.Literals(["10.0.0.0", "10.0.0.0/33", "300.0.0.0/16", "", "not-a-cidr"])],
     ([field, bad]) =>
       Effect.runSync(
         Effect.gen(function*() {
           const network = { ...validMksNetwork, [field]: bad }
           const failure = yield* Effect.flip(decodeConfig({ ...validMksConfig, network }))
-          return failure._tag === "ConfigInvalid"
+
+          return Predicate.isTagged(failure, "ConfigInvalid")
         })
       )
   )
 })
 
-describe("MksIngress — flavor vocabulary", () => {
-  const _withIngress = (ingress: Record<string, string>) => ({
-    ...validMksConfig,
-    network: validMksNetwork,
-    ingress
-  })
+const _withIngress = (ingress: Record<string, string>) => ({
+  ...validMksConfig,
+  network: validMksNetwork,
+  ingress
+})
 
+describe("MksIngress — flavor vocabulary", () => {
   it.effect("accepts a flavor name, for MKS Free's small/medium/large", () =>
     Effect.gen(function*() {
       const decoded = yield* decodeConfig(_withIngress({ flavor: "small" }))

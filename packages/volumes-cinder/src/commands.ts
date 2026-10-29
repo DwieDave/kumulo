@@ -23,5 +23,6 @@ export const adoptVolume = (
   const vol = { id: volumeId, name: spec.name }
   const outputs = upsertVolume({ file, volume: { name: spec.name, id: volumeId, retain: spec.retain } })
   const manifests = staticVolumeManifests({ vol, spec, pvc })
+
   return { outputs, manifests }
 }

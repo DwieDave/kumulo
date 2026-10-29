@@ -1,5 +1,5 @@
 import { Console, Effect } from "effect"
-import * as HttpClient from "effect/unstable/http/HttpClient"
+import * as HttpClient from "effect/http/HttpClient"
 import { AuthenticationFailed, makeK8sClient, parseKubeconfig, waitForDeploymentAvailable } from "@kumulo/core"
 import type { CloudProvider, ResourceRef, K8sClient } from "@kumulo/core"
 import type { K3sClusterConfig } from "../cluster-config.ts"
@@ -21,13 +21,17 @@ import type { DistroEntry, DistroUpgradeArgs } from "./types.ts"
 
 const _statusK3s = Effect.fn(function*(config: K3sClusterConfig) {
   const info: K3sStatus = yield* k3sStatus(config)
+
   if (!info.exists) {
     yield* Console.log(`Cluster "${config.name}" does not exist.`)
+
     return
   }
+
   const nodes = info.nodes.length === 0
     ? "(none)"
     : info.nodes.map((n) => `${n.name} (${n.ready ? "Ready" : "NotReady"})`).join(", ")
+
   yield* Console.log(
     [`Cluster "${config.name}": running`, `  API endpoint: ${info.apiEndpoint}`, `  Nodes: ${nodes}`].join("\n")
   )
@@ -53,6 +57,7 @@ const _k8sClientForUpgradeEffect = (
     const kubeconfig = yield* kubeconfigK3sEffect(config)
     const parsed = yield* parseKubeconfig(kubeconfig.content)
     const client = yield* Effect.provide(HttpClient.HttpClient, k8sHttpClientLayer({ auth: parsed.auth, caPem: parsed.caPem }))
+
     return makeK8sClient({ client, server: parsed.server })
   })
 
@@ -70,11 +75,13 @@ const _ensureSucReady = (k8sClient: K8sClient["Service"]) =>
       Effect.as(true),
       Effect.catchTag("ResourceNotFound", () => Effect.succeed(false))
     )
+
     yield* Effect.forEach(
       systemUpgradeControllerManifests(),
       (manifest) => k8sClient.apply(refFor(manifest), manifest),
       { discard: true }
     )
+
     if (!alreadyInstalled) {
       yield* waitForDeploymentAvailable({
         get: k8sClient.get,
@@ -123,10 +130,13 @@ const _k3sDoctorChecks = Effect.fn(function*({ config }: { readonly config: K3sC
   const client = yield* HttpClient.HttpClient
   const keystone = env.keystone
   const region = env.region ?? config.auth.region
+
   if (keystone === undefined) {
     const unavailable = Effect.fail(new AuthenticationFailed({ hint: env.unavailableReason ?? "OpenStack auth unavailable" }))
+
     return [keystoneAuthCheck({ token: unavailable })]
   }
+
   return [
     keystoneAuthCheck({ token: keystone.token }),
     microversionCheck({

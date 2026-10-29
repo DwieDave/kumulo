@@ -46,19 +46,24 @@ interface RawIdentity {
 const _fromRaw = (raw: RawIdentity, region: string): Effect.Effect<OpenStackCredentials, AuthenticationFailed> =>
   Effect.gen(function*() {
     const authUrl = yield* _require(raw.auth_url, "auth_url")
+
     if (raw.application_credential_id !== undefined) {
       const applicationCredentialId = yield* _require(raw.application_credential_id, "application_credential_id")
+
       const applicationCredentialSecret = yield* _require(
         raw.application_credential_secret,
         "application_credential_secret"
       )
+
       return { method: "application_credential", authUrl, applicationCredentialId, applicationCredentialSecret, region }
     }
+
     const username = yield* _require(raw.username, "username")
     const password = yield* _require(raw.password, "password")
     const projectName = yield* _require(raw.project_name, "project_name")
     const userDomain = raw.user_domain_name ?? "Default"
     const projectDomain = raw.project_domain_name ?? "Default"
+
     return { method: "password", authUrl, username, password, projectName, userDomain, projectDomain, region }
   })
 
@@ -67,6 +72,7 @@ export const credentialsFromEnv = (
 ): Effect.Effect<OpenStackCredentials, AuthenticationFailed> =>
   Effect.gen(function*() {
     const region = yield* _require(env.OS_REGION_NAME, "OS_REGION_NAME")
+
     return yield* _fromRaw({
       auth_url: env.OS_AUTH_URL,
       application_credential_id: env.OS_APPLICATION_CREDENTIAL_ID,
@@ -94,8 +100,10 @@ export const credentialsFromCloudsYaml = (
   Effect.gen(function*() {
     const parsed: CloudsYaml = parseYaml(options.fileContents)
     const cloud = parsed.clouds?.[options.cloudName]
+
     if (cloud === undefined) return yield* Effect.fail(_missing(`clouds.${options.cloudName}`))
     const region = yield* _require(cloud.region_name, "region_name")
+
     return yield* _fromRaw(cloud.auth ?? {}, region)
   })
 
@@ -107,6 +115,7 @@ export const loadCredentials = (
   if (env.OS_AUTH_URL !== undefined) return credentialsFromEnv(env)
   const path = env.OS_CLIENT_CONFIG_FILE ?? "clouds.yaml"
   const cloudName = env.OS_CLOUD ?? "default"
+
   return Effect.try({
     try: () => readFileSync(path, "utf8"),
     catch: () => _missing(`clouds.yaml at ${path}`)

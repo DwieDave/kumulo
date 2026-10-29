@@ -43,9 +43,11 @@ export const runDnsProviderContractSuite = (build: () => ContractHarness): void 
       const { zone, provider, targetOf, seedForeign } = build()
       const record = _ownedRecord()
       seedForeign(record.name, "203.0.113.9")
+
       const result = yield* Effect.flip(
         provider.ensureRecords(zone, [_ownershipRecord(record.name, "cluster-a"), record])
       )
+
       assert.strictEqual(result._tag, "ResourceConflict")
       assert.strictEqual(targetOf(record.name), "203.0.113.9")
     }))
@@ -55,9 +57,11 @@ export const runDnsProviderContractSuite = (build: () => ContractHarness): void 
       const { zone, provider, targetOf, seedForeignKind } = build()
       const record = _ownedRecord()
       seedForeignKind(record.name, "CNAME", "other.example.com")
+
       const result = yield* Effect.flip(
         provider.ensureRecords(zone, [_ownershipRecord(record.name, "cluster-a"), record])
       )
+
       assert.strictEqual(result._tag, "ResourceConflict")
       assert.strictEqual(targetOf(record.name), "other.example.com")
     }))
@@ -67,9 +71,11 @@ export const runDnsProviderContractSuite = (build: () => ContractHarness): void 
       const { zone, provider, targetOf, seedForeignOwnerTxt } = build()
       const record = _ownedRecord()
       seedForeignOwnerTxt(record.name, "some-other-cluster")
+
       const result = yield* Effect.flip(
         provider.ensureRecords(zone, [_ownershipRecord(record.name, "cluster-a"), record])
       )
+
       assert.strictEqual(result._tag, "ResourceConflict")
       assert.strictEqual(targetOf(record.name), undefined)
     }))

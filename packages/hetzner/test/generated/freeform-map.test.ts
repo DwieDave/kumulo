@@ -1,5 +1,5 @@
 import { assert, it } from "@effect/vitest"
-import { FastCheck as fc } from "effect/testing"
+import { Schema } from "effect"
 import { CreateFirewallRequestJson } from "../../src/generated/hcloud.ts"
 import { decodeFixture, decodeFixtureFails, encodeFixture } from "./decode.ts"
 
@@ -8,15 +8,11 @@ import { decodeFixture, decodeFixtureFails, encodeFixture } from "./decode.ts"
 // preservation on encode); the moment that stops, resources are created unlabelled,
 // `deleteByTag` can't see them (orphaned billable servers) and drift detection, which
 // stores the config hash in exactly this field, breaks.
-it("hcloud labels round-trip with arbitrary keys", () => {
-  fc.assert(
-    fc.property(fc.dictionary(fc.string(), fc.string()), (labels) => {
-      const value = { name: "fw", labels }
-      const encoded = encodeFixture({ schema: CreateFirewallRequestJson, value })
-      const decoded = decodeFixture({ schema: CreateFirewallRequestJson, fixture: encoded })
-      assert.deepStrictEqual(decoded.labels, labels)
-    })
-  )
+it.prop("hcloud labels round-trip with arbitrary keys", [Schema.Record(Schema.String, Schema.String)], ([labels]) => {
+  const value = { name: "fw", labels }
+  const encoded = encodeFixture({ schema: CreateFirewallRequestJson, value })
+  const decoded = decodeFixture({ schema: CreateFirewallRequestJson, fixture: encoded })
+  assert.deepStrictEqual(decoded.labels, labels)
 })
 
 // The round trip above must not rely on unknown-key preservation: a typed Record rejects a

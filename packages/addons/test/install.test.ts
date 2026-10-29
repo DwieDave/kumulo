@@ -1,6 +1,6 @@
 import { assert, it } from "@effect/vitest"
 import type { K8sClient, K8sManifest } from "@kumulo/core"
-import { Effect } from "effect"
+import { Effect, Option, Schema } from "effect"
 import { installAddons } from "../src/install.ts"
 import { resolveAddons } from "../src/registry.ts"
 
@@ -12,18 +12,17 @@ const cloudCredential = {
   applicationCredentialSecret: "app-secret"
 }
 
-const _nameOf = (manifest: K8sManifest): string => {
-  const metadata = manifest.metadata
-  return typeof metadata === "object" && metadata !== null && "name" in metadata && typeof metadata.name === "string"
-    ? metadata.name
-    : ""
-}
+const _metadataName = Schema.decodeUnknownOption(Schema.Struct({ name: Schema.String }))
+
+const _nameOf = (manifest: K8sManifest): string =>
+  Option.match(_metadataName(manifest.metadata), { onNone: () => "", onSome: ({ name }) => name })
 
 const _fakeK8sClient = (log: Array<string>): K8sClient["Service"] => ({
   get: () => Effect.die("unused"),
   list: () => Effect.die("unused"),
   apply: (_ref, manifest) => {
     log.push(`${manifest.kind}:${_nameOf(manifest)}`)
+
     return Effect.succeed(manifest)
   },
   delete: () => Effect.die("unused"),
@@ -33,6 +32,7 @@ const _fakeK8sClient = (log: Array<string>): K8sClient["Service"] => ({
 it.effect("installs addon manifests in registry order, addon-by-addon", () =>
   Effect.gen(function*() {
     const log: Array<string> = []
+
     const addons = resolveAddons({
       distro: "k3s",
       addons: {

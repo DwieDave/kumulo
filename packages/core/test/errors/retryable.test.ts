@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Option, SchemaIssue } from "effect"
+import { SchemaIssue } from "effect"
 import {
   AddonInstallFailed,
   AuthenticationFailed,
@@ -30,7 +30,7 @@ describe("isRetryable", () => {
   })
 
   it("matches the full retryableByTag table for every remaining tag", () => {
-    const issue = new SchemaIssue.InvalidValue(Option.some("bad"), { message: "invalid" })
+    const issue = new SchemaIssue.InvalidValue({ message: "invalid" })
     expect(isRetryable(new ResponseDecodeError({ endpoint: "/x", issue }))).toBe(false)
     expect(isRetryable(new AuthenticationFailed({ hint: "x" }))).toBe(false)
     expect(isRetryable(new ResourceNotFound({ kind: "server", ref: "a" }))).toBe(false)

@@ -4,7 +4,7 @@ import { Effect } from "effect"
 import { readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import * as YAML from "yaml"
-import type { OpenAPISpec } from "effect/unstable/httpapi/OpenApi"
+import type { OpenAPISpec } from "effect/http-api/OpenApi"
 import { runPipeline } from "codegen"
 import type { NamedPatch } from "codegen"
 
@@ -34,6 +34,7 @@ const _generateOne = (config: ServiceConfig) =>
   Effect.gen(function*() {
     const spec: OpenAPISpec = YAML.parse(readFileSync(join(root, config.specPath), "utf8"))
     const allowlistDoc = JSON.parse(readFileSync(join(root, config.allowlistPath), "utf8"))
+
     const patches: ReadonlyArray<NamedPatch> = [{
       source: config.patchPath,
       patch: _parseJson5(readFileSync(join(root, config.patchPath), "utf8"))

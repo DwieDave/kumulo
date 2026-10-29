@@ -29,6 +29,7 @@ describe("filterAllowlist", () => {
       const result = yield* Effect.flip(
         filterAllowlist({ spec: syntheticSpec, allowlist: ["listWidgets", "notARealOperation"] })
       )
+
       expect(result._tag).toEqual("AllowlistOperationNotFound")
       expect(result.operationIds).toEqual(["notARealOperation"])
     }))

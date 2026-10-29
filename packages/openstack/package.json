@@ -61,8 +61,8 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
-    "vitest": "catalog:",
     "codegen": "workspace:*",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "vitest": "catalog:"
   }
 }

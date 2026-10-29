@@ -1,11 +1,12 @@
 import { assert, it } from "@effect/vitest"
+import type { Schema } from "effect"
 import { readFileSync } from "node:fs"
 import type { K8sManifest } from "@kumulo/core"
 import { refForPlan, renderMastersPlan, renderUpgradePlan, renderWorkersPlan } from "../../src/upgrade/plan.ts"
 
 const VERSION = "v1.31.5+k3s1"
 
-const _golden = (name: string): unknown =>
+const _golden = (name: string): Schema.Json =>
   JSON.parse(readFileSync(new URL(`fixtures/${name}.json`, import.meta.url), "utf8"))
 
 it("masters plan matches the golden fixture (concurrency 1, control-plane selector, cordon)", () => {

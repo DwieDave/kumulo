@@ -5,9 +5,11 @@ const _firstDiffLine = (args: { readonly a: string; readonly b: string }): numbe
   const linesA = args.a.split("\n")
   const linesB = args.b.split("\n")
   const length = Math.max(linesA.length, linesB.length)
+
   for (let i = 0; i < length; i++) {
     if (linesA[i] !== linesB[i]) return i + 1
   }
+
   return length + 1
 }
 

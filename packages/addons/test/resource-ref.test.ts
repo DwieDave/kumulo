@@ -8,6 +8,7 @@ it("refFor builds a namespaced path from a well-formed manifest", () => {
     kind: "Secret",
     metadata: { name: "kumulo-token", namespace: "kube-system" }
   }
+
   assert.deepStrictEqual(refFor(manifest), { path: "/api/v1/namespaces/kube-system/secrets/kumulo-token", kind: "Secret" })
 })
 

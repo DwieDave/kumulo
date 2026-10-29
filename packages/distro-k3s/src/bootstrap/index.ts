@@ -1,8 +1,15 @@
 export type { NonEmptyMasters, ResolvedToken } from "./token.ts"
+
 export { resolveToken } from "./token.ts"
+
 export type { AddonDisableFlags, AgentInstallArgs, ServerInstallArgs } from "./install-script.ts"
+
 export { renderAgentInstallScript, renderServerInstallScript } from "./install-script.ts"
+
 export type { InstallMastersArgs, InstallWorkersArgs } from "./orchestrate.ts"
+
 export { installMasters, installWorkers } from "./orchestrate.ts"
+
 export type { BootstrapResult, RunBootstrapArgs } from "./install.ts"
+
 export { runBootstrap } from "./install.ts"

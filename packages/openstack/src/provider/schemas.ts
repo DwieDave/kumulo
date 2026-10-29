@@ -12,11 +12,12 @@ const ServerAddresses = Schema.Struct({
   }))
 })
 
-export const decodeServerIp = (body: unknown): Effect.Effect<string, ResponseDecodeError> =>
+export const decodeServerIp = (body: Schema.Json): Effect.Effect<string, ResponseDecodeError> =>
   Schema.decodeUnknownEffect(ServerAddresses)(body).pipe(
     Effect.mapError((error) => new ResponseDecodeError({ endpoint: "v2.1/servers", issue: error.issue })),
     Effect.map((decoded) => {
       const networks = Object.values(decoded.server?.addresses ?? {})[0]
+
       return networks?.find((candidate) => candidate.addr !== undefined)?.addr ?? ""
     })
   )

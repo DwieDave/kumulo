@@ -6,6 +6,7 @@ describe("pollUntil", () => {
   it.live("resolves once isDone is satisfied", () =>
     Effect.gen(function*() {
       const calls = yield* Ref.make(0)
+
       const status = yield* pollUntil({
         check: Ref.updateAndGet(calls, (n) => n + 1),
         isDone: (n: number) => n >= 3,
@@ -14,6 +15,7 @@ describe("pollUntil", () => {
         kind: "server",
         ref: "kumulo-x-master-a-0"
       })
+
       expect(status).toBe(3)
     }))
 

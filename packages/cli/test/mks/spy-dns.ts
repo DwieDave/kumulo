@@ -6,6 +6,7 @@ import type { DesiredRecord } from "@kumulo/core"
 export const spyDnsLayer = () => {
   const ensured: Array<ReadonlyArray<DesiredRecord>> = []
   const removed: Array<string> = []
+
   const layer = Layer.succeed(DnsProvider, {
     ensureRecords: (_zone: string, records: ReadonlyArray<DesiredRecord>) =>
       Effect.sync(() => {
@@ -16,5 +17,6 @@ export const spyDnsLayer = () => {
         removed.push(tag)
       })
   })
+
   return { layer, ensured, removed }
 }

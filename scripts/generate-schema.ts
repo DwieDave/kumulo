@@ -39,11 +39,14 @@ const crossFieldConstraints = [
 ]
 
 const document = Schema.toJsonSchemaDocument(ClusterConfig)
+
 // `additionalProperties: false` would otherwise reject the very `$schema` key
 // json configs use to reference this document — allow it in every variant.
-type Variant = { properties: Record<string, unknown> }
+type Variant = { properties: Schema.JsonObject }
+
 const anyOf = document.schema["anyOf"]
 const variants: ReadonlyArray<Variant> = Array.isArray(anyOf) ? anyOf : []
+
 const schema = {
   $schema: JsonSchema.META_SCHEMA_URI_DRAFT_2020_12,
   title: "kumulo cluster config",
@@ -51,5 +54,7 @@ const schema = {
   allOf: crossFieldConstraints,
   $defs: document.definitions
 }
+
 writeFileSync(new URL("../kumulo.schema.json", import.meta.url), `${JSON.stringify(schema, null, 2)}\n`)
+
 console.log("wrote kumulo.schema.json")

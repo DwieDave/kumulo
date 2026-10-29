@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Redacted } from "effect"
+import { Effect, Predicate, Redacted } from "effect"
 import { makeObjectStorageClient } from "@kumulo/upcloud"
 import { makeUpcloudObjectStorageProvider } from "../../src/provider/object-storage-provider.ts"
 import { makeFakeObjectStorageServer } from "./fake-object-storage-server.ts"
@@ -12,12 +12,15 @@ const _makeProvider = (options?: { readonly privateNetworkUuid?: string }) => {
   const fake = makeFakeObjectStorageServer()
   const client = makeObjectStorageClient(fake.httpClient)
   const provider = makeUpcloudObjectStorageProvider({ client, cluster: _cluster, region: _region, pollInterval: "1 millis", ...options })
+
   return { fake, provider }
 }
 
 const _theService = (fake: ReturnType<typeof makeFakeObjectStorageServer>) => {
   const service = [...fake.services.values()][0]
+
   if (service === undefined) throw new Error("expected a fake service to exist")
+
   return service
 }
 
@@ -80,10 +83,12 @@ describe("upcloud storage-upcloud provider — service + buckets", () => {
       yield* provider.ensureBucket(_spec)
       const service = _theService(fake)
       const bucket = fake.buckets.get(service.uuid)?.get(_spec.name)
+
       if (bucket !== undefined) bucket.total_objects = 3
       const failure = yield* Effect.flip(provider.deleteBucket({ name: _spec.name, region: _region }))
       assert.strictEqual(failure._tag, "BucketNotEmpty")
-      if (failure._tag === "BucketNotEmpty") {
+
+      if (Predicate.isTagged(failure, "BucketNotEmpty")) {
         assert.strictEqual(failure.bucket, _spec.name)
         assert.strictEqual(failure.objectCount, 3)
       }

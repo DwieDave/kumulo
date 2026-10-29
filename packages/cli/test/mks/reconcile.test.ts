@@ -1,6 +1,6 @@
 import { Effect, Layer } from "effect"
 import { layerNoop } from "effect/FileSystem"
-import * as HttpClient from "effect/unstable/http/HttpClient"
+import * as HttpClient from "effect/http/HttpClient"
 import { assert, it } from "@effect/vitest"
 import { makeMksClient } from "@kumulo/distro-ovh-mks"
 import { loadConfig } from "../../src/config.ts"
@@ -16,10 +16,13 @@ import { cloudProviderNever } from "./fake-cloud-provider.ts"
 // at 0, silently passing a test that only checked the count.
 const _withCreateSpy = (server: ReturnType<typeof makeFakeMksServer>) => {
   let created = false
+
   const httpClient = HttpClient.tap(server.httpClient, (response) => {
     if (response.request.method === "POST" && new URL(response.request.url).pathname.endsWith("/kube")) created = true
+
     return Effect.void
   })
+
   return { httpClient, wasCreated: () => created }
 }
 

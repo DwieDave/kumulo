@@ -3,7 +3,7 @@
 import { Effect } from "effect"
 import { readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
-import type { OpenAPISpec } from "effect/unstable/httpapi/OpenApi"
+import type { OpenAPISpec } from "effect/http-api/OpenApi"
 import { runPipeline } from "codegen"
 import type { NamedPatch } from "codegen"
 
@@ -19,6 +19,7 @@ const _parseJson5 = (text: string): NamedPatch["patch"] => JSON.parse(text.repla
 const program = Effect.gen(function*() {
   const spec: OpenAPISpec = JSON.parse(readFileSync(join(root, specPath), "utf8"))
   const allowlistDoc = JSON.parse(readFileSync(join(root, allowlistPath), "utf8"))
+
   const patches: ReadonlyArray<NamedPatch> = [{
     source: patchPath,
     patch: _parseJson5(readFileSync(join(root, patchPath), "utf8"))

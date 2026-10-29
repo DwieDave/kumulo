@@ -1,28 +1,29 @@
 import { describe, expect, it } from "@effect/vitest"
-import { FastCheck as fc } from "effect/testing"
+import { Schema } from "effect"
 import { diffNodePools } from "../../src/distro/nodepool-diff.ts"
 import type { ExistingNodePool } from "../../src/distro/nodepool-diff.ts"
 import type { MksWorkerPoolConfig } from "../../src/distro/types.ts"
 
-const _poolArb = fc.record({
-  name: fc.constantFrom("workers", "spot", "batch"),
-  flavor: fc.constantFrom("b2-7", "b2-15"),
-  desiredNodes: fc.integer({ min: 0, max: 10 }),
-  minNodes: fc.integer({ min: 0, max: 10 }),
-  maxNodes: fc.integer({ min: 0, max: 10 }),
-  autoscale: fc.boolean(),
-  antiAffinity: fc.boolean(),
-  monthlyBilled: fc.boolean()
+const _poolSchema = Schema.Struct({
+  name: Schema.Literals(["workers", "spot", "batch"]),
+  flavor: Schema.Literals(["b2-7", "b2-15"]),
+  desiredNodes: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 10 })),
+  minNodes: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 10 })),
+  maxNodes: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 10 })),
+  autoscale: Schema.Boolean,
+  antiAffinity: Schema.Boolean,
+  monthlyBilled: Schema.Boolean
 })
 
 const _toExisting = (pool: MksWorkerPoolConfig, id: string): ExistingNodePool => ({ ...pool, id })
 
 describe("diffNodePools", () => {
-  it.prop("re-diffing a converged state is a no-op", [fc.array(_poolArb, { maxLength: 4 })], ([pools]) => {
+  it.prop("re-diffing a converged state is a no-op", [Schema.Array(_poolSchema).check(Schema.isMaxLength(4))], ([pools]) => {
     // de-dupe by name — the API itself is keyed that way.
     const desired = [...new Map(pools.map((pool) => [pool.name, pool])).values()]
     const existing = desired.map((pool, i) => _toExisting(pool, `id-${i}`))
     const diff = diffNodePools({ desired, existing })
+
     return diff.toCreate.length === 0 && diff.toReplace.length === 0 && diff.toUpdate.length === 0 &&
       diff.toDelete.length === 0
   })
@@ -31,6 +32,7 @@ describe("diffNodePools", () => {
     const desired: ReadonlyArray<MksWorkerPoolConfig> = [
       { name: "workers", flavor: "b2-7", desiredNodes: 3, minNodes: 1, maxNodes: 5, autoscale: true, antiAffinity: true, monthlyBilled: false }
     ]
+
     const diff = diffNodePools({ desired, existing: [] })
     expect(diff.toCreate).toEqual(desired)
     expect(diff.toDelete).toEqual([])
@@ -50,6 +52,7 @@ describe("diffNodePools", () => {
         monthlyBilled: false
       }
     ]
+
     const diff = diffNodePools({ desired: [], existing })
     expect(diff.toDelete).toEqual(["pool-1"])
   })
@@ -66,12 +69,15 @@ describe("diffNodePools", () => {
       antiAffinity: true,
       monthlyBilled: false
     }
+
     const existing: ReadonlyArray<ExistingNodePool> = [pool]
+
     const replaced = diffNodePools({
       desired: [{ ...pool, flavor: "b2-15" }],
       existing,
       replace: new Set(["workers"])
     })
+
     expect(replaced.toReplace).toHaveLength(1)
     expect(replaced.toUpdate).toEqual([])
 
@@ -86,6 +92,7 @@ describe("diffNodePools", () => {
       desired: [{ ...pool, desiredNodes: 4 }],
       existing
     })
+
     expect(updated.toUpdate).toHaveLength(1)
     expect(updated.toReplace).toEqual([])
   })

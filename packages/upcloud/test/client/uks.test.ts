@@ -1,8 +1,9 @@
 import { Effect } from "effect"
+import type { Schema } from "effect"
 import { assert, it } from "@effect/vitest"
-import * as HttpClient from "effect/unstable/http/HttpClient"
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
+import * as HttpClient from "effect/http/HttpClient"
+import * as HttpClientRequest from "effect/http/HttpClientRequest"
+import * as HttpClientResponse from "effect/http/HttpClientResponse"
 import { makeUksClient } from "../../src/client/uks.ts"
 import { capturedJson } from "./capture.ts"
 
@@ -13,7 +14,7 @@ const _rawHttpClient = (handle: (request: HttpClientRequest.HttpClientRequest) =
     HttpClient.mapRequest(HttpClientRequest.prependUrl(_fixtureBaseUrl))
   )
 
-const _fixtureHttpClient = (status: number, body: unknown) => _rawHttpClient(() => new Response(JSON.stringify(body), { status }))
+const _fixtureHttpClient = (status: number, body: Schema.Json) => _rawHttpClient(() => new Response(JSON.stringify(body), { status }))
 
 const _cluster = {
   uuid: "c1",
@@ -46,12 +47,15 @@ it.effect("decodes GET /1.3/kubernetes as a bare array", () =>
 it.effect("POST create sends the full body and decodes the created cluster", () =>
   Effect.gen(function*() {
     let captured: unknown
+
     const client = makeUksClient(
       _rawHttpClient((request) => {
         captured = capturedJson(request)
+
         return new Response(JSON.stringify(_cluster), { status: 200 })
       })
     )
+
     const body = { name: "demo", zone: "de-fra1", version: "1.31", network: "net-uuid", network_cidr: "10.0.0.0/24" }
     yield* client.create(body)
     // D7: `version` is part of the create body — a cluster created without it
@@ -83,12 +87,15 @@ it.effect("R4: a shape mismatch surfaces as a decode failure, not undefined", ()
 it.effect("DELETE /1.3/kubernetes/{uuid} hits the right path", () =>
   Effect.gen(function*() {
     let capturedPath: string | undefined
+
     const client = makeUksClient(
       _rawHttpClient((request) => {
         capturedPath = request.url
+
         return new Response(null, { status: 204 })
       })
     )
+
     yield* client.delete("c1")
     assert.strictEqual(capturedPath, `${_fixtureBaseUrl}/1.3/kubernetes/c1`)
   }))

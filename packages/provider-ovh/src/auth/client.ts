@@ -1,7 +1,7 @@
 import { Effect, Layer } from "effect"
-import * as HttpClient from "effect/unstable/http/HttpClient"
-import * as HttpClientError from "effect/unstable/http/HttpClientError"
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
+import * as HttpClient from "effect/http/HttpClient"
+import * as HttpClientError from "effect/http/HttpClientError"
+import * as HttpClientRequest from "effect/http/HttpClientRequest"
 import { OvhAuth } from "./port.ts"
 
 export const OVH_API_BASE_URL = "https://eu.api.ovh.com/1.0"
@@ -14,6 +14,7 @@ export const ovhHttpClientLive = (
     Effect.gen(function* () {
       const base = yield* HttpClient.HttpClient
       const auth = yield* OvhAuth
+
       return base.pipe(
         HttpClient.mapRequestEffect((request) =>
           auth.token.pipe(

@@ -10,6 +10,7 @@ it.effect("passes when the plan fits within the quota", () =>
       keystone: fakeEndpointResolver(),
       region: "GRA9"
     })
+
     const result = yield* quotaHeadroomCheck({ limits, plannedInstanceCount: 5 }).run
     assert.strictEqual(result.status, "pass")
     assert.match(result.message, /8\/10/)
@@ -22,6 +23,7 @@ it.effect("fails with an actionable message when the plan exceeds the quota", ()
       keystone: fakeEndpointResolver(),
       region: "GRA9"
     })
+
     const result = yield* quotaHeadroomCheck({ limits, plannedInstanceCount: 5 }).run
     assert.strictEqual(result.status, "fail")
     assert.match(result.message, /exceeding the quota of 5/)
@@ -34,6 +36,7 @@ it.effect("passes when Nova reports no quota limit (-1)", () =>
       keystone: fakeEndpointResolver(),
       region: "GRA9"
     })
+
     const result = yield* quotaHeadroomCheck({ limits, plannedInstanceCount: 5 }).run
     assert.strictEqual(result.status, "pass")
     assert.match(result.message, /no quota limit reported/)
@@ -46,6 +49,7 @@ it.effect("treats a malformed limits.absolute shape as unknown quota (lenient de
       keystone: fakeEndpointResolver(),
       region: "GRA9"
     })
+
     const result = yield* quotaHeadroomCheck({ limits, plannedInstanceCount: 5 }).run
     assert.strictEqual(result.status, "pass")
     assert.match(result.message, /no quota limit reported/)
@@ -58,6 +62,7 @@ it.effect("treats an unreachable limits endpoint as unknown quota (pass, not a f
       keystone: fakeEndpointResolver(),
       region: "GRA9"
     })
+
     const result = yield* quotaHeadroomCheck({ limits, plannedInstanceCount: 5 }).run
     assert.strictEqual(result.status, "pass")
   }))

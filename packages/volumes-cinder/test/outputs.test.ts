@@ -1,6 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Effect } from "effect"
-import * as fc from "effect/testing/FastCheck"
+import { Effect, Schema } from "effect"
 import { layerNoop } from "effect/FileSystem"
 import {
   emptyOutputs,
@@ -14,15 +13,13 @@ import {
   writeOutputs
 } from "../src/outputs.ts"
 
-const outputsVolumeArb = fc.record({
-  name: fc.string({ minLength: 1, maxLength: 20 }).filter((s) => s.trim().length > 0),
-  id: fc.string({ minLength: 1, maxLength: 20 }).filter((s) => s.trim().length > 0),
-  retain: fc.boolean()
-})
+const _text = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(20), Schema.isPattern(/\S/))
 
-const outputsFileArb = fc.record({
-  cluster: fc.string({ minLength: 1, maxLength: 20 }).filter((s) => s.trim().length > 0),
-  volumes: fc.array(outputsVolumeArb, { maxLength: 5 })
+const outputsVolumeArb = Schema.Struct({ name: _text, id: _text, retain: Schema.Boolean })
+
+const outputsFileArb = Schema.Struct({
+  cluster: _text,
+  volumes: Schema.Array(outputsVolumeArb).check(Schema.isMaxLength(5))
 })
 
 describe("outputs file YAML round-trip", () => {
@@ -61,11 +58,13 @@ describe("readOutputs / writeOutputs (in-memory FileSystem)", () => {
   it.effect("write then read recovers the same outputs file", () =>
     Effect.gen(function*() {
       const store = new Map<string, string>()
+
       const fs = layerNoop({
         exists: (path) => Effect.succeed(store.has(path)),
         writeFileString: (path, data) => Effect.sync(() => void store.set(path, data)),
         readFileString: (path) => Effect.succeed(store.get(path) ?? "")
       })
+
       const file = { cluster: "prod", volumes: [{ name: "postgres-data", id: "vol-1", retain: true }] }
       yield* writeOutputs({ dir: "/out", file }).pipe(Effect.provide(fs))
       const roundTripped = yield* readOutputs({ dir: "/out", tag: "prod" }).pipe(Effect.provide(fs))
@@ -76,11 +75,13 @@ describe("readOutputs / writeOutputs (in-memory FileSystem)", () => {
   it.effect("json format writes .outputs.json and round-trips", () =>
     Effect.gen(function*() {
       const store = new Map<string, string>()
+
       const fs = layerNoop({
         exists: (path) => Effect.succeed(store.has(path)),
         writeFileString: (path, data) => Effect.sync(() => void store.set(path, data)),
         readFileString: (path) => Effect.succeed(store.get(path) ?? "")
       })
+
       const file = { cluster: "prod", volumes: [{ name: "postgres-data", id: "vol-1", retain: true }] }
       yield* writeOutputs({ dir: "/out", file, format: "json" }).pipe(Effect.provide(fs))
       expect(store.has("/out/prod.outputs.json")).toBe(true)
@@ -92,11 +93,13 @@ describe("readOutputs / writeOutputs (in-memory FileSystem)", () => {
   it.effect("reading with json format falls back to an existing yaml file", () =>
     Effect.gen(function*() {
       const store = new Map<string, string>()
+
       const fs = layerNoop({
         exists: (path) => Effect.succeed(store.has(path)),
         writeFileString: (path, data) => Effect.sync(() => void store.set(path, data)),
         readFileString: (path) => Effect.succeed(store.get(path) ?? "")
       })
+
       const file = { cluster: "prod", volumes: [{ name: "a", id: "1", retain: false }] }
       yield* writeOutputs({ dir: "/out", file }).pipe(Effect.provide(fs))
       const read = yield* readOutputs({ dir: "/out", tag: "prod", format: "json" }).pipe(Effect.provide(fs))
@@ -106,10 +109,7 @@ describe("readOutputs / writeOutputs (in-memory FileSystem)", () => {
 
 // ---- ingress (R13, N6) ----------------------------------------------------
 
-const ingressArb = fc.record({
-  load_balancer_id: fc.string({ minLength: 1, maxLength: 20 }).filter((s) => s.trim().length > 0),
-  floating_ip: fc.string({ minLength: 1, maxLength: 20 }).filter((s) => s.trim().length > 0)
-})
+const ingressArb = Schema.Struct({ load_balancer_id: _text, floating_ip: _text })
 
 describe("ingress outputs", () => {
   it("setIngress records the LB id and floating IP without touching volumes", () => {
@@ -134,7 +134,7 @@ describe("ingress outputs", () => {
   // file object must not survive serialisation.
   it.effect.prop(
     "serialisation is a closed allowlist: no key outside {cluster, volumes, ingress} survives",
-    { file: outputsFileArb, ingress: ingressArb, secret: fc.string({ minLength: 1 }) },
+    { file: outputsFileArb, ingress: ingressArb, secret: Schema.String.check(Schema.isMinLength(1)) },
     ({ file, ingress, secret }) =>
       Effect.gen(function*() {
         const smuggled = {
@@ -143,6 +143,7 @@ describe("ingress outputs", () => {
           secretKey: secret,
           ingressSecret: secret
         }
+
         const text = stringifyOutputsYaml(smuggled)
         const parsed = yield* parseOutputsYaml(text)
         expect(Object.keys(parsed).toSorted()).toEqual(["cluster", "ingress", "volumes"])

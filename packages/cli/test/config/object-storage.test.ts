@@ -1,6 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
-import { FastCheck as fc } from "effect/testing"
-import { Effect } from "effect"
+import { Effect, Predicate, Schema } from "effect"
 import { decodeConfig } from "../../src/cluster-config.ts"
 import { validConfig } from "./fixtures.ts"
 
@@ -65,13 +64,13 @@ describe("ClusterConfig — object_storage + secrets", () => {
       expect(_pathsOf(failure.issues).some((path) => path.startsWith("secrets"))).toBe(true)
     }))
 
-  const badBucketNames = fc.constantFrom(
+  const badBucketNames = Schema.Literals([
     "Staging-EU-Backups",
     "ab",
     "a".repeat(64),
     "-abcde",
     "abcde-"
-  )
+  ])
 
   it.prop(
     "rejects malformed S3 bucket names with a pathed issue",
@@ -86,9 +85,11 @@ describe("ClusterConfig — object_storage + secrets", () => {
               buckets: [{ ...withOvhBucket.object_storage.buckets[0], name: badName }]
             }
           }
+
           const failure = yield* Effect.flip(decodeConfig(candidate))
+
           return (
-            failure._tag === "ConfigInvalid" &&
+            Predicate.isTagged(failure, "ConfigInvalid") &&
             _pathsOf(failure.issues).some((path) => path === "object_storage.buckets.0.name")
           )
         })
@@ -103,6 +104,7 @@ describe("ClusterConfig — object_storage + secrets", () => {
         ...withOvhBucket,
         object_storage: { ...withOvhBucket.object_storage, module: "none" as const }
       }
+
       const decoded = yield* decodeConfig(candidate)
       expect(decoded.object_storage).toEqual({ module: "none" })
     }))
@@ -113,6 +115,7 @@ describe("ClusterConfig — object_storage + secrets", () => {
         ...withOvhBucket,
         secrets: { sink: "none" as const }
       }
+
       const failure = yield* Effect.flip(decodeConfig(candidate))
       expect(failure._tag).toBe("ConfigInvalid")
     }))
@@ -123,6 +126,7 @@ describe("ClusterConfig — object_storage + secrets", () => {
         ...withOvhBucket,
         secrets: { sink: "sops" as const, dir: "." }
       }
+
       const failure = yield* Effect.flip(decodeConfig(candidate))
       expect(failure._tag).toBe("ConfigInvalid")
     }))
@@ -137,6 +141,7 @@ describe("ClusterConfig — object_storage + secrets", () => {
           sops: { age_recipient: "notanagekey" }
         }
       }
+
       const failure = yield* Effect.flip(decodeConfig(candidate))
       expect(failure._tag).toBe("ConfigInvalid")
       expect(_pathsOf(failure.issues).some((path) => path === "secrets.sops.age_recipient")).toBe(true)

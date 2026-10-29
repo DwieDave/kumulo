@@ -53,10 +53,10 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
-    "vitest": "catalog:",
     "codegen": "workspace:*",
+    "effect": "catalog:",
     "ovh2openapi": "workspace:*",
-    "effect": "catalog:"
+    "vitest": "catalog:"
   },
   "scripts": {
     "build": "bash ../../scripts/build-package.sh",

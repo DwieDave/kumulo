@@ -1,8 +1,8 @@
 import { assert, describe, it } from "@effect/vitest"
-import { Effect } from "effect"
-import * as HttpClient from "effect/unstable/http/HttpClient"
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
+import { Effect, Predicate } from "effect"
+import * as HttpClient from "effect/http/HttpClient"
+import * as HttpClientRequest from "effect/http/HttpClientRequest"
+import * as HttpClientResponse from "effect/http/HttpClientResponse"
 import { makeStorageClient } from "../../src/client/storage.ts"
 import { toStorageError } from "../../src/provider/errors.ts"
 
@@ -51,13 +51,13 @@ describe("toStorageError — status → tag", () => {
   it.effect("429 carries the Retry-After header verbatim", () =>
     Effect.gen(function*() {
       const error = yield* _errorFor({ status: 429, headers: { "retry-after": "30" } })
-      assert.strictEqual(error._tag === "RateLimited" ? error.retryAfter : undefined, "30")
+      assert.strictEqual(Predicate.isTagged(error, "RateLimited") ? error.retryAfter : undefined, "30")
     }))
 
   it.effect("5xx keeps the real status instead of a fabricated quota", () =>
     Effect.gen(function*() {
       const error = yield* _errorFor({ status: 500 })
-      assert.strictEqual(error._tag === "ProviderApiError" ? error.status : undefined, 500)
+      assert.strictEqual(Predicate.isTagged(error, "ProviderApiError") ? error.status : undefined, 500)
     }))
 
   it.effect("a decode failure becomes ResponseDecodeError, not a status tag", () =>

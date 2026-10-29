@@ -40,6 +40,7 @@ export const diffBuckets = (
 
   for (const bucket of desired) {
     const match = byName.get(bucket.name)
+
     if (!match) {
       toCreate.push(bucket)
     } else if (_isImmutableDiff(bucket, match)) {

@@ -54,9 +54,11 @@ it.effect("fails loudly when the kubeconfig has no usable server host, rather th
   Effect.gen(function*() {
     const spy = spyDnsLayer()
     const broken = { content: _kubeconfig.content.replace("https://abc123.upcloud.k8s.io:6443", "not-a-url") }
+
     const result = yield* Effect.result(
       reconcileUpcloudDns({ config: _withZone, kubeconfig: broken }).pipe(Effect.provide(spy.layer))
     )
+
     assert.strictEqual(result._tag, "Failure")
     assert.strictEqual(spy.ensured.length, 0)
   }))

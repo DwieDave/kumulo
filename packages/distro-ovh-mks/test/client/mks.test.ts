@@ -1,8 +1,8 @@
 import { Effect } from "effect"
 import { assert, it } from "@effect/vitest"
-import * as HttpClient from "effect/unstable/http/HttpClient"
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
+import * as HttpClient from "effect/http/HttpClient"
+import * as HttpClientRequest from "effect/http/HttpClientRequest"
+import * as HttpClientResponse from "effect/http/HttpClientResponse"
 import { makeMksClient } from "../../src/client/mks.ts"
 
 const _fixtureBaseUrl = "https://fixture.invalid"
@@ -33,15 +33,21 @@ it.effect("creates a cluster and decodes the cluster resource (POST /kube)", () 
       status: "INSTALLING",
       updatePolicy: "ALWAYS_UPDATE"
     }
+
     let capturedPath: string | undefined
+
     const httpClient = _rawHttpClient((request) => {
       capturedPath = request.url
+
       return new Response(JSON.stringify(cluster), { status: 200 })
     })
+
     const client = makeMksClient(httpClient)
+
     const result = yield* client.postCloudProjectServiceNameKube("service-1", {
       payload: { name: "prod-eu", region: "GRA5" }
     })
+
     assert.strictEqual(capturedPath, `${_fixtureBaseUrl}/cloud/project/service-1/kube`)
     assert.strictEqual(result.name, "prod-eu")
     assert.strictEqual(result.status, "INSTALLING")
@@ -69,6 +75,7 @@ it.effect("lists nodepools (GET /kube/{kubeId}/nodepool)", () =>
       antiAffinity: true,
       monthlyBilled: false
     }
+
     const httpClient = _fixtureHttpClient({ status: 200, body: [pool] })
     const client = makeMksClient(httpClient)
     const result = yield* client.getCloudProjectServiceNameKubeKubeIdNodepool("service-1", "kube-1", undefined)

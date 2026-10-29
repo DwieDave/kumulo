@@ -2,18 +2,14 @@
 // Regenerates src/releases/fixture.ts from the live rancher/k3s GitHub tags —
 // run manually (`bun run scripts/refresh-releases.ts`), never in CI/tests
 // (tests must stay offline): a one-shot, human-triggered refresh.
-const _isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null
+import { Effect, Schema } from "effect"
 
-const _tagName = (value: unknown): string | undefined => {
-  if (!_isRecord(value)) return undefined
-  return typeof value["name"] === "string" ? value["name"] : undefined
-}
+const Tags = Schema.Array(Schema.Struct({ name: Schema.String }))
 
 const res = await fetch("https://api.github.com/repos/k3s-io/k3s/tags?per_page=8")
-const body: unknown = await res.json()
-const names = (Array.isArray(body) ? body : []).flatMap((tag) => {
-  const name = _tagName(tag)
-  return name === undefined ? [] : [`  "${name}"`]
-}).join(",\n")
+const tags = await Effect.runPromise(Schema.decodeUnknownEffect(Tags)(await res.json()))
+const names = tags.map((tag) => `  "${tag.name}"`).join(",\n")
+
 console.log(`export const K3S_RELEASE_FIXTURE: ReadonlyArray<string> = [\n${names}\n]\n`)
+
 console.log("// paste the above into src/releases/fixture.ts")

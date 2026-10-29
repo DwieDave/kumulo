@@ -7,6 +7,7 @@ it("decodes a list-networks response (happy path)", () => {
     schema: NetworksIndexResponse,
     fixture: { networks: [{ id: "net-1", name: "private", mtu: 1500, shared: false }] }
   })
+
   assert.strictEqual(decoded.networks?.[0]?.mtu, 1500)
 })
 
@@ -15,5 +16,6 @@ it("rejects a network whose mtu is not a number (error-mapping)", () => {
     schema: NetworksIndexResponse,
     fixture: { networks: [{ id: "net-1", mtu: "jumbo" }] }
   })
+
   assert.isDefined(error)
 })

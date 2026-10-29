@@ -1,9 +1,10 @@
+import { PlanAction } from "@kumulo/core"
 import { Effect, Redacted } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import type { PlatformError } from "effect/PlatformError"
-import { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/unstable/process"
+import { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/process"
 import { ConfigInvalid, CredentialsSink, pollUntil, ProviderApiError } from "@kumulo/core"
-import type { BucketInfo, CredentialEntry, CredentialsSinkError, ObjectStorageError, PlanAction, S3Credentials } from "@kumulo/core"
+import type { BucketInfo, CredentialEntry, CredentialsSinkError, ObjectStorageError, S3Credentials } from "@kumulo/core"
 import { credentialsPath, sopsCredentialsSinkLive } from "@kumulo/secrets-sops"
 import { mapUpcloudError } from "@kumulo/upcloud"
 import type { ObjectStorageClient } from "@kumulo/upcloud"
@@ -29,9 +30,11 @@ export const bucketPlanActions = (
   { config, live }: { readonly config: UpcloudUksClusterConfig; readonly live: ReadonlyArray<BucketInfo> }
 ): ReadonlyArray<PlanAction> => {
   const liveNames = new Set(live.map((b) => b.name))
+
   return configuredUpcloudBuckets(config).map((bucket) => {
     const name = uksBucketRow(bucket.name)
-    return liveNames.has(bucket.name) ? { _tag: "NoOp" as const, name } : { _tag: "Create" as const, name }
+
+    return liveNames.has(bucket.name) ? PlanAction.NoOp({ name }) : PlanAction.Create({ name })
   })
 }
 
@@ -42,6 +45,7 @@ export const lookupUpcloudBuckets = (
     if (config.object_storage.module !== "upcloud") return []
     const { objectStorage } = yield* UpcloudEnv
     const options = { client: objectStorage, ..._options(config) }
+
     return yield* listBuckets(options)(config.object_storage.region)
   })
 
@@ -78,9 +82,11 @@ export const convergeUpcloudBuckets = (
 > =>
   Effect.gen(function*() {
     const buckets = configuredUpcloudBuckets(config)
+
     if (buckets.length === 0) return
     const { objectStorage } = yield* UpcloudEnv
     const options = { client: objectStorage, ..._options(config) }
+
     const ensured = yield* Effect.forEach(buckets, (bucket) =>
       ensureBucket(options)({ name: bucket.name, region: options.region, versioning: false, encryption: false, retain: bucket.retain }), {
       concurrency: 4
@@ -89,6 +95,7 @@ export const convergeUpcloudBuckets = (
     const sops = yield* _sopsConfig(config)
     const fs = yield* FileSystem
     const path = credentialsPath({ dir: sops.dir, cluster: config.name })
+
     if (yield* fs.exists(path)) return
     const spawner = yield* ChildProcessSpawnerNS.ChildProcessSpawner
     const creds = yield* ensureCredentials(options)(config.name)
@@ -108,6 +115,7 @@ export const reconcileUpcloudObjectStorageOnDelete = (
 > =>
   Effect.gen(function*() {
     const buckets = configuredUpcloudBuckets(config)
+
     if (buckets.length === 0) return { kept: [], deleted: [] }
     const { objectStorage } = yield* UpcloudEnv
     const options = { client: objectStorage, ..._options(config) }
@@ -117,12 +125,15 @@ export const reconcileUpcloudObjectStorageOnDelete = (
       concurrency: 4
     })
     const allNonRetained = buckets.every((b) => !b.retain)
+
     if (allNonRetained) {
       const services = yield* mapUpcloudError({
         self: objectStorage.services.list(),
         ctx: { kind: "object-storage-service", ref: config.name }
       })
+
       const service = services.find((s) => s.name === `${config.name}-objsto`)
+
       if (service !== undefined) {
         yield* mapUpcloudError({
           self: objectStorage.services.delete(service.uuid, true),
@@ -132,6 +143,7 @@ export const reconcileUpcloudObjectStorageOnDelete = (
         yield* _awaitServiceGone({ objectStorage, uuid: service.uuid })
       }
     }
+
     return { kept: buckets.filter((b) => b.retain).map((b) => b.name), deleted: toDelete.map((b) => b.name) }
   })
 

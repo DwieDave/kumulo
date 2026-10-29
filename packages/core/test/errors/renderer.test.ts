@@ -45,6 +45,7 @@ describe("renderError", () => {
       BootstrapFailed: (e) => `bootstrap failed on ${e.node} at ${e.phase}`,
       AddonInstallFailed: (e) => `addon ${e.addon} failed: ${e.cause}`
     }
+
     expect(incompleteRegistry.HttpTransportError).toBeDefined()
   })
 })

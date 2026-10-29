@@ -41,11 +41,14 @@ describe("ports", () => {
           resolveFlavor: () => Effect.succeed("flavor-1")
         })
       )
+
       const result = yield* Effect.provide(
         CloudProvider.pipe(Effect.flatMap((cp) => cp.resolveImage("ubuntu-24.04"))),
         fake
       )
+
       expect(result).toBe("img-1")
+
       const network = yield* Effect.provide(
         CloudProvider.pipe(
           Effect.flatMap((cp) =>
@@ -54,6 +57,7 @@ describe("ports", () => {
         ),
         fake
       )
+
       expect(network).toEqual({
         id: "net-1",
         cidr: "10.0.0.0/16",
@@ -74,10 +78,12 @@ describe("ports", () => {
           validate: () => Effect.void
         })
       )
+
       const name = yield* Effect.provide(
         ProviderProfile.pipe(Effect.map((profile) => profile.name)),
         fake
       )
+
       expect(name).toBe("ovh")
     }))
 
@@ -95,6 +101,7 @@ describe("ports", () => {
           delete: () => Effect.void
         })
       )
+
       const kind = yield* Effect.provide(Distro.pipe(Effect.map((d) => d.kind)), fake)
       expect(kind).toBe("managed")
     }))
@@ -109,6 +116,7 @@ describe("ports", () => {
           manifests: () => Effect.succeed([])
         })
       )
+
       const name = yield* Effect.provide(Addon.pipe(Effect.map((a) => a.name)), fake)
       expect(name).toBe("cilium")
     }))
@@ -122,6 +130,7 @@ describe("ports", () => {
           removeClusterRecords: () => Effect.void
         })
       )
+
       yield* Effect.provide(
         DnsProvider.pipe(Effect.flatMap((dns) => dns.ensureRecords("example.com", []))),
         fake
@@ -140,12 +149,14 @@ describe("ports", () => {
           staticPvManifest: () => ({ apiVersion: "v1", kind: "PersistentVolume" })
         })
       )
+
       const info = yield* Effect.provide(
         VolumeProvider.pipe(
           Effect.flatMap((vp) => vp.ensureVolume({ name: "postgres-data", sizeGb: 100, type: "high-speed", retain: true }))
         ),
         fake
       )
+
       expect(info.name).toBe("postgres-data")
     }))
 
@@ -166,6 +177,7 @@ describe("ports", () => {
             })
         })
       )
+
       const bucket = yield* Effect.provide(
         ObjectStorageProvider.pipe(
           Effect.flatMap((osp) =>
@@ -174,6 +186,7 @@ describe("ports", () => {
         ),
         fake
       )
+
       expect(bucket.name).toBe("staging-eu-backups")
     }))
 
@@ -185,6 +198,7 @@ describe("ports", () => {
           write: () => Effect.void
         })
       )
+
       yield* Effect.provide(
         CredentialsSink.pipe(
           Effect.flatMap((sink) => sink.write([{ key: "s3.accessKey", value: Redacted.make("access") }]))

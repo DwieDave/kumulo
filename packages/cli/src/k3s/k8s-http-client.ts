@@ -1,7 +1,7 @@
 import { Effect, Layer } from "effect"
 import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient"
-import * as HttpClient from "effect/unstable/http/HttpClient"
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
+import * as HttpClient from "effect/http/HttpClient"
+import * as HttpClientRequest from "effect/http/HttpClientRequest"
 import type { KubeconfigAuth } from "@kumulo/core"
 
 // kubeconfig CA is passed in both auth modes: k3s API server uses a self-signed cert.
@@ -26,5 +26,6 @@ export const k8sHttpClientLayer = (
   const base = NodeHttpClient.layerNodeHttpNoAgent.pipe(
     Layer.provide(NodeHttpClient.layerAgentOptions(_agentOptions({ auth, caPem })))
   )
+
   return auth.kind === "token" ? _withBearer(auth.token).pipe(Layer.provide(base)) : base
 }

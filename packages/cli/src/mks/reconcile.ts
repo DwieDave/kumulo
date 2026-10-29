@@ -1,10 +1,12 @@
 import { Effect } from "effect"
-import type * as HttpClient from "effect/unstable/http/HttpClient"
+import type { Types } from "effect"
+import type * as HttpClient from "effect/http/HttpClient"
 import { CloudProvider, ConfigInvalid, PlanRejected, ResourceConflict, ResourceNotFound } from "@kumulo/core"
-import type { DnsProvider, Kubeconfig, LbInfo, ManagedClusterInfo, MksError, NetworkInfo, NetworkSpec } from "@kumulo/core"
+import type { DnsProvider, Kubeconfig, LbInfo, LbSpec, ManagedClusterInfo, MksError, NetworkInfo, NetworkSpec } from "@kumulo/core"
 import type { ClusterConfig } from "../cluster-config.ts"
 import {
   clusterDrift,
+  MksClusterDrift,
   deleteCluster,
   driftConflict,
   ensureCluster,
@@ -28,7 +30,7 @@ import { MksEnv } from "./env.ts"
 import type { MksInventory } from "./plan.ts"
 import { mksClusterRow, mksPoolRow, toMksPool } from "./plan.ts"
 import { dnsProviderLayerFor, reconcileDns, removeDns } from "../dns.ts"
-import type { DnsTargets } from "../dns.ts"
+import type { DnsTarget, DnsTargets } from "../dns.ts"
 
 const _toMksConfig = (
   { config, serviceName }: { readonly config: ClusterConfig; readonly serviceName: string }
@@ -42,8 +44,10 @@ const _toMksConfig = (
 export const resolveMksNetwork = (config: ClusterConfig): Effect.Effect<NetworkInfo | undefined, MksError, CloudProvider> =>
   Effect.gen(function*() {
     const network = config.distro === "ovh-mks" ? config.network : undefined
+
     if (network === undefined) return undefined
     const cloud = yield* CloudProvider
+
     return yield* cloud.findNetwork(mksNetworkSpec(network))
   })
 
@@ -54,8 +58,10 @@ export const lookupMksInventory = (
     const { mks, serviceName } = yield* MksEnv
     const mksConfig = _toMksConfig({ config, serviceName })
     const info = yield* findClusterByName({ mks, config: mksConfig })
+
     if (info === undefined) return { clusterExists: false, poolNames: new Set<string>(), poolHashes: new Map() }
     const pools = yield* listNodePools({ mks, ref: { serviceName, kubeId: info.id } })
+
     return {
       clusterExists: true,
       poolNames: new Set(pools.map((pool) => pool.name)),
@@ -77,12 +83,13 @@ const _endpointInvalid = (apiEndpoint: string) =>
 
 const _dnsTargets = (
   { hostname, ingress }: { readonly hostname: string; readonly ingress: LbInfo | undefined }
-): DnsTargets => ({
-  api_server: { kind: "hostname", value: hostname },
-  ...(ingress?.floatingIp === undefined || ingress.floatingIp === ""
-    ? {}
-    : { ingress: { kind: "ip" as const, value: ingress.floatingIp } })
-})
+): DnsTargets => {
+  const apiServer: DnsTarget = { kind: "hostname", value: hostname }
+
+  return ingress?.floatingIp === undefined || ingress.floatingIp === ""
+    ? { api_server: apiServer }
+    : { api_server: apiServer, ingress: { kind: "ip", value: ingress.floatingIp } }
+}
 
 export const reconcileMksDns = (
   { apiEndpoint, config, ingress }: {
@@ -94,10 +101,12 @@ export const reconcileMksDns = (
   Effect.gen(function*() {
     // `none` short-circuits before the endpoint check.
     if (config.dns.module === "none") return
+
     const hostname = yield* Effect.try({
       try: () => new URL(apiEndpoint).hostname,
       catch: () => _endpointInvalid(apiEndpoint)
     })
+
     if (hostname === "") return yield* Effect.fail(_endpointInvalid(apiEndpoint))
     yield* reconcileDns({ config, targets: _dnsTargets({ hostname, ingress }) })
   })
@@ -115,6 +124,7 @@ const _networkIds = (
     ...(info.nodesSubnetId === undefined ? [`nodes_subnet ${spec.nodesSubnet}`] : []),
     ...(info.loadBalancersSubnetId === undefined ? [`load_balancers_subnet ${spec.loadBalancersSubnet}`] : [])
   ]
+
   return info.nodesSubnetId === undefined || info.loadBalancersSubnetId === undefined
     ? Effect.fail(
       new ResourceConflict({ kind: "network-drift", ref: `network ${info.id} has no subnet for ${missing.join(" or ")}; ${_RECREATE}` })
@@ -132,9 +142,11 @@ const _refuseClusterDrift = (
 ): Effect.Effect<void, MksError> =>
   Effect.gen(function*() {
     const actual = yield* findClusterByName({ mks, config: _toMksConfig({ config, serviceName }) })
+
     if (actual === undefined) return
     const drift = clusterDrift({ desired: { region: config.auth.region, privateNetwork: true }, actual })
-    if (drift._tag === "Blocked") return yield* Effect.fail(driftConflict(drift))
+
+    if (MksClusterDrift.$is("Blocked")(drift)) return yield* Effect.fail(driftConflict(drift))
   })
 
 const _ensureMksNetwork = (
@@ -146,6 +158,7 @@ const _ensureMksNetwork = (
 ): Effect.Effect<MksNetworkIds, MksError, CloudProvider> =>
   Effect.gen(function*() {
     const network = config.distro === "ovh-mks" ? config.network : undefined
+
     if (network === undefined) return {}
     yield* _refuseClusterDrift({ config, mks, serviceName })
     yield* requireVrack({ mks, region: config.auth.region, serviceName })
@@ -153,6 +166,7 @@ const _ensureMksNetwork = (
     const spec = mksNetworkSpec(network)
     const ids = yield* _networkIds({ info: yield* cloud.ensureNetwork(spec), spec })
     yield* _ensureMksGateway({ config, ids, mks, network, serviceName })
+
     return ids
   })
 
@@ -169,7 +183,9 @@ const _ensureMksGateway = (
   Effect.gen(function*() {
     const cloud = yield* CloudProvider
     const name = `kumulo-${config.name}`
+
     if (yield* cloud.hasGateway({ name })) return
+
     if (ids.privateNetworkId === undefined || ids.nodesSubnetId === undefined) return
     yield* ensureGateway({
       mks,
@@ -196,16 +212,21 @@ const _ensureMksIngress = (
 ): Effect.Effect<LbInfo | undefined, MksError, CloudProvider> =>
   Effect.gen(function*() {
     const ingress = config.distro === "ovh-mks" ? config.ingress : undefined
+
     if (ingress === undefined) return undefined
     const cloud = yield* CloudProvider
-    return yield* cloud.ensureLoadBalancer({
-      members: [],
-      floatingIp: true,
-      ...(network.privateNetworkId === undefined ? {} : { vipNetworkId: network.privateNetworkId }),
-      ...(network.loadBalancersSubnetId === undefined ? {} : { vipSubnetId: network.loadBalancersSubnetId }),
-      ...(ingress.flavor_id === undefined ? {} : { flavorId: ingress.flavor_id }),
-      ...(ingress.flavor === undefined ? {} : { flavorName: ingress.flavor })
-    })
+
+    const spec: Types.Mutable<LbSpec> = { members: [], floatingIp: true }
+
+    if (network.privateNetworkId !== undefined) spec.vipNetworkId = network.privateNetworkId
+
+    if (network.loadBalancersSubnetId !== undefined) spec.vipSubnetId = network.loadBalancersSubnetId
+
+    if (ingress.flavor_id !== undefined) spec.flavorId = ingress.flavor_id
+
+    if (ingress.flavor !== undefined) spec.flavorName = ingress.flavor
+
+    return yield* cloud.ensureLoadBalancer(spec)
   })
 
 const NO_REPLACE: ReadonlySet<string> = new Set()
@@ -223,7 +244,9 @@ const _poolsToReplace = (
       })
     )
   }
+
   const byRow = new Map(config.worker_pools.map((pool) => [mksPoolRow({ cluster: config.name, pool: pool.name }), pool.name]))
+
   return Effect.succeed(new Set([...replace].flatMap((row) => byRow.get(row) ?? [])))
 }
 
@@ -241,26 +264,33 @@ export const applyMksEffect = (
     const pools = yield* _poolsToReplace({ config, replace })
     const { mks, serviceName } = yield* MksEnv
     const version = yield* parseKubeVersion(config.version)
+
     const network = yield* withRowProgress({
       match: (name) => name.startsWith("network/") || name.startsWith("subnet/") || name.startsWith("gateway/"),
       effect: _ensureMksNetwork({ config, mks, serviceName })
     })
+
     const mksConfig: MksDriverConfig = { ..._toMksConfig({ config, serviceName }), version, ...network }
+
     const info = yield* withRowProgress({
       match: (name) => name.startsWith("mks-cluster/"),
       effect: ensureCluster({ mks, config: mksConfig })
     })
+
     const ref: MksClusterRef = { serviceName, kubeId: info.id }
     yield* withRowProgress({
       match: (name) => name.startsWith("mks-pool/"),
       effect: ensureNodePools({ mks, ref, pools: mksConfig.worker_pools, replace: pools })
     })
+
     const ingress = yield* withRowProgress({
       match: (name) => name.startsWith("load-balancer/") || name.startsWith("floating-ip/"),
       effect: _ensureMksIngress({ config, network })
     })
+
     yield* reconcileMksDns({ config, apiEndpoint: info.apiEndpoint, ingress })
-    return { ...info, ...(ingress === undefined ? {} : { ingress }) }
+
+    return ingress === undefined ? { ...info } : { ...info, ingress }
   })
 
 export const applyMks = (
@@ -278,9 +308,11 @@ export const kubeconfigMks = (
     const { mks, serviceName } = yield* MksEnv
     const mksConfig = _toMksConfig({ config, serviceName })
     const info = yield* findClusterByName({ mks, config: mksConfig })
+
     if (info === undefined) {
       return yield* Effect.fail(new ResourceNotFound({ kind: "kube", ref: config.name }))
     }
+
     return yield* fetchKubeconfig({ mks, ref: { serviceName, kubeId: info.id } })
   })
 
@@ -314,6 +346,7 @@ export const deleteMksEffect = (config: ClusterConfig): Effect.Effect<void, MksE
       match: (name) => name.startsWith("mks-cluster/") || name.startsWith("mks-pool/"),
       effect: Effect.gen(function*() {
         const info = yield* findClusterByName({ mks, config: mksConfig })
+
         if (info !== undefined) {
           yield* deleteCluster({ mks, ref: { serviceName, kubeId: info.id } })
           yield* _waitClusterGone({ config, mks, serviceName })

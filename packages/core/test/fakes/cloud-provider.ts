@@ -27,9 +27,11 @@ export const FakeCloudProviderLive: Layer.Layer<CloudProvider> = Layer.effect(
         Ref.get(network).pipe(
           Effect.flatMap((existing) => {
             if (existing !== undefined) return Effect.succeed(existing)
+
             return freshId("net").pipe(
               Effect.flatMap((id) => {
                 const info: NetworkInfo = { id, cidr: spec.cidr }
+
                 return Ref.set(network, info).pipe(Effect.as(info))
               })
             )
@@ -39,9 +41,11 @@ export const FakeCloudProviderLive: Layer.Layer<CloudProvider> = Layer.effect(
         Ref.get(secGroup).pipe(
           Effect.flatMap((existing) => {
             if (existing !== undefined) return Effect.succeed(existing)
+
             return freshId("sg").pipe(
               Effect.flatMap((id) => {
                 const info: SecGroupInfo = { id }
+
                 return Ref.set(secGroup, info).pipe(Effect.as(info))
               })
             )
@@ -51,9 +55,11 @@ export const FakeCloudProviderLive: Layer.Layer<CloudProvider> = Layer.effect(
         Ref.get(lb).pipe(
           Effect.flatMap((existing) => {
             if (existing !== undefined) return Effect.succeed(existing)
+
             return freshId("lb").pipe(
               Effect.flatMap((id) => {
                 const info: LbInfo = { id, vip: `10.0.0.100` }
+
                 return Ref.set(lb, info).pipe(Effect.as(info))
               })
             )
@@ -63,10 +69,13 @@ export const FakeCloudProviderLive: Layer.Layer<CloudProvider> = Layer.effect(
         Ref.get(servers).pipe(
           Effect.flatMap((map) => {
             const existing = map.get(spec.name)
+
             if (existing !== undefined) return Effect.succeed(existing.info)
+
             return freshId("srv").pipe(
               Effect.flatMap((id) => {
                 const info: ServerInfo = { id, name: spec.name, ip: `10.0.0.${map.size + 1}` }
+
                 return Ref.update(servers, (current) => new Map(current).set(spec.name, { info, tag: spec.tag })).pipe(
                   Effect.as(info)
                 )
@@ -85,7 +94,7 @@ export const FakeCloudProviderLive: Layer.Layer<CloudProvider> = Layer.effect(
       listClusterResources: (tag) =>
         Effect.all({ servers: Ref.get(servers), network: Ref.get(network), secGroup: Ref.get(secGroup), lb: Ref.get(lb) }).pipe(
           Effect.map(({ lb: lbInfo, network: net, secGroup: sg, servers: map }) => ({
-            servers: [...map.values()].filter((record) => record.tag === tag).map((record) => record.info),
+            servers: [...map.values()].flatMap((record) => record.tag === tag ? [record.info] : []),
             networks: net === undefined ? [] : [net],
             securityGroups: sg === undefined ? [] : [sg],
             loadBalancers: lbInfo === undefined ? [] : [lbInfo]

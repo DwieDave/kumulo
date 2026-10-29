@@ -1,9 +1,10 @@
 // kumulo: plaintext is piped only through sops's stdin, never written to disk — only the ciphertext sops prints to stdout is.
-import { Effect, Layer, Stream } from "effect"
+import { Effect, Layer, Predicate, Stream } from "effect"
+import type { Schema } from "effect"
 import type { FileSystem } from "effect/FileSystem"
 import type { PlatformError } from "effect/PlatformError"
-import type { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/unstable/process";
-import { ChildProcess } from "effect/unstable/process"
+import type { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/process";
+import { ChildProcess } from "effect/process"
 import { stringify } from "yaml"
 import { CredentialsSink, SinkUnavailable } from "@kumulo/core"
 import type { CredentialEntry } from "@kumulo/core"
@@ -14,8 +15,8 @@ type ChildProcessSpawnerService = (typeof ChildProcessSpawnerNS.ChildProcessSpaw
 export const credentialsPath = ({ dir, cluster }: { readonly dir: string; readonly cluster: string }): string =>
   `${dir.endsWith("/") ? dir.slice(0, -1) : dir}/${cluster}.credentials.yaml`
 
-const _clusterOf = (payload: Record<string, unknown>): string | undefined =>
-  typeof payload.cluster === "string" && payload.cluster.trim().length > 0 ? payload.cluster : undefined
+const _clusterOf = (payload: Schema.MutableJsonObject): string | undefined =>
+  Predicate.isString(payload.cluster) && payload.cluster.trim().length > 0 ? payload.cluster : undefined
 
 const _encryptWithSops = (
   { ageRecipient, plaintext, spawner }: {
@@ -30,12 +31,16 @@ const _encryptWithSops = (
       ["--encrypt", "--input-type", "yaml", "--output-type", "yaml", "--age", ageRecipient, "/dev/stdin"],
       { stdin: Stream.encodeText(Stream.make(plaintext)) }
     )
+
     const handle = yield* spawner.spawn(command)
+
     const [stdout, stderr, exitCode] = yield* Effect.all(
       [Stream.mkString(Stream.decodeText(handle.stdout)), Stream.mkString(Stream.decodeText(handle.stderr)), handle.exitCode],
       { concurrency: "unbounded" }
     )
+
     if (exitCode !== 0) return yield* Effect.fail(new SinkUnavailable({ hint: `sops exited with code ${exitCode}: ${stderr.trim()}` }))
+
     return stdout
   }))
 
@@ -52,11 +57,14 @@ const _write = (
     if (ageRecipient.trim().length === 0) {
       return yield* Effect.fail(new SinkUnavailable({ hint: "no age recipient configured for the sops credentials sink" }))
     }
+
     const payload = buildCredentialsPayload(entries)
     const cluster = _clusterOf(payload)
+
     if (cluster === undefined) {
       return yield* Effect.fail(new SinkUnavailable({ hint: 'credential entries must include a non-empty "cluster" key' }))
     }
+
     const ciphertext = yield* _encryptWithSops({ ageRecipient, plaintext: stringify(payload), spawner })
     yield* fs.writeFileString(credentialsPath({ dir, cluster }), ciphertext)
   }).pipe(Effect.catchTag("PlatformError", (cause) => Effect.fail(new SinkUnavailable({ hint: cause.message }))))

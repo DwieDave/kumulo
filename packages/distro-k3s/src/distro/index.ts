@@ -1,16 +1,17 @@
 import { Effect } from "effect"
-import type { K8sClient, SelfManagedDistroShape } from "@kumulo/core"
+import type { K8sClient, SelfManagedDistroService } from "@kumulo/core"
 import { Ssh } from "../ssh/port.ts"
 import type { SshHost } from "../ssh/port.ts"
 import { fetchKubeconfig } from "../kubeconfig/fetch.ts"
 import { resolveServerUrl } from "../kubeconfig/rewrite.ts"
-import { makeReleaseCache } from "../releases/cache.ts"
+import type { ReleaseCache } from "../releases/cache.ts"
 import { drainAndRemove } from "./drain.ts"
 import { bootstrapOrder } from "./plan.ts"
 import { renderUserData } from "./user-data.ts"
 import { renderUpgradePlan } from "../upgrade/plan.ts"
 
 export { drainAndRemove } from "./drain.ts"
+
 export { bootstrapOrder } from "./plan.ts"
 
 export interface MakeSelfManagedDistroArgs {
@@ -18,14 +19,14 @@ export interface MakeSelfManagedDistroArgs {
   readonly sshPublicKey: string
   readonly ssh: Ssh["Service"]
   readonly k8s: K8sClient["Service"]
+  readonly releases: ReleaseCache
   readonly master1: SshHost
   readonly lbVip?: string
   readonly apiDnsName?: string
 }
 
 // Dependencies are closed over here, not requested via Effect context: the port's methods carry no `R`.
-export const makeSelfManagedDistro = (args: MakeSelfManagedDistroArgs): SelfManagedDistroShape => {
-  const releases = Effect.runSync(makeReleaseCache())
+export const makeSelfManagedDistro = (args: MakeSelfManagedDistroArgs): SelfManagedDistroService => {
   const provideSsh = Effect.provideService(Ssh, args.ssh)
 
   return {
@@ -44,7 +45,7 @@ export const makeSelfManagedDistro = (args: MakeSelfManagedDistroArgs): SelfMana
         })
       }).pipe(provideSsh),
     upgradePlan: (target) => Effect.succeed(renderUpgradePlan({ version: target })),
-    validateVersion: releases.validateVersion,
+    validateVersion: args.releases.validateVersion,
     drainAndRemove: (node) => drainAndRemove({ client: args.k8s, node })
   }
 }

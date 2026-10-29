@@ -1,5 +1,5 @@
 import { assert, it } from "@effect/vitest"
-import { FastCheck as fc } from "effect/testing"
+import { Schema } from "effect"
 import { CreatePlacementGroupRequestJson, GetAction200, ListServerTypes200 } from "../../src/generated/hcloud.ts"
 import { decodeFixture, decodeFixtureFails, encodeFixture } from "./decode.ts"
 
@@ -19,6 +19,7 @@ it("decodes a get-action response (happy path)", () => {
       }
     }
   })
+
   assert.strictEqual(decoded.action.status, "running")
 })
 
@@ -38,6 +39,7 @@ it("rejects a get-action response with an unknown status (error-mapping)", () =>
       }
     }
   })
+
   assert.isDefined(error)
 })
 
@@ -69,6 +71,7 @@ it("decodes a list-server-types response, including a null pagination field (hap
       meta: { pagination: _pagination }
     }
   })
+
   assert.strictEqual(decoded.server_types[0]?.name, "cx22")
   assert.strictEqual(decoded.meta.pagination.previous_page, null)
 })
@@ -78,6 +81,7 @@ it("rejects a list-server-types response missing a required pagination field (er
     schema: ListServerTypes200,
     fixture: { server_types: [], meta: { pagination: { page: 1, per_page: 25, previous_page: null, next_page: null, last_page: 1 } } }
   })
+
   assert.isDefined(error)
 })
 
@@ -85,7 +89,7 @@ it("rejects a list-server-types response missing a required pagination field (er
 // empty struct that only survives because unknown keys happen to be preserved. If it
 // regressed to `Struct({})`, arbitrary keys would be dropped on encode and resources
 // would be created unlabelled — invisible to tag-based teardown.
-it.prop("round-trips arbitrary label maps through encode -> decode", [fc.dictionary(fc.string(), fc.string())], ([labels]) => {
+it.prop("round-trips arbitrary label maps through encode -> decode", [Schema.Record(Schema.String, Schema.String)], ([labels]) => {
   const schema = CreatePlacementGroupRequestJson
   const encoded = encodeFixture({ schema, value: { name: "pg", type: "spread", labels } })
   assert.deepStrictEqual(decodeFixture({ schema, fixture: encoded }).labels, labels)

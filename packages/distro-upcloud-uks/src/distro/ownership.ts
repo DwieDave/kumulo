@@ -6,6 +6,7 @@ export const KUMULO_OWNER_LABEL_KEY = "kumulo-owner"
 const _isValidKey = (key: string): boolean =>
   key.length >= 2 && key.length <= 32 && !key.startsWith("_") && [...key].every((char) => {
     const code = char.codePointAt(0) ?? 0
+
     return code >= 0x20 && code <= 0x7e
   })
 

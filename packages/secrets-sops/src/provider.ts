@@ -1,8 +1,8 @@
 // Plaintext is read from the child process's stdout only and never written to disk.
 import type { Exit} from "effect";
-import { ConfigProvider, Effect, Schema, Semaphore, Stream } from "effect"
-import type { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/unstable/process";
-import { ChildProcess } from "effect/unstable/process"
+import { ConfigProvider, Effect, Predicate, Schema, Semaphore, Stream } from "effect"
+import type { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/process";
+import { ChildProcess } from "effect/process"
 
 type ChildProcessSpawnerService = (typeof ChildProcessSpawnerNS.ChildProcessSpawner)["Service"]
 
@@ -23,6 +23,7 @@ const _parseFlatRecord = (
       try: () => JSON.parse(stdout),
       catch: (cause) => _sourceError({ file, detail: "sops output is not valid JSON", cause })
     })
+
     return yield* Schema.decodeUnknownEffect(SopsSecrets)(document).pipe(
       Effect.mapError((cause) =>
         _sourceError({ file, detail: `expected a mapping of env-var names to string values — ${cause.message}`, cause })
@@ -36,13 +37,16 @@ export const decryptSopsFile = (
   Effect.scoped(Effect.gen(function*() {
     const command = ChildProcess.make("sops", ["--decrypt", "--output-type", "json", file])
     const handle = yield* spawner.spawn(command)
+
     const [stdout, stderr, exitCode] = yield* Effect.all(
       [Stream.mkString(Stream.decodeText(handle.stdout)), Stream.mkString(Stream.decodeText(handle.stderr)), handle.exitCode],
       { concurrency: "unbounded" }
     )
+
     if (exitCode !== 0) {
       return yield* Effect.fail(_sourceError({ file, detail: `sops exited with code ${exitCode}: ${stderr.trim()}` }))
     }
+
     return yield* _parseFlatRecord({ file, stdout })
   })).pipe(
     Effect.catchTag("PlatformError", (cause) => Effect.fail(_sourceError({ file, detail: cause.message, cause })))
@@ -54,6 +58,7 @@ const _once = <A, E>(self: Effect.Effect<A, E>): Effect.Effect<A, E> => {
   let memo: Exit.Exit<A, E> | undefined
   const compute = Effect.flatten(Effect.tap(Effect.exit(self), (exit) => Effect.sync(() => { memo = exit })))
   const guarded = gate.withPermits(1)(Effect.suspend(() => memo ?? compute))
+
   return Effect.suspend(() => memo ?? guarded)
 }
 
@@ -61,11 +66,13 @@ export const sopsConfigProvider = (
   { file, spawner }: { readonly file: string; readonly spawner: ChildProcessSpawnerService }
 ): ConfigProvider.ConfigProvider => {
   const secrets = _once(decryptSopsFile({ file, spawner }))
+
   return ConfigProvider.make(([key, ...rest]) =>
-    typeof key !== "string" || rest.length > 0
+    !Predicate.isString(key) || rest.length > 0
       ? Effect.succeed(undefined)
       : Effect.map(secrets, (values) => {
         const value = values[key]
+
         return value === undefined ? undefined : ConfigProvider.makeValue(value)
       })
   )

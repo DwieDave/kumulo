@@ -7,6 +7,7 @@ it("decodes a list-volume-types response (happy path)", () => {
     schema: TypesListResponse,
     fixture: { volume_types: [{ id: "t1", name: "standard", is_public: true }] }
   })
+
   assert.strictEqual(decoded.volume_types?.[0]?.name, "standard")
 })
 
@@ -15,5 +16,6 @@ it("rejects a volume type whose is_public is not a boolean (error-mapping)", () 
     schema: TypesListResponse,
     fixture: { volume_types: [{ id: "t1", is_public: "yes" }] }
   })
+
   assert.isDefined(error)
 })

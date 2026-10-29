@@ -1,18 +1,24 @@
-import { Argument, Command, Flag } from "effect/unstable/cli"
+import { Argument, Command, Flag } from "effect/cli"
 
-export const configArgument = (): Argument.Argument<string> => Argument.file("config", { mustExist: true })
+export const configArgument = (): Argument.Argument<string> => Argument.File("config", { mustExist: true })
 
-const yesFlag = Flag.boolean("yes").pipe(
+const yesFlag = Flag.Boolean("yes").pipe(
   Flag.withAlias("y"),
-  Flag.withDescription("Skip the confirmation prompt")
+  Flag.withDescription("Skip the confirmation prompt"),
+  Flag.withDefault(false)
 )
-const dryRunFlag = Flag.boolean("dry-run").pipe(
-  Flag.withDescription("Print the plan without applying it")
+
+const dryRunFlag = Flag.Boolean("dry-run").pipe(
+  Flag.withDescription("Print the plan without applying it"),
+  Flag.withDefault(false)
 )
-const showEnvFlag = Flag.boolean("show-env").pipe(
-  Flag.withDescription("Print the provider env-var summary before the plan")
+
+const showEnvFlag = Flag.Boolean("show-env").pipe(
+  Flag.withDescription("Print the provider env-var summary before the plan"),
+  Flag.withDefault(false)
 )
-const secretsFileFlag = Flag.optional(Flag.file("secrets-file").pipe(
+
+const secretsFileFlag = Flag.optional(Flag.File("secrets-file").pipe(
   Flag.withDescription("Sops-encrypted YAML file of credential env vars (fallback: KUMULO_SECRETS_FILE)")
 ))
 

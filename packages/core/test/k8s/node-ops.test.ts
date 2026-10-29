@@ -12,6 +12,7 @@ describe("node-ops", () => {
       const fake = fakeHttpClient(() =>
         new Response(JSON.stringify({ apiVersion: "v1", kind: "Node" }), { status: 200 })
       )
+
       const client = makeK8sClient({ client: fake.client, server })
       yield* cordonNode({ client, name: "n1" })
       const [request] = fake.requests()
@@ -34,6 +35,7 @@ describe("node-ops", () => {
           )
           : new Response(null, { status: 201 })
       )
+
       const client = makeK8sClient({ client: fake.client, server })
       yield* drainNode({ client, podsRef: { path: "/api/v1/pods?fieldSelector=spec.nodeName=n1", kind: "Pod" } })
       const evictions = fake.requests().filter((r) => r.url.includes("eviction"))
@@ -55,6 +57,7 @@ describe("node-ops", () => {
           )
           : new Response(null, { status: 201 })
       )
+
       const client = makeK8sClient({ client: fake.client, server })
       yield* drainNode({ client, podsRef: { path: "/api/v1/pods?fieldSelector=spec.nodeName=n1", kind: "Pod" } })
       const evictions = fake.requests().filter((r) => r.url.includes("eviction"))

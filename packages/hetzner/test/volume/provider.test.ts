@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Effect } from "effect"
+import { Effect, Predicate } from "effect"
 import { ResourceConflict } from "@kumulo/core"
 import { deleteVolume, ensureVolume, listClusterVolumes, type VolumeProviderOptions } from "../../src/volume/provider.ts"
 import { makeFakeHcloud } from "../provider/fake-hcloud.ts"
@@ -12,13 +12,16 @@ describe("hetzner VolumeProvider", () => {
   it.effect("ensureVolume creates then reuses by name", () => {
     let created = false
     const volume = fixture.volume({ id: 1, name: "postgres-data", size: 20 })
+
     const fake = makeFakeHcloud({
       "GET /volumes": () => ({ status: 200, body: { volumes: created ? [volume] : [], meta: fixture.meta() } }),
       "POST /volumes": () => {
         created = true
+
         return { status: 201, body: { volume, action: fixture.action({ id: 9 }), next_actions: [] } }
       }
     })
+
     return Effect.gen(function*() {
       const first = yield* ensureVolume({ options, spec })
       const second = yield* ensureVolume({ options, spec })
@@ -36,6 +39,7 @@ describe("hetzner VolumeProvider", () => {
         body: { volume: fixture.volume({ id: 2, name: "small", size: 10 }), action: fixture.action({ id: 9 }), next_actions: [] }
       })
     })
+
     return Effect.gen(function*() {
       const info = yield* ensureVolume({ options, spec: { name: "small", sizeGb: 3, type: "hcloud-volumes", retain: false } })
       expect(info).toEqual({ id: "2", name: "small" })
@@ -45,6 +49,7 @@ describe("hetzner VolumeProvider", () => {
 
   it.effect("ensureVolume enlarges an existing volume when the requested size grew", () => {
     let resized = false
+
     const fake = makeFakeHcloud({
       "GET /volumes": () => ({
         status: 200,
@@ -52,9 +57,11 @@ describe("hetzner VolumeProvider", () => {
       }),
       "POST /volumes/1/actions/resize": () => {
         resized = true
+
         return { status: 201, body: { action: fixture.action({ id: 9 }) } }
       }
     })
+
     return Effect.gen(function*() {
       const info = yield* ensureVolume({ options, spec: { ...spec, sizeGb: 50 } })
       expect(info).toEqual({ id: "1", name: "postgres-data" })
@@ -66,10 +73,11 @@ describe("hetzner VolumeProvider", () => {
     const fake = makeFakeHcloud({
       "GET /volumes": () => ({ status: 200, body: { volumes: [fixture.volume({ id: 1, name: "postgres-data", size: 50 })], meta: fixture.meta() } })
     })
+
     return Effect.gen(function*() {
       const failure = yield* Effect.flip(ensureVolume({ options, spec: { ...spec, sizeGb: 20 } }))
       expect(failure).toBeInstanceOf(ResourceConflict)
-      expect(failure._tag === "ResourceConflict" ? failure.ref : undefined).toBe("postgres-data: 50Gi -> 20Gi")
+      expect(Predicate.isTagged(failure, "ResourceConflict") ? failure.ref : undefined).toBe("postgres-data: 50Gi -> 20Gi")
     }).pipe(Effect.provide(fake.layer))
   })
 
@@ -77,6 +85,7 @@ describe("hetzner VolumeProvider", () => {
     const fake = makeFakeHcloud({
       "GET /volumes": () => ({ status: 200, body: { volumes: [fixture.volume({ id: 1, name: "a", size: 20 })], meta: fixture.meta() } })
     })
+
     return Effect.gen(function*() {
       const volumes = yield* listClusterVolumes({ options })
       expect(volumes).toEqual([{ id: "1", name: "a" }])
@@ -86,6 +95,7 @@ describe("hetzner VolumeProvider", () => {
 
   it.effect("deleteVolume tolerates an already-gone volume (404)", () => {
     const fake = makeFakeHcloud({ "DELETE /volumes/1": () => ({ status: 404 }) })
+
     return Effect.gen(function*() {
       yield* deleteVolume({ id: "1" })
     }).pipe(Effect.provide(fake.layer))

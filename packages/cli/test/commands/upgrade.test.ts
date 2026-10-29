@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
-import type { HttpClientRequest} from "effect/unstable/http";
-import { HttpClient, HttpClientResponse, UrlParams } from "effect/unstable/http"
+import type { HttpClientRequest} from "effect/http";
+import { HttpClient, HttpClientResponse, UrlParams } from "effect/http"
 import { makeK8sClient } from "@kumulo/core"
 import type { K3sClusterConfigEncoded } from "../../src/cluster-config.ts"
 import { applyK3sUpgradeWith } from "../../src/commands/upgrade.ts"
@@ -31,17 +31,21 @@ const _encoded: K3sClusterConfigEncoded = {
   },
   k3s: { extra_server_args: [], extra_agent_args: [] }
 }
+
 const _config = decodeK3sTestConfig(_encoded)
 
 const _fakeHttpClient = (sucDeploymentExists: boolean) => {
   const requests: Array<HttpClientRequest.HttpClientRequest> = []
   let gets = 0
+
   const client = HttpClient.make((request) => {
     requests.push(request)
     const url = new URL(request.url)
+
     if (request.method === "GET" && url.pathname.endsWith("/system-upgrade-controller")) {
       gets++
       const notFound = gets === 1 && !sucDeploymentExists
+
       return Effect.succeed(
         HttpClientResponse.fromWeb(
           request,
@@ -58,11 +62,14 @@ const _fakeHttpClient = (sucDeploymentExists: boolean) => {
         )
       )
     }
+
     if (request.method === "PATCH") {
       return Effect.succeed(HttpClientResponse.fromWeb(request, new Response(JSON.stringify({ apiVersion: "v1", kind: "Ok" }), { status: 200 })))
     }
+
     return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("not found", { status: 404 })))
   })
+
   return { client, requests: () => requests, gets: () => gets }
 }
 
@@ -76,6 +83,7 @@ describe("upgrade command — SUC Plan apply", () => {
 
       const patches = requests().filter((r) => r.method === "PATCH")
       expect(patches.length).toBeGreaterThan(0)
+
       for (const request of patches) {
         expect(request.headers["content-type"]).toBe("application/apply-patch+yaml")
         expect(UrlParams.toString(request.urlParams)).toContain("fieldManager=kumulo")

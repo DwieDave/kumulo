@@ -1,4 +1,4 @@
-import type { OpenAPISpec } from "effect/unstable/httpapi/OpenApi"
+import type { OpenAPISpec } from "effect/http-api/OpenApi"
 
 /** Tiny synthetic OpenAPI spec, not a real service — proves the pipeline is service-agnostic. */
 export const syntheticSpec: OpenAPISpec = {

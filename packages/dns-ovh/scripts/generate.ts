@@ -1,10 +1,10 @@
 import { readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { applyPatches, generateSource, type NamedPatch } from "codegen"
 import { convert } from "ovh2openapi"
 import type { OvhModel, OvhSchema } from "ovh2openapi"
-import type { OpenAPISpec } from "effect/unstable/httpapi/OpenApi"
+import type { OpenAPISpec } from "effect/http-api/OpenApi"
 
 const root = import.meta.dirname
 const pkgRoot = join(root, "..")
@@ -17,29 +17,38 @@ interface AllowlistOp {
 const _refModelKeys = (fullType: string, models: Record<string, OvhModel>): Array<string> =>
   Object.keys(models).filter((key) => new RegExp(`(^|[^A-Za-z0-9_.])${key.replace(/\./g, "\\.")}([^A-Za-z0-9_.]|$)`).test(fullType))
 
-const _closeModels = (roots: ReadonlyArray<string>, models: Record<string, OvhModel>): Record<string, OvhModel> => {
+const _closeModels = (roots: ReadonlyArray<string>, models: Record<string, OvhModel>) => {
   const kept: Record<string, OvhModel> = {}
   const stack = [...roots]
+
   while (stack.length > 0) {
     const key = stack.pop()
+
     if (key === undefined) break
+
     if (kept[key] || !models[key]) continue
     const model = models[key]
     kept[key] = model
+
     if ("enum" in model) continue
+
     for (const prop of Object.values(model.properties)) {
       for (const refKey of _refModelKeys(prop.fullType, models)) stack.push(refKey)
     }
   }
+
   return kept
 }
 
 const _trimSchema = (schema: OvhSchema, ops: ReadonlyArray<AllowlistOp>): OvhSchema => {
-  const byPath = new Map(ops.map((op) => [op.path, new Set(ops.filter((o) => o.path === op.path).map((o) => o.method))]))
-  const apis = schema.apis
-    .filter((api) => byPath.has(api.path))
-    .map((api) => ({ ...api, operations: api.operations.filter((op) => byPath.get(api.path)?.has(op.httpMethod) === true) }))
-    .filter((api) => api.operations.length > 0)
+  const byPath = new Map(ops.map((op) => [op.path, new Set(ops.flatMap((o) => (o.path === op.path ? [o.method] : [])))]))
+
+  const apis = schema.apis.flatMap((api) => {
+    if (!byPath.has(api.path)) return []
+    const operations = api.operations.filter((op) => byPath.get(api.path)?.has(op.httpMethod) === true)
+
+    return operations.length > 0 ? [{ ...api, operations }] : []
+  })
 
   const modelRoots = apis.flatMap((api) =>
     api.operations.flatMap((op) => [
@@ -47,6 +56,7 @@ const _trimSchema = (schema: OvhSchema, ops: ReadonlyArray<AllowlistOp>): OvhSch
       ...(op.responseType ? _refModelKeys(op.responseType, schema.models) : [])
     ])
   )
+
   return { ...schema, apis, models: _closeModels(modelRoots, schema.models) }
 }
 
@@ -55,8 +65,9 @@ interface AllowlistFile {
   readonly operations: ReadonlyArray<AllowlistOp>
 }
 
-const _isOpenApiSpec = (value: unknown): value is OpenAPISpec =>
-  typeof value === "object" && value !== null && !Array.isArray(value) && "openapi" in value && "paths" in value
+const _hasSpecFields = Schema.is(Schema.Struct({ openapi: Schema.Unknown, paths: Schema.Unknown }))
+
+const _isOpenApiSpec = (value: unknown): value is OpenAPISpec => _hasSpecFields(value)
 
 export const generate = () =>
   Effect.gen(function* () {
@@ -68,6 +79,7 @@ export const generate = () =>
     const patchText = readFileSync(join(pkgRoot, "patches/dns.patch.json5"), "utf8").replace(/\/\/.*$/gm, "")
     const patches: ReadonlyArray<NamedPatch> = [{ source: "patches/dns.patch.json5", patch: JSON.parse(patchText) }]
     const patched = yield* applyPatches({ patches, document })
+
     if (!_isOpenApiSpec(patched)) return yield* Effect.die(new Error("patched DNS document lost its OpenAPISpec shape"))
 
     return yield* generateSource({ spec: patched, options: { name: "Dns", format: "httpclient" } })

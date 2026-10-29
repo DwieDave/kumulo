@@ -1,8 +1,8 @@
 import { assert, describe, it } from "@effect/vitest"
-import { Effect } from "effect"
-import * as HttpClient from "effect/unstable/http/HttpClient"
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
+import { Effect, Predicate } from "effect"
+import * as HttpClient from "effect/http/HttpClient"
+import * as HttpClientRequest from "effect/http/HttpClientRequest"
+import * as HttpClientResponse from "effect/http/HttpClientResponse"
 import { makeMksClient } from "../../src/client/mks.ts"
 import { toMksError } from "../../src/distro/errors.ts"
 
@@ -49,7 +49,7 @@ describe("toMksError — status → tag", () => {
   it.effect("429 carries the Retry-After header verbatim", () =>
     Effect.gen(function*() {
       const error = yield* _errorFor({ status: 429, headers: { "retry-after": "60" } })
-      assert.strictEqual(error._tag === "RateLimited" ? error.retryAfter : undefined, "60")
+      assert.strictEqual(Predicate.isTagged(error, "RateLimited") ? error.retryAfter : undefined, "60")
     }))
 
   it.effect("a plain 402 is a provider error, not a fabricated quota", () =>
@@ -62,14 +62,14 @@ describe("toMksError — status → tag", () => {
     Effect.gen(function*() {
       const error = yield* _errorFor({ status: 403, body: JSON.stringify({ message: "kube quota exceeded for project" }) })
       assert.strictEqual(error._tag, "QuotaExceeded")
-      assert.strictEqual(error._tag === "QuotaExceeded" ? error.limit : 0, undefined)
-      assert.strictEqual(error._tag === "QuotaExceeded" ? error.requested : 0, undefined)
+      assert.strictEqual(Predicate.isTagged(error, "QuotaExceeded") ? error.limit : 0, undefined)
+      assert.strictEqual(Predicate.isTagged(error, "QuotaExceeded") ? error.requested : 0, undefined)
     }))
 
   it.effect("5xx keeps the real status", () =>
     Effect.gen(function*() {
       const error = yield* _errorFor({ status: 500 })
-      assert.strictEqual(error._tag === "ProviderApiError" ? error.status : undefined, 500)
+      assert.strictEqual(Predicate.isTagged(error, "ProviderApiError") ? error.status : undefined, 500)
     }))
 
   it.effect("a malformed body becomes ResponseDecodeError — never a success, conflict or auth error", () =>

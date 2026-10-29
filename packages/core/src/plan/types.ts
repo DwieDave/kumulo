@@ -1,3 +1,4 @@
+import { Data } from "effect"
 import type { ResourceCoordinates } from "./naming.ts"
 
 export interface DesiredResource extends ResourceCoordinates {
@@ -10,12 +11,15 @@ export interface TaggedResource {
   readonly configHash?: string | undefined
 }
 
-export type PlanAction =
-  | { readonly _tag: "Create"; readonly name: string }
-  | { readonly _tag: "Delete"; readonly name: string }
-  | { readonly _tag: "NoOp"; readonly name: string }
-  | { readonly _tag: "Update"; readonly name: string; readonly reason: string }
-  | { readonly _tag: "ReplaceNeedsConfirm"; readonly name: string; readonly reason: string }
+export type PlanAction = Data.TaggedEnum<{
+  Create: { readonly name: string }
+  Delete: { readonly name: string }
+  NoOp: { readonly name: string }
+  Update: { readonly name: string; readonly reason: string }
+  ReplaceNeedsConfirm: { readonly name: string; readonly reason: string }
+}>
+
+export const PlanAction = Data.taggedEnum<PlanAction>()
 
 export interface Plan {
   readonly actions: ReadonlyArray<PlanAction>

@@ -1,9 +1,13 @@
-import type { Redacted } from "effect"
+import type { Redacted, Schema } from "effect"
 
 export type ClusterTag = string
+
 export type NodeRole = "master" | "worker"
+
 export type DistroKind = "k3s" | "ovh-mks" | "upcloud-uks"
+
 export type Capability = "octavia" | "floatingIps" | "cilium"
+
 export type Version = string
 
 export interface NetworkSpec {
@@ -11,6 +15,7 @@ export interface NetworkSpec {
   readonly nodesSubnet?: string
   readonly loadBalancersSubnet?: string
 }
+
 export interface GatewayRef {
   readonly name: string
 }
@@ -33,6 +38,7 @@ export interface SecGroupRule {
 export interface SecGroupSpec {
   readonly rules: ReadonlyArray<SecGroupRule>
 }
+
 export interface SecGroupInfo {
   readonly id: string
 }
@@ -46,6 +52,7 @@ export interface LbSpec {
   readonly flavorName?: string
   readonly floatingIp?: boolean
 }
+
 export interface LbInfo {
   readonly id: string
   readonly vip: string
@@ -59,6 +66,7 @@ export interface ServerSpec {
   readonly image: string
   readonly tag: ClusterTag
 }
+
 export interface ServerInfo {
   readonly id: string
   readonly name: string
@@ -67,8 +75,11 @@ export interface ServerInfo {
 }
 
 export type ImageRef = string
+
 export type ImageId = string
+
 export type FlavorRef = string
+
 export type FlavorId = string
 
 export interface Inventory {
@@ -81,6 +92,7 @@ export interface Inventory {
 export interface ManagedClusterRef {
   readonly id: string
 }
+
 export interface ManagedClusterInfo {
   readonly id: string
   readonly apiEndpoint: string
@@ -90,23 +102,28 @@ export interface ManagedClusterInfo {
 export interface Kubeconfig {
   readonly content: string
 }
+
 export interface SshTarget {
   readonly host: string
   readonly user: string
 }
+
 export interface NodeContext {
   readonly name: string
   readonly role: NodeRole
   readonly token?: string
   readonly apiEndpoint: string
 }
+
 export interface BootstrapPlan {
   readonly order: ReadonlyArray<string>
 }
+
 export interface NodeRef {
   readonly name: string
   readonly role: NodeRole
 }
+
 export interface ResolvedVersion {
   readonly value: string
 }
@@ -114,8 +131,9 @@ export interface ResolvedVersion {
 export interface K8sManifest {
   readonly apiVersion: string
   readonly kind: string
-  readonly [key: string]: unknown
+  readonly [key: string]: Schema.Json
 }
+
 export interface AddonContext {
   readonly clusterName: string
   readonly capabilities: ReadonlyArray<Capability>
@@ -132,10 +150,12 @@ export interface VolumeSpec {
   readonly type: string
   readonly retain: boolean
 }
+
 export interface VolumeInfo {
   readonly id: string
   readonly name: string
 }
+
 export interface VolumeRef {
   readonly id: string
 }
@@ -147,11 +167,13 @@ export interface BucketSpec {
   readonly encryption: boolean
   readonly retain: boolean
 }
+
 export interface BucketInfo {
   readonly name: string
   readonly region: string
   readonly endpoint: string
 }
+
 export interface BucketRef {
   readonly name: string
   readonly region: string
@@ -172,13 +194,15 @@ export interface CredentialEntry {
 export interface AutoscalingRule {
   readonly enabled: boolean
 }
-export interface WorkerPoolShape {
+
+export interface WorkerPoolFields {
   readonly name: string
   readonly autoscaling?: AutoscalingRule
 }
-export interface ClusterConfigShape {
+
+export interface ClusterConfigFields {
   readonly distro: DistroKind
-  readonly worker_pools: ReadonlyArray<WorkerPoolShape>
+  readonly worker_pools: ReadonlyArray<WorkerPoolFields>
   readonly addons: { readonly cni: "flannel" | "cilium" }
   readonly auth?: { readonly region: string }
   readonly api_server?: { readonly high_availability: boolean }

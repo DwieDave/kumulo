@@ -70,10 +70,13 @@ const isAddonsConsistentWithProvider = Schema.makeFilter(
     addons?: { hcloud_csi: { enabled: boolean }; cinder_csi: { enabled: boolean } }
   }) => {
     if (config.addons === undefined) return undefined
+
     if (config.addons.hcloud_csi.enabled && config.provider !== "hetzner")
       return "addons.hcloud_csi can only be enabled when provider is hetzner"
+
     if (config.addons.cinder_csi.enabled && config.provider === "hetzner")
       return "addons.cinder_csi cannot be enabled when provider is hetzner"
+
     return undefined
   }
 )
@@ -98,4 +101,5 @@ export const K3sClusterConfig = Schema.Struct({
 )
 
 export type K3sClusterConfig = typeof K3sClusterConfig.Type
+
 export type K3sClusterConfigEncoded = typeof K3sClusterConfig.Encoded

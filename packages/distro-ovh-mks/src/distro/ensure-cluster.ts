@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import type { ManagedClusterInfo, MksError } from "@kumulo/core"
 import type { Mks } from "../client/mks.ts"
-import { clusterDrift, driftConflict } from "./cluster-drift.ts"
+import { clusterDrift, driftConflict, MksClusterDrift } from "./cluster-drift.ts"
 import type { MksClusterState } from "./cluster-drift.ts"
 import { mapMksError } from "./errors.ts"
 import { pollUntil } from "./status.ts"
@@ -44,6 +44,7 @@ const _findByName = (
   Effect.gen(function*() {
     const ctx = { kind: "kube", ref: config.serviceName }
     const ids = yield* mapMksError({ self: mks.getCloudProjectServiceNameKube(config.serviceName, undefined), ctx })
+
     const clusters = yield* Effect.forEach(
       ids,
       (id) =>
@@ -53,6 +54,7 @@ const _findByName = (
         }),
       { concurrency: 4 }
     )
+
     return clusters.find((cluster) => cluster.name === config.name)
   })
 
@@ -93,8 +95,11 @@ const _convergeCluster = (
 ): Effect.Effect<void, MksError> => {
   const desired = { ...config, privateNetwork: config.privateNetworkId !== undefined }
   const drift = clusterDrift({ desired, actual: _toInfo(cluster) })
-  if (drift._tag === "None") return Effect.void
-  if (drift._tag === "Blocked") return Effect.fail(driftConflict(drift))
+
+  if (MksClusterDrift.$is("None")(drift)) return Effect.void
+
+  if (MksClusterDrift.$is("Blocked")(drift)) return Effect.fail(driftConflict(drift))
+
   return upgrade({
     mks,
     ref: { serviceName: config.serviceName, kubeId: cluster.id ?? "" },
@@ -107,8 +112,10 @@ export const ensureCluster = (
 ): Effect.Effect<MksClusterInfo, MksError> =>
   Effect.gen(function*() {
     const existing = yield* _findByName({ mks, config })
+
     if (existing !== undefined) yield* _convergeCluster({ cluster: existing, mks, config })
     const cluster = existing ?? (yield* _create({ mks, config }))
     const ready = yield* _awaitReady({ mks, config, kubeId: cluster.id ?? "" })
+
     return _toInfo(ready)
   })

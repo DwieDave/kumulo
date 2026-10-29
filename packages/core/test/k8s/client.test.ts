@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
-import { UrlParams } from "effect/unstable/http"
+import { UrlParams } from "effect/http"
 import { makeK8sClient } from "../../src/k8s/client.ts"
 import { fakeHttpClient } from "./fake-http-client.ts"
 
@@ -13,6 +13,7 @@ describe("K8sClient", () => {
       const fake = fakeHttpClient(() =>
         new Response(JSON.stringify({ apiVersion: "v1", kind: "Node", metadata: { name: "n1" } }), { status: 200 })
       )
+
       const client = makeK8sClient({ client: fake.client, server })
       const manifest = yield* client.get(nodeRef)
       expect(manifest["kind"]).toBe("Node")
@@ -47,6 +48,7 @@ describe("K8sClient", () => {
           { status: 200 }
         )
       )
+
       const client = makeK8sClient({ client: fake.client, server })
       const items = yield* client.list(nodeRef)
       expect(items.length).toBe(1)
@@ -59,6 +61,7 @@ describe("K8sClient", () => {
           status: 200
         })
       )
+
       const client = makeK8sClient({ client: fake.client, server })
       const items = yield* client.list(nodeRef)
       expect(items.length).toBe(1)
@@ -69,6 +72,7 @@ describe("K8sClient", () => {
       const fake = fakeHttpClient(() =>
         new Response(JSON.stringify({ apiVersion: "v1", kind: "Node", metadata: { name: "n1" } }), { status: 200 })
       )
+
       const client = makeK8sClient({ client: fake.client, server })
       yield* client.apply(nodeRef, { apiVersion: "v1", kind: "Node", metadata: { name: "n1" } })
       const [request] = fake.requests()

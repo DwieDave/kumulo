@@ -16,6 +16,7 @@ users:
   - user:
       token: tok-123
 `
+
       const ctx = yield* parseKubeconfig(text)
       expect(ctx.server).toBe("https://10.0.0.1:6443")
       expect(ctx.caPem).toBe("ca-pem")
@@ -33,6 +34,7 @@ users:
       client-certificate-data: ${_b64("cert-pem")}
       client-key-data: ${_b64("key-pem")}
 `
+
       const ctx = yield* parseKubeconfig(text)
       expect(ctx.auth).toEqual({ kind: "clientCert", certPem: "cert-pem", keyPem: "key-pem" })
       expect(ctx.caPem).toBeUndefined()
