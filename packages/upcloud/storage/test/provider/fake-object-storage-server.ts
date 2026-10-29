@@ -74,7 +74,6 @@ export const makeFakeObjectStorageServer = () => {
   const requests: Array<string> = []
   let nextId = 1
   let serviceDeleteConflicts = 0
-  let onBucketList: ((serviceUuid: string) => void) | undefined
 
 
   const _handleServices = (request: HttpClientRequest.HttpClientRequest): Response => {
@@ -199,8 +198,6 @@ export const makeFakeObjectStorageServer = () => {
     if (!serviceBuckets) return _notFound("service not found")
 
     if (request.method === "GET") {
-      onBucketList?.(serviceUuid)
-
       for (const [name, bucket] of serviceBuckets) {
         if (bucket.deleted) {
           if (bucket.pollsUntilGone <= 0) serviceBuckets.delete(name)
@@ -421,9 +418,5 @@ export const makeFakeObjectStorageServer = () => {
     serviceDeleteConflicts = times
   }
 
-  const onBucketListed = (hook: (serviceUuid: string) => void): void => {
-    onBucketList = hook
-  }
-
-  return { httpClient, failServiceDeleteWithConflict, onBucketListed, services, buckets, users, accessKeys, policies, requests }
+  return { httpClient, failServiceDeleteWithConflict, services, buckets, users, accessKeys, policies, requests }
 }

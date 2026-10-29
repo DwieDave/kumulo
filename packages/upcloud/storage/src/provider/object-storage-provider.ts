@@ -164,7 +164,7 @@ export const ensureBucket = (options: UpcloudObjectStorageOptions) =>
     })
 
 // refuses BucketNotEmpty when the API reports objects still in it — no force in v1.
-// The metrics are re-read right before the DELETE so a recent upload is not missed.
+// The metrics come from a single list taken right before the DELETE.
 export const deleteBucket = (options: UpcloudObjectStorageOptions) =>
   (ref: BucketRef): Effect.Effect<void, ObjectStorageError> =>
     Effect.gen(function*() {
@@ -173,13 +173,8 @@ export const deleteBucket = (options: UpcloudObjectStorageOptions) =>
       if (service === undefined) return
       const ctx = { kind: "bucket", ref: `${service.uuid}/${ref.name}` }
 
-      const _find = Effect.map(
-        mapUpcloudError({ self: options.client.buckets.list(service.uuid), ctx }),
-        (buckets) => buckets.find((b) => b.name === ref.name && !b.deleted)
-      )
-
-      if ((yield* _find) === undefined) return
-      const fresh = yield* _find
+      const buckets = yield* mapUpcloudError({ self: options.client.buckets.list(service.uuid), ctx })
+      const fresh = buckets.find((b) => b.name === ref.name && !b.deleted)
 
       if (fresh === undefined) return
 
