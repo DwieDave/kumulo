@@ -19,7 +19,9 @@ interface FakeService {
   pollsUntilGone?: number
   labels?: ReadonlyArray<FakeLabel>
   networks?: ReadonlyArray<{ readonly name: string; readonly type: string; readonly family: string; readonly uuid?: string }>
-  endpoints?: ReadonlyArray<{ readonly domain_name: string; readonly type: string }>
+  endpoints?: ReadonlyArray<{ readonly domain_name: string; readonly type: string; readonly mode?: string }>
+  runningEndpoints?: ReadonlyArray<{ readonly domain_name: string; readonly type: string; readonly mode?: string }>
+  fixedState?: string
   ladderIndex: number
 }
 
@@ -123,11 +125,23 @@ export const makeFakeObjectStorageServer = () => {
         service.pollsUntilGone -= 1
       }
 
+      if (service.fixedState !== undefined) {
+        service.operational_state = service.fixedState
+
+        return _ok(service)
+      }
+
+      if (service.configured_status === "stopped") {
+        service.operational_state = "stopped"
+
+        return _ok(service)
+      }
+
       if (service.ladderIndex < _stateLadder.length - 1) service.ladderIndex += 1
       service.operational_state = _stateLadder[service.ladderIndex] ?? "running"
 
       if (service.operational_state === "running") {
-        service.endpoints = [{ domain_name: `${service.name}.upcloudobjects.com`, type: "public" }]
+        service.endpoints = service.runningEndpoints ?? [{ domain_name: `${service.name}.upcloudobjects.com`, type: "public", mode: "api" }]
       }
 
       return _ok(service)
@@ -139,7 +153,14 @@ export const makeFakeObjectStorageServer = () => {
 
       if (payload === undefined) return _badRequest("service patch sent an empty body")
 
-      if (payload.configured_status !== undefined) service.configured_status = payload.configured_status
+      if (payload.configured_status !== undefined) {
+        service.configured_status = payload.configured_status
+
+        if (payload.configured_status === "started" && service.operational_state === "stopped") {
+          service.operational_state = "setup-network"
+          service.ladderIndex = 0
+        }
+      }
 
       if (payload.labels !== undefined) service.labels = payload.labels
 

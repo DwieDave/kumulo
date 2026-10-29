@@ -5,6 +5,9 @@ export {
   deleteBucket,
   ensureBucket,
   ensureCredentials,
+  ensureService,
+  ensureUserAccess,
+  KUMULO_S3_POLICY,
   listBuckets,
   makeUpcloudObjectStorageProvider,
   upcloudObjectStorageProviderLive

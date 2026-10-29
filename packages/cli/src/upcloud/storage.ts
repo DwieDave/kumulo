@@ -1,14 +1,14 @@
 import { PlanAction } from "@kumulo/core"
-import { Effect } from "effect"
+import { Effect, Redacted, Schema, Stream } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import type { PlatformError } from "effect/PlatformError"
-import { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/process"
-import { ConfigInvalid, CredentialsSink, pollUntil, ProviderApiError } from "@kumulo/core"
-import type { BucketInfo, CredentialsSinkError, ObjectStorageError } from "@kumulo/core"
+import { ChildProcess, ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/process"
+import { ConfigInvalid, CredentialsSink, pollUntil, ProviderApiError, SinkUnavailable } from "@kumulo/core"
+import type { BucketInfo, CredentialsSinkError, ObjectStorageError, S3Credentials } from "@kumulo/core"
 import { credentialsPath, sopsCredentialsSinkLive } from "@kumulo/secrets-sops"
 import { mapUpcloudError } from "@kumulo/upcloud"
 import type { ObjectStorageClient } from "@kumulo/upcloud"
-import { deleteBucket, ensureBucket, ensureCredentials, listBuckets } from "@kumulo/storage-upcloud"
+import { deleteBucket, ensureBucket, ensureCredentials, ensureService, ensureUserAccess, listBuckets } from "@kumulo/storage-upcloud"
 import type { UpcloudObjectStorageOptions } from "@kumulo/storage-upcloud"
 import type { UpcloudUksClusterConfig } from "../cluster-config.ts"
 import { credentialEntries } from "../storage/credentials.ts"
@@ -61,6 +61,38 @@ const _sopsConfig = (
     )
     : Effect.succeed({ dir: config.secrets.dir, ageRecipient: config.secrets.sops.age_recipient })
 
+const _StoredS3 = Schema.Struct({
+  s3: Schema.Struct({ user: Schema.String, accessKey: Schema.String, secretKey: Schema.String })
+})
+
+// kumulo: the sink can only write whole files, so a re-run decrypts the file to keep the existing secret.
+const _readStoredCredentials = (
+  { path, spawner }: { readonly path: string; readonly spawner: (typeof ChildProcessSpawnerNS.ChildProcessSpawner)["Service"] }
+): Effect.Effect<S3Credentials, SinkUnavailable> =>
+  Effect.scoped(Effect.gen(function*() {
+    const handle = yield* spawner.spawn(ChildProcess.make("sops", ["--decrypt", "--output-type", "json", path]))
+
+    const [stdout, stderr, exitCode] = yield* Effect.all(
+      [Stream.mkString(Stream.decodeText(handle.stdout)), Stream.mkString(Stream.decodeText(handle.stderr)), handle.exitCode],
+      { concurrency: "unbounded" }
+    )
+
+    if (exitCode !== 0) {
+      return yield* Effect.fail(new SinkUnavailable({ hint: `sops exited with code ${exitCode} reading ${path}: ${stderr.trim()}` }))
+    }
+
+    const stored = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(_StoredS3))(stdout).pipe(
+      Effect.mapError((cause) => new SinkUnavailable({ hint: `${path} has no s3 user and keys: ${cause.message}` }))
+    )
+
+    return {
+      user: stored.s3.user,
+      accessKey: Redacted.make(stored.s3.accessKey),
+      secretKey: Redacted.make(stored.s3.secretKey),
+      buckets: []
+    }
+  })).pipe(Effect.catchTag("PlatformError", (cause) => Effect.fail(new SinkUnavailable({ hint: cause.message }))))
+
 export const convergeUpcloudBuckets = (
   config: UpcloudUksClusterConfig
 ): Effect.Effect<
@@ -75,18 +107,20 @@ export const convergeUpcloudBuckets = (
     const { objectStorage } = yield* UpcloudEnv
     const options = { client: objectStorage, ..._options(config) }
 
+    const service = yield* ensureService(options)
+
     const ensured = yield* Effect.forEach(buckets, (bucket) =>
-      ensureBucket(options)({ name: bucket.name, region: options.region, versioning: false, encryption: false, retain: bucket.retain }), {
+      ensureBucket(options)({ name: bucket.name, region: options.region, versioning: false, encryption: false, retain: bucket.retain }, service), {
       concurrency: 4
     })
+
+    yield* ensureUserAccess(options)(config.name)
 
     const sops = yield* _sopsConfig(config)
     const fs = yield* FileSystem
     const path = credentialsPath({ dir: sops.dir, cluster: config.name })
-
-    if (yield* fs.exists(path)) return
     const spawner = yield* ChildProcessSpawnerNS.ChildProcessSpawner
-    const creds = yield* ensureCredentials(options)(config.name)
+    const creds = (yield* fs.exists(path)) ? yield* _readStoredCredentials({ path, spawner }) : yield* ensureCredentials(options)(config.name)
     const sink = sopsCredentialsSinkLive({ dir: sops.dir, ageRecipient: sops.ageRecipient, spawner, fs })
     yield* Effect.flatMap(CredentialsSink, (s) => s.write(credentialEntries({ cluster: config.name, creds, buckets: ensured, withRegion: false }))).pipe(
       Effect.provide(sink)
