@@ -1,4 +1,4 @@
-import { Duration, Effect, Layer, Random, Schedule } from "effect"
+import { Duration, Effect, Layer, Random } from "effect"
 import type { Redacted } from "effect"
 import * as HttpClientError from "effect/http/HttpClientError"
 import * as HttpClient from "effect/http/HttpClient"
@@ -18,10 +18,6 @@ export const retryAfterCapSeconds = 60
 
 const _retryAfterSeconds = (value: string | undefined): number | undefined =>
   value !== undefined && /^\d+$/.test(value.trim()) ? Math.min(Number(value.trim()), retryAfterCapSeconds) : undefined
-
-export const transportRetrySchedule: Schedule.Schedule<Duration.Duration> = Schedule.exponential("200 millis", 2).pipe(
-  Schedule.jittered
-)
 
 export const transportMaxRetries = 5
 
@@ -50,7 +46,7 @@ export const makeUpcloudHttpClient = (options: UpcloudHttpClientOptions): HttpCl
       })
     )
 
-  // the exponential schedule paces 5xx retries; a numeric Retry-After on a 429 replaces its delay
+  // retries back off exponentially (200ms * 2^n, +-20% jitter); a numeric Retry-After on a 429 replaces that delay
   const run = (request: HttpClientRequest.HttpClientRequest) =>
     Effect.gen(function*() {
       let response = yield* attempt(request)

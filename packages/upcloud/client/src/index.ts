@@ -5,7 +5,6 @@ export {
   DEFAULT_REQUEST_TIMEOUT,
   retryAfterCapSeconds,
   transportMaxRetries,
-  transportRetrySchedule,
   UPCLOUD_API_BASE_URL,
   UpcloudHttpLive,
   makeUpcloudHttpClient
