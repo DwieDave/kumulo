@@ -14,7 +14,7 @@ import {
   ResourceNotFound,
   ResponseDecodeError
 } from "@kumulo/core"
-import { mapBunnyResponse, mapBunnyStatus, parseBunnyErrorBody, toBunnyError } from "../../src/errors.ts"
+import { mapBunnyStatus, parseBunnyErrorBody, toBunnyError } from "../../src/errors.ts"
 
 const _ctx = { kind: "dns-record", ref: "example.com/www" }
 
@@ -89,6 +89,11 @@ describe("mapBunnyStatus", () => {
     assert.strictEqual(error instanceof CapabilityMissing ? error.capability : undefined, "invalid_plan_type.bot_detection")
   })
 
+  it("maps a plan rejection by body even when the status is a plain 400", () => {
+    const body = { errorKey: "invalid_plan_type.waf", message: "upgrade", field: undefined }
+    assert.instanceOf(mapBunnyStatus({ ..._ctx, status: 400, body }), CapabilityMissing)
+  })
+
   it("maps other statuses to ProviderApiError with the detail", () => {
     const body = { errorKey: "k", message: "boom", field: "Name" }
     const error = mapBunnyStatus({ ..._ctx, status: 400, body })
@@ -114,33 +119,19 @@ describe("toBunnyError", () => {
     assert.instanceOf(toBunnyError({ ..._ctx, cause }), HttpTransportError)
   })
 
-  it("maps status errors through mapBunnyStatus", () => {
+  it("reads a duplicate key from the status error description", () => {
+    const body = JSON.stringify({ ErrorKey: "dnszone.record_exists", Message: "dup" })
+
+    const cause = new HttpClientError.HttpClientError({
+      reason: new HttpClientError.StatusCodeError({ request: _request, response: _response(400, body), description: body })
+    })
+
+    assert.instanceOf(toBunnyError({ ..._ctx, cause }), ResourceConflict)
+  })
+
+  it("maps status errors through the shared classifier", () => {
     assert.instanceOf(toBunnyError({ ..._ctx, cause: _statusError(404) }), ResourceNotFound)
     assert.instanceOf(toBunnyError({ ..._ctx, cause: _statusError(401) }), AuthenticationFailed)
     assert.instanceOf(toBunnyError({ ..._ctx, cause: _statusError(500) }), ProviderApiError)
   })
-})
-
-describe("mapBunnyResponse", () => {
-  it.effect("reads the Core body from the response", () =>
-    Effect.gen(function*() {
-      const response = _response(400, JSON.stringify({ ErrorKey: "dnszone.record_exists", Message: "dup" }))
-      assert.instanceOf(yield* mapBunnyResponse({ ..._ctx, response }), ResourceConflict)
-    }))
-
-  it.effect("maps a Shield 202 plan rejection", () =>
-    Effect.gen(function*() {
-      const response = _response(
-        202,
-        JSON.stringify({ success: false, errorKey: "invalid_plan_type.bot_detection", message: "needs Advanced" })
-      )
-
-      assert.instanceOf(yield* mapBunnyResponse({ ..._ctx, response }), CapabilityMissing)
-    }))
-
-  it.effect("carries Retry-After on 429", () =>
-    Effect.gen(function*() {
-      const error = yield* mapBunnyResponse({ ..._ctx, response: _response(429, "", { "retry-after": "3" }) })
-      assert.strictEqual(error instanceof RateLimited ? error.retryAfter : undefined, "3")
-    }))
 })

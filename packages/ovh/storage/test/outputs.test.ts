@@ -52,7 +52,12 @@ describe("readOutputs / writeOutputs (in-memory FileSystem)", () => {
       const fs = layerNoop({
         exists: (path) => Effect.succeed(store.has(path)),
         writeFileString: (path, data) => Effect.sync(() => void store.set(path, data)),
-        readFileString: (path) => Effect.succeed(store.get(path) ?? "")
+        readFileString: (path) => Effect.succeed(store.get(path) ?? ""),
+        rename: (from, to) =>
+          Effect.sync(() => {
+            store.set(to, store.get(from) ?? "")
+            store.delete(from)
+          })
       })
 
       const file = { cluster: "prod", buckets: [{ name: "staging-eu-backups", region: "DE1", versioning: false, encryption: false, retain: true }] }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Effect } from "effect"
+import { Effect, Redacted } from "effect"
 import { parseKubeconfig } from "../../src/k8s/kubeconfig.ts"
 
 const _b64 = (value: string): string => globalThis.btoa(value)
@@ -20,7 +20,8 @@ users:
       const ctx = yield* parseKubeconfig(text)
       expect(ctx.server).toBe("https://10.0.0.1:6443")
       expect(ctx.caPem).toBe("ca-pem")
-      expect(ctx.auth).toEqual({ kind: "token", token: "tok-123" })
+      expect(ctx.auth.kind).toBe("token")
+      expect(ctx.auth.kind === "token" ? Redacted.value(ctx.auth.token) : undefined).toBe("tok-123")
     }))
 
   it.effect("parses client-cert auth", () =>

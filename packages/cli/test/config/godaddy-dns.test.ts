@@ -37,7 +37,8 @@ describe("godaddy dns config", () => {
         const records = [
           { name: "@", target: "203.0.113.7" },
           { name: "example.com", target: "2001:db8::1" },
-          { name: "@", target: "ingress" }
+          // upcloud-uks has no ingress target, see uks-dns-target.test.ts
+          ...(distro === "upcloud-uks" ? [] : [{ name: "@", target: "ingress" }])
         ]
 
         expect(Result.isSuccess(_decode(base, _dns(600, records)))).toBe(true)

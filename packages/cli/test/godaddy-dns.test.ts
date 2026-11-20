@@ -3,7 +3,7 @@ import * as HttpClient from "effect/http/HttpClient"
 import * as HttpClientResponse from "effect/http/HttpClientResponse"
 import { assert, describe, it } from "@effect/vitest"
 import { makeFakeZone } from "../../godaddy/dns/test/provider/fake-zone.ts"
-import { dnsPreflight, dnsProviderLayerFor, reconcileDns, removeDns } from "../src/dns.ts"
+import { dnsPreflight, dnsProviderLayerWith, reconcileDns, removeDns } from "../src/dns.ts"
 import { missingCredentials, providerSections } from "../src/env-summary.ts"
 import type { ClusterConfig } from "../src/cluster-config.ts"
 import { fakeCredentials } from "./commands/fake-credentials.ts"
@@ -27,12 +27,12 @@ const _env = (fake: ReturnType<typeof makeFakeZone>) => Layer.succeed(HttpClient
 
 const _targets = { api_server: { kind: "ip", value: "203.0.113.1" } } as const
 
-describe("godaddy dns through dnsProviderLayerFor", () => {
+describe("godaddy dns through dnsProviderLayerWith", () => {
   for (const [distro, config] of _configs(900)) {
     it.effect(`${distro}: apply writes records with dns.ttl and delete removes them`, () =>
       Effect.gen(function*() {
         const fake = makeFakeZone({ zone: "example.com" })
-        const layer = dnsProviderLayerFor(config).pipe(Layer.provide(_env(fake)), Layer.provide(fakeCredentials))
+        const layer = dnsProviderLayerWith({ config }).pipe(Layer.provide(_env(fake)), Layer.provide(fakeCredentials))
 
         yield* reconcileDns({ config, targets: _targets }).pipe(Effect.provide(layer))
 

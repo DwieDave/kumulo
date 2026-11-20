@@ -1,12 +1,11 @@
 import { Effect } from "effect"
-import { ResourceConflict } from "@kumulo/core"
+import { pollUntil, ResourceConflict } from "@kumulo/core"
 import { mapUpcloudError } from "@kumulo/upcloud"
 import type { UksCluster } from "@kumulo/upcloud"
-import type { ManagedClusterInfo, MksError } from "@kumulo/core"
+import type { ManagedClusterInfo, ManagedDistroError } from "@kumulo/core"
 import { clusterDrift, driftConflict, UksClusterDrift, VersionDrift, versionDrift } from "./cluster-drift.ts"
 import type { UksClusterState } from "./cluster-drift.ts"
 import { ownershipLabels } from "./ownership.ts"
-import { pollUntil } from "./status.ts"
 import type { UksClients, UksClusterConfig } from "./types.ts"
 
 export type UksClusterInfo = ManagedClusterInfo & UksClusterState & { readonly uuid: string; readonly name: string; readonly version: string }
@@ -28,7 +27,7 @@ const _toInfo = (cluster: UksCluster): UksClusterInfo => ({
 
 export const findClusterByName = (
   { clients, name }: { readonly clients: UksClients; readonly name: string }
-): Effect.Effect<UksClusterInfo | undefined, MksError> =>
+): Effect.Effect<UksClusterInfo | undefined, ManagedDistroError> =>
   mapUpcloudError({ self: clients.uks.list(), ctx: { kind: "uks-cluster", ref: name } }).pipe(
     Effect.map((clusters) => clusters.find((cluster) => cluster.name === name)),
     Effect.map((cluster) => cluster && _toInfo(cluster))
@@ -43,7 +42,7 @@ const _create = (
     readonly networkUuid: string
     readonly owner: string
   }
-): Effect.Effect<UksCluster, MksError> =>
+): Effect.Effect<UksCluster, ManagedDistroError> =>
   mapUpcloudError({
     self: clients.uks.create({
       name: config.name,
@@ -61,7 +60,7 @@ const _create = (
 
 const _awaitRunning = (
   { clients, uuid }: { readonly clients: UksClients; readonly uuid: string }
-): Effect.Effect<UksCluster, MksError> =>
+): Effect.Effect<UksCluster, ManagedDistroError> =>
   pollUntil({
     check: mapUpcloudError({ self: clients.uks.get(uuid), ctx: { kind: "uks-cluster", ref: uuid } }),
     isDone: (cluster) => cluster.state === "running",
@@ -84,7 +83,7 @@ const _reconcilePatchable = (
     readonly config: UksClusterConfig
     readonly owner: string
   }
-): Effect.Effect<void, MksError> => {
+): Effect.Effect<void, ManagedDistroError> => {
   const desiredLabels = ownershipLabels({ spec: config, owner })
 
   const filterDrift = config.control_plane_ip_filter !== undefined &&
@@ -106,7 +105,7 @@ const _reconcilePatchable = (
 // creation-time-only fields never move under a patch; clusterDrift refuses before anything is written
 const _refuseCreationDrift = (
   { cluster, config }: { readonly cluster: UksCluster; readonly config: UksClusterConfig }
-): Effect.Effect<void, MksError> => {
+): Effect.Effect<void, ManagedDistroError> => {
   const drift = clusterDrift({
     desired: { zone: config.zone, plan: config.plan, networkCidr: config.network.cidr, storageEncryption: config.storage_encryption },
     actual: _toInfo(cluster)
@@ -137,7 +136,7 @@ export const ensureCluster = (
     readonly networkUuid: string
     readonly owner: string
   }
-): Effect.Effect<UksClusterInfo, MksError> =>
+): Effect.Effect<UksClusterInfo, ManagedDistroError> =>
   Effect.gen(function*() {
     const existing = yield* mapUpcloudError({ self: clients.uks.list(), ctx: { kind: "uks-cluster", ref: config.name } }).pipe(
       Effect.map((clusters) => clusters.find((cluster) => cluster.name === config.name))

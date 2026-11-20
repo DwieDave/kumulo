@@ -1,113 +1,119 @@
-import { Effect, Layer } from "effect"
-import { DnsProvider, ResourceConflict } from "@kumulo/core"
-import type { ClusterTag, DesiredRecord, DnsError } from "@kumulo/core"
+import { Effect, Layer, Option } from "effect"
+import { DnsProvider, reconcileDns } from "@kumulo/core"
+import type { DnsAdapter, DnsError, ZoneRecord } from "@kumulo/core"
 import type { HetznerDns, HetznerDnsError, HetznerRRset } from "../client/hetzner-dns.ts"
-import { toDnsError } from "./errors.ts"
-import { rrsetsAt } from "./existing.ts"
-import type { DnsRecordKind } from "./ownership.ts"
-import { ownerTagOf, recordKind } from "./ownership.ts"
+import { toDnsError } from "../errors.ts"
 
+const _APEX = "@"
 const _DEFAULT_TTL = 300
 
-const _wrap = (
-  zone: string,
-  name: string,
-  self: Effect.Effect<unknown, HetznerDnsError>
-): Effect.Effect<void, DnsError> => Effect.asVoid(Effect.mapError(self, (cause) => toDnsError({ cause, zone, name })))
+const _normalize = ({ name, zone }: { readonly name: string; readonly zone: string }): string => {
+  const lowered = name.toLowerCase()
+  const apex = zone.toLowerCase()
 
-const _isOwnershipRecord = (record: DesiredRecord): boolean => ownerTagOf(record.target) !== undefined
+  if (lowered === "" || lowered === _APEX || lowered === apex) return _APEX
 
-const _ownerTargetFor = (records: ReadonlyArray<DesiredRecord>, name: string): string | undefined =>
-  records.find((r) => r.name === name && _isOwnershipRecord(r))?.target
+  return lowered.endsWith(`.${apex}`) ? lowered.slice(0, lowered.length - apex.length - 1) : lowered
+}
 
-const _ensureRaw = (
-  { dns, zone, name, target, kind, existing }: {
-    readonly dns: HetznerDns
+const _unquote = (data: string): string =>
+  data.length >= 2 && data.startsWith("\"") && data.endsWith("\"") ? data.slice(1, -1) : data
+
+const _canonicalIpv6 = (data: string): string => {
+  const url = Option.liftThrowable(() => new URL(`http://[${data}]`))()
+
+  return Option.match(url, { onNone: () => data.toLowerCase(), onSome: (u) => u.hostname })
+}
+
+const _canonical = ({ type, value }: { readonly type: string; readonly value: string }): string => {
+  const bare = _unquote(value)
+
+  if (type === "CNAME") return bare.toLowerCase().replace(/\.$/, "")
+
+  return type === "AAAA" ? _canonicalIpv6(bare) : bare
+}
+
+const _toZoneRecords = (rrset: HetznerRRset): ReadonlyArray<ZoneRecord> =>
+  rrset.records.map((r) => ({ name: rrset.name, type: rrset.type, value: r.value, ttl: rrset.ttl }))
+
+const _wrap = <A>(
+  { name, self, zone }: {
     readonly zone: string
     readonly name: string
-    readonly target: string
-    readonly kind: DnsRecordKind
-    readonly existing: HetznerRRset | undefined
+    readonly self: Effect.Effect<A, HetznerDnsError>
   }
-): Effect.Effect<void, DnsError> =>
-  existing !== undefined && existing.records[0]?.value === target
-    ? Effect.void
-    : _wrap(zone, name, dns.putRRset(zone, name, kind, { ttl: existing?.ttl ?? _DEFAULT_TTL, records: [{ value: target }] }))
+): Effect.Effect<A, DnsError> => Effect.mapError(self, (cause) => toDnsError({ cause, zone, name }))
 
-// RFC 1034 §3.6.2 forbids a CNAME coexisting with other record types at the same name, so a kind change deletes the old rrset first.
-const _deleteStaleKinds = (
-  { dns, zone, name, kind, existingOther }: {
-    readonly dns: HetznerDns
-    readonly zone: string
-    readonly name: string
-    readonly kind: DnsRecordKind
-    readonly existingOther: ReadonlyArray<HetznerRRset>
-  }
-): Effect.Effect<void, DnsError> =>
-  Effect.forEach(existingOther.filter((r) => r.type !== kind), (r) => _wrap(zone, name, dns.deleteRRset(zone, name, r.type)), {
-    discard: true
-  })
+export interface HetznerDnsProviderOptions {
+  readonly dns: HetznerDns
+  readonly ttl?: number | undefined
+}
 
-const _ensurePair = (
-  { dns, zone, name, target, ownerTarget }:
-    { readonly dns: HetznerDns; readonly zone: string; readonly name: string; readonly target: string; readonly ownerTarget: string | undefined }
-): Effect.Effect<void, DnsError> =>
-  Effect.gen(function*() {
-    const kind = recordKind(target)
-    const existing = yield* rrsetsAt({ dns, zone, name })
-    const existingOther = existing.filter((r) => r.type !== "TXT")
-    const existingOwnerTxt = existing.find((r) => r.type === "TXT" && ownerTagOf(r.records[0]?.value ?? "") !== undefined)
-    const foreignOwnerTxt = existingOwnerTxt !== undefined && existingOwnerTxt.records[0]?.value !== ownerTarget
+// A Hetzner RRset holds every value of one (name, type), so each write reads the current set and puts the merged one:
+// replacing the whole set would wipe foreign values at the same name (an SPF TXT beside the ownership TXT).
+export const makeHetznerDnsAdapter = ({ dns, ttl }: HetznerDnsProviderOptions): DnsAdapter => {
+  const currentValues = ({ name, type, zone }: { readonly zone: string; readonly name: string; readonly type: string }) =>
+    _wrap({ zone, name, self: dns.listRRsets(zone) }).pipe(
+      Effect.map((all) =>
+        all.filter((r) => r.name === name && r.type === type).flatMap((r) => r.records.map((v) => v.value))
+      )
+    )
 
-    if (foreignOwnerTxt || (existingOther.length > 0 && existingOwnerTxt === undefined)) {
-      return yield* Effect.fail(new ResourceConflict({ kind: "dns-record", ref: `${zone}/${name}` }))
+  const writeValues = (
+    { name, ttl: setTtl, type, values, zone }: {
+      readonly zone: string
+      readonly name: string
+      readonly type: string
+      readonly values: ReadonlyArray<string>
+      readonly ttl: number
     }
-
-    if (ownerTarget !== undefined) {
-      yield* _ensureRaw({ dns, zone, name, target: ownerTarget, kind: "TXT", existing: existingOwnerTxt })
-    }
-
-    yield* _deleteStaleKinds({ dns, zone, name, kind, existingOther })
-    const existingSame = existingOther.find((r) => r.type === kind)
-    yield* _ensureRaw({ dns, zone, name, target, kind, existing: existingSame })
-  })
-
-export const ensureRecords = (dns: HetznerDns) =>
-  (zone: string, records: ReadonlyArray<DesiredRecord>): Effect.Effect<void, DnsError> =>
-    Effect.gen(function*() {
-      const rest = records.filter((r) => !_isOwnershipRecord(r))
-      const pairedNames = new Set(rest.map((r) => r.name))
-      const orphanTxt = records.filter((r) => _isOwnershipRecord(r) && !pairedNames.has(r.name))
-
-      for (const record of rest) {
-        const ownerTarget = _ownerTargetFor(records, record.name)
-        yield* _ensurePair({ dns, zone, name: record.name, target: record.target, ownerTarget })
-      }
-
-      for (const record of orphanTxt) {
-        const existing = yield* rrsetsAt({ dns, zone, name: record.name })
-        yield* _ensureRaw({ dns, zone, name: record.name, target: record.target, kind: "TXT", existing: existing.find((r) => r.type === "TXT") })
-      }
+  ): Effect.Effect<void, DnsError> =>
+    _wrap({
+      zone,
+      name,
+      self: values.length === 0
+        ? dns.deleteRRset(zone, name, type)
+        : Effect.asVoid(dns.putRRset(zone, name, type, { ttl: setTtl, records: values.map((value) => ({ value })) }))
     })
 
-const _ownedNames = (rrsets: ReadonlyArray<HetznerRRset>, tag: ClusterTag): ReadonlySet<string> =>
-  new Set(rrsets.flatMap((r) => r.type === "TXT" && ownerTagOf(r.records[0]?.value ?? "") === tag ? [r.name] : []))
+  const same = (type: string) => (a: string) => (b: string): boolean => _canonical({ type, value: a }) === _canonical({ type, value: b })
 
-export const removeClusterRecords = (dns: HetznerDns) =>
-  (zone: string, tag: ClusterTag): Effect.Effect<void, DnsError> =>
-    Effect.gen(function*() {
-      const all = yield* rrsetsAt({ dns, zone })
-      const owned = _ownedNames(all, tag)
-      const toDelete = all.filter((r) => owned.has(r.name))
+  return {
+    ttl: ttl ?? _DEFAULT_TTL,
+    list: (zone) => _wrap({ zone, name: "*", self: dns.listRRsets(zone) }).pipe(Effect.map((all) => all.flatMap(_toZoneRecords))),
+    create: ({ record, zone }) =>
+      Effect.flatMap(
+        currentValues({ zone, name: record.name, type: record.type }),
+        (values) =>
+          writeValues({ zone, name: record.name, type: record.type, ttl: record.ttl, values: [...values, record.value] })
+      ),
+    update: ({ existing, record, zone }) =>
+      Effect.flatMap(currentValues({ zone, name: record.name, type: record.type }), (values) => {
+        const matches = same(record.type)(existing.value)
 
-      for (const record of toDelete) {
-        yield* _wrap(zone, record.name, dns.deleteRRset(zone, record.name, record.type))
-      }
-    })
+        return writeValues({
+          zone,
+          name: record.name,
+          type: record.type,
+          ttl: record.ttl,
+          values: values.some(matches) ? values.map((v) => matches(v) ? record.value : v) : [...values, record.value]
+        })
+      }),
+    delete: ({ record, zone }) =>
+      Effect.flatMap(currentValues({ zone, name: record.name, type: record.type }), (values) =>
+        writeValues({
+          zone,
+          name: record.name,
+          type: record.type,
+          ttl: record.ttl,
+          values: values.filter((v) => !same(record.type)(record.value)(v))
+        })),
+    normalize: _normalize,
+    canonical: _canonical
+  }
+}
 
-export const makeHetznerDnsProvider = (dns: HetznerDns) => ({
-  ensureRecords: ensureRecords(dns),
-  removeClusterRecords: removeClusterRecords(dns)
-})
+export const makeHetznerDnsProvider = (options: HetznerDnsProviderOptions) => reconcileDns(makeHetznerDnsAdapter(options))
 
-export const hetznerDnsProviderLive = (dns: HetznerDns) => Layer.succeed(DnsProvider, makeHetznerDnsProvider(dns))
+export const hetznerDnsProviderLive = (options: HetznerDnsProviderOptions) =>
+  Layer.succeed(DnsProvider, makeHetznerDnsProvider(options))

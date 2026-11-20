@@ -148,6 +148,13 @@ The full schema lives in [`packages/core/src/config/schema.ts`](packages/core/sr
 §5. The files under [`examples/`](examples/) are decoded against that
 schema in CI (`examples/decode.test.ts`), so they never drift out of date.
 
+**DNS record targets.** `target` is `api_server`, `ingress` (`ovh-mks` with an
+`ingress` block), `cdn`, or a literal IP or hostname. `upcloud-uks`
+rejects `target: ingress` at decode: its load balancer comes from an in-cluster
+`Service` of type `LoadBalancer`, so kumulo has no address for it. Read the
+Service's address once it has one and apply again with that address as a
+literal target.
+
 ### bunny.net (DNS, object storage, CDN)
 
 bunny.net has no compute or managed Kubernetes, so it fills three slots, each
@@ -257,3 +264,4 @@ bun run ci   # typecheck + test + dep-lint + oxlint + codegen:check, everything 
 
 See [`.docs/workflows/kumulo-cli-build/`](.docs/workflows/kumulo-cli-build)
 for the design, requirements, and task-by-task build log.
+[`RELEASING.md`](RELEASING.md) lists the steps to publish a version to npm.

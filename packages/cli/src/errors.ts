@@ -8,7 +8,7 @@ import type { KumuloError, RendererRegistry } from "@kumulo/core"
 import { renderError } from "@kumulo/core"
 import type { OutputsInvalid as StorageOutputsInvalid } from "@kumulo/storage-ovh"
 import type { OutputsInvalid as VolumesOutputsInvalid } from "@kumulo/volumes-cinder"
-import type { DistroNotWired } from "./distro-not-wired.ts"
+import type { DoctorFailed } from "./doctor/failed.ts"
 import type { UnmanagedBucketsPresent } from "./upcloud/storage.ts"
 
 const _block = (
@@ -88,12 +88,12 @@ export const cliErrorRegistry: RendererRegistry = {
   SinkUnavailable: (error) => `Credentials sink unavailable: ${error.hint}`
 }
 
-export type CliDomainError = KumuloError | DistroNotWired | VolumesOutputsInvalid | StorageOutputsInvalid | UnmanagedBucketsPresent | PlatformError
+export type CliDomainError = KumuloError | DoctorFailed | VolumesOutputsInvalid | StorageOutputsInvalid | UnmanagedBucketsPresent | PlatformError
 
 export const renderCliError = (error: CliDomainError): string => {
   if (Predicate.isTagged(error, "PlatformError")) return `File error: ${error.message}`
 
-  if (Predicate.isTagged(error, "DistroNotWired")) return `distro "${error.distro}" is not wired into the CLI yet`
+  if (Predicate.isTagged(error, "DoctorFailed")) return `Doctor checks failed: ${error.failed.join(", ")}`
 
   if (Predicate.isTagged(error, "OutputsInvalid")) return `Outputs file is invalid: ${error.message}`
 

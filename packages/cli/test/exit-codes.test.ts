@@ -4,7 +4,7 @@ import { assert, it } from "@effect/vitest"
 import { AddonInstallFailed, AuthenticationFailed, BootstrapFailed, BucketNotEmpty, CapabilityMissing, ConfigInvalid, HttpTransportError, PlanRejected, ProvisioningTimeout, ProviderApiError, QuotaExceeded, RateLimited, ResourceConflict, ResourceNotFound, ResponseDecodeError, SinkUnavailable } from "@kumulo/core"
 import type { KumuloError, KumuloErrorTag } from "@kumulo/core"
 import { OutputsInvalid } from "@kumulo/volumes-cinder"
-import { DistroNotWired } from "../src/distro-not-wired.ts"
+import { DoctorFailed } from "../src/doctor/failed.ts"
 import type { CliExitError } from "../src/exit-codes.ts"
 import { exitCodeFor } from "../src/exit-codes.ts"
 
@@ -32,7 +32,7 @@ const _samples: Record<KumuloErrorTag, KumuloError> = {
 
 const _allErrors: ReadonlyArray<CliExitError> = [
   ...Object.values(_samples),
-  new DistroNotWired({ distro: "k3s" }),
+  new DoctorFailed({ failed: ["a"] }),
   new OutputsInvalid({ message: "bad json" }),
   new PlatformError(new BadArgument({ module: "FileSystem", method: "readFileString" }))
 ]

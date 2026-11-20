@@ -1,21 +1,19 @@
-export { clusterDrift, driftConflict, UksClusterDrift, VersionDrift, versionDrift } from "./cluster-drift.ts"
+export { clusterDrift, UksClusterDrift, VersionDrift, versionDrift } from "./cluster-drift.ts"
 
 export type { UksClusterState, UksDesiredCluster } from "./cluster-drift.ts"
 
-export { KUMULO_POOL_LABEL_KEY, diffNodePools, uksPoolHash, uksPoolName } from "./nodegroup-diff.ts"
+export { diffNodePools, uksPoolHash, uksPoolName } from "./nodegroup-diff.ts"
 
 export type { ExistingNodeGroup, NodeGroupDiff } from "./nodegroup-diff.ts"
 
 export { compareMinor, resolveUpgradeTarget, UpgradeTarget } from "./upgrade.ts"
 
 
-export { isValidLabel, KUMULO_OWNER_LABEL_KEY, ownershipLabels } from "./ownership.ts"
+export { isValidLabel, ownershipLabels } from "./ownership.ts"
 
 export type { UksClusterConfig, UksClusterRef, UksClients, UksLabel, UksUpgradeStrategy, UksWorkerPoolConfig } from "./types.ts"
 
-export { pollUntil, pollUntilGone } from "./status.ts"
 
-export type { StatusPollOptions } from "./status.ts"
 
 export { ensureNetwork, deleteNetwork, findOwnedNetwork, networkName, routerName, uksNetworkLabels } from "./network.ts"
 

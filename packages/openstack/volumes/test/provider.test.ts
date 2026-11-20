@@ -115,6 +115,30 @@ describe("volumes-cinder VolumeProvider", () => {
     }).pipe(Effect.provide(fake.layer))
   })
 
+  it.effect("a list that never ends fails at the page cap instead of truncating", () => {
+    let page = 0
+
+    const fake = makeFakeCinder({
+      "GET /volumes/detail": () => {
+        page += 1
+
+        return {
+          status: 200,
+          body: {
+            volumes: [{ id: `vol-${page}`, name: `v${page}` }],
+            volumes_links: [{ rel: "next", href: `/volumes/detail?marker=vol-${page}` }]
+          }
+        }
+      }
+    })
+
+    return Effect.gen(function*() {
+      const failure = yield* Effect.flip(listClusterVolumes("prod"))
+      expect(failure).toBeInstanceOf(ProviderApiError)
+      expect(page).toBe(100)
+    }).pipe(Effect.provide(fake.layer))
+  })
+
   it.effect("deleteVolume tolerates an already-gone volume (404)", () => {
     const fake = makeFakeCinder({ "DELETE /volumes/vol-1": () => ({ status: 404 }) })
 

@@ -3,13 +3,9 @@ import {
   Cidr,
   commonClusterFields,
   Dns,
-  isAuthMethodConsistentWithProvider,
-  isCdnApexRequiresBunnyDns,
-  isGodaddyApexNotCname,
-  isGodaddyTtlMinimum,
-  isCdnOriginUrlRequired,
-  isSecretsRequiredForObjectStorage,
-  isVolumesModuleConsistentWithProvider,
+  authMethodConsistentWithProvider,
+  cdnOriginUrlRequired,
+  secretsRequiredForObjectStorage,
   ProviderSchema
 } from "@kumulo/core"
 
@@ -65,13 +61,6 @@ const K3sPassthrough = Schema.Struct({
   extra_agent_args: Schema.Array(Schema.String)
 })
 
-const isCsiVolumeTypeSupportedByProvider = Schema.makeFilter(
-  (config: { provider: string; addons?: { csi: { default_volume_type?: string | undefined } } }) =>
-    config.provider === "hetzner" && config.addons?.csi.default_volume_type !== undefined
-      ? "addons.csi.default_volume_type is not supported when provider is hetzner (Hetzner volumes have no types)"
-      : undefined
-)
-
 export const K3sClusterConfig = Schema.Struct({
   ...commonClusterFields,
   provider: ProviderSchema,
@@ -84,16 +73,7 @@ export const K3sClusterConfig = Schema.Struct({
   masters: Masters,
   addons: Addons,
   k3s: K3sPassthrough
-}).check(
-  isSecretsRequiredForObjectStorage,
-  isAuthMethodConsistentWithProvider,
-  isVolumesModuleConsistentWithProvider,
-  isCsiVolumeTypeSupportedByProvider,
-  isCdnApexRequiresBunnyDns,
-  isCdnOriginUrlRequired,
-  isGodaddyTtlMinimum,
-  isGodaddyApexNotCname
-)
+}).check(secretsRequiredForObjectStorage.filter, authMethodConsistentWithProvider.filter, cdnOriginUrlRequired.filter)
 
 export type K3sClusterConfig = typeof K3sClusterConfig.Type
 

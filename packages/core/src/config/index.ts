@@ -1,3 +1,5 @@
+export { type CrossFieldRule, crossFieldRule } from "./rule.ts"
+
 export { decodeConfigWith, encodeConfigWith } from "./decode.ts"
 
 export {
@@ -14,20 +16,18 @@ export {
   BunnyStorageRegion,
   Cdn,
   CdnOrigin,
-  isCdnApexRequiresBunnyDns,
-  isGodaddyApexNotCname,
-  isGodaddyTtlMinimum,
-  isCdnOriginUrlRequired,
+  cdnOriginUrlRequired,
+  isIpLiteral,
   Shield,
   Cidr,
+  ClusterName,
   cidrRange,
   CinderVolumes,
   commonClusterFields,
   Dns,
   HcloudVolumes,
-  isAuthMethodConsistentWithProvider,
-  isSecretsRequiredForObjectStorage,
-  isVolumesModuleConsistentWithProvider,
+  authMethodConsistentWithProvider,
+  secretsRequiredForObjectStorage,
   ManagedVolume,
   NonNegativeInt,
   NoVolumes,

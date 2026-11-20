@@ -1,27 +1,28 @@
 import { Effect, Redacted, Schema } from "effect"
 import { assert, describe, it } from "@effect/vitest"
 import { BucketNotEmpty, ResourceConflict } from "@kumulo/core"
-import { makeBunnyHttpClient, makeBunnyStorageClient, makeFakeBunnyStorage } from "@kumulo/bunny"
+import { makeBunnyHttpClient, makeBunnyStorageClient } from "@kumulo/bunny"
+import { makeFakeBunnyStorage } from "@kumulo/bunny/testing"
 import { diffBuckets } from "../src/diff.ts"
 import type { ExistingBunnyBucket } from "../src/diff.ts"
 import { emptyOutputs, outputsPath, parseOutputsYaml, stringifyOutputs } from "../src/outputs.ts"
 import type { OutputsBucket } from "../src/outputs.ts"
 import { makeBunnyObjectStorageProvider } from "../src/provider.ts"
 
-const _setup = (owned: ReadonlyArray<OutputsBucket> = []) => {
+const _setup = (owned: ReadonlyArray<OutputsBucket> = []) => Effect.gen(function*() {
   const fake = makeFakeBunnyStorage({ apiKey: "k" })
-  const http = makeBunnyHttpClient({ base: fake.httpClient, apiKey: Redacted.make("k"), baseUrl: "https://fake.invalid" })
+  const http = yield* makeBunnyHttpClient({ base: fake.httpClient, apiKey: Redacted.make("k"), baseUrl: "https://fake.invalid" })
   const storage = makeBunnyStorageClient(http)
 
   return { fake, storage, provider: makeBunnyObjectStorageProvider({ storage, owned }) }
-}
+})
 
 const _spec = { name: "kumulo-data", region: "DE", retain: false }
 
 describe("provider", () => {
   it.effect("creates a zone and reports the s3 endpoint", () =>
     Effect.gen(function*() {
-      const { fake, provider } = _setup()
+      const { fake, provider } = yield* _setup()
       const ensured = yield* provider.ensureZone(_spec)
       assert.strictEqual(fake.peek().length, 1)
       assert.strictEqual(ensured.info.endpoint, "https://de-s3.storage.bunnycdn.com")
@@ -30,9 +31,9 @@ describe("provider", () => {
 
   it.effect("re-apply of an owned zone performs zero writes", () =>
     Effect.gen(function*() {
-      const first = _setup()
+      const first = yield* _setup()
       const ensured = yield* first.provider.ensureZone(_spec)
-      const { fake, storage } = _setup()
+      const { fake, storage } = yield* _setup()
       const seeded = fake.seed({ name: _spec.name })
       const provider = makeBunnyObjectStorageProvider({ storage, owned: [{ ...ensured.bucket, id: seeded.Id }] })
       yield* provider.ensureBucket(_spec)
@@ -43,7 +44,7 @@ describe("provider", () => {
 
   it.effect("name collision with an unowned zone is a ResourceConflict", () =>
     Effect.gen(function*() {
-      const { fake, provider } = _setup()
+      const { fake, provider } = yield* _setup()
       fake.seed({ name: _spec.name })
       const error = yield* Effect.flip(provider.ensureBucket(_spec))
       assert.instanceOf(error, ResourceConflict)
@@ -52,7 +53,7 @@ describe("provider", () => {
 
   it.effect("refuses to delete a non-empty zone", () =>
     Effect.gen(function*() {
-      const { fake, storage } = _setup()
+      const { fake, storage } = yield* _setup()
       const seeded = fake.seed({ name: _spec.name, filesStored: 3 })
 
       const provider = makeBunnyObjectStorageProvider({
@@ -67,7 +68,7 @@ describe("provider", () => {
 
   it.effect("deleting a zone that is already gone is a no-op", () =>
     Effect.gen(function*() {
-      const { fake, storage } = _setup()
+      const { fake, storage } = yield* _setup()
 
       const provider = makeBunnyObjectStorageProvider({
         storage,
@@ -80,7 +81,7 @@ describe("provider", () => {
 
   it.effect("deletes an empty owned zone", () =>
     Effect.gen(function*() {
-      const { fake, storage } = _setup()
+      const { fake, storage } = yield* _setup()
       const seeded = fake.seed({ name: _spec.name })
 
       const provider = makeBunnyObjectStorageProvider({
@@ -94,7 +95,7 @@ describe("provider", () => {
 
   it.effect("never deletes a retained zone", () =>
     Effect.gen(function*() {
-      const { fake, storage } = _setup()
+      const { fake, storage } = yield* _setup()
       const seeded = fake.seed({ name: _spec.name })
 
       const provider = makeBunnyObjectStorageProvider({
@@ -109,7 +110,7 @@ describe("provider", () => {
 
   it.effect("returns per-bucket credentials from zone name and password", () =>
     Effect.gen(function*() {
-      const { fake, storage } = _setup()
+      const { fake, storage } = yield* _setup()
       const seeded = fake.seed({ name: _spec.name, region: "NY" })
 
       const provider = makeBunnyObjectStorageProvider({
@@ -128,7 +129,7 @@ describe("provider", () => {
 
   it.effect("lists owned zones in a region", () =>
     Effect.gen(function*() {
-      const { fake, storage } = _setup()
+      const { fake, storage } = yield* _setup()
       const mine = fake.seed({ name: "owned-zone", region: "DE" })
       fake.seed({ name: "other-zone", region: "DE" })
 
@@ -143,7 +144,7 @@ describe("provider", () => {
 
   it.effect("an unavailable (invalid) name is a ResourceConflict and writes nothing", () =>
     Effect.gen(function*() {
-      const { fake, provider } = _setup()
+      const { fake, provider } = yield* _setup()
       const error = yield* Effect.flip(provider.ensureBucket({ name: "x", region: "DE", retain: false }))
       assert.instanceOf(error, ResourceConflict)
       assert.strictEqual(fake.writes().length, 0)

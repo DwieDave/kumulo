@@ -1,7 +1,6 @@
 import { Duration, Effect, Layer, Ref } from "effect"
 import { layerNoop } from "effect/FileSystem"
 import * as HttpClient from "effect/http/HttpClient"
-import * as HttpClientRequest from "effect/http/HttpClientRequest"
 import { assert, describe, it } from "@effect/vitest"
 import { AuthenticationFailed, PlanAction, ProviderApiError } from "@kumulo/core"
 import { makeBunnyPullZoneClient } from "@kumulo/bunny"
@@ -215,15 +214,6 @@ describe("cdn dns target", () => {
   })
 })
 
-const _relative = (client: HttpClient.HttpClient): HttpClient.HttpClient =>
-  client.pipe(
-    HttpClient.mapRequest((request) => {
-      const url = new URL(request.url)
-
-      return HttpClientRequest.setUrl(request, `${url.pathname}${url.search}`)
-    })
-  )
-
 const _stale = () =>
   makeFakeCdn({ outputs: { cluster: "staging", pullZoneId: 999, systemHostname: "gone.b-cdn.net", shieldZoneId: 55, rules: {}, lists: {} } })
 
@@ -309,6 +299,11 @@ describe("hardening", () => {
         exists: (path) => Effect.succeed(store.has(path)),
         readFileString: (path) => Effect.succeed(store.get(path) ?? ""),
         writeFileString: (path, data) => Effect.sync(() => void store.set(path, data)),
+        rename: (from, to) =>
+          Effect.sync(() => {
+            store.set(to, store.get(from) ?? "")
+            store.delete(from)
+          }),
         makeDirectory: () => Effect.void
       })
 
@@ -317,7 +312,7 @@ describe("hardening", () => {
 
       const handleFor = () =>
         cdnHandleFor({ config, configDir: "." }).pipe(
-          Effect.provide(Layer.mergeAll(fs, Layer.succeed(HttpClient.HttpClient, _relative(fake.pullZone.httpClient)), fakeCredentials))
+          Effect.provide(Layer.mergeAll(fs, Layer.succeed(HttpClient.HttpClient, fake.pullZone.httpClient), fakeCredentials))
         )
 
       const first = yield* handleFor()

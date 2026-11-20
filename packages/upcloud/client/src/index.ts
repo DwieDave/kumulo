@@ -1,60 +1,34 @@
 /** @kumulo/upcloud — package barrel. */
 export const packageName = "@kumulo/upcloud"
 
-export {
-  DEFAULT_REQUEST_TIMEOUT,
-  retryAfterCapSeconds,
-  transportMaxRetries,
-  UPCLOUD_API_BASE_URL,
-  UpcloudHttpLive,
-  makeUpcloudHttpClient
-} from "./transport/http-client.ts"
+export { UpcloudHttpLive } from "./transport/http-client.ts"
 
-export type { UpcloudHttpClientOptions } from "./transport/http-client.ts"
+export { ignoreMissing, mapUpcloudError } from "./errors.ts"
 
-export { ignoreMissing, mapUpcloudError, statusError, toUpcloudError } from "./errors/index.ts"
-
-export type { Classified, ErrorContext, UpcloudCause, UpcloudError } from "./errors/index.ts"
+export type { UpcloudError } from "./errors.ts"
 
 export { UpcloudLabel } from "./client/common.ts"
 
-export type { UpcloudRawError } from "./client/common.ts"
+export { makeUksClient, UksCluster } from "./client/uks.ts"
 
-export { makeUksClient, UksCluster, UksPlan, UksState } from "./client/uks.ts"
+export type { UksClient } from "./client/uks.ts"
 
-export type { UksClient, UksClusterCreateInput, UksClusterPatchInput, UksUpgradeRequest } from "./client/uks.ts"
+export { makeNodeGroupsClient, NodeGroup } from "./client/node-groups.ts"
 
-export { makeNodeGroupsClient, NodeGroup, NodeGroupKubeletArg, NodeGroupState, NodeGroupStorage, NodeGroupTaint } from "./client/node-groups.ts"
+export type { NodeGroupsClient } from "./client/node-groups.ts"
 
-export type { NodeGroupCreateInput, NodeGroupPatchInput, NodeGroupsClient } from "./client/node-groups.ts"
+export { makeNetworkClient, makeRouterClient } from "./client/network.ts"
 
-export { IpNetwork, makeNetworkClient, makeRouterClient, Network, Router } from "./client/network.ts"
+export type { NetworkClient, RouterClient } from "./client/network.ts"
 
-export type { NetworkClient, NetworkCreateInput, RouterClient } from "./client/network.ts"
-
-export { makeZoneClient, Zone } from "./client/zone.ts"
+export { makeZoneClient } from "./client/zone.ts"
 
 export type { ZoneClient } from "./client/zone.ts"
 
-export { makeStorageClient, Storage, StorageState, StorageTier } from "./client/storage.ts"
+export { makeStorageClient, Storage, StorageTier } from "./client/storage.ts"
 
-export type { StorageClient, StorageCreateInput, StoragePatchInput } from "./client/storage.ts"
+export type { StorageClient } from "./client/storage.ts"
 
-export {
-  AccessKey,
-  AccessKeyStatus,
-  BucketMetrics,
-  makeObjectStorageClient,
-  ObjectStorageConfiguredStatus,
-  ObjectStorageEndpoint,
-  ObjectStorageNetwork,
-  ObjectStorageRegion,
-  ObjectStorageService,
-  ObjectStorageUser
-} from "./client/object-storage.ts"
+export { AccessKey, makeObjectStorageClient, ObjectStorageService } from "./client/object-storage.ts"
 
-export type {
-  ObjectStorageClient,
-  ObjectStorageServiceCreateInput,
-  ObjectStorageServicePatchInput
-} from "./client/object-storage.ts"
+export type { ObjectStorageClient } from "./client/object-storage.ts"

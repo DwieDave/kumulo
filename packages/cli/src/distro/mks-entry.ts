@@ -134,11 +134,11 @@ export const mksEntry: DistroEntry<MksClusterConfig> = {
       }))
     ),
   delete: deleteMks,
-  kubeconfig: kubeconfigMks,
+  kubeconfig: ({ config }) => kubeconfigMks(config),
   deletedLabel: "mks-cluster",
   appliedPrefixes: ["network/", "subnet/", "gateway/", "mks-cluster/", "mks-pool/", "load-balancer/", "floating-ip/", "cdn/"],
   selfProgress: true,
-  status: _statusMks,
+  status: ({ config }) => _statusMks(config),
   upgrade: _upgradeMksEntry,
   credentialsLabel: "ovh api",
   requiredEnvVars: ["OVH_CLIENT_ID", "OVH_CLIENT_SECRET", "OVH_SERVICE_NAME"],

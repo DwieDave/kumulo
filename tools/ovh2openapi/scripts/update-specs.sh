@@ -6,7 +6,7 @@ set -euo pipefail
 
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/specs/ovh"
 
-curl -sS -o "$dir/cloud.json" https://eu.api.ovh.com/1.0/cloud.json
-curl -sS -o "$dir/domain.json" https://eu.api.ovh.com/1.0/domain.json
+curl --fail -sS --max-time 60 -o "$dir/cloud.json" https://eu.api.ovh.com/1.0/cloud.json
+curl --fail -sS --max-time 60 -o "$dir/domain.json" https://eu.api.ovh.com/1.0/domain.json
 
 echo "Updated $dir/cloud.json and $dir/domain.json"

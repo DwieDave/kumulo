@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { describe, expect, it } from "vitest"
 import { Effect } from "effect"
-import { computePlan, decidePlanAction, PlanDecision, renderPlan, toTaggedResource } from "@kumulo/core"
+import { computePlan, decidePlanAction, PlanDecision, toTaggedResource } from "@kumulo/core"
+import { renderPlan } from "../packages/cli/src/present.ts"
 import { parseConfigYaml } from "../packages/cli/src/cluster-config.ts"
 import type { BucketSpec, DesiredResource, PlanAction, TaggedResource } from "@kumulo/core"
 import type { ClusterConfig } from "../packages/cli/src/cluster-config.ts"
@@ -25,9 +26,9 @@ const _desiredBuckets = (config: ClusterConfig): ReadonlyArray<BucketSpec> =>
     ? []
     : config.object_storage.buckets.map((bucket) => ({
         name: bucket.name,
-        region: bucket.region ?? config.auth.region,
-        versioning: bucket.versioning,
-        encryption: bucket.encryption,
+        region: "region" in bucket ? (bucket.region ?? config.auth.region) : config.auth.region,
+        versioning: "versioning" in bucket ? bucket.versioning : false,
+        encryption: "encryption" in bucket ? bucket.encryption : false,
         retain: bucket.retain
       }))
 

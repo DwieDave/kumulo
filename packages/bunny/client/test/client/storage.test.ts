@@ -7,16 +7,16 @@ import { makeBunnyStorageClient } from "../../src/client/storage.ts"
 import { makeFakeBunnyStorage } from "../../src/testing/fake-storage.ts"
 import { makeBunnyHttpClient } from "../../src/transport/http-client.ts"
 
-const _setup = () => {
+const _setup = () => Effect.gen(function*() {
   const fake = makeFakeBunnyStorage({ apiKey: "k" })
-  const http = makeBunnyHttpClient({ base: fake.httpClient, apiKey: Redacted.make("k"), baseUrl: "https://fake.invalid" })
+  const http = yield* makeBunnyHttpClient({ base: fake.httpClient, apiKey: Redacted.make("k"), baseUrl: "https://fake.invalid" })
 
   return { fake, client: makeBunnyStorageClient(http) }
-}
+})
 
 it.effect("creates an S3-capable zone with defaults", () =>
   Effect.gen(function*() {
-    const { client, fake } = _setup()
+    const { client, fake } = yield* _setup()
     const zone = yield* client.createZone({ name: "kumulo-backups", region: "DE" })
     assert.strictEqual(zone.StorageZoneType, "Supported")
     assert.strictEqual(zone.ZoneTier, "Standard")
@@ -28,14 +28,14 @@ it.effect("creates an S3-capable zone with defaults", () =>
 
 it.effect("creates an Edge tier zone", () =>
   Effect.gen(function*() {
-    const { client } = _setup()
+    const { client } = yield* _setup()
     const zone = yield* client.createZone({ name: "kumulo-edge", region: "NY", zoneTier: "Edge" })
     assert.strictEqual(zone.ZoneTier, "Edge")
   }))
 
 it.effect("rejects duplicate and invalid names", () =>
   Effect.gen(function*() {
-    const { client, fake } = _setup()
+    const { client, fake } = yield* _setup()
     fake.seed({ name: "taken-name" })
     const duplicate = yield* Effect.flip(client.createZone({ name: "taken-name", region: "DE" }))
     assert.instanceOf(duplicate, ResourceConflict)
@@ -46,7 +46,7 @@ it.effect("rejects duplicate and invalid names", () =>
 
 it.effect("gets a zone and decodes all fields", () =>
   Effect.gen(function*() {
-    const { client, fake } = _setup()
+    const { client, fake } = yield* _setup()
     const seeded = fake.seed({ name: "some-zone", region: "SG", filesStored: 3, storageUsed: 99 })
     const zone = yield* client.getZone(seeded.Id)
     assert.strictEqual(zone.Id, seeded.Id)
@@ -59,13 +59,13 @@ it.effect("gets a zone and decodes all fields", () =>
 
 it.effect("maps a missing zone to ResourceNotFound", () =>
   Effect.gen(function*() {
-    const { client } = _setup()
+    const { client } = yield* _setup()
     assert.instanceOf(yield* Effect.flip(client.getZone(1)), ResourceNotFound)
   }))
 
 it.effect("lists across pages and filters by search", () =>
   Effect.gen(function*() {
-    const { client, fake } = _setup()
+    const { client, fake } = yield* _setup()
 
     for (const n of ["alpha-1", "alpha-2", "alpha-3", "beta-1", "beta-2"]) {
       fake.seed({ name: n })
@@ -80,7 +80,7 @@ it.effect("lists across pages and filters by search", () =>
 
 it.effect("checks availability", () =>
   Effect.gen(function*() {
-    const { client, fake } = _setup()
+    const { client, fake } = yield* _setup()
     fake.seed({ name: "in-use" })
     assert.isTrue(yield* client.checkAvailability("free-name"))
     assert.isFalse(yield* client.checkAvailability("in-use"))
@@ -89,7 +89,7 @@ it.effect("checks availability", () =>
 
 it.effect("deletes without linked pull zones", () =>
   Effect.gen(function*() {
-    const { client, fake } = _setup()
+    const { client, fake } = yield* _setup()
     const seeded = fake.seed({ name: "doomed-zone" })
     yield* client.deleteZone(seeded.Id)
     assert.strictEqual(fake.peek().length, 0)
@@ -101,7 +101,7 @@ it.effect("deletes without linked pull zones", () =>
 
 it.effect("lists regions", () =>
   Effect.gen(function*() {
-    const { client } = _setup()
+    const { client } = yield* _setup()
     const regions = yield* client.regions()
     assert.deepStrictEqual(regions.slice(0, 2).map((r) => r.Code), ["DE", "NY"])
     assert.strictEqual(regions.at(-1)?.Endpoint, null)
@@ -110,7 +110,7 @@ it.effect("lists regions", () =>
 it.effect("maps a bad key to AuthenticationFailed", () =>
   Effect.gen(function*() {
     const fake = makeFakeBunnyStorage({ apiKey: "right" })
-    const http = makeBunnyHttpClient({ base: fake.httpClient, apiKey: Redacted.make("wrong"), baseUrl: "https://fake.invalid" })
+    const http = yield* makeBunnyHttpClient({ base: fake.httpClient, apiKey: Redacted.make("wrong"), baseUrl: "https://fake.invalid" })
     assert.instanceOf(yield* Effect.flip(makeBunnyStorageClient(http).listZones()), AuthenticationFailed)
   }))
 

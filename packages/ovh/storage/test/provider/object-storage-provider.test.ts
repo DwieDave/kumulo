@@ -103,4 +103,16 @@ describe("ovh storage-ovh provider — credentials", () => {
       assert.notStrictEqual(Redacted.value(creds.accessKey), `AK-${userId}-seed`)
       assert.strictEqual(fake.credentialCount(userId), 1)
     }))
+
+  it.effect("ensureCredentials keeps the existing credentials when creating the new one fails", () =>
+    Effect.gen(function*() {
+      const fake = makeFakeProject(_serviceName)
+      const userId = fake.seedUser("kumulo-staging")
+      fake.seedCredential(userId)
+      fake.failNextCredentialCreate()
+      const provider = makeOvhObjectStorageProvider({ storage: fake.storage, serviceName: _serviceName })
+      const error = yield* Effect.flip(provider.ensureCredentials("staging"))
+      assert.strictEqual(error._tag, "ProviderApiError")
+      assert.strictEqual(fake.credentialCount(userId), 1)
+    }))
 })

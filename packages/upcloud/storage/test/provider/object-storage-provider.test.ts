@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Predicate, Redacted } from "effect"
 import { makeObjectStorageClient } from "@kumulo/upcloud"
-import { ProviderApiError } from "@kumulo/core"
+import { PaginationStalled, ProviderApiError } from "@kumulo/core"
 import { ensureService, ensureUserAccess, KUMULO_S3_POLICY, makeUpcloudObjectStorageProvider } from "../../src/provider/object-storage-provider.ts"
 import { makeFakeObjectStorageServer } from "./fake-object-storage-server.ts"
 
@@ -69,6 +69,16 @@ describe("upcloud storage-upcloud provider — service + buckets", () => {
       assert.deepStrictEqual(buckets.map((b) => b.name), [_spec.name])
     }))
 
+  it.live("listBuckets returns nothing for a region other than the configured one", () =>
+    Effect.gen(function*() {
+      const { provider } = _makeProvider()
+      yield* provider.ensureBucket(_spec)
+      const other = yield* provider.listBuckets("us-nyc1")
+      assert.deepStrictEqual(other, [])
+      const own = yield* provider.listBuckets(_region)
+      assert.strictEqual(own.length, 1)
+    }))
+
   it.live("deleteBucket removes an empty bucket", () =>
     Effect.gen(function*() {
       const { fake, provider } = _makeProvider()
@@ -132,6 +142,27 @@ describe("upcloud storage-upcloud provider — credentials", () => {
       const service = _theService(fake)
       assert.strictEqual(fake.accessKeys.get(`${service.uuid}/staging-kumulo`)?.size, 1)
       assert.notStrictEqual(Redacted.value(first.accessKey), Redacted.value(second.accessKey))
+    }))
+
+  it.live("ensureCredentials keeps the existing key when creating the new one fails", () =>
+    Effect.gen(function*() {
+      const { fake, provider } = _makeProvider()
+      yield* provider.ensureCredentials(_cluster)
+      const service = _theService(fake)
+      const real = makeObjectStorageClient(fake.httpClient)
+
+      const failing = makeUpcloudObjectStorageProvider({
+        client: {
+          ...real,
+          accessKeys: { ...real.accessKeys, create: () => Effect.fail(new PaginationStalled({ cursor: "x", pages: 1 })) }
+        },
+        cluster: _cluster,
+        region: _region,
+        pollInterval: "1 millis"
+      })
+
+      yield* Effect.flip(failing.ensureCredentials(_cluster))
+      assert.strictEqual(fake.accessKeys.get(`${service.uuid}/staging-kumulo`)?.size, 1)
     }))
 
   it.live("ensureCredentials attaches the S3 policy once", () =>

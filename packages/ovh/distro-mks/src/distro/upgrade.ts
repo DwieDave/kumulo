@@ -1,7 +1,7 @@
 import type { Effect } from "effect"
-import type { MksError } from "@kumulo/core"
+import type { ManagedDistroError } from "@kumulo/core"
 import type { Mks } from "../client/mks.ts"
-import { mapMksError } from "./errors.ts"
+import { mapMksError } from "../errors.ts"
 import type { MksClusterRef, MksUpgradeStrategy } from "./types.ts"
 
 // no arbitrary target-version field on this endpoint, OVH doesn't support skipping versions
@@ -12,7 +12,7 @@ export const upgrade = (
     readonly strategy: MksUpgradeStrategy
     readonly force?: boolean
   }
-): Effect.Effect<void, MksError> =>
+): Effect.Effect<void, ManagedDistroError> =>
   mapMksError({
     self: mks.postCloudProjectServiceNameKubeKubeIdUpdate(ref.serviceName, ref.kubeId, { payload: { strategy, force } }),
     ctx: { kind: "upgrade", ref: ref.kubeId }

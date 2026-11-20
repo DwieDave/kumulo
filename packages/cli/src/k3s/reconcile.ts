@@ -1,7 +1,8 @@
-import { Effect, Exit, Layer, Schema } from "effect"
+import { Effect, Exit, FileSystem, Layer, Schema } from "effect"
+import { homedir } from "node:os"
 import * as HttpClient from "effect/http/HttpClient"
-import { BootstrapFailed, CloudProvider, installAddons, K8sClient, makeK8sClient, parseKubeconfig, PlanRejected, ResourceNotFound, VolumeProvider } from "@kumulo/core"
-import type { Addon, AddonError, AuthenticationFailed, CloudError, DnsError, HttpTransportError, K8sManifest, Kubeconfig, ServerInfo, ServerSpec, VolumeError, ConfigInvalid, DnsProvider } from "@kumulo/core"
+import { BootstrapFailed, CloudProvider, installAddons, K8sClient, k8sClientFromKubeconfig, PlanRejected, ResourceNotFound, VolumeProvider } from "@kumulo/core"
+import type { Addon, AddonError, AuthenticationFailed, CloudError, DnsError, HttpTransportError, Inventory, K8sManifest, Kubeconfig, ServerInfo, ServerSpec, VolumeError, ConfigInvalid, DnsProvider } from "@kumulo/core"
 import type { K3sClusterConfig } from "../cluster-config.ts"
 
 export type K3sError =
@@ -24,26 +25,28 @@ import {
   systemUpgradeControllerAddon,
   drainAndRemove,
   fetchKubeconfig,
+  renderCloudInit,
+  writeKubeconfigFile,
   resolveServerUrl,
-  runBootstrap,
-  SshLive
+  runBootstrap
 } from "@kumulo/distro-k3s"
-import type { SshHost } from "@kumulo/distro-k3s"
+import type { ResolveServerUrlArgs, SshHost } from "@kumulo/distro-k3s"
 import type { CinderAuth } from "@kumulo/volumes-cinder"
 import { providerFor } from "../provider/registry.ts"
-import type { OpenStackEnv } from "../doctor-openstack/env.ts"
+import { k3sSshLayer } from "./env.ts"
+import type { OpenStackEnv } from "../openstack/env.ts"
 import {
   k3sHetznerVolumeProviderLayer,
   k3sVolumeProviderLayer,
   secGroupRules
 } from "./env.ts"
 import { k8sHttpClientLayer } from "./k8s-http-client.ts"
-import { buildK3sServerSpecs } from "./plan.ts"
+import { buildK3sServerSpecs, nodeRoleOf } from "./plan.ts"
 import { withRowProgress } from "../spinner.ts"
-import { dnsProviderLayerWith, reconcileDns, removeDns } from "../dns.ts"
-import { applyCdn, cdnHandleFor, cdnWarnings, pullZoneIdFor, removeCdn } from "../cdn.ts"
+import { reconcileDns, removeDns } from "../dns.ts"
+import { withEdge } from "../edge.ts"
+import { applyCdn, cdnWarnings, removeCdn } from "../cdn.ts"
 import type { CdnHandle, CdnStepError } from "../cdn.ts"
-import type { FileSystem } from "effect/FileSystem"
 
 export interface K3sApplyResult {
   readonly apiEndpoint: string
@@ -74,18 +77,37 @@ const _apiDnsFqdn = (config: K3sClusterConfig): string | undefined => {
 }
 
 const _tlsSans = (
-  args: { readonly config: K3sClusterConfig; readonly masterIps: ReadonlyArray<string>; readonly lbVip: string }
+  args: { readonly config: K3sClusterConfig; readonly masterIps: ReadonlyArray<string>; readonly lbVip: string | undefined }
 ): ReadonlyArray<string> => {
   const fqdn = _apiDnsFqdn(args.config)
 
-  return [...args.masterIps, args.lbVip, ...(fqdn === undefined ? [] : [fqdn])]
+  return [...args.masterIps, ...(args.lbVip === undefined ? [] : [args.lbVip]), ...(fqdn === undefined ? [] : [fqdn])]
 }
 
 interface Infra {
-  readonly lbVip: string
+  readonly lbVip: string | undefined
   readonly masterInfos: ReadonlyArray<ServerInfo>
   readonly workerInfos: ReadonlyArray<ServerInfo>
 }
+
+// the API endpoint falls back to the first master when no load balancer fronts it (non-HA)
+const _apiEndpoint = (infra: Infra): string => infra.lbVip ?? infra.masterInfos[0]?.ip ?? ""
+
+const _expandHome = (path: string): string => path.startsWith("~/") ? `${homedir()}${path.slice(1)}` : path
+
+const _readSshPublicKey = (
+  config: K3sClusterConfig
+): Effect.Effect<string, BootstrapFailed, FileSystem.FileSystem> =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem
+    const content = yield* fs.readFileString(_expandHome(config.ssh.public_key_path))
+
+    return content.trim()
+  }).pipe(
+    Effect.mapError((cause) =>
+      new BootstrapFailed({ node: config.ssh.public_key_path, phase: "readSshPublicKey", log: String(cause) })
+    )
+  )
 
 const NO_REPLACE: ReadonlySet<string> = new Set()
 
@@ -122,22 +144,30 @@ const _deleteDrifted = (
 const _provisionInfra = (
   config: K3sClusterConfig,
   replace: ReadonlySet<string>
-): Effect.Effect<Infra, CloudError | PlanRejected, CloudProvider> =>
+): Effect.Effect<Infra, CloudError | PlanRejected | BootstrapFailed, CloudProvider | FileSystem.FileSystem> =>
   Effect.gen(function*() {
     const cloudProvider = yield* CloudProvider
+    const sshPublicKey = yield* _readSshPublicKey(config)
 
-    const lb = yield* withRowProgress({
+    const provisioned = yield* withRowProgress({
       match: (name) =>
         name.startsWith("network/") || name.startsWith("security-group/") || name.startsWith("load-balancer/"),
       effect: Effect.gen(function*() {
-        yield* cloudProvider.ensureNetwork({ cidr: config.network.cidr })
+        const network = yield* cloudProvider.ensureNetwork({ cidr: config.network.cidr })
         yield* cloudProvider.ensureSecurityGroups({ rules: secGroupRules(config) })
+        // without HA there is no load balancer: the API is reached on the master itself
+        const lb = config.api_server.high_availability ? yield* cloudProvider.ensureLoadBalancer({ members: [] }) : undefined
 
-        return yield* cloudProvider.ensureLoadBalancer({ members: [] })
+        return { networkId: network.id, lbVip: lb?.vip }
       })
     })
 
-    const specs = buildK3sServerSpecs(config)
+    const specs = buildK3sServerSpecs(config).map((spec) => ({
+      ...spec,
+      userData: renderCloudInit({ hostname: spec.name, sshPublicKey }),
+      networkId: provisioned.networkId
+    }))
+
     yield* _refuseMasterReplace(specs, replace)
 
     if (replace.size > 0) yield* _deleteDrifted({ config, replace })
@@ -146,7 +176,7 @@ const _provisionInfra = (
     const masterInfos = yield* Effect.forEach(masterSpecs, cloudProvider.ensureServer, { concurrency: masterSpecs.length })
     const workerInfos = yield* Effect.forEach(workerSpecs, cloudProvider.ensureServer, { concurrency: 10 })
 
-    return { lbVip: lb.vip, masterInfos, workerInfos }
+    return { lbVip: provisioned.lbVip, masterInfos, workerInfos }
   })
 
 const _bootstrap = (config: K3sClusterConfig, infra: Infra): Effect.Effect<SshHost, BootstrapFailed, Ssh> =>
@@ -172,11 +202,13 @@ export const k8sClientLive = (
   Layer.effect(
     K8sClient,
     Effect.gen(function*() {
-      const raw = yield* fetchKubeconfig({ master1, clusterName: config.name, serverUrl: `https://${master1.ip}:6443` })
-      const parsed = yield* parseKubeconfig(raw.content)
-      const client = yield* Effect.provide(HttpClient.HttpClient, k8sHttpClientLayer({ auth: parsed.auth, caPem: parsed.caPem }))
+      const kubeconfig = yield* fetchKubeconfig({ master1, clusterName: config.name, serverUrl: `https://${master1.ip}:6443` })
 
-      return makeK8sClient({ client, server: parsed.server })
+      return yield* k8sClientFromKubeconfig({
+        kubeconfig,
+        httpClientFor: (ctx) =>
+          Effect.provide(HttpClient.HttpClient, k8sHttpClientLayer({ auth: ctx.auth, caPem: ctx.caPem }))
+      })
     })
   )
 
@@ -195,21 +227,6 @@ const _installAddons = (
     yield* installAddons({ k8sClient, addons })
   })
 
-const _reconcileVolumes = (config: K3sClusterConfig): Effect.Effect<void, VolumeError, VolumeProvider> => {
-  const volumes = config.volumes
-
-  return volumes.module === "none"
-    ? Effect.void
-    : Effect.gen(function*() {
-      const provider = yield* VolumeProvider
-      yield* Effect.forEach(
-        volumes.managed,
-        (v) => provider.ensureVolume({ name: v.name, sizeGb: v.size_gb, type: v.type, retain: v.retain }),
-        { discard: true }
-      )
-    })
-}
-
 export const orphanedWorkers = (
   { config, workerInfos }: { readonly config: K3sClusterConfig; readonly workerInfos: ReadonlyArray<ServerInfo> }
 ): ReadonlyArray<ServerInfo> => {
@@ -225,7 +242,7 @@ const _drainOrphanedWorkers = (
     const cloudProvider = yield* CloudProvider
     const k8sClient = yield* K8sClient
     const inventory = yield* cloudProvider.listClusterResources(config.name)
-    const existingWorkers = inventory.servers.filter((s) => s.name.includes("-worker-"))
+    const existingWorkers = inventory.servers.filter((s) => nodeRoleOf({ config, server: s }) === "worker")
     const orphaned = orphanedWorkers({ config, workerInfos: existingWorkers })
     yield* Effect.forEach(
       orphaned,
@@ -237,17 +254,34 @@ const _drainOrphanedWorkers = (
     )
   })
 
+const _serverUrl = (
+  { config, lbVip, masterIp }: { readonly config: K3sClusterConfig; readonly lbVip: string | undefined; readonly masterIp: string }
+): string => {
+  const apiDnsName = _apiDnsFqdn(config)
+
+  const args: ResolveServerUrlArgs = { masterIp, lbVip, apiDnsName }
+
+  return resolveServerUrl(args)
+}
+
+// read-only commands take the VIP from inventory and never create a load balancer
+const _inventoryLbVip = (inventory: Inventory): string | undefined => {
+  const vip = inventory.loadBalancers[0]?.vip
+
+  return vip === undefined || vip === "" ? undefined : vip
+}
+
 const _writeKubeconfig = (
   config: K3sClusterConfig,
   master1: SshHost,
-  lbVip: string,
+  lbVip: string | undefined,
   configDir: string
-): Effect.Effect<string, BootstrapFailed, Ssh> =>
+): Effect.Effect<string, BootstrapFailed, Ssh | FileSystem.FileSystem> =>
   Effect.gen(function*() {
-    const serverUrl = resolveServerUrl({ lbVip, apiDnsName: _apiDnsFqdn(config), masterIp: master1.ip })
+    const serverUrl = _serverUrl({ config, lbVip, masterIp: master1.ip })
     const kubeconfig = yield* fetchKubeconfig({ master1, clusterName: config.name, serverUrl })
     const path = `${configDir}/${config.name}.kubeconfig`
-    yield* Effect.promise(() => import("node:fs/promises").then((fs) => fs.writeFile(path, kubeconfig.content, { mode: 0o600 })))
+    yield* writeKubeconfigFile({ path, content: kubeconfig.content })
 
     return path
   })
@@ -273,7 +307,7 @@ export const applyK3sEffect = (
       args: { readonly config: K3sClusterConfig; readonly master1: SshHost }
     ) => Layer.Layer<K8sClient, BootstrapFailed | ConfigInvalid, Ssh>
   }
-): Effect.Effect<K3sApplyResult, K3sError, CloudProvider | Ssh | DnsProvider | VolumeProvider> =>
+): Effect.Effect<K3sApplyResult, K3sError, CloudProvider | Ssh | DnsProvider | FileSystem.FileSystem> =>
   Effect.gen(function*() {
     const nodeRow = (name: string): boolean => name.startsWith(`kumulo-${config.name}-`)
 
@@ -300,42 +334,37 @@ export const applyK3sEffect = (
           reconcileDns({
             config,
             targets: targets.cdn === undefined
-              ? { api_server: { kind: "ip", value: infra.lbVip } }
-              : { api_server: { kind: "ip", value: infra.lbVip }, cdn: targets.cdn }
+              ? { api_server: { kind: "ip", value: _apiEndpoint(infra) } }
+              : { api_server: { kind: "ip", value: _apiEndpoint(infra) }, cdn: targets.cdn }
           })
       })
     })
-    yield* withRowProgress({
-      match: (name) => name.startsWith("volume/"),
-      effect: _reconcileVolumes(config)
-    })
     const kubeconfigPath = yield* _writeKubeconfig(config, master1, infra.lbVip, configDir)
 
-    return { apiEndpoint: infra.lbVip, kubeconfigPath }
+    return { apiEndpoint: _apiEndpoint(infra), kubeconfigPath }
   })
 
 export const applyK3s = (
   args: { readonly config: K3sClusterConfig; readonly configDir: string; readonly replace?: ReadonlySet<string> }
-): Effect.Effect<K3sApplyResult, K3sError, OpenStackEnv | CinderAuth | HttpClient.HttpClient | FileSystem> =>
+): Effect.Effect<K3sApplyResult, K3sError, OpenStackEnv | CinderAuth | HttpClient.HttpClient | FileSystem.FileSystem> =>
   Effect.gen(function*() {
-    const cdn = yield* cdnHandleFor({ config: args.config, configDir: args.configDir })
-    // resolved before any infrastructure exists so a missing credential fails fast
-    const providerAddons = yield* providerFor(args.config).clusterAddons(args.config)
+    const { cdn, result } = yield* withEdge({
+      config: args.config,
+      configDir: args.configDir,
+      run: (handle) =>
+        Effect.gen(function*() {
+          // resolved before any infrastructure exists so a missing credential fails fast
+          const providerAddons = yield* providerFor(args.config).clusterAddons(args.config)
 
-    const result = yield* applyK3sEffect({ ...args, cdn, providerAddons }).pipe(
-      Effect.provide(SshLive),
-      Effect.provide(_volumeProviderLayerFor(args.config)),
-      Effect.provide(dnsProviderLayerWith({ config: args.config, pullZoneIdFor: pullZoneIdFor(cdn) })),
+          return yield* applyK3sEffect({ ...args, cdn: handle, providerAddons })
+        })
+    }).pipe(
+      Effect.provide(k3sSshLayer({ configDir: args.configDir, clusterName: args.config.name })),
       Effect.provide(_cloudProviderLayerFor(args.config))
     )
 
     return { ...result, cdnWarnings: yield* cdnWarnings(cdn) }
   })
-
-export const deleteK3sEffect = (
-  config: K3sClusterConfig
-): Effect.Effect<void, K3sError, CloudProvider | DnsProvider | VolumeProvider> =>
-  deleteK3sWithCdn({ config, cdn: undefined })
 
 export const deleteK3sWithCdn = (
   { cdn, config }: { readonly config: K3sClusterConfig; readonly cdn: CdnHandle | undefined }
@@ -351,10 +380,11 @@ export const deleteK3sWithCdn = (
         effect: Effect.gen(function*() {
           const existing = yield* volumeProvider.listClusterVolumes(config.name)
 
+          // only config-listed, non-retained volumes are deleted, never other cluster-tagged ones
           for (const vol of existing) {
-            const retained = volumes.managed.find((r) => r.name === vol.name)?.retain ?? false
+            const entry = volumes.managed.find((r) => r.name === vol.name)
 
-            if (!retained) yield* volumeProvider.deleteVolume({ id: vol.id })
+            if (entry !== undefined && !entry.retain) yield* volumeProvider.deleteVolume({ id: vol.id })
           }
         })
       })
@@ -374,13 +404,10 @@ export const deleteK3sWithCdn = (
 
 export const deleteK3s = (
   { config, configDir }: { readonly config: K3sClusterConfig; readonly configDir: string }
-): Effect.Effect<void, K3sError, OpenStackEnv | CinderAuth | HttpClient.HttpClient | FileSystem> =>
+): Effect.Effect<void, K3sError, OpenStackEnv | CinderAuth | HttpClient.HttpClient | FileSystem.FileSystem> =>
   Effect.gen(function*() {
-    const cdn = yield* cdnHandleFor({ config, configDir })
-
-    yield* deleteK3sWithCdn({ config, cdn }).pipe(
+    yield* withEdge({ config, configDir, run: (cdn) => deleteK3sWithCdn({ config, cdn }) }).pipe(
       Effect.provide(_volumeProviderLayerFor(config)),
-      Effect.provide(dnsProviderLayerWith({ config, pullZoneIdFor: pullZoneIdFor(cdn) })),
       Effect.provide(_cloudProviderLayerFor(config))
     )
   })
@@ -389,20 +416,19 @@ export const kubeconfigK3sEffect = (config: K3sClusterConfig): Effect.Effect<Kub
   Effect.gen(function*() {
     const cloudProvider = yield* CloudProvider
     const inventory = yield* cloudProvider.listClusterResources(config.name)
-    const masterInfo = inventory.servers.find((s) => s.name.includes("-master-"))
+    const masterInfo = inventory.servers.find((s) => nodeRoleOf({ config, server: s }) === "master")
 
     if (masterInfo === undefined) return yield* Effect.fail(new ResourceNotFound({ kind: "server", ref: config.name }))
-    const lb = yield* cloudProvider.ensureLoadBalancer({ members: [] })
-    const serverUrl = resolveServerUrl({ lbVip: lb.vip, apiDnsName: _apiDnsFqdn(config), masterIp: masterInfo.ip })
+    const serverUrl = _serverUrl({ config, lbVip: _inventoryLbVip(inventory), masterIp: masterInfo.ip })
 
     return yield* fetchKubeconfig({ master1: _toHost(masterInfo), clusterName: config.name, serverUrl })
   })
 
 export const kubeconfigK3s = (
-  config: K3sClusterConfig
+  { config, configDir }: { readonly config: K3sClusterConfig; readonly configDir: string }
 ): Effect.Effect<Kubeconfig, K3sError, OpenStackEnv | CinderAuth | HttpClient.HttpClient> =>
   kubeconfigK3sEffect(config).pipe(
-    Effect.provide(SshLive),
+    Effect.provide(k3sSshLayer({ configDir, clusterName: config.name })),
     Effect.provide(_cloudProviderLayerFor(config))
   )
 
@@ -453,10 +479,9 @@ export const k3sStatusEffect = (
   Effect.gen(function*() {
     const cloudProvider = yield* CloudProvider
     const inventory = yield* cloudProvider.listClusterResources(config.name)
-    const masterInfo = inventory.servers.find((s) => s.name.includes("-master-"))
+    const masterInfo = inventory.servers.find((s) => nodeRoleOf({ config, server: s }) === "master")
 
     if (masterInfo === undefined) return { exists: false, nodes: [] }
-    const lb = yield* cloudProvider.ensureLoadBalancer({ members: [] })
 
     const nodes = yield* Effect.gen(function*() {
       const client = yield* K8sClient
@@ -465,13 +490,13 @@ export const k3sStatusEffect = (
       return manifests.map((m) => ({ name: _nodeName(m), ready: _nodeReady(m) }))
     }).pipe(Effect.provide(k8sClientLayer({ config, master1: _toHost(masterInfo) })))
 
-    return { exists: true, apiEndpoint: lb.vip, nodes }
+    return { exists: true, apiEndpoint: _inventoryLbVip(inventory) ?? masterInfo.ip, nodes }
   })
 
 export const k3sStatus = (
-  config: K3sClusterConfig
+  { config, configDir }: { readonly config: K3sClusterConfig; readonly configDir: string }
 ): Effect.Effect<K3sStatus, K3sError, OpenStackEnv | CinderAuth | HttpClient.HttpClient> =>
   k3sStatusEffect({ config }).pipe(
-    Effect.provide(SshLive),
+    Effect.provide(k3sSshLayer({ configDir, clusterName: config.name })),
     Effect.provide(_cloudProviderLayerFor(config))
   )

@@ -1,5 +1,5 @@
-import { Duration, Effect, Layer, Option, Predicate, Ref, Schedule } from "effect"
-import { CapabilityMissing, CdnProvider, ProvisioningTimeout, ResourceConflict } from "@kumulo/core"
+import { Duration, Effect, Option, Predicate, Ref, Schedule } from "effect"
+import { CapabilityMissing, ProvisioningTimeout, ResourceConflict } from "@kumulo/core"
 import type { CdnCacheMode, CdnError, CdnTier, EdgeInfo, EdgeRef, EdgeSpec } from "@kumulo/core"
 import type { BunnyError, BunnyPullZone, BunnyPullZoneClient, BunnyPullZoneSettings } from "@kumulo/bunny"
 import type { BunnyShield } from "./shield.ts"
@@ -214,10 +214,4 @@ export const makeBunnyCdnProvider = (options: BunnyCdnProviderOptions) => {
   const deleteEdge = (ref: EdgeRef): Effect.Effect<void, CdnError> => _mapped(client.deletePullZone({ id: _idOf(ref) }))
 
   return { ensureEdge, ensureCertificates, ensureCertificatesReport, ensureSecurity, resetSecurity, describeEdge, deleteEdge }
-}
-
-export const bunnyCdnProviderLive = (options: BunnyCdnProviderOptions) => {
-  const { ensureCertificates, ensureEdge, ensureSecurity: security, describeEdge, deleteEdge } = makeBunnyCdnProvider(options)
-
-  return Layer.succeed(CdnProvider, { ensureEdge, ensureCertificates, ensureSecurity: security, describeEdge, deleteEdge })
 }

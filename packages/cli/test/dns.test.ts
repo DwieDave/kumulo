@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Schema } from "effect"
-import { recordKind } from "@kumulo/dns-hetzner"
-import { ownershipTarget } from "@kumulo/core"
+
+import { ownershipTarget, recordKind } from "@kumulo/core"
 import { desiredRecords } from "../src/dns.ts"
 import type { DnsTarget, DnsTargets } from "../src/dns.ts"
 import type { ClusterConfig } from "../src/cluster-config.ts"

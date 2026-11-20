@@ -1,11 +1,10 @@
-import { ProviderApiError, VolumeProvider } from "@kumulo/core"
+import { pollUntil, ProviderApiError, VolumeProvider } from "@kumulo/core"
 import type { ClusterTag, VolumeInfo, VolumeRef, VolumeSpec } from "@kumulo/core"
 import { Effect, Layer } from "effect"
 import { ignoreMissing, mapUpcloudError } from "@kumulo/upcloud"
 import type { Storage, StorageClient, StorageTier, UpcloudError } from "@kumulo/upcloud"
 import { CLUSTER_LABEL_KEY, matchesVolumeLabels, hasClusterLabel, volumeLabels } from "./labels.ts"
 import { staticPvManifest } from "./manifests.ts"
-import { pollUntil } from "./poll.ts"
 
 export type VolumeError = UpcloudError
 
@@ -36,6 +35,8 @@ const _awaitOnline = ({ client, uuid }: { readonly client: StorageClient; readon
     isDone: (storage) => storage.state === "online",
     interval: "3 seconds",
     timeout: "5 minutes",
+    kind: "storage",
+    ref: uuid,
     onTimeout: () =>
       new ProviderApiError({
         operation: `storage ${uuid} online`,

@@ -5,24 +5,16 @@ export { CinderAuth } from "./auth.ts"
 
 export type { CinderAuthError } from "./auth.ts"
 
-export type { CinderCause, CinderError } from "./errors.ts"
-
-export { cinderClient } from "./client/cinder.ts"
-
-export type { CinderClient } from "./client/cinder.ts"
-
 export {
   deleteVolume,
   ensureVolume,
   listClusterVolumes,
-  VolumeProviderLive
+  cinderVolumeProviderLive
 } from "./provider.ts"
 
 export type { VolumeProviderOptions } from "./provider.ts"
 
-export { staticPvcManifest, staticPvManifest, staticVolumeManifests } from "./manifests.ts"
-
-export type { PvcBinding } from "./manifests.ts"
+export { staticPvManifest, staticVolumeManifests } from "./manifests.ts"
 
 export {
   decodeOutputs,
@@ -31,10 +23,8 @@ export {
   outputsPath,
   OutputsIngress,
   OutputsInvalid,
-  OutputsVolume,
   parseOutputsYaml,
   readOutputs,
-  removeVolume,
   setIngress,
   stringifyOutputs,
   stringifyOutputsYaml,
@@ -43,5 +33,3 @@ export {
 } from "./outputs.ts"
 
 export { adoptVolume, listVolumes } from "./commands.ts"
-
-export type { AdoptResult } from "./commands.ts"

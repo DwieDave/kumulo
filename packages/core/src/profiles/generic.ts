@@ -5,21 +5,6 @@ import { ProviderProfile } from "../ports/provider-profile.ts"
 import { validateAutoscaling, validateCni } from "../ports/validation.ts"
 
 export const genericProfile = {
-  name: "generic",
-  auth: {
-    keystoneUrlPattern: "",
-    domainDefault: "Default"
-  },
-  capabilities: {
-    octavia: (_region: string) => true,
-    floatingIps: true,
-    volumeTypes: []
-  },
-  defaults: {
-    externalNetworkName: "",
-    imageAliases: {},
-    dnsServers: []
-  },
   validate: (config: ClusterConfigFields) => _validateCrossDistro(config)
 }
 

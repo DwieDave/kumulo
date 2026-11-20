@@ -55,6 +55,7 @@ export const makeFakeProject = (serviceName: string) => {
   const containers = new Map<string, StoredContainer>()
   const users = new Map<number, StoredUser>()
   const credentials = new Map<number, Array<StoredCredential>>()
+  let failCredentialCreate = false
 
   const _basePath = `/cloud/project/${serviceName}`
 
@@ -147,6 +148,7 @@ export const makeFakeProject = (serviceName: string) => {
     }
 
     if (request.method === "POST") {
+      if (failCredentialCreate) return new Response(JSON.stringify({ message: "boom" }), { status: 500 })
       const cred: StoredCredential = { access: `AK-${userId}-${(credentials.get(userId)?.length ?? 0) + 1}`, secret: `SK-${userId}` }
       credentials.set(userId, [...(credentials.get(userId) ?? []), cred])
 
@@ -211,6 +213,9 @@ export const makeFakeProject = (serviceName: string) => {
     },
     seedCredential: (userId: number): void => {
       credentials.set(userId, [...(credentials.get(userId) ?? []), { access: `AK-${userId}-seed`, secret: `SK-${userId}-seed` }])
+    },
+    failNextCredentialCreate: (): void => {
+      failCredentialCreate = true
     },
     peekContainer: (region: string, name: string) => containers.get(_containerKey(region, name)),
     userCount: (): number => users.size,

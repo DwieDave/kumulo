@@ -10,7 +10,7 @@ SHA="7bc4ee41e044e4f2f7dc09c8b1193cfc4bc8f8ad"
 BASE="https://raw.githubusercontent.com/gtema/openstack-openapi/${SHA}/specs"
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/specs"
 
-fetch() { curl -sf --max-time 30 "${BASE}/${1}" -o "${DIR}/${2}"; }
+fetch() { curl -fsS --max-time 30 "${BASE}/${1}" -o "${DIR}/${2}"; }
 
 fetch identity/v3.14.yaml keystone/v3.14.yaml
 fetch compute/v2.96.yaml nova/v2.96.yaml

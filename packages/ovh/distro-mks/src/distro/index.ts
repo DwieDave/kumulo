@@ -20,8 +20,6 @@ export { upgrade } from "./upgrade.ts"
 
 export { deleteCluster } from "./delete.ts"
 
-export { pollUntil } from "./status.ts"
-
 export { ensureGateway, type GatewayModel } from "./gateway.ts"
 
 export { requireVrack } from "./vrack.ts"

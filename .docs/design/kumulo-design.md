@@ -40,9 +40,9 @@ Primary target for v1: **k3s on OVHcloud Public Cloud with static node pools** (
 │  @kumulo/core           Orchestration engine                 │
 │    · ConfigSchema (effect/Schema)                           │
 │    · Reconciler (plan → diff → apply, tag-based discovery)  │
-│    · Phases: Network → Security → LB → Nodes → Bootstrap    │
-│              → Addons → Kubeconfig                          │
-│    · Ports (interfaces): CloudProvider, Distro; plain-data Addon + installAddons       │
+│    · Provider toolkit: HTTP client, errors, paginate,       │
+│      pollUntil, outputs files, reconcileDns, testing        │
+│    · Ports (interfaces): CloudProvider, DnsProvider, ...; plain-data Addon + installAddons       │
 ├──────────────────────────┬──────────────────────────────────┤
 │  @kumulo/openstack        │  @kumulo/distro-k3s               │
 │  Generated clients +     │  cloud-init templates, token     │
@@ -60,20 +60,23 @@ Primary target for v1: **k3s on OVHcloud Public Cloud with static node pools** (
 └──────────────────────────┴──────────────────────────────────┘
 ```
 
-**Monorepo** (pnpm workspaces + turborepo or nx):
+**Monorepo** (bun workspaces; `bun run build`, `bun run tsconfig:sync`, dependency-cruiser and knip in CI):
 
 | Package | Responsibility |
 |---|---|
-| `@kumulo/core` | Domain model, config schema, reconciler, phase orchestration, port interfaces. Zero HTTP code. |
+| `@kumulo/core` | Domain model, config schema, reconciler, port interfaces, and the shared provider toolkit (§3.7). |
 | `@kumulo/openstack` | Generated OpenStack API clients + `CloudProvider` implementation. Keystone auth layer. |
-| `@kumulo/provider-ovh` | `ProviderProfile` for OVH: sane defaults, capability flags, credential helpers. |
-| `@kumulo/distro-k3s` | `Distro` (self-managed) implementation for k3s. |
-| `@kumulo/distro-ovh-mks` | `Distro` (managed) implementation for OVH Managed Kubernetes (§3.3.1). |
+| `@kumulo/provider-ovh` (`packages/ovh/client`) | OVH API client and `ProviderProfile` (validation only). |
+| `@kumulo/distro-k3s` | Self-managed k3s: cloud-init rendering, SSH bootstrap with per-cluster known_hosts (TOFU), kubeconfig. |
+| `@kumulo/distro-ovh-mks` (`packages/ovh/distro-mks`) | Managed distro for OVH Managed Kubernetes (§3.3.1). |
+| `@kumulo/distro-upcloud-uks` (`packages/upcloud/distro-uks`), `@kumulo/upcloud`, `@kumulo/volumes-upcloud`, `@kumulo/storage-upcloud` | UpCloud UKS managed distro, client, volumes and object storage. |
+| `@kumulo/hetzner`, `@kumulo/dns-hetzner` | Hetzner cloud provider and DNS. |
+| `@kumulo/dns-godaddy`, `@kumulo/dns-bunny`, `@kumulo/storage-bunny`, `@kumulo/cdn-bunny`, `@kumulo/bunny`, `@kumulo/storage-ovh` | DNS, object storage and CDN modules; `@kumulo/bunny` is the shared Bunny client. |
 | `@kumulo/dns-ovh` | `DnsProvider` module for OVH DNS (§3.5). |
-| `@kumulo/volumes-cinder` | `VolumeProvider` module for retained Cinder volumes (§3.6). |
+| `@kumulo/volumes-cinder` (`packages/openstack/volumes`) | `VolumeProvider` module for retained Cinder volumes (§3.6). |
 | `@kumulo/cli` | Command definitions, output formatting, wiring of Layers. |
 
-Everything composes through Effect **Layers**; the CLI's `main` builds the Layer graph: `ProviderProfile → KeystoneAuth → OpenStackClients → CloudProvider → Reconciler`.
+Everything composes through Effect **Layers**; the CLI's `main` builds the Layer graph: `openstackCloudProviderLive` (Keystone auth + OpenStack clients) `→ CloudProvider → Reconciler`, with `DnsProvider`, `VolumeProvider`, `CdnProvider` and object-storage layers selected by config and provided alongside.
 
 ---
 
@@ -98,33 +101,21 @@ interface CloudProvider {
 
 Although v1 has exactly one implementation (OpenStack), keeping this port honest is what makes a future `@kumulo/hcloud` or `@kumulo/proxmox` conceivable without touching core.
 
-### 3.2 `ProviderProfile` (implemented by `@kumulo/provider-ovh`)
+### 3.2 `ProviderProfile` (implemented by `@kumulo/provider-ovh`, `@kumulo/hetzner`)
 
-A *data + small logic* layer that parameterizes the OpenStack implementation. It never makes HTTP calls itself (except optional credential helpers):
+The profile was reduced to a single validation hook. Capabilities, defaults and image aliases are not modelled; provider modules own their own config and cross-field rules (`mksConfigRules`, `hetznerConfigRules`, `godaddyConfigRules`, `bunnyCdnConfigRules`, composed in `cli/src/cluster-config.ts` via `crossFieldRule`). The aspirational shape below is historical:
 
 ```ts
 interface ProviderProfile {
-  name: string                                  // "ovh" | "generic"
-  auth: AuthDefaults                            // keystone URL patterns, domain defaults
-  capabilities: {
-    octavia: (region: string) => boolean        // OVH: per-region
-    floatingIps: boolean                        // OVH: Ext-Net model instead, in most regions
-    volumeTypes: string[]                       // OVH: "classic", "high-speed", "high-speed-gen2"
-  }
-  defaults: {
-    externalNetworkName: string                 // OVH: "Ext-Net"
-    imageAliases: Record<string, string>        // "ubuntu-24.04" -> exact Glance name per region
-    dnsServers: string[]
-  }
   validate(config: ClusterConfig): Effect<void, ProfileError>   // reject unsupported combos early
 }
 ```
 
-A `generic` profile ships in core for vanilla OpenStack clouds (clouds.yaml-driven, no assumptions). Users on Infomaniak/OTC/private clouds use `provider: generic` and set what OVH users get for free.
+`genericProfile` (`{ validate }`) ships in core for vanilla OpenStack clouds (clouds.yaml-driven, no assumptions). Users on Infomaniak/OTC/private clouds use `provider: generic` and set what OVH users get for free.
 
-### 3.3 `Distro` (implemented by `@kumulo/distro-k3s`)
+### 3.3 Distros (no core port)
 
-The distro abstraction is deliberately narrow — it owns everything Kubernetes-flavored, and core knows nothing about k3s:
+The `Distro` port, `DistroService` and the phase pipeline were removed from core. Each distro package (`@kumulo/distro-k3s`, `@kumulo/distro-ovh-mks`, `@kumulo/distro-upcloud-uks`) exports its own functions, and the CLI wires them per `distro` value. The sketch below is the original design, kept for context:
 
 ```ts
 interface Distro {
@@ -138,11 +129,11 @@ interface Distro {
 }
 ```
 
-**What's realistic about "k3s-agnostic":** the infra phases (network, SGs, LB, instances) are already 100% distro-agnostic. Bootstrap, join tokens, kubeconfig location, and upgrade mechanics are distro-specific and live entirely behind this interface. RKE2 is a near-clone of k3s here (same vendor, similar cloud-init shape) and would be a small package. Talos would need a variant `renderUserData` (machine config instead of cloud-init) and a different `fetchKubeconfig` (talosctl API) — feasible, but v2+ work. **v1 ships `distro: k3s` and `distro: ovh-mks`; the enum lives in the config schema from day one.**
+**What's realistic about "k3s-agnostic":** the infra phases (network, SGs, LB, instances) are already 100% distro-agnostic. Bootstrap, join tokens, kubeconfig location, and upgrade mechanics are distro-specific and live entirely behind this interface. RKE2 is a near-clone of k3s here (same vendor, similar cloud-init shape) and would be a small package. Talos would need a variant `renderUserData` (machine config instead of cloud-init) and a different `fetchKubeconfig` (talosctl API) — feasible, but v2+ work. **v1 ships `distro: k3s`, `distro: ovh-mks` and `distro: upcloud-uks`; the enum lives in the config schema from day one.**
 
 ### 3.3.1 `distro: ovh-mks` — OVH Managed Kubernetes as a distro
 
-Managed Kubernetes inverts the model: OVH runs the control plane and provisions the nodes, so most of our infra phases don't apply. Rather than forcing it through `renderUserData`, the `Distro` port is split into two shapes behind one discriminated union:
+Managed Kubernetes inverts the model: OVH runs the control plane and provisions the nodes, so most of our infra phases don't apply. Rather than forcing it through `renderUserData`, the original design split the port into two shapes behind one discriminated union (now realized only as separate packages and CLI reconcile flows; errors use core's `ManagedDistroError`):
 
 ```ts
 type Distro = SelfManagedDistro | ManagedDistro   // discriminated on kind
@@ -261,7 +252,7 @@ Behavior (port contract, implementation-independent):
 ### 4.1 Source of truth
 
 - **Specs:** the OpenAPI 3.1 schemas generated by the OpenStack codegenerator project (published via `gtema/openstack-openapi` / opendev codegenerator build artifacts) for: **Keystone (identity), Nova (compute), Neutron (network), Glance (image), Cinder (block-storage), Octavia (load-balancer)**.
-- Specs are **vendored** into `@kumulo/openstack/specs/<service>/<version>.yaml` and updated deliberately via a `pnpm specs:update` script — never fetched at build time from the network. Reproducible builds matter more than freshness.
+- Specs are **vendored** into `@kumulo/openstack/specs/<service>/<version>.yaml` and updated deliberately via a `bun run specs:update:<ovh|openstack|hetzner|godaddy>` script — never fetched at build time from the network. Reproducible builds matter more than freshness.
 
 ### 4.2 Codegen pipeline (the important engineering decision)
 
@@ -280,7 +271,7 @@ specs/<service>.json                       (vendored upstream OpenAPI 3.1)
   → 4. commit generated output (reviewed in PRs like any code)
 ```
 
-**Patch policy — we never edit vendored specs.** Every deviation from upstream lives in a reviewed, commented `*.patch.json` file next to the spec. This makes `pnpm specs:update` mechanical: pull new upstream spec → re-apply patches → regenerate → diff. Patches that no longer apply fail loudly in CI, which is the desired signal that upstream changed. Each patch entry carries a `// why` comment (JSON5 in source, compiled to strict JSON) referencing the upstream bug or design decision.
+**Patch policy — we never edit vendored specs.** Every deviation from upstream lives in a reviewed, commented `*.patch.json` file next to the spec. This makes `bun run specs:update:*` mechanical: pull new upstream spec → re-apply patches → regenerate → diff. Patches that no longer apply fail loudly in CI, which is the desired signal that upstream changed. Each patch entry carries a `// why` comment (JSON5 in source, compiled to strict JSON) referencing the upstream bug or design decision.
 
 The generator choice is still encapsulated in `@kumulo/openstack`: nothing outside the package imports generated code directly — it's wrapped by the `CloudProvider` implementation.
 
@@ -301,7 +292,7 @@ The generator choice is still encapsulated in `@kumulo/openstack`: nothing outsi
 
 ```ts
 // Layer graph inside @kumulo/openstack
-KeystoneAuthLive:   ProviderProfile + Credentials → KeystoneAuth
+KeystoneAuthLive:   Credentials → KeystoneAuth
   · issues scoped tokens, caches until expiry - skew
   · re-auth via Schedule on 401
   · exposes ServiceCatalog: (service, region) → endpoint URL
@@ -332,7 +323,7 @@ Converter requirements:
 - **Pure & deterministic:** OVH schema JSON in → OpenAPI 3.1 JSON out; identical input yields byte-identical output (stable key ordering), so regenerations diff cleanly. It lives in the repo (`tools/ovh2openapi`, TypeScript, developed TDD against vendored fixtures) — we own it rather than depending on an unmaintained external converter, but we crib the mapping rules from ovhapi2openapi.
 - **Small by construction:** it only needs to handle the schema constructs actually used by the allowlisted routes (models → components/schemas, route params → parameters, `responseType` → responses, enums, format hints). Constructs we don't consume fail loudly (`ConversionUnsupported` tagged error at build time) instead of being silently guessed — YAGNI enforced by the converter itself.
 - **Patches apply post-conversion**, so all semantic corrections (tightening types, naming operations, fixing OVH doc bugs) stay in the one reviewed patch mechanism — the converter performs *mechanical* translation only, never judgment calls. Judgment lives in patches.
-- **Drift alarm:** `pnpm specs:update` re-fetches OVH's schema JSON; a changed upstream produces either a clean regenerated diff or a hard converter/patch failure in CI. Either outcome is the signal we want. This matters because OVH's v1 schema format carries no stability guarantee.
+- **Drift alarm:** `bun run specs:update:ovh` re-fetches OVH's schema JSON; a changed upstream produces either a clean regenerated diff or a hard converter/patch failure in CI. Either outcome is the signal we want. This matters because OVH's v1 schema format carries no stability guarantee.
 
 Auth for these clients is a distinct Layer from Keystone: **OVH service accounts (OAuth2 client-credentials)** — token endpoint + IAM-policy-scoped access, valid on both v1 and v2. Structurally a sibling of `KeystoneAuthLive` (`OvhAuthLive: OvhCredentials → OvhAuth`), with the same refresh `Schedule` and Bearer injection; the legacy AK/AS/CK request-signing scheme is deliberately not supported (KISS — service accounts cover our use case and are OVH's recommended production mechanism).
 
@@ -510,7 +501,7 @@ Rules:
 ## 9. Autoscaling Roadmap
 
 - **v1 (yours):** static pools + `kumulo scale`. Config schema already carries `autoscaling` blocks (rejected at runtime) so future enablement isn't a breaking change.
-- **v1.x — hand-rolled autoscaler (`@kumulo/autoscaler`):** a small controller Deployment shipped as an addon. Watches for unschedulable pods → maps to a pool via labels/taints → calls the same Nova provisioning path (packaged as a tiny in-cluster service using the same generated clients) → scales within min/max; scale-down on sustained low utilization with drain via the `Distro` port. This avoids upstream cluster-autoscaler entirely.
+- **v1.x — hand-rolled autoscaler (`@kumulo/autoscaler`):** a small controller Deployment shipped as an addon. Watches for unschedulable pods → maps to a pool via labels/taints → calls the same Nova provisioning path (packaged as a tiny in-cluster service using the same generated clients) → scales within min/max; scale-down on sustained low utilization with drain via the distro package. This avoids upstream cluster-autoscaler entirely.
 - **v2 option:** contribute a raw-Nova cloudprovider to upstream cluster-autoscaler. Bigger effort, broader ecosystem value; only if the hand-rolled one proves insufficient.
 
 ---
@@ -522,7 +513,7 @@ Rules:
 | Generated-spec drift/gaps (Neutron's extension model is messy) | Vendored specs + allowlist + response `Schema` validation in *lenient* mode by default (log, don't fail, on extra fields) |
 | OVH v1 proprietary schema format changes without notice (no stability guarantee) | Deterministic in-repo converter (§4.5) fails loudly on unknown constructs; vendored schemas + CI drift check on `specs:update` |
 | Octavia unavailable in a chosen OVH region | Capability check in `doctor`/`validate`; kube-vip fallback for API HA documented v1, implemented v1.x |
-| OVH image/flavor naming churn | Alias table in `provider-ovh` with per-region overrides; `resolveImage` falls back to fuzzy Glance search with a warning |
+| OVH image/flavor naming churn | Planned (not wired): alias table with per-region overrides; `resolveImage` falling back to fuzzy Glance search with a warning |
 | Microversion mismatches across clouds (generic profile) | Explicit pin + `doctor` verifies the cloud accepts it |
 | cloud-init size limits / secrets in user-data | Join token is the only secret in user-data (same as hetzner-k3s); keep templates < 16KB; gzip+base64 if needed |
 | SSH dependency for master-1 bootstrap | Minimized to token+kubeconfig fetch; evaluate Nova console/metadata alternatives later |
@@ -535,7 +526,7 @@ Rules:
 - **DRY:** one source of truth per concern — types come from Schema, endpoint shapes from patched specs, provider quirks from the profile. The JSON-patch pipeline exists precisely so spec fixes aren't duplicated into hand-written code.
 - **KISS:** no state file, no plugin discovery/registry magic (Layers are wired explicitly in `main`), no premature config surface. Shelling out to `kubectl` for addon apply in v1 is acceptable KISS over an in-house k8s client.
 - **SOLID:** the ports in §3 are the interface-segregation/dependency-inversion story; packages depend inward on `core` only (enforced by dependency-cruiser). Open/closed shows up as "new provider/distro = new package, zero core changes."
-- **YAGNI, applied selectively:** we *do* pre-carve the `Distro`/`ProviderProfile` seams and the `autoscaling` schema block (cheap now, breaking later) — but we do **not** build the second distro, the second cloud backend, floating-IP/NAT topologies, or upstream cluster-autoscaler integration until someone needs them. When principle conflicts arise: KISS beats DRY, shipped beats perfect.
+- **YAGNI, applied selectively:** we *do* pre-carve the distro/provider seams and the `autoscaling` schema block (cheap now, breaking later) — but we do **not** build the second distro, the second cloud backend, floating-IP/NAT topologies, or upstream cluster-autoscaler integration until someone needs them. When principle conflicts arise: KISS beats DRY, shipped beats perfect.
 
 ## 12. Milestones
 
@@ -553,11 +544,12 @@ Rules:
 ## Appendix A — Package dependency graph
 
 ```
-cli → core → (ports: CloudProvider, ProviderProfile, Distro, DnsProvider, CdnProvider, VolumeProvider; plus plain-data Addon, installAddons)
+cli → core → (ports: CloudProvider, ProviderProfile, DnsProvider, CdnProvider, VolumeProvider; plus plain-data Addon, installAddons)
 openstack → core (implements CloudProvider) ; depends on generated clients
-provider-ovh → core (implements ProviderProfile)
-distro-k3s → core (implements Distro, self-managed)
-distro-ovh-mks → core (implements Distro, managed)
+provider-ovh (packages/ovh/client) → core (OVH client, ProviderProfile)
+distro-k3s → core (self-managed k3s)
+distro-ovh-mks, distro-upcloud-uks → core (managed distros)
+upcloud, volumes-upcloud, storage-upcloud, storage-ovh → core
 dns-ovh → core (implements DnsProvider)
 dns-hetzner → core (implements DnsProvider)
 dns-godaddy → core (implements DnsProvider)
@@ -576,3 +568,13 @@ Core depends on nothing but `effect`. All arrows point inward — hexagonal, enf
 ## Appendix B — Naming
 
 **Decided: Kumulo** (K-swapped *cumulus*; Esperanto for "cumulus/heap" — cloud-neutral, distro-neutral, no crowded `kube-` prefix). Binary `kumulo`, npm scope `@kumulo/*`, GitHub org `kumulo`. Before first publish: verify npm org + package name, GitHub org, domain (kumulo.dev), and run a trademark scan against cloud-adjacent names (Cumulo9, Kumolus) for conflicts in developer tooling.
+
+
+---
+
+## Appendix B — Shared provider toolkit, doctor and SSH trust
+
+- **Toolkit in `@kumulo/core`:** `makeProviderHttpClient` (auth, 401 re-auth, retry with Retry-After, timeout, concurrency), `classifyHttpError`/`mapHttpError`, `paginate`/`paginateByPage`/`paginateByOffset`, `pollUntil`, `makeOutputsFile` (atomic 0600 outputs files), `diffBuckets`, `reconcileDns` with the `DnsAdapter` shape, and the `@kumulo/core/testing` DNS contract suite (`dnsProviderContract`). Provider packages build on these instead of local copies.
+- **`kumulo doctor <config>`:** checks provider credentials and capabilities; fails with `DoctorFailed` (exit code 20).
+- **SSH trust:** `@kumulo/distro-k3s` pins host keys in a per-cluster known_hosts file (trust on first use; mismatch raises `SshHostKeyMismatch`).
+- **Config schemas:** providers own their config schema and cross-field rules; the CLI composes them into `ClusterConfig`. Cluster names must be DNS labels (`ClusterName`).

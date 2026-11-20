@@ -1,5 +1,5 @@
 import { Effect, Option, Schema } from "effect"
-import type { HttpTransportError, ResourceConflict, ResourceNotFound } from "../errors/tagged.ts"
+import type { HttpTransportError, ResourceConflict, ResourceNotFound, ResponseDecodeError } from "../errors/tagged.ts"
 import type { K8sManifest } from "../domain/types.ts"
 import type { K8sClient, ResourceRef } from "./client.ts"
 
@@ -46,7 +46,7 @@ export interface DrainNodeOptions {
 
 export const drainNode = (
   options: DrainNodeOptions
-): Effect.Effect<void, ResourceNotFound | ResourceConflict | HttpTransportError> =>
+): Effect.Effect<void, ResourceNotFound | ResourceConflict | HttpTransportError | ResponseDecodeError> =>
   options.client.list(options.podsRef).pipe(
     Effect.flatMap(_podRefs),
     Effect.flatMap((pods) =>

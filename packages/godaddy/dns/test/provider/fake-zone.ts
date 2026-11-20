@@ -208,7 +208,7 @@ export const makeFakeZone = ({ zone: zoneName, ...options }: FakeZoneOptions & {
   }
 
   const httpClient = HttpClient.make((request) => Effect.succeed(HttpClientResponse.fromWeb(request, _handle(request)))).pipe(
-    HttpClient.mapRequest(HttpClientRequest.prependUrl(_fixtureBaseUrl))
+    HttpClient.mapRequest((request) => URL.canParse(request.url) ? request : HttpClientRequest.prependUrl(request, _fixtureBaseUrl))
   )
 
   const seed = (record: SeedRecord): StoredRecord => {

@@ -1,6 +1,6 @@
 {
   "name": "@kumulo/cdn-bunny",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "bunny.net CDN provider for kumulo.",
   "license": "MIT",
   "author": "David Stahl-Gruber",
@@ -47,8 +47,7 @@
   },
   "dependencies": {
     "@kumulo/bunny": "workspace:*",
-    "@kumulo/core": "workspace:*",
-    "yaml": "catalog:"
+    "@kumulo/core": "workspace:*"
   },
   "peerDependencies": {
     "effect": "catalog:"

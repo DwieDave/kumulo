@@ -1,10 +1,10 @@
-import { Effect, Schema } from "effect"
+import { Effect, Redacted, Schema } from "effect"
 import { parse } from "yaml"
 import { ConfigInvalid } from "../errors/tagged.ts"
 
 export interface TokenAuth {
   readonly kind: "token"
-  readonly token: string
+  readonly token: Redacted.Redacted
 }
 
 export interface ClientCertAuth {
@@ -47,7 +47,7 @@ type KubeconfigUser = NonNullable<NonNullable<KubeconfigDoc["users"]>[number]["u
 
 // landmine: only token/client-cert auth is parsed, exec/oidc plugin kubeconfigs are not supported
 const _parseAuth = (user: KubeconfigUser | undefined): KubeconfigAuth | undefined => {
-  if (user?.token !== undefined) return { kind: "token", token: user.token }
+  if (user?.token !== undefined) return { kind: "token", token: Redacted.make(user.token) }
   const certData = user?.["client-certificate-data"]
   const keyData = user?.["client-key-data"]
 

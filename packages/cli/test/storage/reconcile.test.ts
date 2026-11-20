@@ -78,6 +78,11 @@ const _fakeFs = (seed: Record<string, string> = {}) => {
     writeFileString: (path, data) =>
       Effect.sync(() => {
         store.set(path, data)
+      }),
+    rename: (from, to) =>
+      Effect.sync(() => {
+        store.set(to, store.get(from) ?? "")
+        store.delete(from)
       })
   })
 }

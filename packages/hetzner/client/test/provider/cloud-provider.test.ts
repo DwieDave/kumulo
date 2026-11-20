@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Effect } from "effect"
-import { ResourceNotFound } from "@kumulo/core"
+import { Effect, Schema } from "effect"
+import { CONFIG_HASH_KEY, configHash, ResourceNotFound, serverConfigHash } from "@kumulo/core"
 import type { SecGroupRule } from "@kumulo/core"
 import {
   type CloudProviderOptions,
@@ -155,6 +155,43 @@ describe("hetzner CloudProvider", () => {
       const info = yield* ensureServer({ options, spec: { name: "master-1", role: "master", flavor: "cx22", image: "ubuntu-24.04", tag: "prod" } })
       expect(info).toEqual({ id: "10", name: "master-1", ip: "1.2.3.4" })
       expect(fake.calls().filter((call) => call.method === "POST" && call.url.includes("/v1/servers")).length).toBe(1)
+    }).pipe(Effect.provide(fake.layer))
+  })
+
+  it.effect("ensureServer sends user_data and the network, leaving both out of the config hash", () => {
+    let payload: unknown
+
+    const fake = makeFakeHcloud({
+      "GET /servers": () => ({ status: 200, body: { servers: [], meta: fixture.meta() } }),
+      "GET /placement_groups": () => ({
+        status: 200,
+        body: { placement_groups: [fixture.placementGroup({ id: 3, name: "kumulo-prod-masters" })], meta: fixture.meta() }
+      }),
+      "POST /servers": (request) => {
+        payload = requestJson(request)
+
+        return {
+          status: 201,
+          body: {
+            server: fixture.server({ id: 10, name: "master-1", ip: "1.2.3.4" }),
+            action: fixture.action({ id: 99, status: "running" }),
+            next_actions: [],
+            root_password: null
+          }
+        }
+      },
+      "GET /actions/99": () => ({ status: 200, body: { action: fixture.action({ id: 99 }) } })
+    })
+
+    const base = { name: "master-1", role: "master", flavor: "cx22", image: "ubuntu-24.04", tag: "prod" } as const
+
+    return Effect.gen(function*() {
+      yield* ensureServer({ options, spec: { ...base, userData: "#cloud-config\n", networkId: "7" } })
+      const sent = yield* Schema.decodeUnknownEffect(Schema.Struct({ user_data: Schema.String, networks: Schema.Array(Schema.Number), labels: Schema.Record(Schema.String, Schema.String) }))(payload)
+      expect(sent.user_data).toBe("#cloud-config\n")
+      expect(sent.networks).toEqual([7])
+      expect(sent.labels[CONFIG_HASH_KEY]).toBe(serverConfigHash(base))
+      expect(sent.labels[CONFIG_HASH_KEY]).toBe(configHash(base))
     }).pipe(Effect.provide(fake.layer))
   })
 

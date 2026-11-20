@@ -56,6 +56,13 @@ describe("validateCni", () => {
     expect(Option.isSome(validateCni(config))).toBe(true)
   })
 
+  it("names upcloud-uks, not ovh-mks, when rejecting cilium there", () => {
+    const config: ClusterConfigFields = { distro: "upcloud-uks", worker_pools: [], addons: { cni: "cilium" } }
+    const reason = Option.match(validateCni(config), { onNone: () => "", onSome: (rejected) => rejected.reason })
+    expect(reason).toContain("upcloud-uks")
+    expect(reason).not.toContain("ovh-mks")
+  })
+
   it("accepts cilium under k3s", () => {
     const config: ClusterConfigFields = { distro: "k3s", worker_pools: [], addons: { cni: "cilium" } }
     expect(Option.isNone(validateCni(config))).toBe(true)

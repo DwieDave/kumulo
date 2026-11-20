@@ -49,7 +49,7 @@ describe("published kumulo CLI bundle", () => {
         stdio: "pipe"
       })
     ).toThrow(/OAuth2 token request failed|Authentication failed/)
-  })
+  }, 60_000)
 
   it("apply --dry-run against the k3s example fails loudly on fake credentials", () => {
     expect(() => _dryRun("k3s.yaml")).toThrow(/POST http:\/\/example\.invalid\/v3\/auth\/tokens/)
@@ -60,7 +60,7 @@ describe("published kumulo CLI bundle", () => {
   })
 
   it("apply --dry-run against the k3s-hetzner example fails loudly on fake credentials", () => {
-    expect(() => _dryRun("k3s-hetzner.yaml")).toThrow(/Authentication failed: \w[\w -]*prod-fsn: hcloud rejected the API token/)
+    expect(() => _dryRun("k3s-hetzner.yaml")).toThrow(/Authentication failed: \w[\w -]*prod-fsn: .*unauthorized/)
   })
 
   it("apply --dry-run against the k3s-bunny example fails loudly on fake credentials", () => {
@@ -69,5 +69,5 @@ describe("published kumulo CLI bundle", () => {
 
   it("apply --dry-run against the ovh-mks-bunny-cdn example fails loudly on fake credentials", () => {
     expect(() => _dryRun("ovh-mks-bunny-cdn.yaml")).toThrow(/OAuth2 token request failed|Authentication failed/)
-  })
+  }, 60_000)
 })

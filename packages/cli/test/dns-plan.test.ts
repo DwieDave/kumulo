@@ -1,7 +1,7 @@
 import { PlanAction } from "@kumulo/core"
 import { assert, it } from "@effect/vitest"
 import { dnsPlanActions } from "../src/dns-plan.ts"
-import { buildK3sPlan } from "../src/k3s/plan.ts"
+import { k3sPlanFor } from "../src/k3s/plan.ts"
 import { buildMksPlan, emptyMksInventory } from "../src/mks/plan.ts"
 import { baseEncodedConfig, decodeK3sTestConfig } from "./fixtures.ts"
 
@@ -50,7 +50,7 @@ it("emits nothing when dns.module is none", () => {
 })
 
 it("k3s plan output includes DNS rows", () => {
-  const names = buildK3sPlan(_k3sConfig).actions.map((a) => a.name)
+  const names = k3sPlanFor({ config: _k3sConfig, observed: [] }).actions.map((a) => a.name)
   assert.ok(names.includes("dns/example.com/api (A)"))
   assert.ok(names.includes("dns/example.com/www (CNAME)"))
 })

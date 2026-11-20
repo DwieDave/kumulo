@@ -1,3 +1,4 @@
+import { withFixtureBaseUrl } from "./fixture-url.ts"
 import { Effect, Option, Predicate, Schema } from "effect"
 import * as HttpClient from "effect/http/HttpClient"
 import * as HttpClientRequest from "effect/http/HttpClientRequest"
@@ -371,7 +372,7 @@ export const makeFakeShield = (options: { readonly plan?: FakeShieldPlan } = {})
   }
 
   const httpClient = HttpClient.make((request) => Effect.succeed(HttpClientResponse.fromWeb(request, _handle(request)))).pipe(
-    HttpClient.mapRequest(HttpClientRequest.prependUrl("https://fixture.invalid"))
+    HttpClient.mapRequest(withFixtureBaseUrl)
   )
 
   return {

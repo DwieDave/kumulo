@@ -54,7 +54,6 @@ curl -sfL https://get.k3s.io | \\
   sh -s - \\
     ${server} \\
     ${disableCcm} \\
-    --write-kubeconfig-mode=644 \\
     --advertise-address=${args.privateIp} \\
     --node-ip=${args.privateIp} \\
     --node-external-ip=${args.publicIp} \\

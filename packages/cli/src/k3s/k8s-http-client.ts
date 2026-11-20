@@ -1,4 +1,4 @@
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Redacted } from "effect"
 import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient"
 import * as HttpClient from "effect/http/HttpClient"
 import * as HttpClientRequest from "effect/http/HttpClientRequest"
@@ -27,5 +27,5 @@ export const k8sHttpClientLayer = (
     Layer.provide(NodeHttpClient.layerAgentOptions(_agentOptions({ auth, caPem })))
   )
 
-  return auth.kind === "token" ? _withBearer(auth.token).pipe(Layer.provide(base)) : base
+  return auth.kind === "token" ? _withBearer(Redacted.value(auth.token)).pipe(Layer.provide(base)) : base
 }

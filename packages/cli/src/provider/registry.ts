@@ -1,14 +1,15 @@
-import { Config, Effect, Layer, Redacted } from "effect"
+import { Effect, Layer, Redacted } from "effect"
 import type * as HttpClient from "effect/http/HttpClient"
-import { AuthenticationFailed, CloudProvider } from "@kumulo/core"
+import { AuthenticationFailed, CloudProvider, genericProfileLive } from "@kumulo/core"
+import type { ProviderProfile } from "@kumulo/core"
 import type { Addon, SecGroupSpec } from "@kumulo/core"
 import type { ClusterConfig, K3sClusterConfig } from "../cluster-config.ts"
-import { buildFr57Rules, CloudProviderLive, KeystoneAuth, OpenStackHttpLive, openstackClusterAddons } from "@kumulo/openstack"
+import { buildFr57Rules, openstackCloudProviderLive, KeystoneAuth, OpenStackHttpLive, openstackClusterAddons } from "@kumulo/openstack"
 import type { CloudProviderOptions } from "@kumulo/openstack"
-import { buildHetznerSecGroupRules, CloudProviderLive as HcloudCloudProviderLive, hcloudHttpClientLive, hetznerClusterAddons } from "@kumulo/hetzner"
-import { hasOctavia } from "@kumulo/provider-ovh"
-import { OpenStackEnv } from "../doctor-openstack/env.ts"
-import type { OpenStackEnvService } from "../doctor-openstack/env.ts"
+import { buildHetznerSecGroupRules, hetznerCloudProviderLive, hcloudHttpClientLive, hetznerClusterAddons, hetznerProfileLive } from "@kumulo/hetzner"
+import { hasOctavia, ovhProfileLive } from "@kumulo/provider-ovh"
+import { OpenStackEnv } from "../openstack/env.ts"
+import type { OpenStackEnvService } from "../openstack/env.ts"
 import { requiredRedactedEnv } from "../env.ts"
 
 export type ProviderKind = ClusterConfig["provider"]
@@ -22,6 +23,7 @@ export interface ProviderEntry {
   readonly secGroupRules: (config: K3sClusterConfig) => SecGroupSpec["rules"]
   readonly requiredEnvVars: ReadonlyArray<string>
   readonly credentialsFromDistro: boolean
+  readonly profileLayer: (config: ClusterConfig) => Layer.Layer<ProviderProfile>
 }
 
 type OpenStackCloudProviderLayer = Layer.Layer<CloudProvider, AuthenticationFailed, OpenStackEnv | HttpClient.HttpClient>
@@ -54,7 +56,7 @@ const _liveCloudProvider = (
 ): Layer.Layer<CloudProvider, never, HttpClient.HttpClient> => {
   const keystone = Layer.succeed(KeystoneAuth, auth)
 
-  return CloudProviderLive({ ...options, region }).pipe(
+  return openstackCloudProviderLive({ ...options, region }).pipe(
     Layer.provide(OpenStackHttpLive().pipe(Layer.provide(keystone))),
     Layer.provide(keystone)
   )
@@ -92,29 +94,26 @@ export const hcloudHttpClientLayer = (): Layer.Layer<HttpClient.HttpClient, Auth
 export const k3sHetznerCloudProviderLayer = (
   config: K3sClusterConfig
 ): Layer.Layer<CloudProvider, AuthenticationFailed, HttpClient.HttpClient> =>
-  HcloudCloudProviderLive({ tag: config.name, location: config.auth.region }).pipe(Layer.provide(hcloudHttpClientLayer()))
+  hetznerCloudProviderLive({ tag: config.name, location: config.auth.region }).pipe(Layer.provide(hcloudHttpClientLayer()))
 
 const _openStackClusterAddons = (config: K3sClusterConfig): Effect.Effect<ReadonlyArray<Addon>, AuthenticationFailed, OpenStackEnv> =>
   Effect.gen(function*() {
     const env = yield* OpenStackEnv
-    const authUrl = yield* Config.String("OS_AUTH_URL").pipe(Config.withDefault(""))
-    const applicationCredentialId = yield* Config.String("OS_APPLICATION_CREDENTIAL_ID").pipe(Config.withDefault(""))
+    const ccm = config.addons.cloud_controller_manager
+    const csi = config.addons.csi.enabled ? { defaultVolumeType: config.addons.csi.default_volume_type } : false
 
-    const applicationCredentialSecret = yield* Config.Redacted("OS_APPLICATION_CREDENTIAL_SECRET").pipe(
-      Config.withDefault(Redacted.make(""))
-    )
+    if (!ccm && csi === false) return []
+    const credentials = env.clusterCredentials
 
-    return openstackClusterAddons({
-      conf: {
-        authUrl,
-        region: env.region ?? "",
-        applicationCredentialId,
-        applicationCredentialSecret: Redacted.value(applicationCredentialSecret)
-      },
-      ccm: config.addons.cloud_controller_manager,
-      csi: config.addons.csi.enabled ? { defaultVolumeType: config.addons.csi.default_volume_type } : false
-    })
-  }).pipe(Effect.orDie)
+    if (credentials === undefined || env.region === undefined) {
+      return yield* new AuthenticationFailed({
+        hint: env.unavailableReason ??
+          "the OpenStack cloud controller manager and Cinder CSI need application credentials; the configured auth method (password) cannot provide them"
+      })
+    }
+
+    return openstackClusterAddons({ conf: { ...credentials, region: env.region }, ccm, csi })
+  })
 
 const _hetznerClusterAddons = (config: K3sClusterConfig): Effect.Effect<ReadonlyArray<Addon>, AuthenticationFailed> =>
   Effect.map(requiredRedactedEnv("HCLOUD_TOKEN"), (token) =>
@@ -127,7 +126,10 @@ const _ruleOptions = (config: K3sClusterConfig) => ({
   cni: config.addons.cni
 })
 
-const _openStackEntry = (kind: ProviderKind): ProviderEntry => ({
+const _openStackEntry = (
+  { kind, profileLayer }: { readonly kind: ProviderKind; readonly profileLayer: ProviderEntry["profileLayer"] }
+): ProviderEntry => ({
+  profileLayer,
   kind,
   cloudProviderLayer: k3sCloudProviderLayer,
   clusterAddons: _openStackClusterAddons,
@@ -140,10 +142,11 @@ const _unavailableUpcloudAddons = (): Effect.Effect<never, AuthenticationFailed>
   Effect.fail(new AuthenticationFailed({ hint: "upcloud-uks has no OpenStack credential — see UpcloudEnv" }))
 
 export const providerRegistry: Record<ProviderKind, ProviderEntry> = {
-  ovh: _openStackEntry("ovh"),
-  generic: _openStackEntry("generic"),
+  ovh: _openStackEntry({ kind: "ovh", profileLayer: (config) => ovhProfileLive(config.auth.region) }),
+  generic: _openStackEntry({ kind: "generic", profileLayer: () => genericProfileLive }),
   hetzner: {
     kind: "hetzner",
+    profileLayer: () => hetznerProfileLive,
     cloudProviderLayer: k3sHetznerCloudProviderLayer,
     clusterAddons: _hetznerClusterAddons,
     secGroupRules: (config) => buildHetznerSecGroupRules(_ruleOptions(config)),
@@ -152,6 +155,7 @@ export const providerRegistry: Record<ProviderKind, ProviderEntry> = {
   },
   upcloud: {
     kind: "upcloud",
+    profileLayer: () => genericProfileLive,
     cloudProviderLayer: () => _unavailableCloudProvider("upcloud-uks does not use the OpenStack CloudProvider port"),
     clusterAddons: _unavailableUpcloudAddons,
     secGroupRules: () => [],

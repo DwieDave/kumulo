@@ -4,7 +4,7 @@ import { Effect, Layer, Schema } from "effect"
 import { CloudProvider, configHash, toTaggedResource } from "@kumulo/core"
 import type { Inventory, TaggedResource } from "@kumulo/core"
 import type { K3sClusterConfigEncoded } from "../../src/cluster-config.ts"
-import { buildK3sNodes, buildK3sPlan, buildK3sServerSpecs, k3sPlanEffect, k3sPlanFor } from "../../src/k3s/plan.ts"
+import { buildK3sNodes, buildK3sServerSpecs, k3sPlanEffect, k3sPlanFor } from "../../src/k3s/plan.ts"
 import { baseEncodedConfig, decodeK3sTestConfig } from "../fixtures.ts"
 
 const _encoded: K3sClusterConfigEncoded = {
@@ -51,7 +51,7 @@ it("builds one ServerSpec per master and per worker-pool index, per-index named"
 })
 
 it("plans one Create action per desired node when nothing is provisioned yet", () => {
-  const plan = buildK3sPlan(_config)
+  const plan = k3sPlanFor({ config: _config, observed: [] })
   assert.strictEqual(plan.actions.length, 8)
   assert.ok(plan.actions.every((a) => PlanAction.$is("Create")(a)))
 })
@@ -166,6 +166,6 @@ it("k3s plan resolves the cdn dns target as a CNAME", () => {
     cdn: { module: "bunny", name: "stagingeu", origin: { url: "https://203.0.113.10" }, hostnames: ["app.example.com"] }
   })
 
-  const names = buildK3sPlan(config).actions.map((action) => action.name)
+  const names = k3sPlanFor({ config, observed: [] }).actions.map((action) => action.name)
   assert.ok(names.includes("dns/example.com/app (CNAME)"), names.join(","))
 })

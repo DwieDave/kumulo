@@ -1,3 +1,4 @@
+import { diffBuckets as coreDiffBuckets } from "@kumulo/core"
 import type { BucketRef } from "@kumulo/core"
 
 export type BunnyTier = "standard" | "edge"
@@ -26,31 +27,23 @@ export interface BunnyBucketDiff {
 
 const _toRef = (bucket: ExistingBunnyBucket): BucketRef => ({ name: bucket.name, region: bucket.region })
 
-const _isImmutableDiff = (spec: BunnyBucketSpec, existing: ExistingBunnyBucket): boolean =>
-  spec.region !== existing.region || (spec.tier ?? "standard") !== existing.tier
-
+// Region and tier cannot change in place, so any drift is a replace.
 export const diffBuckets = (
   { desired, existing }: {
     readonly desired: ReadonlyArray<BunnyBucketSpec>
     readonly existing: ReadonlyArray<ExistingBunnyBucket>
   }
 ): BunnyBucketDiff => {
-  const byName = new Map(existing.map((bucket) => [bucket.name, bucket]))
-  const desiredNames = new Set(desired.map((bucket) => bucket.name))
+  const diff = coreDiffBuckets({
+    desired,
+    existing,
+    isImmutable: (spec, current) => spec.region !== current.region || (spec.tier ?? "standard") !== current.tier
+  })
 
-  const toCreate: Array<BunnyBucketSpec> = []
-  const toReplace: Array<{ readonly ref: BucketRef; readonly spec: BunnyBucketSpec }> = []
-  const noop: Array<BucketRef> = []
-
-  for (const spec of desired) {
-    const match = byName.get(spec.name)
-
-    if (!match) toCreate.push(spec)
-    else if (_isImmutableDiff(spec, match)) toReplace.push({ ref: _toRef(match), spec })
-    else noop.push(_toRef(match))
+  return {
+    toCreate: diff.toCreate,
+    toReplace: diff.toReplace.map(({ existing: current, spec }) => ({ ref: _toRef(current), spec })),
+    toDelete: diff.toDelete.map(_toRef),
+    noop: diff.noop.map(_toRef)
   }
-
-  const toDelete = existing.flatMap((bucket) => (desiredNames.has(bucket.name) || bucket.retain ? [] : [_toRef(bucket)]))
-
-  return { toCreate, toReplace, toDelete, noop }
 }

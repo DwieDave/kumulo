@@ -6,6 +6,9 @@ export interface CloudInitArgs {
   readonly packages?: ReadonlyArray<string>
 }
 
+// kumulo: must match the user the SSH layer connects as (ssh/live.ts)
+export const SSH_USER = "root"
+
 const DEFAULT_PACKAGES: ReadonlyArray<string> = ["curl", "open-iscsi"]
 
 const _packagesYaml = (packages: ReadonlyArray<string>): string => packages.map((pkg) => `  - ${pkg}`).join("\n")
@@ -19,8 +22,10 @@ export const renderCloudInit = (args: CloudInitArgs): string => {
 preserve_hostname: false
 hostname: ${args.hostname}
 
-ssh_authorized_keys:
-  - ${args.sshPublicKey}
+users:
+  - name: ${SSH_USER}
+    ssh_authorized_keys:
+      - ${args.sshPublicKey}
 
 packages:
 ${_packagesYaml(packages)}

@@ -1,51 +1,7 @@
-import { Effect } from "effect"
-import type { K8sClient, SelfManagedDistroService } from "@kumulo/core"
-import { Ssh } from "../ssh/port.ts"
-import type { SshHost } from "../ssh/port.ts"
-import { fetchKubeconfig } from "../kubeconfig/fetch.ts"
-import { resolveServerUrl } from "../kubeconfig/rewrite.ts"
-import type { ReleaseCache } from "../releases/cache.ts"
-import { drainAndRemove } from "./drain.ts"
-import { bootstrapOrder } from "./plan.ts"
-import { renderUserData } from "./user-data.ts"
-import { renderUpgradePlan } from "../upgrade/plan.ts"
-
 export { drainAndRemove } from "./drain.ts"
 
 export { bootstrapOrder } from "./plan.ts"
 
-export interface MakeSelfManagedDistroArgs {
-  readonly clusterName: string
-  readonly sshPublicKey: string
-  readonly ssh: Ssh["Service"]
-  readonly k8s: K8sClient["Service"]
-  readonly releases: ReleaseCache
-  readonly master1: SshHost
-  readonly lbVip?: string
-  readonly apiDnsName?: string
-}
+export { renderUserData } from "./user-data.ts"
 
-// Dependencies are closed over here, not requested via Effect context: the port's methods carry no `R`.
-export const makeSelfManagedDistro = (args: MakeSelfManagedDistroArgs): SelfManagedDistroService => {
-  const provideSsh = Effect.provideService(Ssh, args.ssh)
-
-  return {
-    kind: "self-managed",
-    name: "k3s",
-    planBootstrap: (_cluster, inventory) => Effect.succeed({ order: bootstrapOrder(inventory) }),
-    renderUserData: renderUserData({ clusterName: args.clusterName, sshPublicKey: args.sshPublicKey }),
-    fetchKubeconfig: (_entry, apiEndpoint) =>
-      fetchKubeconfig({
-        master1: args.master1,
-        clusterName: args.clusterName,
-        serverUrl: resolveServerUrl({
-          lbVip: args.lbVip,
-          apiDnsName: args.apiDnsName,
-          masterIp: apiEndpoint
-        })
-      }).pipe(provideSsh),
-    upgradePlan: (target) => Effect.succeed(renderUpgradePlan({ version: target })),
-    validateVersion: args.releases.validateVersion,
-    drainAndRemove: (node) => drainAndRemove({ client: args.k8s, node })
-  }
-}
+export type { RenderUserDataArgs } from "./user-data.ts"

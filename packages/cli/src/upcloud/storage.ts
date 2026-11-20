@@ -15,7 +15,6 @@ import { credentialEntries } from "../storage/credentials.ts"
 import { UpcloudEnv } from "./env.ts"
 
 export const uksBucketRow = (name: string): string => `bucket/${name}`
-export const uksObjectStorageRow = (cluster: string): string => `object-storage/${cluster}`
 
 type ConfiguredBucket = Extract<UpcloudUksClusterConfig["object_storage"], { readonly module: "upcloud" }>["buckets"][number]
 

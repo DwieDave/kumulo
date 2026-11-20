@@ -1,5 +1,6 @@
 import { Effect } from "effect"
 import { BootstrapFailed } from "@kumulo/core"
+import { describeSshError } from "../ssh/errors.ts"
 import { Ssh } from "../ssh/port.ts"
 import type { SshHost } from "../ssh/port.ts"
 import { cloudInitReady, controlPlaneReady, sshReady } from "../ssh/readiness.ts"
@@ -34,7 +35,7 @@ const _exec = (host: SshHost, script: string, phase: string): Effect.Effect<void
   Effect.gen(function*() {
     const ssh = yield* Ssh
     yield* ssh.exec(host, script).pipe(
-      Effect.mapError((cause) => new BootstrapFailed({ node: host.ip, phase, log: String(cause) }))
+      Effect.mapError((cause) => new BootstrapFailed({ node: host.ip, phase, log: `exit/stderr: ${describeSshError(cause)}` }))
     )
   })
 

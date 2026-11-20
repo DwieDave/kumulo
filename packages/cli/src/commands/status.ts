@@ -33,7 +33,7 @@ export const status = Command.make(
   { config: configArgument() },
   Effect.fn(function*({ config: configPath }) {
     const config = yield* loadConfig(configPath)
-    yield* onDistro(config)(({ config: cfg, entry }) => entry.status(cfg))
+    yield* onDistro(config)(({ config: cfg, entry }) => entry.status({ config: cfg, configDir: dirname(configPath) }))
     yield* _statusBuckets(config, dirname(configPath))
     yield* _statusCdn(config, dirname(configPath))
   })

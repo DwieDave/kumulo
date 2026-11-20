@@ -39,8 +39,6 @@ const _matchedOperationIds = (spec: OpenAPISpec): Set<string> => {
   return matched
 }
 
-const _schemaRefPrefix = "#/components/schemas/"
-
 // kumulo: walks an arbitrary JSON-ish value collecting every "#/components/schemas/X"
 // $ref it finds, so pruned specs don't retain unused component schemas (which the
 // generator otherwise emits in full, even for allowlist entries as small as 1 op).

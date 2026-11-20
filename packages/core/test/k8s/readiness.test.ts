@@ -1,20 +1,20 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
-import { waitForDeploymentAvailable, waitForNodeReady } from "../../src/k8s/readiness.ts"
+import { waitForDeploymentAvailable } from "../../src/k8s/readiness.ts"
 import type { K8sManifest } from "../../src/domain/types.ts"
 import type { ResourceRef } from "../../src/k8s/client.ts"
 
 const ref: ResourceRef = { path: "/apis/apps/v1/namespaces/default/deployments/d1", kind: "Deployment" }
 
-const _neverReady = (): Effect.Effect<K8sManifest, never> =>
+const _neverAvailable = (): Effect.Effect<K8sManifest, never> =>
   Effect.succeed({
-    apiVersion: "v1",
-    kind: "Node",
-    status: { conditions: [{ type: "Ready", status: "False" }] }
+    apiVersion: "apps/v1",
+    kind: "Deployment",
+    status: { conditions: [{ type: "Available", status: "False" }] }
   })
 
-const _malformedStatusNode = (_ref: ResourceRef): Effect.Effect<K8sManifest, never> =>
-  Effect.succeed({ apiVersion: "v1", kind: "Node", status: "not-an-object" })
+const _malformedStatus = (_ref: ResourceRef): Effect.Effect<K8sManifest, never> =>
+  Effect.succeed({ apiVersion: "apps/v1", kind: "Deployment", status: "not-an-object" })
 
 describe("readiness waits", () => {
   it.live("waitForDeploymentAvailable resolves once the Available condition flips to True", () =>
@@ -37,11 +37,11 @@ describe("readiness waits", () => {
       expect(calls).toBeGreaterThanOrEqual(2)
     }))
 
-  it.live("waitForNodeReady times out when status/conditions is missing/malformed (lenient decode, not a hard failure)", () =>
+  it.live("waitForDeploymentAvailable times out when status/conditions is missing/malformed", () =>
     Effect.gen(function*() {
-      const error = yield* Effect.flip(waitForNodeReady({
-        get: _malformedStatusNode,
-        ref: { path: "/api/v1/nodes/n1", kind: "Node" },
+      const error = yield* Effect.flip(waitForDeploymentAvailable({
+        get: _malformedStatus,
+        ref,
         interval: "1 millis",
         timeout: "10 millis"
       }))
@@ -49,11 +49,11 @@ describe("readiness waits", () => {
       expect(error._tag).toBe("ProvisioningTimeout")
     }))
 
-  it.live("waitForNodeReady times out with ProvisioningTimeout when Ready never flips", () =>
+  it.live("waitForDeploymentAvailable times out with ProvisioningTimeout when Available never flips", () =>
     Effect.gen(function*() {
-      const error = yield* Effect.flip(waitForNodeReady({
-        get: _neverReady,
-        ref: { path: "/api/v1/nodes/n1", kind: "Node" },
+      const error = yield* Effect.flip(waitForDeploymentAvailable({
+        get: _neverAvailable,
+        ref,
         interval: "1 millis",
         timeout: "10 millis"
       }))

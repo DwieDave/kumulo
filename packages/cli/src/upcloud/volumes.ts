@@ -2,7 +2,7 @@ import { PlanAction } from "@kumulo/core"
 import { Effect, Option, Schema } from "effect"
 import * as HttpClient from "effect/http/HttpClient"
 import { makeK8sClient, parseKubeconfig, ResourceNotFound } from "@kumulo/core"
-import type { K8sClient, K8sManifest, Kubeconfig, MksError, VolumeError, VolumeSpec } from "@kumulo/core"
+import type { K8sClient, K8sManifest, Kubeconfig, ManagedDistroError, VolumeError, VolumeSpec } from "@kumulo/core"
 import { mapUpcloudError } from "@kumulo/upcloud"
 import { deleteVolume, ensureVolume, hasClusterLabel, listClusterVolumes, staticVolumeManifests } from "@kumulo/volumes-upcloud"
 import type { VolumeProviderOptions } from "@kumulo/volumes-upcloud"
@@ -57,7 +57,7 @@ const _options = (config: UpcloudUksClusterConfig): VolumeProviderOptions => ({ 
 
 const _k8sClientFor = (
   kubeconfig: Kubeconfig
-): Effect.Effect<K8sClient["Service"], MksError, HttpClient.HttpClient> =>
+): Effect.Effect<K8sClient["Service"], ManagedDistroError, HttpClient.HttpClient> =>
   Effect.gen(function*() {
     const parsed = yield* parseKubeconfig(kubeconfig.content).pipe(
       Effect.mapError((cause) => new ResourceNotFound({ kind: "kubeconfig", ref: cause.issues.map((i) => i.message).join(", ") }))
@@ -89,7 +89,7 @@ const _refFor = (manifest: K8sManifest) => {
 
 const _applyManifests = (
   { k8sClient, manifests }: { readonly k8sClient: K8sClient["Service"]; readonly manifests: ReadonlyArray<K8sManifest> }
-): Effect.Effect<void, MksError> =>
+): Effect.Effect<void, ManagedDistroError> =>
   Effect.forEach(manifests, (manifest) =>
     k8sClient.apply(_refFor(manifest), manifest).pipe(
       Effect.mapError((cause) => new ResourceNotFound({ kind: "k8s-manifest", ref: `${cause}` }))
@@ -97,7 +97,7 @@ const _applyManifests = (
 
 export const convergeUpcloudVolumes = (
   { config, kubeconfig }: { readonly config: UpcloudUksClusterConfig; readonly kubeconfig: Kubeconfig }
-): Effect.Effect<void, VolumeError | MksError, UpcloudEnv | HttpClient.HttpClient> =>
+): Effect.Effect<void, VolumeError | ManagedDistroError, UpcloudEnv | HttpClient.HttpClient> =>
   Effect.gen(function*() {
     const managed = managedUpcloudVolumes(config)
 

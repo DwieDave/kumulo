@@ -1,15 +1,17 @@
 import { describe, it } from "@effect/vitest"
 import { Effect, Predicate, Result, Schema } from "effect"
 import { decodeConfig } from "../../src/cluster-config.ts"
-import { validConfig } from "./fixtures.ts"
+import { validConfig, validUpcloudUksConfig } from "./fixtures.ts"
 
-const distros = ["k3s", "ovh-mks"] as const
+const distros = ["k3s", "ovh-mks", "upcloud-uks"] as const
 const dnsModules = ["ovh", "hetzner", "bunny", "godaddy"] as const
 
 const realDns = { zone: "example.com", ttl: 600, records: [{ name: "api.prod-eu", target: "api_server" }] }
 
 const _forDistro = (distro: (typeof distros)[number]) => {
   const { network: _k3sOnly, ...withoutNetwork } = validConfig
+
+  if (distro === "upcloud-uks") return validUpcloudUksConfig
 
   return distro === "k3s"
     ? { ...validConfig, distro, version: "v1.31.4+k3s1" }

@@ -1,7 +1,7 @@
+import { pollUntil } from "@kumulo/core"
 import { Console, Effect } from "effect"
 import { mapUpcloudError } from "@kumulo/upcloud"
-import type { MksError } from "@kumulo/core"
-import { pollUntil } from "./status.ts"
+import type { ManagedDistroError } from "@kumulo/core"
 import type { UksClients } from "./types.ts"
 import { resolveUpgradeTarget, UpgradeTarget } from "./upgrade.ts"
 import type { UksUpgradeStrategy } from "./types.ts"
@@ -14,7 +14,7 @@ export const upgradeCluster = (
     readonly strategy: UksUpgradeStrategy
     readonly upgradeStrategy: "manual" | "rolling-update"
   }
-): Effect.Effect<void, MksError> =>
+): Effect.Effect<void, ManagedDistroError> =>
   Effect.gen(function*() {
     const availableUpgrades = yield* mapUpcloudError({
       self: clients.uks.availableUpgrades(uuid),

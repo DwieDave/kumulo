@@ -1,4 +1,4 @@
-import { CloudProvider, CONFIG_HASH_KEY, configHash, pollUntil, ResourceNotFound } from "@kumulo/core"
+import { CloudProvider, CONFIG_HASH_KEY, serverConfigHash, ignoreNotFound, pollUntil, ResourceNotFound } from "@kumulo/core"
 import type { CloudError } from "@kumulo/core"
 import type {
   ClusterTag,
@@ -11,6 +11,7 @@ import type {
   SecGroupRule,
   SecGroupSpec,
   ServerInfo,
+  NodeRole,
   ServerSpec
 } from "@kumulo/core"
 import { Effect, Layer } from "effect"
@@ -18,7 +19,7 @@ import type { HttpClient } from "effect/http"
 import { hcloudClient, type HcloudClient } from "../client/hcloud.ts"
 import { networkZoneForLocation } from "../profile/locations.ts"
 import { waitForAction } from "./actions.ts"
-import { ignoreMissing, mapHcloudError, required, type ErrorContext, type HcloudError } from "./errors.ts"
+import { mapHcloudError, required, type ErrorContext, type HcloudError } from "../errors.ts"
 import type { HcloudFirewallRuleInput } from "./firewall-rules.ts"
 import { listAll } from "./paginate.ts"
 
@@ -211,6 +212,12 @@ interface ServerRecord {
   readonly labels?: { readonly [key: string]: string | undefined } | undefined
 }
 
+const _roleOf = (server: ServerRecord): NodeRole | undefined => {
+  const role = server.labels?.["kumulo-role"]
+
+  return role === "master" || role === "worker" ? role : undefined
+}
+
 const _hashOf = (server: ServerRecord): string | undefined => server.labels?.[CONFIG_HASH_KEY]
 
 const _serverIp = (server: ServerRecord): string => server.public_net.ipv4?.ip ?? ""
@@ -235,6 +242,21 @@ const _waitServerRunning = ({ client, id }: { readonly client: HcloudClient; rea
     ref: String(id)
   })
 
+interface Provisioning {
+  user_data?: string
+  networks?: Array<number>
+}
+
+const _provisioning = (spec: ServerSpec): Provisioning => {
+  const out: Provisioning = {}
+
+  if (spec.userData !== undefined) out.user_data = spec.userData
+
+  if (spec.networkId !== undefined) out.networks = [Number(spec.networkId)]
+
+  return out
+}
+
 const _createServer = (
   { client, groupId, options, spec }: {
     readonly client: HcloudClient
@@ -251,7 +273,8 @@ const _createServer = (
         image: spec.image,
         location: options.location,
         placement_group: groupId,
-        labels: { ..._clusterLabel(options), "kumulo-role": spec.role, [CONFIG_HASH_KEY]: configHash(spec) }
+        ..._provisioning(spec),
+        labels: { ..._clusterLabel(options), "kumulo-role": spec.role, [CONFIG_HASH_KEY]: serverConfigHash(spec) }
       }
     }),
     ctx: _ctx("server", spec.name)
@@ -319,7 +342,7 @@ export const listClusterResources = ({ options }: { readonly options: CloudProvi
     ], { concurrency: 4 })
 
     return {
-      servers: servers.map((s) => ({ id: String(s.id), name: s.name, ip: _serverIp(s), configHash: _hashOf(s) })),
+      servers: servers.map((s) => ({ id: String(s.id), name: s.name, ip: _serverIp(s), role: _roleOf(s), configHash: _hashOf(s) })),
       networks: networks.map((n) => ({ id: String(n.id), cidr: "" })),
       securityGroups: firewalls.map((f) => ({ id: String(f.id) })),
       loadBalancers: lbs.map((l) => ({ id: String(l.id), vip: l.public_net.ipv4.ip ?? "" }))
@@ -339,7 +362,7 @@ const _deleteIfExists = (
     readonly remove: (id: number) => Effect.Effect<unknown, HcloudError, Deps>
   }
 ): R<void> =>
-  find.pipe(Effect.flatMap((found) => found === undefined ? Effect.void : ignoreMissing(remove(found.id))))
+  find.pipe(Effect.flatMap((found) => found === undefined ? Effect.void : ignoreNotFound(remove(found.id))))
 
 const _placementGroupRoles: ReadonlyArray<ServerGroupRole> = ["master", "worker"]
 
@@ -438,7 +461,7 @@ export const resolveFlavor = ({ ref }: { readonly ref: string }): R<string> =>
     return yield* _resolved({ entries: all, kind: "flavor", ref })
   })
 
-export const CloudProviderLive = (options: CloudProviderOptions): Layer.Layer<CloudProvider, never, Deps> =>
+export const hetznerCloudProviderLive = (options: CloudProviderOptions): Layer.Layer<CloudProvider, never, Deps> =>
   Layer.effect(
     CloudProvider,
     Effect.gen(function*() {

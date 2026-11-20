@@ -6,7 +6,7 @@ export { hcloudClient } from "./client/hcloud.ts"
 
 export type { HcloudClient } from "./client/hcloud.ts"
 
-export type { HcloudError } from "./provider/errors.ts"
+export type { HcloudError } from "./errors.ts"
 
 export { hetznerLocationZones, hetznerLocations, isHetznerLocation, networkZoneForLocation } from "./profile/locations.ts"
 
@@ -17,7 +17,7 @@ export { validateHetznerConfig } from "./profile/validation.ts"
 export { buildHetznerSecGroupRules, HcloudFirewallRuleInput } from "./provider/firewall-rules.ts"
 
 export {
-  CloudProviderLive,
+  hetznerCloudProviderLive,
   deleteByTag,
   deleteServer,
   ensureLoadBalancer,
@@ -38,10 +38,12 @@ export { staticPvcManifest, staticPvManifest, staticVolumeManifests } from "./vo
 
 export type { PvcBinding } from "./volume/manifests.ts"
 
-export { deleteVolume, ensureVolume, listClusterVolumes, VolumeProviderLive } from "./volume/provider.ts"
+export { deleteVolume, ensureVolume, listClusterVolumes, hetznerVolumeProviderLive } from "./volume/provider.ts"
 
 export type { VolumeProviderOptions } from "./volume/provider.ts"
 
 export { hetznerClusterAddons } from "./cluster/addons.ts"
 
 export type { HetznerClusterAddonsInput } from "./cluster/addons.ts"
+
+export { hetznerConfigRules, hetznerCsiHasNoVolumeType, hetznerVolumesConsistentWithProvider } from "./config.ts"

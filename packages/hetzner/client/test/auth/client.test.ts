@@ -60,3 +60,14 @@ it.live("gives up after the bounded retry cap, still surfacing the last response
     assert.strictEqual(fake.callCount(), 6)
   }).pipe(Effect.provide(hcloudHttpClientLive(token).pipe(Layer.provide(fake.layer))))
 })
+
+it.live("never retries a POST on 5xx, so a server create cannot be duplicated", () => {
+  const fake = _fakeBase(() => ({ status: 503 }))
+
+  return Effect.gen(function*() {
+    const client = yield* HttpClient.HttpClient
+    const response = yield* client.execute(HttpClientRequest.post("https://api.hetzner.cloud/v1/servers"))
+    assert.strictEqual(response.status, 503)
+    assert.strictEqual(fake.callCount(), 1)
+  }).pipe(Effect.provide(hcloudHttpClientLive(token).pipe(Layer.provide(fake.layer))))
+})

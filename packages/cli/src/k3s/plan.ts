@@ -1,6 +1,6 @@
 import { PlanAction } from "@kumulo/core"
-import { CloudProvider, computePlan, resourceName } from "@kumulo/core"
-import type { CloudError, DesiredResource, Inventory, Plan, ServerSpec, TaggedResource } from "@kumulo/core"
+import { CloudProvider, computePlan, deleteRow, resourceName } from "@kumulo/core"
+import type { CloudError, DesiredResource, Inventory, NodeRole, Plan, ServerInfo, ServerSpec, TaggedResource } from "@kumulo/core"
 import type { K3sClusterConfig } from "../cluster-config.ts"
 import { Effect } from "effect"
 import { dnsPlanActions } from "../dns-plan.ts"
@@ -48,6 +48,16 @@ export const buildK3sNodes = (config: K3sClusterConfig): ReadonlyArray<DesiredNo
 export const buildK3sServerSpecs = (config: K3sClusterConfig): ReadonlyArray<ServerSpec> =>
   buildK3sNodes(config).map((node) => node.spec)
 
+// kumulo: providers report the role from metadata/labels; servers created before that fall back to the naming convention prefix
+export const nodeRoleOf = (
+  { config, server }: { readonly config: K3sClusterConfig; readonly server: Pick<ServerInfo, "name" | "role"> }
+): NodeRole | undefined => {
+  if (server.role !== undefined) return server.role
+  const roles: ReadonlyArray<NodeRole> = ["master", "worker"]
+
+  return roles.find((role) => server.name.startsWith(`kumulo-${config.name}-${role}-`))
+}
+
 export interface K3sInfraObserved {
   readonly network: boolean
   readonly securityGroups: boolean
@@ -64,7 +74,7 @@ const _infraActions = (
   ([
     [k3sNetworkRow(config.name), infra.network],
     [k3sSecurityGroupRow(config.name), infra.securityGroups],
-    [k3sLbRow(config.name), infra.loadBalancer]
+    ...(config.api_server.high_availability ? [[k3sLbRow(config.name), infra.loadBalancer] as const] : [])
   ] as const).map(([name, exists]) => exists ? PlanAction.NoOp({ name }) : PlanAction.Create({ name }))
 
 const NO_INFRA: K3sInfraObserved = { network: false, securityGroups: false, loadBalancer: false }
@@ -82,8 +92,6 @@ export const k3sPlanFor = (
     ...dnsPlanActions({ config: config.dns, targets: config.cdn === undefined || config.cdn.module === "none" ? { api_server: "ip" } : { api_server: "ip", cdn: "hostname" } })
   ]
 })
-
-export const buildK3sPlan = (config: K3sClusterConfig): Plan => k3sPlanFor({ config, observed: [] })
 
 const _observedInfra = (inventory: Inventory): K3sInfraObserved => ({
   network: inventory.networks.length > 0,
@@ -114,6 +122,13 @@ export const k3sDeletePlanActions = (
     const liveNames = new Set(inventory.servers.map((server) => server.name))
     const desiredNames = buildK3sNodes(config).map((node) => node.spec.name)
 
+    // only config-listed volumes are ever deleted, retained ones are kept
+    const volumeActions: Plan["actions"] = config.volumes.module === "none"
+      ? []
+      : config.volumes.managed.map((volume) =>
+        deleteRow({ name: `volume/${volume.name}`, live: true, retain: volume.retain })
+      )
+
     const nodeActions: Plan["actions"] = [
       ...inventory.servers.map((server) => (PlanAction.Delete({ name: server.name }))),
       ...desiredNames.filter((name) => !liveNames.has(name)).map((name) => (PlanAction.NoOp({ name: `${name} (already absent)` })))
@@ -121,13 +136,15 @@ export const k3sDeletePlanActions = (
 
     const infra = _observedInfra(inventory)
 
+    const lbRows = config.api_server.high_availability || infra.loadBalancer
+      ? [[k3sLbRow(config.name), infra.loadBalancer] as const]
+      : []
+
     const infraActions: Plan["actions"] = ([
       [k3sNetworkRow(config.name), infra.network],
       [k3sSecurityGroupRow(config.name), infra.securityGroups],
-      [k3sLbRow(config.name), infra.loadBalancer]
-    ] as const).map(([name, exists]) =>
-      exists ? PlanAction.Delete({ name }) : PlanAction.NoOp({ name: `${name} (already absent)` })
-    )
+      ...lbRows
+    ] as const).map(([name, exists]) => deleteRow({ name, live: exists, retain: false }))
 
-    return [...nodeActions, ...infraActions]
+    return [...volumeActions, ...nodeActions, ...infraActions]
   })

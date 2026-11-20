@@ -4,10 +4,10 @@ import type { HttpClientRequest } from "effect/http"
 import { assert, it } from "@effect/vitest"
 import { CapabilityMissing, CloudProvider } from "@kumulo/core"
 import type { SecGroupRule } from "@kumulo/core"
-import { CloudProviderLive as HcloudCloudProviderLive } from "@kumulo/hetzner"
-import { OpenStackEnv } from "../../src/doctor-openstack/env.ts"
+import { hetznerCloudProviderLive } from "@kumulo/hetzner"
+import { OpenStackEnv } from "../../src/openstack/env.ts"
 import { secGroupRules } from "../../src/k3s/env.ts"
-import { k3sCloudProviderLayer, mksCloudProviderLayer } from "../../src/provider/registry.ts"
+import { k3sCloudProviderLayer, mksCloudProviderLayer, providerFor } from "../../src/provider/registry.ts"
 import { baseEncodedConfig, decodeK3sTestConfig } from "../fixtures.ts"
 
 const _ovhConfig = decodeK3sTestConfig(baseEncodedConfig)
@@ -172,7 +172,7 @@ it.effect("hetzner ensureSecurityGroups posts hcloud-shaped rules", () =>
     )
 
     const provider = yield* CloudProvider.pipe(
-      Effect.provide(HcloudCloudProviderLive({ tag: _hetznerConfig.name, location: _hetznerConfig.auth.region })),
+      Effect.provide(hetznerCloudProviderLive({ tag: _hetznerConfig.name, location: _hetznerConfig.auth.region })),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, client))
     )
 
@@ -187,4 +187,36 @@ it.effect("hetzner ensureSecurityGroups posts hcloud-shaped rules", () =>
     }
 
     assert.isTrue(sent.some((rule) => rule.port === "2379-2380"))
+  }))
+
+const _ccmConfig = decodeK3sTestConfig({
+  ...baseEncodedConfig,
+  addons: { ...baseEncodedConfig.addons, cloud_controller_manager: true }
+})
+
+const _envWith = (clusterCredentials: { authUrl: string; applicationCredentialId: string; applicationCredentialSecret: string } | undefined) =>
+  Layer.succeed(OpenStackEnv, { keystone: undefined, region: "GRA11", unavailableReason: undefined, clusterCredentials })
+
+it.effect("openstack cluster addons take their credentials from OpenStackEnv", () =>
+  Effect.gen(function*() {
+    const addons = yield* providerFor(_ccmConfig).clusterAddons(_ccmConfig).pipe(
+      Effect.provide(_envWith({ authUrl: "https://auth.example/v3", applicationCredentialId: "id-1", applicationCredentialSecret: "s3cret" }))
+    )
+
+    assert.deepStrictEqual(addons.map((addon) => addon.name), ["openstack-ccm"])
+    assert.include(JSON.stringify(addons), "id-1")
+  }))
+
+it.effect("openstack cluster addons fail instead of injecting empty credentials", () =>
+  Effect.gen(function*() {
+    const error = yield* providerFor(_ccmConfig).clusterAddons(_ccmConfig).pipe(Effect.provide(_envWith(undefined)), Effect.flip)
+
+    assert.strictEqual(error._tag, "AuthenticationFailed")
+  }))
+
+it.effect("openstack cluster addons need no credentials when ccm and csi are off", () =>
+  Effect.gen(function*() {
+    const addons = yield* providerFor(_ovhConfig).clusterAddons(_ovhConfig).pipe(Effect.provide(_envWith(undefined)))
+
+    assert.deepStrictEqual(addons, [])
   }))

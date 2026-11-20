@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Arbitrary, Effect, Fiber, Option, Predicate, Schema } from "effect"
 import { TestClock } from "effect/testing"
-import { CapabilityMissing, ProvisioningTimeout, ResourceConflict, ResourceNotFound, ResponseDecodeError, type SecGroupSpec } from "@kumulo/core"
+import { CapabilityMissing, ProvisioningTimeout, ResourceConflict, ResourceNotFound, ResponseDecodeError, serverConfigHash, type SecGroupSpec } from "@kumulo/core"
 import {
   deleteByTag,
   ensureFloatingIp,
@@ -524,6 +524,42 @@ describe("openstack CloudProvider", () => {
       const info = yield* ensureServer({ options, spec: { name: "master-1", role: "master", flavor: "b2-7", image: "img-1", tag: "prod" } })
       expect(info).toEqual({ id: "srv-1", name: "master-1", ip: "10.0.0.5" })
       expect(fake.calls().filter((call) => call.method === "POST" && call.url.includes("/v2.1/servers")).length).toBe(1)
+    }).pipe(Effect.provide(fake.layer))
+  })
+
+  it.effect("ensureServer sends base64 user_data and attaches the external plus cluster network", () => {
+    let payload: unknown
+
+    const fake = makeFakeOpenStack({
+      "GET /v2.1/servers": () => ({ status: 200, body: { servers: [] } }),
+      "GET /v2.1/os-server-groups": () => ({ status: 200, body: { server_groups: [{ id: "grp-masters", name: "kumulo-prod-masters" }] } }),
+      "GET /v2.0/networks": () => ({ status: 200, body: { networks: [{ id: "ext-net", name: "Ext-Net" }] } }),
+      "POST /v2.1/servers": (request) => {
+        payload = requestJson(request)
+
+        return { status: 202, body: { server: { id: "srv-1" } } }
+      },
+      "GET /v2.1/servers/srv-1": () => ({
+        status: 200,
+        body: { server: { id: "srv-1", status: "ACTIVE", addresses: { "kumulo-prod": [{ addr: "10.0.0.5" }] } } }
+      })
+    })
+
+    return Effect.gen(function*() {
+      yield* ensureServer({
+        options,
+        spec: { name: "master-1", role: "master", flavor: "b2-7", image: "img-1", tag: "prod", userData: "#cloud-config\n", networkId: "net-1" }
+      })
+      expect(payload).toMatchObject({
+        server: {
+          user_data: btoa("#cloud-config\n"),
+          networks: [{ uuid: "ext-net" }, { uuid: "net-1" }],
+          metadata: {
+            "kumulo-role": "master",
+            "kumulo-config-hash": serverConfigHash({ name: "master-1", role: "master", flavor: "b2-7", image: "img-1", tag: "prod" })
+          }
+        }
+      })
     }).pipe(Effect.provide(fake.layer))
   })
 

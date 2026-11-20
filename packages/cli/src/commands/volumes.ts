@@ -4,7 +4,8 @@ import type { FileSystem } from "effect/FileSystem"
 import type { PlatformError } from "effect/PlatformError"
 import type { HttpClient } from "effect/http"
 import { Command, Flag } from "effect/cli"
-import type { VolumeError, VolumeSpec } from "@kumulo/core"
+import type { Layer } from "effect"
+import type { AuthenticationFailed, VolumeError, VolumeSpec } from "@kumulo/core"
 import type { ClusterConfig } from "../cluster-config.ts"
 import { ConfigInvalid, VolumeProvider } from "@kumulo/core"
 import {
@@ -12,12 +13,13 @@ import {
   listVolumes,
   readOutputs,
   upsertVolume,
-  VolumeProviderLive,
+  cinderVolumeProviderLive,
   writeOutputs
 } from "@kumulo/volumes-cinder"
 import type { OutputsInvalid ,
   CinderAuth} from "@kumulo/volumes-cinder"
 import { loadConfig } from "../config.ts"
+import { k3sHetznerVolumeProviderLayer } from "../k3s/env.ts"
 import { configArgument } from "../root.ts"
 
 const nameFlag = Flag.String("name").pipe(
@@ -95,12 +97,23 @@ const _toManagedSpec = (entry: ManagedVolume): VolumeSpec => ({
   retain: entry.retain
 })
 
+// cinder and hcloud volumes are converged through the VolumeProvider port; upcloud plans and converges its own.
+export const usesGenericVolumes = (config: ClusterConfig): boolean =>
+  config.volumes.module === "cinder" || config.volumes.module === "hcloud"
+
+const _volumeProviderLayer = (
+  config: ClusterConfig
+): Layer.Layer<VolumeProvider, AuthenticationFailed, CinderAuth | HttpClient.HttpClient> =>
+  config.volumes.module === "hcloud"
+    ? k3sHetznerVolumeProviderLayer(config)
+    : cinderVolumeProviderLive({ tag: config.name })
+
 export const lookupManagedVolumeNames = (
   config: ClusterConfig
 ): Effect.Effect<ReadonlySet<string>, VolumeError, CinderAuth | HttpClient.HttpClient> =>
   Effect.gen(function*() {
-    if (config.volumes.module !== "cinder" || config.volumes.managed.length === 0) return new Set<string>()
-    const provider = yield* Effect.provide(VolumeProvider, VolumeProviderLive({ tag: config.name }))
+    if (!usesGenericVolumes(config) || managedVolumes(config).length === 0) return new Set<string>()
+    const provider = yield* Effect.provide(VolumeProvider, _volumeProviderLayer(config))
     const existing = yield* provider.listClusterVolumes(config.name)
 
     return new Set(existing.map((volume) => volume.name))
@@ -111,11 +124,11 @@ export const convergeManagedVolumes = (
   { config, configDir }: { readonly config: ClusterConfig; readonly configDir: string }
 ): Effect.Effect<void, VolumeError | OutputsInvalid | PlatformError, CinderAuth | HttpClient.HttpClient | FileSystem> =>
   Effect.gen(function*() {
-    if (config.volumes.module !== "cinder" || config.volumes.managed.length === 0) return
-    const provider = yield* Effect.provide(VolumeProvider, VolumeProviderLive({ tag: config.name }))
+    if (!usesGenericVolumes(config) || managedVolumes(config).length === 0) return
+    const provider = yield* Effect.provide(VolumeProvider, _volumeProviderLayer(config))
     const file = yield* readOutputs({ dir: configDir, tag: config.name, format: config.outputs?.format })
 
-    const ensured = yield* Effect.forEach(config.volumes.managed, (entry) =>
+    const ensured = yield* Effect.forEach(managedVolumes(config), (entry) =>
       provider.ensureVolume(_toManagedSpec(entry)).pipe(
         Effect.map((info) => ({ name: entry.name, id: info.id, retain: entry.retain }))
       ), { concurrency: 4 })
@@ -133,13 +146,13 @@ export const reconcileVolumesOnDelete = (
   CinderAuth | HttpClient.HttpClient
 > =>
   Effect.gen(function*() {
-    if (config.volumes.module !== "cinder" || config.volumes.managed.length === 0) return { kept: [], deleted: [] }
-    const provider = yield* Effect.provide(VolumeProvider, VolumeProviderLive({ tag: config.name }))
+    if (!usesGenericVolumes(config) || managedVolumes(config).length === 0) return { kept: [], deleted: [] }
+    const provider = yield* Effect.provide(VolumeProvider, _volumeProviderLayer(config))
     const existing = yield* provider.listClusterVolumes(config.name)
     const kept: Array<string> = []
     const deleted: Array<string> = []
 
-    for (const entry of config.volumes.managed) {
+    for (const entry of managedVolumes(config)) {
       const vol = existing.find((v) => v.name === entry.name)
 
       if (vol === undefined) continue

@@ -41,7 +41,7 @@ describe("decryptSopsFile", () => {
       const secrets = yield* decryptSopsFile({ file: "/secrets/staging.yaml", spawner })
       expect(secrets).toEqual({ HCLOUD_TOKEN: "tok", OVH_CLIENT_ID: "id" })
       expect(invocations).toEqual([
-        { command: "sops", args: ["--decrypt", "--output-type", "json", "/secrets/staging.yaml"] }
+        { command: "sops", args: ["--decrypt", "--output-type", "json", "--", "/secrets/staging.yaml"] }
       ])
     }))
 

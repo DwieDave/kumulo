@@ -1,3 +1,4 @@
+import { diffBuckets as diffBucketsCore } from "@kumulo/core"
 import type { BucketRef, BucketSpec } from "@kumulo/core"
 
 export interface ExistingBucket {
@@ -17,11 +18,6 @@ export interface BucketDiff {
   readonly noop: ReadonlyArray<BucketRef>
 }
 
-const _isImmutableDiff = (bucket: BucketSpec, existing: ExistingBucket): boolean =>
-  bucket.region !== existing.region || bucket.encryption !== existing.encryption
-
-const _isMutableDiff = (bucket: BucketSpec, existing: ExistingBucket): boolean => bucket.versioning !== existing.versioning
-
 const _toRef = (bucket: ExistingBucket): BucketRef => ({ name: bucket.name, region: bucket.region })
 
 export const diffBuckets = (
@@ -30,31 +26,18 @@ export const diffBuckets = (
     readonly existing: ReadonlyArray<ExistingBucket>
   }
 ): BucketDiff => {
-  const byName = new Map(existing.map((bucket) => [bucket.name, bucket]))
-  const desiredNames = new Set(desired.map((bucket) => bucket.name))
+  const diff = diffBucketsCore({
+    desired,
+    existing,
+    isImmutable: (spec, current) => spec.region !== current.region || spec.encryption !== current.encryption,
+    isMutable: (spec, current) => spec.versioning !== current.versioning
+  })
 
-  const toCreate: Array<BucketSpec> = []
-  const toReplace: Array<{ readonly ref: BucketRef; readonly spec: BucketSpec }> = []
-  const toUpdate: Array<{ readonly ref: BucketRef; readonly spec: BucketSpec }> = []
-  const noop: Array<BucketRef> = []
-
-  for (const bucket of desired) {
-    const match = byName.get(bucket.name)
-
-    if (!match) {
-      toCreate.push(bucket)
-    } else if (_isImmutableDiff(bucket, match)) {
-      toReplace.push({ ref: _toRef(match), spec: bucket })
-    } else if (_isMutableDiff(bucket, match)) {
-      toUpdate.push({ ref: _toRef(match), spec: bucket })
-    } else {
-      noop.push(_toRef(match))
-    }
+  return {
+    toCreate: diff.toCreate,
+    toReplace: diff.toReplace.map(({ existing: current, spec }) => ({ ref: _toRef(current), spec })),
+    toUpdate: diff.toUpdate.map(({ existing: current, spec }) => ({ ref: _toRef(current), spec })),
+    toDelete: diff.toDelete.map(_toRef),
+    noop: diff.noop.map(_toRef)
   }
-
-  const toDelete = existing
-    .filter((bucket) => !desiredNames.has(bucket.name) && !bucket.retain)
-    .map(_toRef)
-
-  return { toCreate, toReplace, toUpdate, toDelete, noop }
 }

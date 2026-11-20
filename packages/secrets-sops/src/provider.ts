@@ -35,7 +35,7 @@ export const decryptSopsFile = (
   { file, spawner }: { readonly file: string; readonly spawner: ChildProcessSpawnerService }
 ): Effect.Effect<SopsSecrets, ConfigProvider.SourceError> =>
   Effect.scoped(Effect.gen(function*() {
-    const command = ChildProcess.make("sops", ["--decrypt", "--output-type", "json", file])
+    const command = ChildProcess.make("sops", ["--decrypt", "--output-type", "json", "--", file])
     const handle = yield* spawner.spawn(command)
 
     const [stdout, stderr, exitCode] = yield* Effect.all(
@@ -49,6 +49,10 @@ export const decryptSopsFile = (
 
     return yield* _parseFlatRecord({ file, stdout })
   })).pipe(
+    Effect.timeoutOrElse({
+      duration: "30 seconds",
+      orElse: () => Effect.fail(_sourceError({ file, detail: "sops timed out after 30 seconds" }))
+    }),
     Effect.catchTag("PlatformError", (cause) => Effect.fail(_sourceError({ file, detail: cause.message, cause })))
   )
 

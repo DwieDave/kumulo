@@ -12,8 +12,10 @@ import {
   uksPoolHash
 } from "@kumulo/distro-upcloud-uks"
 import type { ExistingNodeGroup, UksWorkerPoolConfig } from "@kumulo/distro-upcloud-uks"
-import type { MksError, ObjectStorageError, VolumeError } from "@kumulo/core"
+import type { ManagedDistroError, ObjectStorageError, VolumeError } from "@kumulo/core"
 import type { UpcloudUksClusterConfig } from "../cluster-config.ts"
+import { dnsPlanActions } from "../dns-plan.ts"
+import type { DnsPlanTargets } from "../dns-plan.ts"
 import { UpcloudEnv } from "./env.ts"
 import { bucketPlanActions, configuredUpcloudBuckets, lookupUpcloudBuckets, uksBucketRow } from "./storage.ts"
 import { lookupUpcloudVolumes, managedUpcloudVolumes, uksVolumeRow, volumePlanActions } from "./volumes.ts"
@@ -42,7 +44,7 @@ export interface UpcloudInventory {
 
 export const lookupUpcloudInventory = (
   config: UpcloudUksClusterConfig
-): Effect.Effect<UpcloudInventory, MksError | ObjectStorageError | VolumeError, UpcloudEnv> =>
+): Effect.Effect<UpcloudInventory, ManagedDistroError | ObjectStorageError | VolumeError, UpcloudEnv> =>
   Effect.gen(function*() {
     const { clients } = yield* UpcloudEnv
     const cluster = yield* findClusterByName({ clients, name: config.name })
@@ -129,6 +131,11 @@ export const toUksPool = (
   taints: pool.taints
 })
 
+// api_server is the hostname in the kubeconfig's cluster.server, see reconcileUpcloudDns
+const _dnsTargets = (config: UpcloudUksClusterConfig): DnsPlanTargets =>
+  config.cdn === undefined || config.cdn.module === "none" ? { api_server: "hostname" } : { api_server: "hostname", cdn: "hostname" }
+
+// without dns rows a dns-only change plans NothingToDo and apply never reaches reconcileUpcloudDns
 export const buildUpcloudPlan = (
   { config, inventory }: { readonly config: UpcloudUksClusterConfig; readonly inventory: UpcloudInventory }
 ): Plan => ({
@@ -137,6 +144,7 @@ export const buildUpcloudPlan = (
     _createOrNoOp(inventory.networkExists, uksNetworkRow(config.name)),
     _clusterAction({ config, inventory }),
     ...config.worker_pools.map((pool) => _poolAction({ cluster: config.name, inventory, pool: toUksPool(pool) })),
+    ...dnsPlanActions({ config: config.dns, targets: _dnsTargets(config) }),
     ...volumePlanActions({ config, live: inventory.volumes ?? [] }),
     ...bucketPlanActions({ config, live: inventory.buckets ?? [] })
   ]
@@ -144,7 +152,7 @@ export const buildUpcloudPlan = (
 
 export const upcloudDeletePlanActions = (
   config: UpcloudUksClusterConfig
-): Effect.Effect<Plan["actions"], MksError | ObjectStorageError | VolumeError, UpcloudEnv> =>
+): Effect.Effect<Plan["actions"], ManagedDistroError | ObjectStorageError | VolumeError, UpcloudEnv> =>
   Effect.gen(function*() {
     const inventory = yield* lookupUpcloudInventory(config)
 

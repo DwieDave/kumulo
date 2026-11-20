@@ -108,3 +108,21 @@ it.effect("maps 401 and 500 statuses", () =>
     assert.instanceOf(yield* Effect.flip(_stub(401, "").findZone({ domain: "x.io" })), AuthenticationFailed)
     assert.instanceOf(yield* Effect.flip(_stub(500, "boom").findZone({ domain: "x.io" })), ProviderApiError)
   }))
+
+it.effect("an empty page that still claims more items ends the walk instead of looping", () =>
+  Effect.gen(function*() {
+    let calls = 0
+
+    const httpClient = HttpClient.make((request) => {
+      calls++
+
+      return Effect.succeed(HttpClientResponse.fromWeb(
+        request,
+        Response.json({ Items: [], CurrentPage: calls, TotalItems: 0, HasMoreItems: true })
+      ))
+    }).pipe(HttpClient.mapRequest(HttpClientRequest.prependUrl("https://fixture.invalid")))
+
+    const records = yield* bunnyDnsClient({ httpClient }).listRecords({ zoneId: 1 })
+    assert.deepStrictEqual(records, [])
+    assert.strictEqual(calls, 1)
+  }))

@@ -1,4 +1,5 @@
 import { Effect, Schema } from "effect"
+import { crossFieldRule } from "./rule.ts"
 
 const octet = "(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)"
 const prefix = "(3[0-2]|[12]?\\d)"
@@ -8,6 +9,11 @@ const isCidr = Schema.isPattern(new RegExp(`^${octet}\\.${octet}\\.${octet}\\.${
 })
 
 export const Cidr = Schema.String.check(isCidr)
+
+const _ipv4Literal = new RegExp(`^${octet}\\.${octet}\\.${octet}\\.${octet}$`)
+const _ipv6Literal = /^(?!.*:::)(?=(?:[^:]*:){2})(?:[0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$/
+
+export const isIpLiteral = (target: string): boolean => _ipv4Literal.test(target) || _ipv6Literal.test(target)
 
 export const cidrRange = (cidr: string): readonly [number, number] => {
   const [address = "", bits = "0"] = cidr.split("/")
@@ -28,14 +34,6 @@ export type Provider = typeof Provider.Type
 
 export type AuthMethod = typeof AuthMethod.Type
 
-// kumulo: any real object_storage.module requires a real secrets.sink
-export const isSecretsRequiredForObjectStorage = Schema.makeFilter(
-  (config: { object_storage: { module: string }; secrets: { sink: string } }) =>
-    config.object_storage.module !== "none" && config.secrets.sink === "none"
-      ? `secrets.sink must not be none when object_storage.module is ${config.object_storage.module}`
-      : undefined
-)
-
 export const authMethodsByProvider: Record<Provider, ReadonlyArray<AuthMethod>> = {
   hetzner: ["api_token"],
   upcloud: ["api_token"],
@@ -43,24 +41,33 @@ export const authMethodsByProvider: Record<Provider, ReadonlyArray<AuthMethod>> 
   generic: ["application_credential", "clouds_yaml", "env"]
 }
 
-export const isAuthMethodConsistentWithProvider = Schema.makeFilter(
-  (config: { provider: Provider; auth: { method: AuthMethod } }) =>
+// kumulo: any real object_storage.module requires a real secrets.sink
+export const secretsRequiredForObjectStorage = crossFieldRule({
+  check: (config: { object_storage: { module: string }; secrets: { sink: string } }) =>
+    config.object_storage.module !== "none" && config.secrets.sink === "none"
+      ? `secrets.sink must not be none when object_storage.module is ${config.object_storage.module}`
+      : undefined,
+  jsonSchema: [
+    {
+      if: {
+        properties: { object_storage: { properties: { module: { not: { const: "none" } } }, required: ["module"] } },
+        required: ["object_storage"]
+      },
+      then: { properties: { secrets: { properties: { sink: { not: { const: "none" } } } } } }
+    }
+  ]
+})
+
+export const authMethodConsistentWithProvider = crossFieldRule({
+  check: (config: { provider: Provider; auth: { method: AuthMethod } }) =>
     authMethodsByProvider[config.provider].includes(config.auth.method)
       ? undefined
-      : `auth.method must be one of ${authMethodsByProvider[config.provider].join(", ")} for provider ${config.provider}`
-)
-
-export const isVolumesModuleConsistentWithProvider = Schema.makeFilter(
-  (config: { provider: string; volumes: { module: string } }) => {
-    if (config.volumes.module === "hcloud" && config.provider !== "hetzner")
-      return "volumes.module hcloud requires provider hetzner"
-
-    if (config.volumes.module === "cinder" && config.provider === "hetzner")
-      return "volumes.module cinder is not available on provider hetzner"
-
-    return undefined
-  }
-)
+      : `auth.method must be one of ${authMethodsByProvider[config.provider].join(", ")} for provider ${config.provider}`,
+  jsonSchema: Object.entries(authMethodsByProvider).map(([provider, methods]) => ({
+    if: { properties: { provider: { const: provider } }, required: ["provider"] },
+    then: { properties: { auth: { properties: { method: { enum: [...methods] } } } } }
+  }))
+})
 
 export const Auth = Schema.Struct({
   method: AuthMethod,
@@ -227,46 +234,19 @@ export const BunnyCdn = Schema.Struct({
 
 export const Cdn = Schema.Union([Schema.Struct({ module: Schema.Literal("none") }), BunnyCdn])
 
-export const isCdnApexRequiresBunnyDns = Schema.makeFilter(
-  (config: { dns: { module: string; zone?: string }; cdn?: { module: string; hostnames?: ReadonlyArray<string> } }) => {
-    const zone = "zone" in config.dns ? config.dns.zone : undefined
-
-    return config.cdn?.hostnames?.some((host) => host === zone) === true && config.dns.module !== "bunny"
-      ? "cdn.hostnames contains the dns.zone apex, which requires dns.module bunny"
-      : undefined
-  }
-)
-
-export const isGodaddyTtlMinimum = Schema.makeFilter((config: { dns: { module: string; ttl?: number } }) =>
-  config.dns.module === "godaddy" && config.dns.ttl !== undefined && config.dns.ttl < 600
-    ? "GoDaddy requires dns.ttl >= 600"
-    : undefined
-)
-
-const _reservedDnsTargets = ["api_server", "ingress", "cdn"]
-
-const _ipv4Literal = new RegExp(`^${octet}\\.${octet}\\.${octet}\\.${octet}$`)
-const _ipv6Literal = /^(?!.*:::)(?=(?:[^:]*:){2})(?:[0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$/
-
-const _isIpLiteral = (target: string): boolean => _ipv4Literal.test(target) || _ipv6Literal.test(target)
-
-export const isGodaddyApexNotCname = Schema.makeFilter(
-  (config: { dns: { module: string; zone?: string; records?: ReadonlyArray<{ name: string; target: string }> } }) =>
-    config.dns.module === "godaddy" &&
-    config.dns.records?.some(
-      (record) =>
-        (record.name === "@" || record.name === config.dns.zone) &&
-        !_reservedDnsTargets.includes(record.target) &&
-        !_isIpLiteral(record.target)
-    ) === true
-      ? "GoDaddy rejects an apex CNAME: dns.records at the zone apex must target an IP address"
-      : undefined
-)
-
-export const isCdnOriginUrlRequired = Schema.makeFilter(
-  (config: { cdn?: { module: string; origin?: unknown } }) =>
-    config.cdn?.origin === "ingress" ? "cdn.origin ingress is only valid for distro ovh-mks with an ingress block" : undefined
-)
+export const cdnOriginUrlRequired = crossFieldRule({
+  check: (config: { cdn?: { module: string; origin?: unknown } }) =>
+    config.cdn?.origin === "ingress" ? "cdn.origin ingress is only valid for distro ovh-mks with an ingress block" : undefined,
+  jsonSchema: [
+    {
+      if: {
+        properties: { cdn: { properties: { origin: { const: "ingress" } }, required: ["origin"] } },
+        required: ["cdn"]
+      },
+      then: { properties: { distro: { const: "ovh-mks" } } }
+    }
+  ]
+})
 
 const isAgeRecipient = Schema.isPattern(/^age1/, {
   message: "must be an age recipient key starting with age1"
@@ -293,8 +273,15 @@ export const Outputs = Schema.Struct({
   format: OutputsFormat
 })
 
+// DNS label: the cluster name is used in file paths, so "../" and "/" must not decode
+const isClusterName = Schema.isPattern(/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/, {
+  message: "must be a DNS label: 1-63 lowercase letters, digits or '-', starting and ending alphanumeric"
+})
+
+export const ClusterName = Schema.String.check(isClusterName)
+
 export const commonClusterFields = {
-  name: Schema.NonEmptyString,
+  name: ClusterName,
   outputs: Schema.optionalKey(Outputs),
   auth: Auth,
   worker_pools: Schema.Array(WorkerPool),

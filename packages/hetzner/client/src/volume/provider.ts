@@ -1,9 +1,9 @@
-import { ResourceConflict, VolumeProvider } from "@kumulo/core"
+import { ignoreNotFound, ResourceConflict, VolumeProvider } from "@kumulo/core"
 import type { ClusterTag, VolumeError, VolumeInfo, VolumeRef, VolumeSpec } from "@kumulo/core"
 import { Effect, Layer } from "effect"
 import type { HttpClient } from "effect/http"
 import { hcloudClient, type HcloudClient } from "../client/hcloud.ts"
-import { ignoreMissing, mapHcloudError } from "../provider/errors.ts"
+import { mapHcloudError } from "../errors.ts"
 import { listAll } from "../provider/paginate.ts"
 import { staticPvManifest } from "./manifests.ts"
 import { enforceMinimumVolumeSize } from "./sizing.ts"
@@ -105,12 +105,12 @@ export const listClusterVolumes = ({ options }: { readonly options: VolumeProvid
 export const deleteVolume = (ref: VolumeRef): R<void> =>
   Effect.gen(function*() {
     const client = yield* hcloudClient
-    yield* ignoreMissing(
+    yield* ignoreNotFound(
       mapHcloudError({ self: client.Volumes.deleteVolume({ params: { id: Number(ref.id) } }), ctx: { kind: "volume", ref: ref.id } })
     )
   })
 
-export const VolumeProviderLive = (options: VolumeProviderOptions): Layer.Layer<VolumeProvider, never, Deps> =>
+export const hetznerVolumeProviderLive = (options: VolumeProviderOptions): Layer.Layer<VolumeProvider, never, Deps> =>
   Layer.effect(
     VolumeProvider,
     Effect.gen(function*() {

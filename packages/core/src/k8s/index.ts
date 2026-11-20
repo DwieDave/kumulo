@@ -1,12 +1,12 @@
-export { K8sClient, makeK8sClient } from "./client.ts"
+export { K8sClient, k8sClientFromKubeconfig, makeK8sClient } from "./client.ts"
 
-export type { K8sClientOptions, ResourceRef } from "./client.ts"
+export type { K8sClientFromKubeconfigOptions, K8sClientOptions, ResourceRef } from "./client.ts"
 
 export { parseKubeconfig } from "./kubeconfig.ts"
 
 export type { ClientCertAuth, KubeconfigAuth, KubeconfigContext, TokenAuth } from "./kubeconfig.ts"
 
-export { waitForDeploymentAvailable, waitForNodeReady } from "./readiness.ts"
+export { waitForDeploymentAvailable } from "./readiness.ts"
 
 export type { WaitOptions } from "./readiness.ts"
 

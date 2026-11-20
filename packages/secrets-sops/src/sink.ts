@@ -28,7 +28,7 @@ const _encryptWithSops = (
   Effect.scoped(Effect.gen(function*() {
     const command = ChildProcess.make(
       "sops",
-      ["--encrypt", "--input-type", "yaml", "--output-type", "yaml", "--age", ageRecipient, "/dev/stdin"],
+      ["--encrypt", "--input-type", "yaml", "--output-type", "yaml", "--age", ageRecipient, "--", "/dev/stdin"],
       { stdin: Stream.encodeText(Stream.make(plaintext)) }
     )
 
@@ -42,7 +42,12 @@ const _encryptWithSops = (
     if (exitCode !== 0) return yield* Effect.fail(new SinkUnavailable({ hint: `sops exited with code ${exitCode}: ${stderr.trim()}` }))
 
     return stdout
-  }))
+  })).pipe(
+    Effect.timeoutOrElse({
+      duration: "30 seconds",
+      orElse: () => Effect.fail(new SinkUnavailable({ hint: "sops timed out after 30 seconds" }))
+    })
+  )
 
 const _write = (
   { dir, ageRecipient, entries, spawner, fs }: {

@@ -19,7 +19,3 @@ export type { PvcBinding } from "./manifests.ts"
 export { csiDevicePermissionNote } from "./doctor.ts"
 
 export type { DoctorNote } from "./doctor.ts"
-
-export { pollUntil } from "./poll.ts"
-
-export type { StatusPollOptions } from "./poll.ts"

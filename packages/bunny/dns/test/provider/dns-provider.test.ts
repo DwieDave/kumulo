@@ -1,8 +1,8 @@
 import { assert, describe, it } from "@effect/vitest"
 import { Effect } from "effect"
-import { makeFakeBunnyDns } from "@kumulo/bunny"
+import { makeFakeBunnyDns } from "@kumulo/bunny/testing"
 import { makeBunnyDnsProvider } from "../../src/provider/dns-provider.ts"
-import { runDnsProviderContractSuite } from "./contract.ts"
+import { dnsProviderContract } from "@kumulo/core/testing"
 
 const _zone = "example.com"
 
@@ -18,24 +18,27 @@ const _setup = (pullZoneIdFor?: (hostname: string) => number | undefined) => {
 }
 
 describe("bunny dns provider — port contract", () => {
-  runDnsProviderContractSuite(() => {
+  dnsProviderContract(() => {
     const { fake, provider, zoneId } = _setup()
     const at = (name: string) => fake.peekRecords(zoneId).filter((r) => r.Name === _relative(name))
 
     return {
       zone: _zone,
       provider,
-      targetOf: (name) => at(name).find((r) => r.Type !== "TXT")?.Value ?? undefined,
+      targetOf: (name) => at(name).find((r) => r.Type === "A" || r.Type === "AAAA" || r.Type === "CNAME")?.Value ?? undefined,
       seedForeign: (name, target) =>
         void fake.seedRecord({ zoneId, record: { Name: _relative(name), Type: "A", Value: target, Ttl: 300 } }),
       seedForeignKind: (name, type, target) =>
         void fake.seedRecord({
           zoneId,
-          record: { Name: _relative(name), Type: type === "CNAME" ? "CNAME" : "A", Value: target, Ttl: 300 }
+          record: { Name: _relative(name), Type: type === "CNAME" || type === "MX" ? type : "A", Value: target, Ttl: 300 }
         }),
       seedForeignOwnerTxt: (name, tag) =>
         void fake.seedRecord({ zoneId, record: { Name: _relative(name), Type: "TXT", Value: `kumulo.cluster=${tag}`, Ttl: 300 } }),
-      kindsAt: (name) => at(name).map((r) => r.Type).toSorted()
+      kindsAt: (name) => at(name).map((r) => r.Type).toSorted(),
+      valuesAt: (name, type) => at(name).filter((r) => r.Type === type).map((r) => r.Value ?? ""),
+      seedForeignTxt: (name, value) =>
+        void fake.seedRecord({ zoneId, record: { Name: _relative(name), Type: "TXT", Value: value, Ttl: 300 } })
     }
   })
 })

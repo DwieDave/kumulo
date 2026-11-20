@@ -2,7 +2,12 @@
   "compilerOptions": {
     "paths": {
       "@kumulo/bunny": ["./packages/bunny/client/dist/index.d.ts"],
+      "@kumulo/bunny/testing": ["./packages/bunny/client/dist/testing/index.d.ts"],
       "@kumulo/cdn-bunny": ["./packages/bunny/cdn/dist/index.d.ts"],
+      "@kumulo/cli": ["./packages/cli/dist/index.d.ts"],
+      "@kumulo/core": ["./packages/core/dist/index.d.ts"],
+      "@kumulo/core/testing": ["./packages/core/dist/testing/index.d.ts"],
+      "@kumulo/distro-k3s": ["./packages/distro-k3s/dist/index.d.ts"],
       "@kumulo/distro-ovh-mks": ["./packages/ovh/distro-mks/dist/index.d.ts"],
       "@kumulo/distro-upcloud-uks": ["./packages/upcloud/distro-uks/dist/index.d.ts"],
       "@kumulo/dns-bunny": ["./packages/bunny/dns/dist/index.d.ts"],
@@ -12,6 +17,7 @@
       "@kumulo/hetzner": ["./packages/hetzner/client/dist/index.d.ts"],
       "@kumulo/openstack": ["./packages/openstack/client/dist/index.d.ts"],
       "@kumulo/provider-ovh": ["./packages/ovh/client/dist/index.d.ts"],
+      "@kumulo/secrets-sops": ["./packages/secrets-sops/dist/index.d.ts"],
       "@kumulo/storage-bunny": ["./packages/bunny/storage/dist/index.d.ts"],
       "@kumulo/storage-ovh": ["./packages/ovh/storage/dist/index.d.ts"],
       "@kumulo/storage-upcloud": ["./packages/upcloud/storage/dist/index.d.ts"],

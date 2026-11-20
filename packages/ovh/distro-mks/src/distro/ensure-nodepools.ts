@@ -1,11 +1,10 @@
 import { Effect } from "effect"
-import { CONFIG_HASH_KEY } from "@kumulo/core"
-import type { MksError } from "@kumulo/core"
+import { CONFIG_HASH_KEY, pollUntil } from "@kumulo/core"
+import type { ManagedDistroError } from "@kumulo/core"
 import type { Mks } from "../client/mks.ts"
-import { mapMksError } from "./errors.ts"
+import { mapMksError } from "../errors.ts"
 import type { ExistingNodePool, NodePoolDiff } from "./nodepool-diff.ts"
 import { diffNodePools, mksPoolHash } from "./nodepool-diff.ts"
-import { pollUntil } from "./status.ts"
 import type { MksClusterRef, MksWorkerPoolConfig } from "./types.ts"
 
 interface RawPool {
@@ -60,7 +59,7 @@ const _updatePayload = (pool: MksWorkerPoolConfig) => ({
 
 const _create = (
   { mks, ref, pool }: { readonly mks: Mks; readonly ref: MksClusterRef; readonly pool: MksWorkerPoolConfig }
-): Effect.Effect<void, MksError> =>
+): Effect.Effect<void, ManagedDistroError> =>
   mapMksError({
     self: mks.postCloudProjectServiceNameKubeKubeIdNodepool(ref.serviceName, ref.kubeId, { payload: _createPayload(pool) }),
     ctx: { kind: "nodepool", ref: pool.name }
@@ -68,7 +67,7 @@ const _create = (
 
 const _delete = (
   { mks, ref, id }: { readonly mks: Mks; readonly ref: MksClusterRef; readonly id: string }
-): Effect.Effect<void, MksError> =>
+): Effect.Effect<void, ManagedDistroError> =>
   mapMksError({
     self: mks.deleteCloudProjectServiceNameKubeKubeIdNodepoolNodePoolId(ref.serviceName, ref.kubeId, id, undefined),
     ctx: { kind: "nodepool", ref: id }
@@ -76,7 +75,7 @@ const _delete = (
 
 const _update = (
   { mks, ref, id, pool }: { readonly mks: Mks; readonly ref: MksClusterRef; readonly id: string; readonly pool: MksWorkerPoolConfig }
-): Effect.Effect<void, MksError> =>
+): Effect.Effect<void, ManagedDistroError> =>
   mapMksError({
     self: mks.putCloudProjectServiceNameKubeKubeIdNodepoolNodePoolId(ref.serviceName, ref.kubeId, id, { payload: _updatePayload(pool) }),
     ctx: { kind: "nodepool", ref: id }
@@ -85,18 +84,19 @@ const _update = (
 // Replace only creates once the old pool is really gone: OVH's DELETE is async, and creating too early collides or leaves both alive.
 const _awaitGone = (
   { mks, ref, id }: { readonly mks: Mks; readonly ref: MksClusterRef; readonly id: string }
-): Effect.Effect<void, MksError> =>
+): Effect.Effect<void, ManagedDistroError> =>
   pollUntil({
     check: Effect.map(listNodePools({ mks, ref }), (pools) => pools.some((pool) => pool.id === id)),
     isDone: (present) => !present,
     interval: "3 seconds",
     timeout: "10 minutes",
+    kind: "mks-cluster",
     ref: id
   }).pipe(Effect.asVoid)
 
 const _replace = (
   { mks, ref, id, pool }: { readonly mks: Mks; readonly ref: MksClusterRef; readonly id: string; readonly pool: MksWorkerPoolConfig }
-): Effect.Effect<void, MksError> =>
+): Effect.Effect<void, ManagedDistroError> =>
   _delete({ mks, ref, id }).pipe(
     Effect.andThen(_awaitGone({ mks, ref, id })),
     Effect.andThen(_create({ mks, ref, pool }))
@@ -104,7 +104,7 @@ const _replace = (
 
 const _applyDiff = (
   { mks, ref, diff }: { readonly mks: Mks; readonly ref: MksClusterRef; readonly diff: NodePoolDiff }
-): Effect.Effect<void, MksError> =>
+): Effect.Effect<void, ManagedDistroError> =>
   Effect.gen(function*() {
     yield* Effect.forEach(diff.toDelete, (id) => _delete({ mks, ref, id }), { discard: true })
     yield* Effect.forEach(diff.toReplace, ({ id, pool }) => _replace({ mks, ref, id, pool }), { discard: true })
@@ -114,7 +114,7 @@ const _applyDiff = (
 
 export const listNodePools = (
   { mks, ref }: { readonly mks: Mks; readonly ref: MksClusterRef }
-): Effect.Effect<ReadonlyArray<ExistingNodePool>, MksError> =>
+): Effect.Effect<ReadonlyArray<ExistingNodePool>, ManagedDistroError> =>
   Effect.map(
     mapMksError({
       self: mks.getCloudProjectServiceNameKubeKubeIdNodepool(ref.serviceName, ref.kubeId, undefined),
@@ -130,7 +130,7 @@ export const ensureNodePools = (
     readonly pools: ReadonlyArray<MksWorkerPoolConfig>
     readonly replace?: ReadonlySet<string>
   }
-): Effect.Effect<void, MksError> =>
+): Effect.Effect<void, ManagedDistroError> =>
   Effect.gen(function*() {
     const existing = yield* listNodePools({ mks, ref })
     yield* _applyDiff({ mks, ref, diff: diffNodePools({ desired: pools, existing, replace }) })

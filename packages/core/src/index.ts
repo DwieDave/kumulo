@@ -21,8 +21,6 @@ export {
 
 export type { CredentialsSinkError, KumuloError, KumuloErrorTag, PathedIssue } from "./errors/tagged.ts"
 
-export { isRetryable } from "./errors/retryable.ts"
-
 export { renderError } from "./errors/renderer.ts"
 
 export type { RendererRegistry } from "./errors/renderer.ts"
@@ -35,6 +33,7 @@ export {
   Autoscaling,
   BucketName,
   Cidr,
+  ClusterName,
   cidrRange,
   CinderVolumes,
   commonClusterFields,
@@ -42,11 +41,11 @@ export {
   Dns,
   encodeConfigWith,
   HcloudVolumes,
-  isAuthMethodConsistentWithProvider,
-  isCdnApexRequiresBunnyDns,
-  isGodaddyApexNotCname,
-  isGodaddyTtlMinimum,
-  isCdnOriginUrlRequired,
+  authMethodConsistentWithProvider,
+  cdnOriginUrlRequired,
+  type CrossFieldRule,
+  crossFieldRule,
+  isIpLiteral,
   BunnyBucketName,
   BunnyCdn,
   BunnyObjectStorage,
@@ -54,8 +53,7 @@ export {
   Cdn,
   CdnOrigin,
   Shield,
-  isSecretsRequiredForObjectStorage,
-  isVolumesModuleConsistentWithProvider,
+  secretsRequiredForObjectStorage,
   ManagedVolume,
   NonNegativeInt,
   NoVolumes,
@@ -81,9 +79,7 @@ export type { CloudError } from "./ports/cloud-provider.ts"
 
 export { CredentialsSink } from "./ports/credentials-sink.ts"
 
-export { Distro } from "./ports/distro.ts"
-
-export type { DistroService, ManagedDistroService, MksError, SelfManagedDistroService } from "./ports/distro.ts"
+export type { ManagedDistroError } from "./ports/distro.ts"
 
 export { DnsProvider } from "./ports/dns-provider.ts"
 
@@ -95,7 +91,7 @@ export type { ObjectStorageError } from "./ports/object-storage-provider.ts"
 
 export { ProviderProfile } from "./ports/provider-profile.ts"
 
-export type { AuthDefaults, ProfileError } from "./ports/provider-profile.ts"
+export type { ProfileError } from "./ports/provider-profile.ts"
 
 export { validateAutoscaling, validateCni } from "./ports/validation.ts"
 
@@ -107,19 +103,29 @@ export { VolumeProvider } from "./ports/volume-provider.ts"
 
 export type { VolumeError } from "./ports/volume-provider.ts"
 
-export { computePlan, CONFIG_HASH_KEY, configHash, namesToReplace, resourceName, toTaggedResource } from "./plan/index.ts"
+export { computePlan, CONFIG_HASH_KEY, configHash, serverConfigHash, namesToReplace, resourceName, toTaggedResource } from "./plan/index.ts"
 
-export { PlanAction } from "./plan/index.ts"
+export { createOrNoOp, deleteRow, PlanAction } from "./plan/index.ts"
+
+export { paginate, paginateByOffset, paginateByPage, PaginationLimitExceeded, PaginationStalled } from "./paginate.ts"
+
+export type { PaginateOptions, PaginationError } from "./paginate.ts"
+
+export { makeOutputsFile, OutputsInvalid } from "./outputs/index.ts"
+
+export type { OutputsFileOptions, OutputsLocation } from "./outputs/index.ts"
+
+export { diffBuckets } from "./storage/diff.ts"
+
+export type { BucketDiffResult } from "./storage/diff.ts"
 
 export type { DesiredResource, Plan, TaggedResource } from "./plan/index.ts"
 
-export { applyServers, pollUntil } from "./reconcile/index.ts"
+export { pollUntil } from "./reconcile/index.ts"
 
 export type { PollOptions } from "./reconcile/index.ts"
 
-// The CLI's colored `present.ts` is what users see; core's plain `renderPlan`
-// is the uncolored one used for snapshot tests (examples/plan-snapshot.test.ts).
-export { decidePlanAction, PlanDecision, renderPlan } from "./present/index.ts"
+export { decidePlanAction, PlanDecision } from "./present/index.ts"
 
 export { genericProfile, genericProfileLive } from "./profiles/index.ts"
 
@@ -131,16 +137,17 @@ export { cdnNoop, cdnNoopLive } from "./cdn-noop/index.ts"
 
 export { dnsNoop, dnsNoopLive } from "./dns-noop/index.ts"
 
-export { OWNERSHIP_PREFIX, ownershipTarget, ownerTagOf, recordKind } from "./dns/index.ts"
+export { OWNERSHIP_PREFIX, ownershipTarget, ownerTagOf, reconcileDns, reconcileDnsLive, recordKind } from "./dns/index.ts"
 
-export type { DnsRecordKind } from "./dns/index.ts"
+export type { DnsAdapter, DnsRecordKind, ZoneRecord } from "./dns/index.ts"
 
-export { cordonNode, deleteNode, drainNode, installAddons, K8sClient, makeK8sClient, parseKubeconfig, refFor, waitForDeploymentAvailable, waitForNodeReady } from "./k8s/index.ts"
+export { cordonNode, deleteNode, drainNode, installAddons, K8sClient, k8sClientFromKubeconfig, makeK8sClient, parseKubeconfig, refFor, waitForDeploymentAvailable } from "./k8s/index.ts"
 
 export type { Addon, AddonError } from "./k8s/index.ts"
 
 export type {
   ClientCertAuth,
+  K8sClientFromKubeconfigOptions,
   K8sClientOptions,
   KubeconfigAuth,
   KubeconfigContext,
@@ -206,3 +213,25 @@ export type {
   VolumeSpec,
   WorkerPoolFields
 } from "./domain/types.ts"
+
+export {
+  classifyHttpError,
+  HTTP_ERROR_BODY_LIMIT,
+  ignoreNotFound,
+  IDEMPOTENT_METHODS,
+  makeProviderHttpClient,
+  mapHttpError,
+  parseRateLimitReset,
+  parseRateLimitResetAt,
+  parseRetryAfter,
+  parseRetryAfterAt,
+  truncateBody
+} from "./http/index.ts"
+
+export type {
+  ClassifyOptions,
+  HttpErrorContext,
+  MapHttpErrorOptions,
+  ProviderHttpClientOptions,
+  RetryOptions
+} from "./http/index.ts"

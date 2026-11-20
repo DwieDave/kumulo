@@ -3,6 +3,7 @@ import type * as HttpClient from "effect/http/HttpClient"
 import * as HttpClientRequest from "effect/http/HttpClientRequest"
 import { HttpTransportError } from "@kumulo/core"
 import { BunnyPullZoneOriginType, BunnyPullZoneType } from "../enums.ts"
+import { bunnyPages } from "./pages.ts"
 import { bunnyRequester } from "./request.ts"
 import type { BunnyError } from "../errors.ts"
 
@@ -112,25 +113,20 @@ export const makeBunnyPullZoneClient = (httpClient: HttpClient.HttpClient): Bunn
 
   return {
     findPullZone: ({ name }) =>
-      Effect.gen(function*() {
-        let page = 1
-
-        while (true) {
-          const zones = yield* sendDecode({
+      bunnyPages({
+        kind: _kind,
+        ref: name,
+        items: (zones) => zones,
+        hasMore: (zones) => zones.length >= _pageSize,
+        fetch: (page: number) =>
+          sendDecode({
             ref: name,
             schema: _PullZoneList,
             request: HttpClientRequest.get("/pullzone").pipe(
               HttpClientRequest.setUrlParams({ search: name, page: String(page), perPage: String(_pageSize) })
             )
           })
-
-          const found = zones.find((zone) => zone.Name === name)
-
-          if (found !== undefined || zones.length < _pageSize) return found
-
-          page += 1
-        }
-      }),
+      }).pipe(Effect.map((zones) => zones.find((zone) => zone.Name === name))),
     getPullZone: ({ id }) => sendDecode({ ref: String(id), schema: BunnyPullZone, request: HttpClientRequest.get(`/pullzone/${id}`) }),
     createPullZone: ({ name, settings }) =>
       HttpClientRequest.schemaBodyJson(_CreateBody)(HttpClientRequest.post("/pullzone"), { Name: name, ..._settingsBody(settings) }).pipe(

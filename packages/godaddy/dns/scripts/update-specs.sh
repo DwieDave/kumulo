@@ -13,7 +13,7 @@ RAW="$(mktemp)"
 trap 'rm -f "${RAW}"' EXIT
 
 case "${SOURCE}" in
-  http://*|https://*) curl -sf --max-time 30 "${SOURCE}" -o "${RAW}" ;;
+  http://*|https://*) curl -fsS --max-time 30 "${SOURCE}" -o "${RAW}" ;;
   *) cp "${SOURCE}" "${RAW}" ;;
 esac
 

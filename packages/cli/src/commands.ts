@@ -1,12 +1,10 @@
 import { dirname } from "node:path"
-import { Console, Effect, Match } from "effect"
+import { Console, Effect } from "effect"
 import { Command, Prompt } from "effect/cli"
 import type { Layer } from "effect"
-import { genericProfileLive, namesToReplace, PlanAction, PlanDecision, PlanRejected, ProviderProfile } from "@kumulo/core"
+import { deleteRow, namesToReplace, PlanAction, PlanDecision, PlanRejected, ProviderProfile } from "@kumulo/core"
 import type { ClusterConfigFields, ConfigInvalid, CredentialsSink, ObjectStorageProvider, Plan } from "@kumulo/core"
 import type { ClusterConfig } from "./cluster-config.ts"
-import { ovhProfileLive } from "@kumulo/provider-ovh"
-import { hetznerProfileLive } from "@kumulo/hetzner"
 import { readOutputs, setIngress, writeOutputs } from "@kumulo/volumes-cinder"
 import type { OutputsIngress, OutputsInvalid } from "@kumulo/volumes-cinder"
 import type { FileSystem } from "effect/FileSystem"
@@ -19,10 +17,13 @@ import {
   lookupManagedVolumeNames,
   managedVolumes,
   reconcileVolumesOnDelete,
+  usesGenericVolumes,
   volumes
 } from "./commands/volumes.ts"
 import { status } from "./commands/status.ts"
+import { doctor } from "./commands/doctor.ts"
 import { upgrade } from "./commands/upgrade.ts"
+import { providerFor } from "./provider/registry.ts"
 import { distroFor, onDistro, wantsObjectStorage } from "./distro/registry.ts"
 import type { DistroApplyResult, DistroFailure, DistroServices } from "./distro/types.ts"
 import { cdnDeletePlanActions, cdnHandleFor, cdnPlanActions } from "./cdn.ts"
@@ -40,13 +41,6 @@ const _confirm = (
   process.stdout.isTTY
     ? Prompt.run(Prompt.Confirm({ message })).pipe(Effect.catch(() => Effect.succeed(false)))
     : Console.log(fallback).pipe(Effect.as(false))
-
-const _profileLayer = (config: ClusterConfig): Layer.Layer<ProviderProfile> =>
-  Match.value(config.provider).pipe(
-    Match.when("ovh", () => ovhProfileLive(config.auth.region)),
-    Match.when("hetzner", () => hetznerProfileLive),
-    Match.orElse(() => genericProfileLive)
-  )
 
 const _profileFields = (config: ClusterConfig): ClusterConfigFields => {
   const k3sFields = config.distro === "k3s"
@@ -69,7 +63,7 @@ const _validateForProvider = (config: ClusterConfig): Effect.Effect<void, Config
   Effect.gen(function*() {
     const profile = yield* ProviderProfile
     yield* profile.validate(_profileFields(config))
-  }).pipe(Effect.provide(_profileLayer(config)))
+  }).pipe(Effect.provide(providerFor(config).profileLayer(config)))
 
 const _planPhrases: ReadonlyArray<string> = [
   "Counting clouds...",
@@ -145,8 +139,9 @@ const _convergeAll = Effect.fn(function*(
     Effect.tap(() => _logApplied({ plan, prefixes: appliedPrefixes }))
   )
 
-  const genericVolumes = config.volumes.module === "cinder"
+  const genericVolumes = usesGenericVolumes(config)
 
+  // runs after the cluster step: the distro (k3s) may already ensure volumes itself, and concurrent ensureVolume calls can duplicate them
   const volumesStep = withRowProgress({
     match: (name) => genericVolumes && name.startsWith("volume/"),
     effect: convergeManagedVolumes({ config, configDir })
@@ -163,7 +158,8 @@ const _convergeAll = Effect.fn(function*(
       Effect.tap(() => _logApplied({ plan, prefixes: ["bucket/"] }))
     )
 
-  const [result] = yield* Effect.all([clusterStep, volumesStep, bucketsStep], { concurrency: 3 })
+  const [result] = yield* Effect.all([clusterStep, bucketsStep], { concurrency: 2 })
+  yield* volumesStep
   yield* recordIngressOutputs({ config, configDir, ingress: result.ingress })
 
   return result
@@ -230,7 +226,7 @@ const _applyFlow = Effect.fn(function*({ config: configPath }: { readonly config
 
   const result = yield* withPlanView({
     ...view,
-    effect: appliedPrefixes.length === 0 && storageLayer === undefined
+    effect: appliedPrefixes.length === 0 && storageLayer === undefined && !usesGenericVolumes(config)
       ? (selfProgress ? applyStep : withRowProgress({ match: () => true, effect: applyStep }))
       : _convergeAll({ apply: applyStep, appliedPrefixes, config, configDir, plan, selfProgress, storageLayer })
   })
@@ -251,7 +247,7 @@ export const kubeconfig = Command.make(
   { config: configArgument() },
   Effect.fn(function*({ config: configPath }) {
     const config = yield* loadConfig(configPath)
-    const result = yield* onDistro(config)(({ config: cfg, entry }) => entry.kubeconfig(cfg))
+    const result = yield* onDistro(config)(({ config: cfg, entry }) => entry.kubeconfig({ config: cfg, configDir: dirname(configPath) }))
     yield* Console.log(result.content)
   })
 ).pipe(Command.withDescription("Print the cluster's kubeconfig"))
@@ -265,16 +261,8 @@ const _deletePlan = Effect.fn(function*(config: ClusterConfig, configDir: string
   ], { concurrency: 4 })
 
   // upcloud module plans its own volume rows in deletePlanActions; emitting generic ones too duplicates every row.
-  const genericVolumeModule = config.volumes.module === "cinder" || config.volumes.module === "hcloud"
-
-  const volumeActions = (genericVolumeModule ? managedVolumes(config) : [])
-    .map((entry) =>
-      !liveVolumes.has(entry.name)
-        ? PlanAction.NoOp({ name: `volume/${entry.name} (already absent)` })
-        : entry.retain
-        ? PlanAction.NoOp({ name: `volume/${entry.name} (retained)` })
-        : PlanAction.Delete({ name: `volume/${entry.name}` })
-    )
+  const volumeActions = (usesGenericVolumes(config) ? managedVolumes(config) : [])
+    .map((entry) => deleteRow({ name: `volume/${entry.name}`, live: liveVolumes.has(entry.name), retain: entry.retain }))
 
   const plan: Plan = { actions: [...cdnActions, ...clusterActions, ...volumeActions, ...bucketActions] }
 
@@ -318,10 +306,10 @@ export const del = Command.make(
         effect: onDistro(config)(({ config: cfg, entry }) => entry.delete({ config: cfg, configDir: dirname(configPath) }))
       })
       yield* _ciLine(`${red("Deleted")} ${deletedLabel}/${config.name}`)
-      yield* _logApplied({ plan, prefixes: ["mks-pool/"] })
+      yield* _logApplied({ plan, prefixes: distroFor(config).appliedPrefixes.filter((prefix) => prefix.endsWith("-pool/")) })
 
       const volumesResult = yield* withRowProgress({
-        match: (name) => config.volumes.module === "cinder" && name.startsWith("volume/"),
+        match: (name) => usesGenericVolumes(config) && name.startsWith("volume/"),
         effect: reconcileVolumesOnDelete(config)
       })
 
@@ -354,5 +342,5 @@ export const del = Command.make(
 ).pipe(Command.withDescription("Delete a cluster"))
 
 export const kumuloCli = kumulo.pipe(
-  Command.withSubcommands([apply, scale, status, kubeconfig, del, upgrade, volumes])
+  Command.withSubcommands([apply, scale, status, kubeconfig, del, upgrade, volumes, doctor])
 )
