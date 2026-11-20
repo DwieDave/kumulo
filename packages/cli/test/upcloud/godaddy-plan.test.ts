@@ -53,6 +53,22 @@ describe("upcloud-uks with dns.module godaddy", () => {
     for (const name of _infraRows) assert.deepStrictEqual(plan.actions.find((action) => action.name === name), PlanAction.Create({ name }))
   })
 
+  // dns rows are always Create, as on k3s and ovh-mks: the plan does not read the zone, apply converges it
+  it("lists one dns row per record, so a dns-only change is not NothingToDo", () => {
+    const dnsRows = [
+      "dns/example.com/api.staging-eu (CNAME)",
+      "dns/example.com/@ (A)",
+      "dns/example.com/* (A)",
+      "dns/example.com/*.c1 (A)",
+      "dns/example.com/www (CNAME)"
+    ]
+
+    for (const inventory of [_empty, _live]) {
+      const plan = buildUpcloudPlan({ config: _config, inventory })
+      assert.deepStrictEqual(plan.actions.filter((action) => action.name.startsWith("dns/")), dnsRows.map((name) => PlanAction.Create({ name })))
+    }
+  })
+
   it("plans no infrastructure change on a converged inventory", () => {
     const plan = buildUpcloudPlan({ config: _config, inventory: _live })
 

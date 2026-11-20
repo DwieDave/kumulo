@@ -24,6 +24,11 @@ All notable changes to kumulo are documented here. Format:
   `dns.records[i].target`. It used to be written as a CNAME to the literal word
   `ingress`. Use a literal IP or hostname (the address of the cluster's
   LoadBalancer Service).
+- `upcloud-uks`: the plan lists one `dns/<zone>/<name>` row per DNS record, as
+  on `k3s` and `ovh-mks`, so `--dry-run` shows them and an apply whose only
+  change is a DNS record now writes it. Before, such an apply planned nothing
+  and returned without touching the zone. DNS rows are always `Create`: the
+  plan does not read the zone, apply converges it.
 - Known gap: the per-cluster SSH known_hosts layer (`k3sSshLayer`) is not yet
   wired into the CLI.
 
