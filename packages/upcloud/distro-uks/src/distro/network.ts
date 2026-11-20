@@ -1,7 +1,7 @@
 import { Effect, Predicate, Schedule } from "effect"
 import { ignoreMissing, mapUpcloudError } from "@kumulo/upcloud"
 import type { UpcloudLabel } from "@kumulo/upcloud"
-import type { MksError } from "@kumulo/core"
+import type { ManagedDistroError } from "@kumulo/core"
 import type { UksClients } from "./types.ts"
 
 export interface EnsuredNetwork {
@@ -22,7 +22,7 @@ const _legacyCandidate = <Resource extends { readonly name: string; readonly lab
 
 const _findOwnedRouter = (
   { clients, clusterName, adopt }: { readonly clients: UksClients; readonly clusterName: string; readonly adopt: boolean }
-): Effect.Effect<string | undefined, MksError> =>
+): Effect.Effect<string | undefined, ManagedDistroError> =>
   Effect.gen(function*() {
     const name = routerName(clusterName)
     const ctx = { kind: "router", ref: name }
@@ -47,7 +47,7 @@ export const findOwnedNetwork = (
     readonly zone?: string | undefined
     readonly adopt?: boolean
   }
-): Effect.Effect<string | undefined, MksError> =>
+): Effect.Effect<string | undefined, ManagedDistroError> =>
   Effect.gen(function*() {
     const name = networkName(clusterName)
     const ctx = { kind: "network", ref: name }
@@ -67,7 +67,7 @@ export const findOwnedNetwork = (
 
 const _ensureRouter = (
   { clients, clusterName }: { readonly clients: UksClients; readonly clusterName: string }
-): Effect.Effect<string, MksError> =>
+): Effect.Effect<string, ManagedDistroError> =>
   Effect.gen(function*() {
     const name = routerName(clusterName)
     const existing = yield* _findOwnedRouter({ clients, clusterName, adopt: true })
@@ -90,7 +90,7 @@ const _ensureUksNetwork = (
     readonly cidr: string
     readonly routerUuid: string
   }
-): Effect.Effect<string, MksError> =>
+): Effect.Effect<string, ManagedDistroError> =>
   Effect.gen(function*() {
     const name = networkName(clusterName)
     const existing = yield* findOwnedNetwork({ clients, clusterName, zone })
@@ -119,7 +119,7 @@ export const ensureNetwork = (
     readonly zone: string
     readonly cidr: string
   }
-): Effect.Effect<EnsuredNetwork, MksError> =>
+): Effect.Effect<EnsuredNetwork, ManagedDistroError> =>
   Effect.gen(function*() {
     const routerUuid = yield* _ensureRouter({ clients, clusterName })
     const networkUuid = yield* _ensureUksNetwork({ clients, clusterName, zone, cidr, routerUuid })
@@ -139,7 +139,7 @@ const _retryConflicts = <A, E>(self: Effect.Effect<A, E>): Effect.Effect<A, E> =
 
 export const deleteNetwork = (
   { clients, clusterName, zone }: { readonly clients: UksClients; readonly clusterName: string; readonly zone?: string | undefined }
-): Effect.Effect<void, MksError> =>
+): Effect.Effect<void, ManagedDistroError> =>
   Effect.gen(function*() {
     // Delete network before router: router delete 409s while a network is still attached.
     const networkUuid = yield* findOwnedNetwork({ clients, clusterName, zone, adopt: false })

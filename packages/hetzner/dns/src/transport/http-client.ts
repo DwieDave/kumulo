@@ -1,41 +1,28 @@
-// duplicated from openstack's transportRetrySchedule, not shared: dependency-cruiser forbids importing a sibling's src/ internals
-import { Effect, Layer, Schedule } from "effect"
-import type { Duration, Redacted } from "effect"
+import { Effect, Layer, Redacted } from "effect"
 import * as HttpClient from "effect/http/HttpClient"
 import * as HttpClientRequest from "effect/http/HttpClientRequest"
+import { makeProviderHttpClient } from "@kumulo/core"
 
 export const HETZNER_API_BASE_URL = "https://api.hetzner.cloud/v1"
 
-const _isRetryableStatus = (status: number): boolean => status === 429 || (status >= 500 && status < 600)
-
-export const transportRetrySchedule: Schedule.Schedule<Duration.Duration> = Schedule.exponential("200 millis", 2).pipe(
-  Schedule.jittered
-)
-
-export const transportMaxRetries = 5
-
-export interface HetznerHttpClientOptions {
-  readonly base: HttpClient.HttpClient
-  readonly token: Redacted.Redacted<string>
-  readonly baseUrl?: string
-}
-
-export const makeHetznerHttpClient = (options: HetznerHttpClientOptions): HttpClient.HttpClient => {
-  const baseUrl = options.baseUrl ?? HETZNER_API_BASE_URL
-
-  const authed = options.base.pipe(
-    HttpClient.mapRequest((request) => request.pipe(HttpClientRequest.bearerToken(options.token), HttpClientRequest.prependUrl(baseUrl)))
+// Same policy as the @kumulo/hetzner cloud client (same API host): core retries idempotent methods only, never POST/PATCH.
+export const makeHetznerHttpClient = (
+  options: { readonly base: HttpClient.HttpClient; readonly token: Redacted.Redacted<string>; readonly baseUrl?: string }
+): Effect.Effect<HttpClient.HttpClient> =>
+  Effect.map(
+    makeProviderHttpClient({
+      base: options.base,
+      authorize: (request) => Effect.succeed(HttpClientRequest.bearerToken(request, Redacted.value(options.token))),
+      retry: { statuses: [408, 429, 500, 502, 503, 504] }
+    }),
+    // the base URL is prepended outside core's client: HttpClient.make rejects a relative URL before the core runner sees it
+    HttpClient.mapRequest(HttpClientRequest.prependUrl(options.baseUrl ?? HETZNER_API_BASE_URL))
   )
 
-  const schedule = Schedule.passthrough(transportRetrySchedule)
-
-  return HttpClient.transformResponse(
-    authed,
-    (effect) => Effect.repeat(effect, { schedule, times: transportMaxRetries, while: (response) => _isRetryableStatus(response.status) })
-  )
-}
-
-export const HetznerHttpLive = (
-  { token, baseUrl }: { readonly token: Redacted.Redacted<string>; readonly baseUrl?: string }
+export const hetznerDnsHttpLive = (
+  { baseUrl, token }: { readonly token: Redacted.Redacted<string>; readonly baseUrl?: string }
 ): Layer.Layer<HttpClient.HttpClient, never, HttpClient.HttpClient> =>
-  Layer.effect(HttpClient.HttpClient, Effect.map(HttpClient.HttpClient, (base) => makeHetznerHttpClient({ base, token, baseUrl })))
+  Layer.effect(
+    HttpClient.HttpClient,
+    Effect.flatMap(HttpClient.HttpClient, (base) => makeHetznerHttpClient({ base, token, baseUrl }))
+  )

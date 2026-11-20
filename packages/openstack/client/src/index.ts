@@ -3,26 +3,16 @@ export const packageName = "@kumulo/openstack"
 
 export { KeystoneAuth, KeystoneAuthLive } from "./auth/keystone-auth.ts"
 
-export type { EndpointOptions, KeystoneAuthLiveOptions } from "./auth/keystone-auth.ts"
+export { loadCredentials } from "./auth/credentials.ts"
 
-export { credentialsFromCloudsYaml, credentialsFromEnv, loadCredentials } from "./auth/credentials.ts"
-
-export type { OpenStackCredentials } from "./auth/credentials.ts"
-
-export { CloudProviderLive, resolveFlavor, resolveImage } from "./provider/cloud-provider.ts"
+export { openstackCloudProviderLive, resolveFlavor, resolveImage } from "./provider/cloud-provider.ts"
 
 export type { CloudProviderOptions } from "./provider/cloud-provider.ts"
 
 export { OpenStackHttpLive } from "./transport/http-client.ts"
 
-export type { OpenStackError } from "./provider/errors.ts"
+export type { OpenStackError } from "./errors.ts"
 
 export { buildFr57Rules } from "./provider/security-group-rules.ts"
 
-export type { SecurityGroupRuleInput } from "./provider/security-group-rules.ts"
-
 export { openstackClusterAddons } from "./cluster/index.ts"
-
-export type { OpenstackClusterAddonsInput } from "./cluster/index.ts"
-
-export type { CloudConf } from "./cluster/cloud-conf.ts"

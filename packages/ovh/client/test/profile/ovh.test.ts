@@ -2,6 +2,7 @@ import { Effect } from "effect"
 import { assert, it } from "@effect/vitest"
 import type { ClusterConfigFields } from "@kumulo/core"
 import { makeOvhProfile } from "../../src/profile/ovh.ts"
+import { hasOctavia } from "../../src/profile/regions.ts"
 
 const baseConfig: ClusterConfigFields = {
   distro: "k3s",
@@ -12,17 +13,9 @@ const baseConfig: ClusterConfigFields = {
   volumes: { managed: [{ type: "classic" }] }
 }
 
-it("ovh profile defaults", () => {
-  const profile = makeOvhProfile("GRA5")
-  assert.strictEqual(profile.name, "ovh")
-  assert.strictEqual(profile.defaults.externalNetworkName, "Ext-Net")
-  // OVH exposes a public Octavia LB through a floating IP allocated from the
-  // Ext-Net pool — Ext-Net IS that pool, it is not an alternative to it. The
-  // openstack provider's ensureFloatingIp/releaseFloatingIp depend on this.
-  assert.isTrue(profile.capabilities.floatingIps)
-  assert.deepStrictEqual(profile.capabilities.volumeTypes, ["classic", "high-speed", "high-speed-gen2"])
-  assert.isTrue(profile.capabilities.octavia("GRA5"))
-  assert.isFalse(profile.capabilities.octavia("some-unknown-region"))
+it("octavia regions are known", () => {
+  assert.isTrue(hasOctavia("GRA5"))
+  assert.isFalse(hasOctavia("some-unknown-region"))
 })
 
 it.effect("accepts a valid HA config in an Octavia region with an OVH volume type", () =>

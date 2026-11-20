@@ -78,10 +78,18 @@ export const makeFakeZone = (zoneName: string) => {
   return {
     dns: ClientModule.makeHetznerDnsClient(httpClient),
     peek: (name: string): StoredRRset | undefined =>
-      [...rrsets.values()].find((r) => r.name === name && r.type !== "TXT"),
+      [...rrsets.values()].find((r) => r.name === name && ["A", "AAAA", "CNAME"].includes(r.type)),
     peekAll: (): ReadonlyArray<StoredRRset> => [...rrsets.values()],
     seed: (rrset: { type: string; name: string; target: string; ttl?: number }): void => {
-      rrsets.set(_key(rrset.name, rrset.type), { name: rrset.name, type: rrset.type, ttl: rrset.ttl ?? 300, records: [{ value: rrset.target }] })
+      const key = _key(rrset.name, rrset.type)
+      const current = rrsets.get(key)
+
+      rrsets.set(key, {
+        name: rrset.name,
+        type: rrset.type,
+        ttl: rrset.ttl ?? current?.ttl ?? 300,
+        records: [...(current?.records ?? []), { value: rrset.target }]
+      })
     }
   }
 }

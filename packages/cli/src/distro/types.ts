@@ -3,11 +3,11 @@ import type { FileSystem } from "effect/FileSystem"
 import type { PlatformError } from "effect/PlatformError"
 import type * as HttpClient from "effect/http/HttpClient"
 import type { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/process"
-import type { BucketNotEmpty, ConfigInvalid, CredentialsSinkError, DistroKind, Kubeconfig, MksError, Plan } from "@kumulo/core"
+import type { BucketNotEmpty, ConfigInvalid, CredentialsSinkError, DistroKind, Kubeconfig, ManagedDistroError, Plan } from "@kumulo/core"
 import type { ClusterConfig } from "../cluster-config.ts"
 import type { CinderAuth, OutputsIngress } from "@kumulo/volumes-cinder"
 import type { DoctorCheck } from "../doctor/types.ts"
-import type { OpenStackEnv } from "../doctor-openstack/env.ts"
+import type { OpenStackEnv } from "../openstack/env.ts"
 import type { K3sError } from "../k3s/reconcile.ts"
 import type { MksEnv } from "../mks/env.ts"
 import type { UpcloudEnv } from "../upcloud/env.ts"
@@ -22,7 +22,7 @@ export type DistroServices =
   | FileSystem
   | ChildProcessSpawnerNS.ChildProcessSpawner
 
-export type DistroFailure = MksError | K3sError | ConfigInvalid | BucketNotEmpty | CredentialsSinkError | PlatformError | UnmanagedBucketsPresent
+export type DistroFailure = ManagedDistroError | K3sError | ConfigInvalid | BucketNotEmpty | CredentialsSinkError | PlatformError | UnmanagedBucketsPresent
 
 export interface DistroApplyResult {
   readonly summary: string
@@ -41,11 +41,11 @@ export interface DistroEntry<C extends ClusterConfig = ClusterConfig> {
     a: { readonly config: C; readonly configDir: string; readonly replace: ReadonlySet<string> }
   ) => Effect.Effect<DistroApplyResult, DistroFailure, DistroServices>
   readonly delete: (a: { readonly config: C; readonly configDir: string }) => Effect.Effect<void, DistroFailure, DistroServices>
-  readonly kubeconfig: (config: C) => Effect.Effect<Kubeconfig, DistroFailure, DistroServices>
+  readonly kubeconfig: (a: { readonly config: C; readonly configDir: string }) => Effect.Effect<Kubeconfig, DistroFailure, DistroServices>
   readonly deletedLabel: string
   readonly appliedPrefixes: ReadonlyArray<string>
   readonly selfProgress?: boolean
-  readonly status: (config: C) => Effect.Effect<void, DistroFailure, DistroServices>
+  readonly status: (a: { readonly config: C; readonly configDir: string }) => Effect.Effect<void, DistroFailure, DistroServices>
   readonly upgrade: (a: DistroUpgradeArgs<C>) => Effect.Effect<void, DistroFailure, DistroServices>
   readonly credentialsLabel: string
   readonly requiredEnvVars: ReadonlyArray<string>
@@ -56,6 +56,7 @@ export interface DistroEntry<C extends ClusterConfig = ClusterConfig> {
 
 export interface DistroUpgradeArgs<C extends ClusterConfig = ClusterConfig> {
   readonly config: C
+  readonly configDir: string
   readonly strategy: "LATEST_PATCH" | "NEXT_MINOR"
   readonly workerConcurrency: number
   readonly yes: boolean

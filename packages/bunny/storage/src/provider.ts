@@ -1,5 +1,5 @@
-import { Effect, Layer, Option, Predicate, Redacted } from "effect"
-import { BucketNotEmpty, ObjectStorageProvider, ProviderApiError, ResourceConflict, ResourceNotFound } from "@kumulo/core"
+import { Effect, Layer, Option, Redacted } from "effect"
+import { BucketNotEmpty, ObjectStorageProvider, ResourceConflict, ResourceNotFound } from "@kumulo/core"
 import type {
   BucketCredential,
   BucketInfo,
@@ -8,6 +8,7 @@ import type {
   ObjectStorageError,
   S3Credentials
 } from "@kumulo/core"
+import { bunnyCapabilityAsApiError } from "@kumulo/bunny"
 import type { BunnyError, BunnyStorageClient, BunnyStorageZone } from "@kumulo/bunny"
 import type { BunnyBucketSpec, BunnyTier } from "./diff.ts"
 import type { OutputsBucket } from "./outputs.ts"
@@ -19,13 +20,8 @@ export interface EnsuredZone {
 
 const _kind = "storage-zone"
 
-const _toStorageError = (error: BunnyError): ObjectStorageError =>
-  Predicate.isTagged(error, "CapabilityMissing")
-    ? new ProviderApiError({ operation: error.capability, status: 0, body: error.workaround ?? error.region })
-    : error
-
 const _mapped = <A>(self: Effect.Effect<A, BunnyError>): Effect.Effect<A, ObjectStorageError> =>
-  Effect.mapError(self, _toStorageError)
+  Effect.mapError(self, bunnyCapabilityAsApiError)
 
 const _endpoint = (zone: BunnyStorageZone): string =>
   zone.S3Hostname ? `https://${zone.S3Hostname}` : `https://${zone.Region.toLowerCase()}-s3.storage.bunnycdn.com`

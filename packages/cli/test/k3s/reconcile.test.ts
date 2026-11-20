@@ -1,10 +1,11 @@
 import { describe, expect, it } from "@effect/vitest"
+import { layerNoop } from "effect/FileSystem"
 import { Effect, Layer, Option, Ref, Schema } from "effect"
 import { CloudProvider, DnsProvider, K8sClient, VolumeProvider } from "@kumulo/core"
 import type { DesiredRecord, K8sManifest, ServerInfo } from "@kumulo/core"
 import type { K3sClusterConfigEncoded } from "../../src/cluster-config.ts"
 import { ciliumAddon, Ssh, SshCommandError, systemUpgradeControllerAddon } from "@kumulo/distro-k3s"
-import { applyK3sEffect, deleteK3sEffect, k3sStatusEffect, orphanedWorkers } from "../../src/k3s/reconcile.ts"
+import { applyK3sEffect, deleteK3sWithCdn, k3sStatusEffect, orphanedWorkers } from "../../src/k3s/reconcile.ts"
 import { decodeK3sTestConfig } from "../fixtures.ts"
 
 const _ManifestName = Schema.Struct({ metadata: Schema.Struct({ name: Schema.String }) })
@@ -83,6 +84,16 @@ const _encoded: K3sClusterConfigEncoded = {
 
 const _config = decodeK3sTestConfig(_encoded)
 
+const _apply = (args: Parameters<typeof applyK3sEffect>[0]) => applyK3sEffect(args).pipe(Effect.provide(_FakeFs))
+
+const _FakeFs = layerNoop({
+  readFileString: () => Effect.succeed("ssh-ed25519 AAAA test\n"),
+  writeFileString: () => Effect.void,
+  chmod: () => Effect.void,
+  rename: () => Effect.void,
+  remove: () => Effect.void
+})
+
 interface VolumeCalls {
   readonly ensured: Array<string>
   readonly deleted: Array<string>
@@ -143,7 +154,7 @@ const _fakeCloudProviderLive = (deletedServers: Array<string> = []): Layer.Layer
       deleteByTag: () => Ref.set(servers, new Map()),
       listClusterResources: () =>
         Ref.get(servers).pipe(
-          Effect.map((map) => ({ servers: [...map.values()], networks: [], securityGroups: [], loadBalancers: [] }))
+          Effect.map((map) => ({ servers: [...map.values()], networks: [], securityGroups: [], loadBalancers: [{ id: "lb-1", vip: "10.0.0.100" }] }))
         ),
       resolveImage: (ref) => Effect.succeed(ref),
       resolveFlavor: (ref) => Effect.succeed(ref)
@@ -192,7 +203,7 @@ describe("k3s CLI composition root", () => {
       const dnsCalls: DnsCalls = { ensured: [], removed: [] }
       const volumeCalls: VolumeCalls = { ensured: [], deleted: [] }
 
-      const result = yield* applyK3sEffect({ providerAddons: [], config: _config, configDir: "/tmp" }).pipe(
+      const result = yield* _apply({ providerAddons: [], config: _config, configDir: "/tmp" }).pipe(
         Effect.provide(_FakeSshLive(log)),
         Effect.provide(_trackingVolumeProvider(volumeCalls)),
         Effect.provide(_trackingDnsProvider(dnsCalls)),
@@ -222,7 +233,8 @@ describe("k3s CLI composition root", () => {
         { name: "api.test-k3s", target: "kumulo.cluster=test-k3s" }
       ])
 
-      expect(volumeCalls.ensured).toEqual(["pg-data"])
+      // volumes converge in the CLI volume step (convergeManagedVolumes), never inside the k3s apply
+      expect(volumeCalls.ensured).toEqual([])
     }))
 
   it.effect("scale up: re-applying with an added worker only bootstraps the new node's join, existing nodes stay idempotent", () =>
@@ -240,10 +252,10 @@ describe("k3s CLI composition root", () => {
           Effect.provide(cloudLayer)
         )
 
-      yield* provide(applyK3sEffect({ providerAddons: [], config: _configWithWorkerCount(2), configDir: "/tmp" }))
+      yield* provide(_apply({ providerAddons: [], config: _configWithWorkerCount(2), configDir: "/tmp" }))
       expect(log.executed).toHaveLength(5)
 
-      yield* provide(applyK3sEffect({ providerAddons: [], config: _configWithWorkerCount(3), configDir: "/tmp" }))
+      yield* provide(_apply({ providerAddons: [], config: _configWithWorkerCount(3), configDir: "/tmp" }))
       expect(log.executed).toHaveLength(5 + 6)
       expect(deletedServers).toEqual([])
     }))
@@ -255,8 +267,8 @@ describe("k3s CLI composition root", () => {
     const k8sClientLayer = () => _fakeK8sClientLayer(cordonedNodes)
 
     return Effect.gen(function*() {
-      yield* applyK3sEffect({ providerAddons: [], config: _configWithWorkerCount(2), configDir: "/tmp", k8sClientLayer })
-      yield* applyK3sEffect({ providerAddons: [], config: _configWithWorkerCount(1), configDir: "/tmp", k8sClientLayer })
+      yield* _apply({ providerAddons: [], config: _configWithWorkerCount(2), configDir: "/tmp", k8sClientLayer })
+      yield* _apply({ providerAddons: [], config: _configWithWorkerCount(1), configDir: "/tmp", k8sClientLayer })
       expect(deletedServers).toEqual(["kumulo-test-k3s-worker-general-2"])
       expect(cordonedNodes).toEqual(["kumulo-test-k3s-worker-general-2"])
     }).pipe(
@@ -278,7 +290,7 @@ describe("k3s CLI composition root", () => {
       const marker: K8sManifest = { apiVersion: "v1", kind: "ConfigMap", metadata: { name: "provider-marker" } }
       const config = decodeK3sTestConfig({ ..._encoded, addons: { ..._encoded.addons, cni: "cilium", system_upgrade_controller: true } })
 
-      yield* applyK3sEffect({
+      yield* _apply({
         providerAddons: [{ name: "fake-provider", manifests: [marker] }],
         config,
         configDir: "/tmp",
@@ -301,7 +313,7 @@ describe("k3s CLI composition root", () => {
       const marker: K8sManifest = { apiVersion: "v1", kind: "ConfigMap", metadata: { name: "provider-marker" } }
       const config = decodeK3sTestConfig({ ..._encoded, addons: { ..._encoded.addons, cni: "flannel", system_upgrade_controller: false } })
 
-      yield* applyK3sEffect({
+      yield* _apply({
         providerAddons: [{ name: "fake-provider", manifests: [marker] }],
         config,
         configDir: "/tmp",
@@ -332,7 +344,7 @@ describe("k3s CLI composition root", () => {
       const dnsCalls: DnsCalls = { ensured: [], removed: [] }
       const volumeCalls: VolumeCalls = { ensured: [], deleted: [] }
 
-      yield* deleteK3sEffect(_config).pipe(
+      yield* deleteK3sWithCdn({ config: _config, cdn: undefined }).pipe(
         Effect.provide(_trackingVolumeProvider(volumeCalls)),
         Effect.provide(_trackingDnsProvider(dnsCalls)),
         Effect.provide(_fakeCloudProviderLive())
@@ -376,7 +388,7 @@ describe("k3s status", () => {
       const log: SshLog = { executed: [], cloudInitGates: [], clusterInfoGates: [] }
       const malformed: K8sManifest = { apiVersion: "v1", kind: "Node", metadata: "not-an-object", status: "not-an-object" }
 
-      const status = yield* applyK3sEffect({ providerAddons: [], config: _config, configDir: "/tmp" }).pipe(
+      const status = yield* _apply({ providerAddons: [], config: _config, configDir: "/tmp" }).pipe(
         Effect.andThen(() => k3sStatusEffect({ config: _config, k8sClientLayer: _statusK8sClientLayer([malformed]) })),
         Effect.provide(_FakeSshLive(log)),
         Effect.provide(_trackingVolumeProvider({ ensured: [], deleted: [] })),
@@ -393,7 +405,7 @@ describe("k3s status", () => {
       const nodes = [_nodeManifest("kumulo-test-k3s-master-masters-1", true), _nodeManifest("kumulo-test-k3s-worker-general-1", false)]
 
       const status: { exists: boolean; apiEndpoint?: string; nodes: ReadonlyArray<{ name: string; ready: boolean }> } =
-        yield* applyK3sEffect({ providerAddons: [], config: _config, configDir: "/tmp" }).pipe(
+        yield* _apply({ providerAddons: [], config: _config, configDir: "/tmp" }).pipe(
           Effect.andThen(() => k3sStatusEffect({ config: _config, k8sClientLayer: _statusK8sClientLayer(nodes) })),
           Effect.provide(_FakeSshLive(log)),
           Effect.provide(_trackingVolumeProvider({ ensured: [], deleted: [] })),

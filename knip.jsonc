@@ -1,0 +1,44 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  // Exports used only inside their own file are fine; exported types and
+  // interfaces form the public surface of the generated/typed clients.
+  "ignore": ["**/generated/**"],
+  "ignoreExportsUsedInFile": true,
+  "rules": { "types": "off", "nsExports": "off", "nsTypes": "off" },
+  "workspaces": {
+    ".": {
+      "entry": ["scripts/*.{ts,mjs,cjs}", "examples/*.test.ts"],
+      "project": ["scripts/**", "examples/**"],
+      // Tooling kept at the root on purpose: editor language service (tsgo),
+      // runtime peers for the workspaces, and the swc/oxlint plugin runtimes.
+      "ignoreDependencies": ["@effect/platform-node", "@effect/tsgo", "@oxlint/plugins", "@swc/core"]
+    },
+    "packages/oxlint": {
+      // Plugins are loaded by oxlint through .oxlintrc.json, not imported.
+      "entry": ["src/oxlint/index.ts", "src/anti-slop/index.ts", "src/anti-slop/effect/index.ts", "test/**/*.test.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts"]
+    },
+    "packages/*": {
+      "entry": ["src/index.ts", "test/**/*.test.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts"]
+    },
+    "packages/*/*": {
+      "entry": ["src/index.ts", "src/testing/index.ts", "test/**/*.test.ts", "scripts/*.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.ts"]
+    },
+    "packages/cli": {
+      "entry": ["src/index.ts", "src/main.ts", "test/**/*.test.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts"],
+    },
+    "tools/ovh2openapi": {
+      "entry": ["src/index.ts", "src/bin/*.ts", "scripts/*.ts", "test/**/*.test.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.ts"],
+      // Loaded by the codegen runner at generation time.
+      "ignoreDependencies": ["@effect/openapi-generator"]
+    },
+    "tools/*": {
+      "entry": ["src/bin/*.ts", "src/index.ts", "test/**/*.test.ts", "scripts/*.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.ts"]
+    }
+  }
+}

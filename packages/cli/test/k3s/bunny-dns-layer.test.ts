@@ -1,8 +1,8 @@
 import { Effect, Layer } from "effect"
 import * as HttpClient from "effect/http/HttpClient"
 import { assert, describe, it } from "@effect/vitest"
-import { makeFakeBunnyDns } from "@kumulo/bunny"
-import { dnsProviderLayerFor, reconcileDns } from "../../src/dns.ts"
+import { makeFakeBunnyDns } from "@kumulo/bunny/testing"
+import { dnsProviderLayerWith, reconcileDns } from "../../src/dns.ts"
 import { fakeCredentials } from "../commands/fake-credentials.ts"
 import { baseEncodedConfig, decodeTestConfig } from "../fixtures.ts"
 
@@ -16,7 +16,7 @@ const _ensure = ({ fake, ttl }: { readonly fake: ReturnType<typeof makeFakeBunny
   const config = _config(ttl)
 
   return reconcileDns({ config, targets: { api_server: { kind: "ip", value: "203.0.113.1" } } }).pipe(
-    Effect.provide(dnsProviderLayerFor(config).pipe(Layer.provide(Layer.succeed(HttpClient.HttpClient, fake.httpClient)))),
+    Effect.provide(dnsProviderLayerWith({ config }).pipe(Layer.provide(Layer.succeed(HttpClient.HttpClient, fake.httpClient)))),
     Effect.provide(fakeCredentials)
   )
 }

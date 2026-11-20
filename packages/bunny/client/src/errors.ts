@@ -1,17 +1,19 @@
-import { Effect, Option, Schema } from "effect"
+import { Option, Schema } from "effect"
 import type { SchemaError } from "effect/Schema"
-import * as HttpClientError from "effect/http/HttpClientError"
-import type * as HttpClientResponse from "effect/http/HttpClientResponse"
+import type * as HttpClientError from "effect/http/HttpClientError"
 import {
   AuthenticationFailed,
   CapabilityMissing,
+  classifyHttpError,
   HttpTransportError,
+  mapHttpError,
   ProviderApiError,
   RateLimited,
   ResourceConflict,
   ResourceNotFound,
   ResponseDecodeError
 } from "@kumulo/core"
+import type { HttpErrorContext, KumuloError } from "@kumulo/core"
 
 export const BunnyCoreErrorBody = Schema.Struct({
   ErrorKey: Schema.optional(Schema.NullOr(Schema.String)),
@@ -42,6 +44,22 @@ export type BunnyError =
   | ResourceNotFound
   | ResponseDecodeError
 
+// The shared classifier is typed as the whole KumuloError union; with no isQuota hook only these tags can come out.
+const _isBunnyError = (error: KumuloError): error is BunnyError =>
+  error instanceof AuthenticationFailed
+  || error instanceof CapabilityMissing
+  || error instanceof HttpTransportError
+  || error instanceof ProviderApiError
+  || error instanceof RateLimited
+  || error instanceof ResourceConflict
+  || error instanceof ResourceNotFound
+  || error instanceof ResponseDecodeError
+
+const _narrow = ({ error, kind, ref }: { readonly error: KumuloError; readonly kind: string; readonly ref: string }): BunnyError =>
+  _isBunnyError(error)
+    ? error
+    : new ProviderApiError({ operation: `${kind} ${ref}`, status: 0, body: `unexpected ${error._tag}` })
+
 const _decodeCore = Schema.decodeUnknownOption(Schema.fromJsonString(BunnyCoreErrorBody))
 
 const _decodeShield = Schema.decodeUnknownOption(Schema.fromJsonString(BunnyShieldErrorBody))
@@ -63,14 +81,6 @@ const _fromShield = (text: string): Option.Option<BunnyErrorBody> =>
 export const parseBunnyErrorBody = (text: string): BunnyErrorBody | undefined =>
   Option.getOrUndefined(Option.orElse(_fromCore(text), () => _fromShield(text)))
 
-export const readBunnyErrorBody = (
-  response: HttpClientResponse.HttpClientResponse
-): Effect.Effect<BunnyErrorBody | undefined> =>
-  response.text.pipe(
-    Effect.map(parseBunnyErrorBody),
-    Effect.orElseSucceed(() => undefined)
-  )
-
 const _planPrefix = "invalid_plan_type"
 
 const _isDuplicateKey = (key: string | undefined): boolean =>
@@ -84,6 +94,25 @@ const _describe = (body: BunnyErrorBody | undefined, fallback: string): string =
   return parts.length === 0 ? fallback : parts.join(": ")
 }
 
+const _overrideFor = (body: BunnyErrorBody | undefined) =>
+(
+  { kind, ref, status }: HttpErrorContext
+): KumuloError | undefined => {
+  if (_isPlanKey(body?.errorKey)) {
+    return new CapabilityMissing({
+      capability: body?.errorKey ?? _planPrefix,
+      region: "bunny.net",
+      workaround: _describe(body, `HTTP ${status}`)
+    })
+  }
+
+  if (_isDuplicateKey(body?.errorKey) && status !== 401 && status !== 403 && status !== 404) {
+    return new ResourceConflict({ kind, ref })
+  }
+
+  return undefined
+}
+
 export const mapBunnyStatus = (
   { body, fallback, kind, ref, retryAfter, status }: {
     readonly status: number
@@ -93,56 +122,46 @@ export const mapBunnyStatus = (
     readonly retryAfter?: string | undefined
     readonly fallback?: string
   }
-): BunnyError => {
-  const detail = _describe(body, fallback ?? `HTTP ${status}`)
-
-  if (_isPlanKey(body?.errorKey)) {
-    return new CapabilityMissing({ capability: body?.errorKey ?? _planPrefix, region: "bunny.net", workaround: detail })
-  }
-
-  if (status === 401 || status === 403) return new AuthenticationFailed({ hint: `${kind} ${ref}: ${detail}` })
-
-  if (status === 404) return new ResourceNotFound({ kind, ref })
-
-  if (status === 409 || _isDuplicateKey(body?.errorKey)) return new ResourceConflict({ kind, ref })
-
-  if (status === 429) return new RateLimited({ kind, ref, retryAfter })
-
-  return new ProviderApiError({ operation: `${kind} ${ref}`, status, body: detail })
-}
-
-export const mapBunnyResponse = (
-  { kind, ref, response }: {
-    readonly response: HttpClientResponse.HttpClientResponse
-    readonly kind: string
-    readonly ref: string
-  }
-): Effect.Effect<BunnyError> =>
-  Effect.map(readBunnyErrorBody(response), (body) =>
-    mapBunnyStatus({ status: response.status, body, kind, ref, retryAfter: response.headers["retry-after"] }))
+): BunnyError =>
+  _narrow({
+    kind,
+    ref,
+    error: classifyHttpError({
+      status,
+      body: _describe(body, fallback ?? `HTTP ${status}`),
+      kind,
+      ref,
+      retryAfter,
+      override: _overrideFor(body)
+    })
+  })
 
 export const toBunnyError = (
-  { body, cause, kind, ref }: {
+  { cause, kind, ref }: {
     readonly cause: HttpClientError.HttpClientError | SchemaError
     readonly kind: string
     readonly ref: string
-    readonly body?: BunnyErrorBody | undefined
   }
-): BunnyError => {
-  if (!HttpClientError.isHttpClientError(cause)) {
-    return new ResponseDecodeError({ endpoint: `${kind}/${ref}`, issue: cause.issue })
-  }
-
-  const response = cause.response
-
-  if (response === undefined) return new HttpTransportError({ cause })
-
-  return mapBunnyStatus({
-    status: response.status,
-    body,
+): BunnyError =>
+  _narrow({
     kind,
     ref,
-    retryAfter: response.headers["retry-after"],
-    fallback: cause.message
+    error: mapHttpError({
+      cause,
+      kind,
+      ref,
+      override: (context) => _overrideFor(parseBunnyErrorBody(context.body))(context)
+    })
   })
-}
+
+// A plan rejection has no HTTP status of its own; every port maps it the same way.
+export const CAPABILITY_MISSING_STATUS = 400
+
+export const bunnyCapabilityAsApiError = (error: BunnyError): Exclude<BunnyError, CapabilityMissing> =>
+  error instanceof CapabilityMissing
+    ? new ProviderApiError({
+      operation: error.capability,
+      status: CAPABILITY_MISSING_STATUS,
+      body: error.workaround ?? error.capability
+    })
+    : error

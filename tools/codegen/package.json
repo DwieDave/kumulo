@@ -11,8 +11,9 @@
     "check": "bun run src/bin/check.ts"
   },
   "dependencies": {
-    "effect": "catalog:",
     "@effect/openapi-generator": "catalog:",
+    "effect": "catalog:",
+    "json5": "^2.2.3",
     "yaml": "catalog:"
   },
   "devDependencies": {

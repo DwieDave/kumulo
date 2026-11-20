@@ -1,14 +1,15 @@
 /**
- * codegen:check — regen-is-noop CI gate.
+ * codegen:check, the regen-is-noop CI gate.
  *
- * Reads `services.json` (a list of per-service pipeline configs), regenerates
- * each into memory, and diffs it against the committed output file. Empty
- * manifest exits 0 — no service pipelines are registered yet; this script is
- * the reusable gate they wire into.
+ * Regenerates every service client in memory (the `services.json` pipelines
+ * plus the OVH pipelines below) and diffs it against the committed output file.
+ * Specs are YAML, allowlists are JSON documents ({service, spec, operationIds})
+ * and patches are JSON5.
  */
 import { Effect } from "effect"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
+import JSON5 from "json5"
 import * as YAML from "yaml"
 import type { OpenAPISpec } from "effect/http-api/OpenApi"
 import { runPipeline } from "../pipeline.ts"
@@ -26,11 +27,6 @@ interface ServiceEntry {
 
 const root = join(import.meta.dirname, "..", "..")
 
-// kumulo: vendored specs are YAML, allowlists carry {service,spec,operationIds}
-// (not a bare array), and patches are JSON5 (`// why` comments) — strip line
-// comments before JSON.parse rather than pull in a full JSON5 dependency.
-const _stripJsonComments = (text: string): string => text.replace(/\/\/.*$/gm, "")
-
 const _loadService = (entry: ServiceEntry) =>
   Effect.gen(function* () {
     const spec: OpenAPISpec = YAML.parse(readFileSync(join(root, entry.specPath), "utf8"))
@@ -39,7 +35,7 @@ const _loadService = (entry: ServiceEntry) =>
 
     const patches: ReadonlyArray<NamedPatch> = entry.patchPaths.map((patchPath) => ({
       source: patchPath,
-      patch: JSON.parse(_stripJsonComments(readFileSync(join(root, patchPath), "utf8")))
+      patch: JSON5.parse(readFileSync(join(root, patchPath), "utf8"))
     }))
 
     const committed = readFileSync(join(root, entry.outputPath), "utf8")

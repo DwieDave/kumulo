@@ -1,7 +1,7 @@
 /** @kumulo/distro-ovh-mks — package barrel. */
 export const packageName = "@kumulo/distro-ovh-mks"
 
-export { MksClusterConfig } from "./config.ts"
+export { MksClusterConfig, mksConfigRules } from "./config.ts"
 
 export type { MksClusterConfigEncoded } from "./config.ts"
 
@@ -22,7 +22,6 @@ export {
   listNodePools,
   mksPoolHash,
   parseKubeVersion,
-  pollUntil,
   ensureGateway,
   type GatewayModel,
   requireVrack,

@@ -4,6 +4,7 @@ import * as SchemaGetter from "effect/SchemaGetter"
 import * as HttpClientError from "effect/http/HttpClientError"
 import * as HttpClientResponse from "effect/http/HttpClientResponse"
 import { Effect } from "effect"
+import type { PaginationError } from "@kumulo/core"
 
 export const UpcloudLabel = Schema.Struct({ key: Schema.String, value: Schema.String })
 
@@ -17,7 +18,7 @@ export const UpcloudBoolean = Schema.Union([Schema.Boolean, Schema.Literals(["ye
   })
 )
 
-export type UpcloudRawError = HttpClientError.HttpClientError | SchemaError
+export type UpcloudRawError = HttpClientError.HttpClientError | SchemaError | PaginationError
 
 export const isOk = (response: HttpClientResponse.HttpClientResponse): boolean => response.status >= 200 && response.status < 300
 

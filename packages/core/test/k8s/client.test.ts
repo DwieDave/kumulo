@@ -54,6 +54,14 @@ describe("K8sClient", () => {
       expect(items.length).toBe(1)
     }))
 
+  it.effect("list fails with ResponseDecodeError when the body is not a list", () =>
+    Effect.gen(function*() {
+      const fake = fakeHttpClient(() => new Response(JSON.stringify({ items: "not-an-array" }), { status: 200 }))
+      const client = makeK8sClient({ client: fake.client, server })
+      const error = yield* Effect.flip(client.list(nodeRef))
+      expect(error._tag).toBe("ResponseDecodeError")
+    }))
+
   it.effect("list unwraps the items array", () =>
     Effect.gen(function*() {
       const fake = fakeHttpClient(() =>

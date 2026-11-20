@@ -53,6 +53,7 @@
     "effect": "catalog:"
   },
   "devDependencies": {
+    "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
     "@types/ssh2": "catalog:",
     "effect": "catalog:",

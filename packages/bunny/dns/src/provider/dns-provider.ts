@@ -1,10 +1,12 @@
-import { Effect, Layer, Option } from "effect"
-import { DnsProvider, ResourceConflict, ResourceNotFound, ownerTagOf, recordKind } from "@kumulo/core"
-import type { ClusterTag, DesiredRecord, DnsError } from "@kumulo/core"
-import type { BunnyDnsClient, BunnyDnsRecord, BunnyDnsRecordInput, BunnyDnsRecordType, BunnyError } from "@kumulo/bunny"
-import { toDnsError } from "./errors.ts"
+import { Effect, Layer, Option, Schema } from "effect"
+import { DnsProvider, ownerTagOf, ProviderApiError, reconcileDns, ResourceNotFound } from "@kumulo/core"
+import type { ClusterTag, DesiredRecord, DnsAdapter, DnsError, ZoneRecord } from "@kumulo/core"
+import { bunnyCapabilityAsApiError, BunnyDnsRecordType } from "@kumulo/bunny"
+import type { BunnyDnsClient, BunnyDnsRecord, BunnyDnsRecordInput, BunnyError } from "@kumulo/bunny"
 
 const _DEFAULT_TTL = 300
+
+const _PULLZONE_PREFIX = "pullzone:"
 
 export interface BunnyDnsProviderOptions {
   readonly dns: BunnyDnsClient
@@ -17,9 +19,10 @@ export interface BunnyDnsProviderOptions {
   readonly pullZoneIdFor?: (hostname: string) => number | undefined
 }
 
-type _WireKind = BunnyDnsRecordType
+const _isRecordType = Schema.is(BunnyDnsRecordType)
 
-const _wrap = <A>(self: Effect.Effect<A, BunnyError>): Effect.Effect<A, DnsError> => Effect.mapError(self, toDnsError)
+const _wrap = <A>(self: Effect.Effect<A, BunnyError>): Effect.Effect<A, DnsError> =>
+  Effect.mapError(self, bunnyCapabilityAsApiError)
 
 const _normalize = ({ name, zone }: { readonly name: string; readonly zone: string }): string => {
   const lowered = name.toLowerCase()
@@ -30,192 +33,128 @@ const _normalize = ({ name, zone }: { readonly name: string; readonly zone: stri
   return lowered.endsWith(`.${apex}`) ? lowered.slice(0, lowered.length - apex.length - 1) : lowered
 }
 
-const _nameOf = (zone: string) => (record: BunnyDnsRecord): string => _normalize({ name: record.Name ?? "", zone })
+const _unquote = (data: string): string =>
+  data.length >= 2 && data.startsWith("\"") && data.endsWith("\"") ? data.slice(1, -1) : data
 
-const _valueOf = (record: BunnyDnsRecord): string => record.Value ?? ""
+const _canonicalIpv6 = (data: string): string => {
+  const url = Option.liftThrowable(() => new URL(`http://[${data}]`))()
 
-const _isOwnerTxt = (record: BunnyDnsRecord): boolean => record.Type === "TXT" && ownerTagOf(_valueOf(record)) !== undefined
-
-const _WRITTEN_KINDS: ReadonlyArray<string> = ["A", "AAAA", "CNAME", "PullZone"]
-
-const _isWritten = (record: BunnyDnsRecord): boolean => _WRITTEN_KINDS.includes(record.Type)
-
-const _isOwnershipRecord = (record: DesiredRecord): boolean => ownerTagOf(record.target) !== undefined
-
-const _ownerTargetFor = ({ name, records }: { readonly records: ReadonlyArray<DesiredRecord>; readonly name: string }): string | undefined =>
-  records.find((r) => r.name === name && _isOwnershipRecord(r))?.target
-
-const _inputOf = (
-  { comment, name, pullZoneId, ttl, type, value }: {
-    readonly name: string
-    readonly type: _WireKind
-    readonly value: string
-    readonly ttl: number
-    readonly comment: string | undefined
-    readonly pullZoneId: number | undefined
-  }
-): BunnyDnsRecordInput => {
-  const input: BunnyDnsRecordInput = { Name: name, Type: type, Value: pullZoneId === undefined ? value : "", Ttl: ttl }
-  const withComment = comment === undefined ? input : { ...input, Comment: comment }
-
-  return pullZoneId === undefined ? withComment : { ...withComment, PullZoneId: pullZoneId }
+  return Option.match(url, { onNone: () => data.toLowerCase(), onSome: (u) => u.hostname })
 }
 
-const _commentFor = (ownerTarget: string | undefined): string | undefined => {
-  const tag = ownerTarget === undefined ? undefined : ownerTagOf(ownerTarget)
+// A PullZone record carries no hostname, only an id; list() renders it as a CNAME to `pullzone:<id>`.
+const _toZoneRecord = (record: BunnyDnsRecord): ZoneRecord => {
+  const pullZoneId = record.PullZoneId ?? record.AcceleratedPullZoneId
+
+  return record.Type === "PullZone"
+    ? { id: String(record.Id), name: record.Name ?? "", type: "CNAME", value: `${_PULLZONE_PREFIX}${pullZoneId}`, ttl: record.Ttl }
+    : { id: String(record.Id), name: record.Name ?? "", type: record.Type, value: record.Value ?? "", ttl: record.Ttl }
+}
+
+const _commentFor = (ownerTarget: string): string | undefined => {
+  const tag = ownerTagOf(ownerTarget)
 
   return tag === undefined ? undefined : `managed by kumulo (${tag})`
 }
 
-const _matches = (
-  { existing, pullZoneId, value }: { readonly existing: BunnyDnsRecord; readonly value: string; readonly pullZoneId: number | undefined }
-): boolean => pullZoneId === undefined ? _valueOf(existing) === value : existing.Type === "PullZone" && (existing.AcceleratedPullZoneId === pullZoneId || existing.PullZoneId === pullZoneId)
+const _unsupported = (record: ZoneRecord) =>
+  Effect.fail(new ProviderApiError({ operation: "dns-record", status: 400, body: `unsupported record type ${record.type}` }))
 
-const _ensureRaw = (
-  { comment, dns, existing, name, pullZoneId, ttl, type, value, zoneId }: {
-    readonly ttl: number
-    readonly dns: BunnyDnsClient
-    readonly zoneId: number
-    readonly name: string
-    readonly type: _WireKind
-    readonly value: string
-    readonly comment: string | undefined
-    readonly pullZoneId: number | undefined
-    readonly existing: ReadonlyArray<BunnyDnsRecord>
-  }
-): Effect.Effect<void, DnsError> =>
-  Effect.gen(function*() {
-    const [keep, ...surplus] = existing
-    yield* Effect.forEach(surplus, (r) => _wrap(dns.deleteRecord({ zoneId, recordId: r.Id })), { discard: true })
+const _adapter = (
+  { comments, options }: { readonly options: BunnyDnsProviderOptions; readonly comments: ReadonlyMap<string, string> }
+): DnsAdapter => {
+  const { dns } = options
+  const zoneIds = new Map<string, number>()
 
-    if (keep === undefined) {
-      yield* _wrap(dns.addRecord({ zoneId, record: _inputOf({ name, type, value, ttl, comment, pullZoneId }) }))
-    } else if (!_matches({ existing: keep, value, pullZoneId }) || keep.Ttl !== ttl) {
-      yield* _wrap(dns.updateRecord({
-        zoneId,
-        recordId: keep.Id,
-        record: _inputOf({ name, type, value, ttl, comment, pullZoneId })
+  const zoneIdOf = (zone: string): Effect.Effect<number, DnsError> => {
+    const cached = zoneIds.get(zone)
+
+    if (cached !== undefined) return Effect.succeed(cached)
+
+    return _wrap(dns.findZone({ domain: zone })).pipe(
+      Effect.flatMap(Option.match({
+        onNone: () => Effect.fail(new ResourceNotFound({ kind: "dns-zone", ref: zone })),
+        onSome: (found) => Effect.sync(() => (zoneIds.set(zone, found.Id), found.Id))
       }))
+    )
+  }
+
+  const inputOf = (record: ZoneRecord): BunnyDnsRecordInput | undefined => {
+    if (!_isRecordType(record.type)) return undefined
+
+    const pullZoneId = record.type === "CNAME" && record.name === "" ? options.pullZoneIdFor?.(record.value) : undefined
+    const comment = comments.get(record.name)
+
+    const base: BunnyDnsRecordInput = {
+      Name: record.name,
+      Type: pullZoneId === undefined ? record.type : "PullZone",
+      Value: pullZoneId === undefined ? record.value : "",
+      Ttl: record.ttl
     }
-  })
 
-const _wireKindFor = (
-  { name, options, target }: { readonly name: string; readonly target: string; readonly options: BunnyDnsProviderOptions }
-): { readonly type: _WireKind; readonly pullZoneId: number | undefined } => {
-  const pullZoneId = name === "" ? options.pullZoneIdFor?.(target) : undefined
+    const withComment = comment === undefined ? base : { ...base, Comment: comment }
 
-  return pullZoneId === undefined ? { type: recordKind(target), pullZoneId: undefined } : { type: "PullZone", pullZoneId }
+    return pullZoneId === undefined ? withComment : { ...withComment, PullZoneId: pullZoneId }
+  }
+
+  return {
+    ttl: options.ttl ?? _DEFAULT_TTL,
+    list: (zone) =>
+      zoneIdOf(zone).pipe(
+        Effect.flatMap((zoneId) => _wrap(dns.listRecords({ zoneId }))),
+        Effect.map((records) => records.map(_toZoneRecord))
+      ),
+    create: ({ record, zone }) => {
+      const input = inputOf(record)
+
+      return input === undefined
+        ? _unsupported(record)
+        : zoneIdOf(zone).pipe(Effect.flatMap((zoneId) => _wrap(dns.addRecord({ zoneId, record: input }))), Effect.asVoid)
+    },
+    update: ({ existing, record, zone }) => {
+      const input = inputOf(record)
+
+      return input === undefined
+        ? _unsupported(record)
+        : zoneIdOf(zone).pipe(
+          Effect.flatMap((zoneId) => _wrap(dns.updateRecord({ zoneId, recordId: Number(existing.id), record: input })))
+        )
+    },
+    delete: ({ record, zone }) =>
+      zoneIdOf(zone).pipe(Effect.flatMap((zoneId) => _wrap(dns.deleteRecord({ zoneId, recordId: Number(record.id) })))),
+    normalize: _normalize,
+    canonical: ({ type, value }) => {
+      const bare = type === "TXT" ? _unquote(value) : value
+
+      if (type === "AAAA") return _canonicalIpv6(bare)
+
+      if (type !== "CNAME" || bare.startsWith(_PULLZONE_PREFIX)) return bare
+
+      const host = bare.toLowerCase().replace(/\.$/, "")
+      const pullZoneId = options.pullZoneIdFor?.(host)
+
+      return pullZoneId === undefined ? host : `${_PULLZONE_PREFIX}${pullZoneId}`
+    }
+  }
 }
 
-const _ensurePair = (
-  { name, options, ownerTarget, target, zone, zoneId }: {
-    readonly options: BunnyDnsProviderOptions
-    readonly zone: string
-    readonly zoneId: number
-    readonly name: string
-    readonly target: string
-    readonly ownerTarget: string | undefined
-  }
-): Effect.Effect<void, DnsError> =>
-  Effect.gen(function*() {
-    const { dns } = options
-    const comment = _commentFor(ownerTarget)
-    const ttl = options.ttl ?? _DEFAULT_TTL
-    const all = yield* _wrap(dns.listRecords({ zoneId }))
-    const here = all.filter((r) => _nameOf(zone)(r) === name)
-    const other = here.filter((r) => r.Type !== "TXT")
-    const ownerTxts = here.filter(_isOwnerTxt)
-    const foreign = ownerTxts.some((r) => _valueOf(r) !== ownerTarget)
+const _commentsFor = (
+  { records, zone }: { readonly zone: string; readonly records: ReadonlyArray<DesiredRecord> }
+): ReadonlyMap<string, string> =>
+  new Map(records.flatMap((record) => {
+    const comment = _commentFor(record.target)
 
-    if (foreign || (other.length > 0 && ownerTxts.length === 0)) {
-      return yield* Effect.fail(new ResourceConflict({ kind: "dns-record", ref: `${zone}/${name}` }))
-    }
-
-    if (ownerTarget !== undefined) {
-      yield* _ensureRaw({ dns, zoneId, name, type: "TXT", value: ownerTarget, comment, ttl, pullZoneId: undefined, existing: ownerTxts })
-    }
-
-    const wire = _wireKindFor({ name, options, target })
-    yield* Effect.forEach(other.filter((r) => r.Type !== wire.type && _isWritten(r)), (r) => _wrap(dns.deleteRecord({ zoneId, recordId: r.Id })), {
-      discard: true
-    })
-    yield* _ensureRaw({
-      dns,
-      zoneId,
-      name,
-      type: wire.type,
-      value: target,
-      comment,
-      ttl,
-      pullZoneId: wire.pullZoneId,
-      existing: other.filter((r) => r.Type === wire.type)
-    })
-  })
-
-const _zoneIdOf = (
-  { dns, zone }: { readonly dns: BunnyDnsClient; readonly zone: string }
-): Effect.Effect<number, DnsError> =>
-  _wrap(dns.findZone({ domain: zone })).pipe(
-    Effect.flatMap(Option.match({
-      onNone: () => Effect.fail(new ResourceNotFound({ kind: "dns-zone", ref: zone })),
-      onSome: (found) => Effect.succeed(found.Id)
-    }))
-  )
-
-export const ensureRecords = (options: BunnyDnsProviderOptions) =>
-  (zone: string, records: ReadonlyArray<DesiredRecord>): Effect.Effect<void, DnsError> =>
-    Effect.gen(function*() {
-      if (records.length === 0) return
-
-      const zoneId = yield* _zoneIdOf({ dns: options.dns, zone })
-      const rest = records.filter((r) => !_isOwnershipRecord(r))
-      const pairedNames = new Set(rest.map((r) => r.name))
-      const orphanTxt = records.filter((r) => _isOwnershipRecord(r) && !pairedNames.has(r.name))
-
-      for (const record of rest) {
-        const ownerTarget = _ownerTargetFor({ records, name: record.name })
-        yield* _ensurePair({
-          options,
-          zone,
-          zoneId,
-          name: _normalize({ name: record.name, zone }),
-          target: record.target,
-          ownerTarget
-        })
-      }
-
-      for (const record of orphanTxt) {
-        const name = _normalize({ name: record.name, zone })
-        const all = yield* _wrap(options.dns.listRecords({ zoneId }))
-        yield* _ensureRaw({
-          dns: options.dns,
-          zoneId,
-          name,
-          type: "TXT",
-          value: record.target,
-          comment: _commentFor(record.target),
-          ttl: options.ttl ?? _DEFAULT_TTL,
-          pullZoneId: undefined,
-          existing: all.filter((r) => _nameOf(zone)(r) === name && _isOwnerTxt(r))
-        })
-      }
-    })
-
-export const removeClusterRecords = (options: BunnyDnsProviderOptions) =>
-  (zone: string, tag: ClusterTag): Effect.Effect<void, DnsError> =>
-    Effect.gen(function*() {
-      const { dns } = options
-      const zoneId = yield* _zoneIdOf({ dns, zone })
-      const all = yield* _wrap(dns.listRecords({ zoneId }))
-      const owned = new Set(all.flatMap((r) => _isOwnerTxt(r) && ownerTagOf(_valueOf(r)) === tag ? [_nameOf(zone)(r)] : []))
-      const doomed = all.filter((r) => owned.has(_nameOf(zone)(r)) && (_isWritten(r) || (_isOwnerTxt(r) && ownerTagOf(_valueOf(r)) === tag)))
-
-      yield* Effect.forEach(doomed, (r) => _wrap(dns.deleteRecord({ zoneId, recordId: r.Id })), { discard: true })
-    })
+    return comment === undefined ? [] : [[_normalize({ name: record.name, zone }), comment] as const]
+  }))
 
 export const makeBunnyDnsProvider = (options: BunnyDnsProviderOptions) => ({
-  ensureRecords: ensureRecords(options),
-  removeClusterRecords: removeClusterRecords(options)
+  // the managed-by comment depends on the records being applied, so the adapter is built per call
+  ensureRecords: (zone: string, records: ReadonlyArray<DesiredRecord>): Effect.Effect<void, DnsError> =>
+    records.length === 0
+      ? Effect.void
+      : reconcileDns(_adapter({ options, comments: _commentsFor({ zone, records }) })).ensureRecords(zone, records),
+  removeClusterRecords: (zone: string, tag: ClusterTag): Effect.Effect<void, DnsError> =>
+    reconcileDns(_adapter({ options, comments: new Map() })).removeClusterRecords(zone, tag)
 })
 
 export const bunnyDnsProviderLive = (options: BunnyDnsProviderOptions) =>

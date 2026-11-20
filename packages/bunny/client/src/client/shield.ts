@@ -14,6 +14,7 @@ import {
   BunnyShieldPlan,
   BunnyWafMode
 } from "../enums.ts"
+import { bunnyPages } from "./pages.ts"
 import { bunnyRequester } from "./request.ts"
 import type { BunnyError, BunnyErrorBody } from "../errors.ts"
 
@@ -312,9 +313,6 @@ const _botTarget = (id: number): _Target => ({ kind: "bot-detection", ref: Strin
 export const makeBunnyShieldClient = (httpClient: HttpClient.HttpClient): BunnyShieldClient => {
   const requester = bunnyRequester({ httpClient, parseBody: _errorBody, rejectAccepted: true })
 
-  const _send = ({ request, target }: { readonly request: HttpClientRequest.HttpClientRequest; readonly target: _Target }) =>
-    requester.send({ request, ...target })
-
   const _json = <S extends Schema.Constraint & { readonly DecodingServices: never }>(
     { schema, request, target }: { readonly schema: S; readonly request: HttpClientRequest.HttpClientRequest; readonly target: _Target }
   ): _BodyResult<S> => requester.json({ schema: schema, request, ...target })
@@ -367,26 +365,19 @@ export const makeBunnyShieldClient = (httpClient: HttpClient.HttpClient): BunnyS
     )
 
   const listRateLimits = (shieldZoneId: number) =>
-    Effect.gen(function*() {
-      const rules: Array<BunnyRateLimitRule> = []
-      let page = 1
-
-      while (true) {
-        const envelope = yield* _json({
+    bunnyPages({
+      kind: "rate-limit",
+      ref: `zone/${shieldZoneId}`,
+      items: (envelope) => envelope.data ?? [],
+      hasMore: (envelope) => (envelope.data ?? []).length >= _pageSize,
+      fetch: (page: number) =>
+        _json({
           schema: _RuleListEnvelope,
           request: HttpClientRequest.get(`/shield/rate-limits/${shieldZoneId}`).pipe(
             HttpClientRequest.setUrlParams({ page: String(page), perPage: String(_pageSize) })
           ),
           target: { kind: "rate-limit", ref: `zone/${shieldZoneId}` }
         })
-
-        const data = envelope.data ?? []
-        rules.push(...data)
-
-        if (data.length < _pageSize) return rules
-
-        page += 1
-      }
     })
 
   const getRateLimit = (id: number) =>

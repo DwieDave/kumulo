@@ -24,6 +24,12 @@
       "source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs"
+    },
+    "./testing": {
+      "bun": "./src/testing/index.ts",
+      "source": "./src/testing/index.ts",
+      "types": "./dist/testing/index.d.ts",
+      "import": "./dist/testing.mjs"
     }
   },
   "main": "./dist/index.mjs",
@@ -42,6 +48,10 @@
       ".": {
         "types": "./dist/index.d.ts",
         "import": "./dist/index.mjs"
+      },
+      "./testing": {
+        "types": "./dist/testing/index.d.ts",
+        "import": "./dist/testing.mjs"
       }
     }
   },
@@ -57,7 +67,7 @@
     "effect": "catalog:"
   },
   "scripts": {
-    "build": "bash ../../scripts/build-package.sh",
+    "build": "bash ../../scripts/build-package.sh src/testing/index.ts",
     "prepack": "node ../../scripts/prepack-exports.mjs strip",
     "postpack": "node ../../scripts/prepack-exports.mjs restore",
     "prepublishOnly": "bun run build"

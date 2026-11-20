@@ -1,8 +1,9 @@
-import { Effect, Layer, Match, Predicate, Ref } from "effect"
+import { Effect, Match, Predicate, Ref } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import * as HttpClient from "effect/http/HttpClient"
 import type { PlatformError } from "effect/PlatformError"
-import { CdnProvider, ConfigInvalid, ProviderApiError, PlanAction, cdnNoopLive } from "@kumulo/core"
+import { ConfigInvalid, ProviderApiError, PlanAction } from "@kumulo/core"
+import type { CdnProvider } from "@kumulo/core"
 import type {
   AuthenticationFailed,
   CdnError,
@@ -42,10 +43,6 @@ export interface CdnHandle {
 const _bunnyConfig = (config: ClusterConfig): BunnyCdnConfig | undefined =>
   config.cdn === undefined || config.cdn.module === "none" ? undefined : config.cdn
 
-export const wantsCdn = (config: ClusterConfig): boolean => _bunnyConfig(config) !== undefined
-
-export const cdnTargetKind = (config: ClusterConfig): "hostname" | undefined => (wantsCdn(config) ? "hostname" : undefined)
-
 export const cdnHandleFor = (
   { config, configDir }: { readonly config: ClusterConfig; readonly configDir: string }
 ): Effect.Effect<CdnHandle | undefined, CdnHandleError, FileSystem | HttpClient.HttpClient> =>
@@ -55,13 +52,13 @@ export const cdnHandleFor = (
     if (cdn === undefined) return undefined
     const apiKey = yield* requiredRedactedEnv("BUNNYNET_API_KEY")
     const base = yield* HttpClient.HttpClient
-    const httpClient = makeBunnyHttpClient({ base, apiKey })
+    const httpClient = yield* makeBunnyHttpClient({ base, apiKey })
     const fs = yield* FileSystem
     const format = config.outputs?.format
 
     const file = yield* readCdnOutputs({ dir: configDir, tag: config.name, format }).pipe(
       Effect.mapError((error) =>
-        Predicate.isTagged(error, "CdnOutputsInvalid")
+        Predicate.isTagged(error, "OutputsInvalid")
           ? new ConfigInvalid({ issues: [{ path: ["cdn"], message: `${configDir}: ${error.message}` }] })
           : error
       )
@@ -89,24 +86,6 @@ export const cdnHandleFor = (
     return { name: cdn.name, provider, state, persist, warnings }
   })
 
-export const cdnProviderLayerFor = (
-  { config, configDir }: { readonly config: ClusterConfig; readonly configDir: string }
-): Layer.Layer<CdnProvider, CdnHandleError, FileSystem | HttpClient.HttpClient> =>
-  wantsCdn(config)
-    ? Layer.effect(
-      CdnProvider,
-      Effect.map(cdnHandleFor({ config, configDir }), (handle) =>
-        CdnProvider.of({
-          ensureEdge: (spec) => handle === undefined ? Effect.die("cdn handle missing") : handle.provider.ensureEdge(spec),
-          ensureCertificates: (input) =>
-            handle === undefined ? Effect.die("cdn handle missing") : handle.provider.ensureCertificates(input),
-          ensureSecurity: (input) =>
-            handle === undefined ? Effect.die("cdn handle missing") : handle.provider.ensureSecurity(input),
-          describeEdge: (ref) => handle === undefined ? Effect.die("cdn handle missing") : handle.provider.describeEdge(ref),
-          deleteEdge: (ref) => handle === undefined ? Effect.die("cdn handle missing") : handle.provider.deleteEdge(ref)
-        }))
-    )
-    : cdnNoopLive
 
 export const pullZoneIdFor = (handle: CdnHandle | undefined): ((target: string) => number | undefined) => (target) => {
   if (handle === undefined) return undefined

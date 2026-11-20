@@ -1,8 +1,8 @@
-import { Data, Effect, Schema } from "effect"
-import { FileSystem } from "effect/FileSystem"
-import type { PlatformError } from "effect/PlatformError"
-import { parse, stringify } from "yaml"
-import type { ClusterTag, OutputsFormat } from "@kumulo/core"
+import { Schema } from "effect"
+import { makeOutputsFile } from "@kumulo/core"
+import type { ClusterTag } from "@kumulo/core"
+
+export { OutputsInvalid } from "@kumulo/core"
 
 export const OutputsBucket = Schema.Struct({
   id: Schema.Number,
@@ -21,59 +21,22 @@ export const OutputsFile = Schema.Struct({
 
 export type OutputsFile = Schema.Schema.Type<typeof OutputsFile>
 
-export class OutputsInvalid extends Data.TaggedError("OutputsInvalid")<{
-  readonly message: string
-}> {}
+const _file = makeOutputsFile({
+  schema: OutputsFile,
+  suffix: "buckets",
+  empty: (tag: ClusterTag): OutputsFile => ({ cluster: tag, buckets: [] }),
+  clusterOf: (file) => file.cluster,
+  order: (file) => ({ cluster: file.cluster, buckets: file.buckets })
+})
 
-interface OutputsLocation {
-  readonly dir: string
-  readonly tag: ClusterTag
-  readonly format?: OutputsFormat
-}
+export const outputsPath = _file.path
 
-export const outputsPath = ({ dir, format = "yaml", tag }: OutputsLocation): string =>
-  `${dir.endsWith("/") ? dir.slice(0, -1) : dir}/${tag}.buckets.${format}`
+export const parseOutputsYaml = _file.parseYaml
 
-export const decodeOutputs = (input: Schema.Json): Effect.Effect<OutputsFile, OutputsInvalid> =>
-  Schema.decodeUnknownEffect(OutputsFile)(input).pipe(
-    Effect.mapError((cause) => new OutputsInvalid({ message: String(cause) }))
-  )
+export const stringifyOutputs = _file.stringify
 
-export const parseOutputsYaml = (text: string): Effect.Effect<OutputsFile, OutputsInvalid> =>
-  Effect.try({ try: () => parse(text), catch: (cause) => new OutputsInvalid({ message: String(cause) }) }).pipe(
-    Effect.flatMap(decodeOutputs)
-  )
+export const emptyOutputs = _file.empty
 
-export const stringifyOutputs = (
-  { file, format = "yaml" }: { readonly file: OutputsFile; readonly format?: OutputsFormat }
-): string => {
-  const ordered = { cluster: file.cluster, buckets: file.buckets }
+export const readOutputs = _file.read
 
-  return format === "json" ? `${JSON.stringify(ordered, null, 2)}\n` : stringify(ordered)
-}
-
-export const emptyOutputs = (tag: ClusterTag): OutputsFile => ({ cluster: tag, buckets: [] })
-
-export const readOutputs = (
-  { dir, format = "yaml", tag }: OutputsLocation
-): Effect.Effect<OutputsFile, OutputsInvalid | PlatformError, FileSystem> =>
-  Effect.gen(function*() {
-    const fs = yield* FileSystem
-    const other: OutputsFormat = format === "yaml" ? "json" : "yaml"
-
-    for (const candidate of [format, other]) {
-      const path = outputsPath({ dir, tag, format: candidate })
-
-      if (yield* fs.exists(path)) return yield* parseOutputsYaml(yield* fs.readFileString(path))
-    }
-
-    return emptyOutputs(tag)
-  })
-
-export const writeOutputs = (
-  { dir, file, format = "yaml" }: { readonly dir: string; readonly file: OutputsFile; readonly format?: OutputsFormat }
-): Effect.Effect<void, PlatformError, FileSystem> =>
-  Effect.gen(function*() {
-    const fs = yield* FileSystem
-    yield* fs.writeFileString(outputsPath({ dir, tag: file.cluster, format }), stringifyOutputs({ file, format }))
-  })
+export const writeOutputs = _file.write

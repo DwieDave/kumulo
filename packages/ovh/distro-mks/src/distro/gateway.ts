@@ -1,7 +1,7 @@
 import { Effect } from "effect"
-import type { MksError } from "@kumulo/core"
+import type { ManagedDistroError } from "@kumulo/core"
 import type { Mks } from "../client/mks.ts"
-import { mapMksError } from "./errors.ts"
+import { mapMksError } from "../errors.ts"
 
 export type GatewayModel = "s" | "m" | "l" | "xl" | "2xl" | "3xl"
 
@@ -16,7 +16,7 @@ export interface EnsureGatewayInput {
 }
 
 // deliberately OVH's API, not Neutron's routersPost: that would silently land the gateway on OVH's default tier, ignoring gateway_model
-export const ensureGateway = (input: EnsureGatewayInput): Effect.Effect<void, MksError> =>
+export const ensureGateway = (input: EnsureGatewayInput): Effect.Effect<void, ManagedDistroError> =>
   mapMksError({
     self: input.mks.postCloudProjectServiceNameRegionRegionNameNetworkNetworkIdSubnetSubnetIdGateway(
       input.serviceName,

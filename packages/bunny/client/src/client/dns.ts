@@ -2,6 +2,7 @@ import { Effect, Option, Schema } from "effect"
 import type * as HttpClient from "effect/http/HttpClient"
 import * as HttpClientRequest from "effect/http/HttpClientRequest"
 import { toBunnyError } from "../errors.ts"
+import { bunnyPages } from "./pages.ts"
 import { bunnyRequester } from "./request.ts"
 import type { BunnyError } from "../errors.ts"
 import { BunnyDnsRecordType } from "../enums.ts"
@@ -102,22 +103,20 @@ export const bunnyDnsClient = (
       readonly extra: Readonly<Record<string, string>>
     }
   ): Effect.Effect<ReadonlyArray<A>, BunnyError> => {
-    const go = (page: number, acc: ReadonlyArray<A>): Effect.Effect<ReadonlyArray<A>, BunnyError> =>
-      _json({
-        ref,
-        schema,
-        request: HttpClientRequest.get(path).pipe(
-          HttpClientRequest.setUrlParams({ ...extra, page: String(page), perPage: String(perPage) })
-        )
-      }).pipe(
-        Effect.flatMap((decoded) => {
-          const next = [...acc, ...(decoded.Items ?? [])]
-
-          return decoded.HasMoreItems ? go(page + 1, next) : Effect.succeed(next)
+    return bunnyPages({
+      kind: _kind,
+      ref,
+      items: (decoded) => decoded.Items ?? [],
+      hasMore: (decoded) => decoded.HasMoreItems,
+      fetch: (page: number) =>
+        _json({
+          ref,
+          schema,
+          request: HttpClientRequest.get(path).pipe(
+            HttpClientRequest.setUrlParams({ ...extra, page: String(page), perPage: String(perPage) })
+          )
         })
-      )
-
-    return go(1, [])
+    })
   }
 
   return {

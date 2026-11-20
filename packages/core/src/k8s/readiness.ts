@@ -38,15 +38,3 @@ export const waitForDeploymentAvailable = (
     kind: "Deployment",
     ref: options.ref.path
   })
-
-export const waitForNodeReady = (
-  options: WaitOptions
-): Effect.Effect<K8sManifest, ResourceNotFound | HttpTransportError | ProvisioningTimeout> =>
-  pollUntil({
-    check: options.get(options.ref),
-    isDone: (manifest) => _conditionStatus(manifest, "Ready") === "True",
-    interval: options.interval,
-    timeout: options.timeout,
-    kind: "Node",
-    ref: options.ref.path
-  })

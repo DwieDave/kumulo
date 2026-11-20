@@ -132,8 +132,10 @@ const _ensureBucketInService = (
   })
 
 export const listBuckets = (options: UpcloudObjectStorageOptions) =>
-  (_region: string): Effect.Effect<ReadonlyArray<BucketInfo>, ObjectStorageError> =>
+  (region: string): Effect.Effect<ReadonlyArray<BucketInfo>, ObjectStorageError> =>
     Effect.gen(function*() {
+      if (region !== options.region) return []
+
       const service = yield* _findService(options)
 
       if (service === undefined) return []
@@ -225,13 +227,15 @@ const _rotateAccessKey = (
   Effect.gen(function*() {
     const ctx = { kind: "object-storage-access-key", ref: username }
     const existing = yield* mapUpcloudError({ self: client.accessKeys.list(serviceUuid, username), ctx })
+    // create before deleting so a failed create never leaves the user without a key
+    const created = yield* mapUpcloudError({ self: client.accessKeys.create(serviceUuid, username), ctx })
     yield* Effect.forEach(
       existing,
       (key) => mapUpcloudError({ self: client.accessKeys.delete(serviceUuid, username, key.access_key_id), ctx }),
       { discard: true }
     )
 
-    return yield* mapUpcloudError({ self: client.accessKeys.create(serviceUuid, username), ctx })
+    return created
   })
 
 export const ensureCredentials = (options: UpcloudObjectStorageOptions) =>

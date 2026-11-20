@@ -2,7 +2,7 @@ import { SchemaIssue } from "effect"
 import { HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { assert, it } from "@effect/vitest"
 import { AddonInstallFailed, AuthenticationFailed, BootstrapFailed, BucketNotEmpty, CapabilityMissing, ConfigInvalid, HttpTransportError, PlanRejected, ProvisioningTimeout, QuotaExceeded, ResourceConflict, ResourceNotFound, ResponseDecodeError, SinkUnavailable } from "@kumulo/core"
-import { DistroNotWired } from "../src/distro-not-wired.ts"
+import { DoctorFailed } from "../src/doctor/failed.ts"
 import { renderCliError } from "../src/errors.ts"
 
 it("renders a core KumuloError via the shared registry", () => {
@@ -99,9 +99,9 @@ it("renders SinkUnavailable", () => {
   assert.match(message, /Credentials sink unavailable: sops binary not found/)
 })
 
-it("renders a CLI-only DistroNotWired error", () => {
-  const message = renderCliError(new DistroNotWired({ distro: "k3s" }))
-  assert.match(message, /k3s.*not wired/)
+it("renders a DoctorFailed error", () => {
+  const message = renderCliError(new DoctorFailed({ failed: ["a"] }))
+  assert.match(message, /Doctor checks failed: a/)
 })
 
 // landmine: empty MksEnv.serviceName fails at request time, not layer build — the request's hint is the only clue what's unset

@@ -1,4 +1,6 @@
 import { Effect } from "effect"
+import { paginateByOffset } from "@kumulo/core"
+import type { PaginationError } from "@kumulo/core"
 import * as Schema from "effect/Schema"
 import type * as HttpClient from "effect/http/HttpClient"
 import * as HttpClientRequest from "effect/http/HttpClientRequest"
@@ -153,18 +155,16 @@ const _accessKeys = (serviceUuid: string, username: string) => `${_user(serviceU
 
 const _pageSize = 100
 
+const _maxPages = 1000
+
 const _paged = <Item, Failure>(
   fetch: (page: string) => Effect.Effect<ReadonlyArray<Item>, Failure>
-): Effect.Effect<ReadonlyArray<Item>, Failure> =>
-  Effect.gen(function*() {
-    const items: Array<Item> = []
-
-    for (let offset = 0;; offset += _pageSize) {
-      const page = yield* fetch(`limit=${_pageSize}&offset=${offset}`)
-      items.push(...page)
-
-      if (page.length < _pageSize) return items
-    }
+): Effect.Effect<ReadonlyArray<Item>, Failure | PaginationError> =>
+  paginateByOffset({
+    fetch: (offset) => fetch(`limit=${_pageSize}&offset=${offset}`),
+    items: (page) => page,
+    limit: _pageSize,
+    maxPages: _maxPages
   })
 
 export const makeObjectStorageClient = (httpClient: HttpClient.HttpClient): ObjectStorageClient => ({

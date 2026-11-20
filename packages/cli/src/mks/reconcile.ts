@@ -1,8 +1,8 @@
 import { Effect } from "effect"
 import type { Types } from "effect"
 import type * as HttpClient from "effect/http/HttpClient"
-import { CloudProvider, ConfigInvalid, PlanRejected, ResourceConflict, ResourceNotFound } from "@kumulo/core"
-import type { AuthenticationFailed, DnsProvider, Kubeconfig, LbInfo, LbSpec, ManagedClusterInfo, MksError, NetworkInfo, NetworkSpec } from "@kumulo/core"
+import { CloudProvider, ConfigInvalid, PlanRejected, pollUntil, ResourceConflict, ResourceNotFound } from "@kumulo/core"
+import type { AuthenticationFailed, DnsProvider, Kubeconfig, LbInfo, LbSpec, ManagedClusterInfo, ManagedDistroError, NetworkInfo, NetworkSpec } from "@kumulo/core"
 import type { ClusterConfig } from "../cluster-config.ts"
 import {
   clusterDrift,
@@ -15,7 +15,6 @@ import {
   findClusterByName,
   listNodePools,
   parseKubeVersion,
-  pollUntil,
   ensureGateway,
   requireVrack,
   type GatewayModel,
@@ -23,14 +22,15 @@ import {
   type MksDriverConfig,
   type MksClusterRef
 } from "@kumulo/distro-ovh-mks"
-import type { OpenStackEnv } from "../doctor-openstack/env.ts"
+import type { OpenStackEnv } from "../openstack/env.ts"
 import { mksCloudProviderLayer } from "../provider/registry.ts"
 import { withRowProgress } from "../spinner.ts"
 import { MksEnv } from "./env.ts"
 import type { MksInventory } from "./plan.ts"
 import { mksClusterRow, mksPoolRow, toMksPool } from "./plan.ts"
-import { dnsProviderLayerWith, reconcileDns, removeDns } from "../dns.ts"
-import { applyCdn, cdnHandleFor, cdnWarnings, pullZoneIdFor, removeCdn } from "../cdn.ts"
+import { reconcileDns, removeDns } from "../dns.ts"
+import { withEdge } from "../edge.ts"
+import { applyCdn, cdnWarnings, removeCdn } from "../cdn.ts"
 import type { CdnHandle, CdnStepError } from "../cdn.ts"
 import type { FileSystem } from "effect/FileSystem"
 import type { DnsTarget, DnsTargets } from "../dns.ts"
@@ -44,7 +44,7 @@ const _toMksConfig = (
   worker_pools: config.worker_pools.map(toMksPool)
 })
 
-export const resolveMksNetwork = (config: ClusterConfig): Effect.Effect<NetworkInfo | undefined, MksError, CloudProvider> =>
+export const resolveMksNetwork = (config: ClusterConfig): Effect.Effect<NetworkInfo | undefined, ManagedDistroError, CloudProvider> =>
   Effect.gen(function*() {
     const network = config.distro === "ovh-mks" ? config.network : undefined
 
@@ -56,7 +56,7 @@ export const resolveMksNetwork = (config: ClusterConfig): Effect.Effect<NetworkI
 
 export const lookupMksInventory = (
   config: ClusterConfig
-): Effect.Effect<Omit<MksInventory, "volumeNames">, MksError, MksEnv> =>
+): Effect.Effect<Omit<MksInventory, "volumeNames">, ManagedDistroError, MksEnv> =>
   Effect.gen(function*() {
     const { mks, serviceName } = yield* MksEnv
     const mksConfig = _toMksConfig({ config, serviceName })
@@ -105,7 +105,7 @@ export const reconcileMksDns = (
     readonly ingress?: LbInfo
     readonly cdn?: DnsTarget
   }
-): Effect.Effect<void, MksError | ConfigInvalid, DnsProvider> =>
+): Effect.Effect<void, ManagedDistroError | ConfigInvalid, DnsProvider> =>
   Effect.gen(function*() {
     // `none` short-circuits before the endpoint check.
     if (config.dns.module === "none") return
@@ -147,7 +147,7 @@ const _networkIds = (
 // Refusal hoisted ahead of the first Neutron write — a later refusal would already have created the network and subnets, orphaning them.
 const _refuseClusterDrift = (
   { config, mks, serviceName }: { readonly config: ClusterConfig; readonly mks: Mks; readonly serviceName: string }
-): Effect.Effect<void, MksError> =>
+): Effect.Effect<void, ManagedDistroError> =>
   Effect.gen(function*() {
     const actual = yield* findClusterByName({ mks, config: _toMksConfig({ config, serviceName }) })
 
@@ -163,7 +163,7 @@ const _ensureMksNetwork = (
     readonly mks: Mks
     readonly serviceName: string
   }
-): Effect.Effect<MksNetworkIds, MksError, CloudProvider> =>
+): Effect.Effect<MksNetworkIds, ManagedDistroError, CloudProvider> =>
   Effect.gen(function*() {
     const network = config.distro === "ovh-mks" ? config.network : undefined
 
@@ -187,7 +187,7 @@ const _ensureMksGateway = (
     readonly network: { readonly gateway_model?: GatewayModel }
     readonly serviceName: string
   }
-): Effect.Effect<void, MksError, CloudProvider> =>
+): Effect.Effect<void, ManagedDistroError, CloudProvider> =>
   Effect.gen(function*() {
     const cloud = yield* CloudProvider
     const name = `kumulo-${config.name}`
@@ -217,7 +217,7 @@ export const mksNetworkSpec = (
 // Creates an EMPTY LB — listeners/pools/members belong to cloud-controller-manager once a Service adopts it, so re-running is a no-op.
 const _ensureMksIngress = (
   { config, network }: { readonly config: ClusterConfig; readonly network: MksNetworkIds }
-): Effect.Effect<LbInfo | undefined, MksError, CloudProvider> =>
+): Effect.Effect<LbInfo | undefined, ManagedDistroError, CloudProvider> =>
   Effect.gen(function*() {
     const ingress = config.distro === "ovh-mks" ? config.ingress : undefined
 
@@ -270,7 +270,7 @@ export const applyMksEffect = (
   }
 ): Effect.Effect<
   MksApplyResult,
-  MksError | ConfigInvalid | PlanRejected | CdnStepError,
+  ManagedDistroError | ConfigInvalid | PlanRejected | CdnStepError,
   MksEnv | DnsProvider | CloudProvider
 > =>
   Effect.gen(function*() {
@@ -322,23 +322,22 @@ export const applyMks = (
   args: { readonly config: ClusterConfig; readonly configDir: string; readonly replace?: ReadonlySet<string> }
 ): Effect.Effect<
   MksWrappedResult,
-  MksError | ConfigInvalid | PlanRejected | CdnStepError | AuthenticationFailed,
+  ManagedDistroError | ConfigInvalid | PlanRejected | CdnStepError | AuthenticationFailed,
   MksEnv | OpenStackEnv | HttpClient.HttpClient | FileSystem
 > =>
   Effect.gen(function*() {
-    const cdn = yield* cdnHandleFor({ config: args.config, configDir: args.configDir })
-
-    const result = yield* applyMksEffect({ config: args.config, replace: args.replace, cdn }).pipe(
-      Effect.provide(dnsProviderLayerWith({ config: args.config, pullZoneIdFor: pullZoneIdFor(cdn) })),
-      Effect.provide(mksCloudProviderLayer(args.config))
-    )
+    const { cdn, result } = yield* withEdge({
+      config: args.config,
+      configDir: args.configDir,
+      run: (handle) => applyMksEffect({ config: args.config, replace: args.replace, cdn: handle })
+    }).pipe(Effect.provide(mksCloudProviderLayer(args.config)))
 
     return { ...result, cdnWarnings: yield* cdnWarnings(cdn) }
   })
 
 export const kubeconfigMks = (
   config: ClusterConfig
-): Effect.Effect<Kubeconfig, MksError, MksEnv> =>
+): Effect.Effect<Kubeconfig, ManagedDistroError, MksEnv> =>
   Effect.gen(function*() {
     const { mks, serviceName } = yield* MksEnv
     const mksConfig = _toMksConfig({ config, serviceName })
@@ -354,7 +353,7 @@ export const kubeconfigMks = (
 // OVH's delete call returns before node VMs are gone; deleting the network first is a guaranteed 409, so teardown blocks here.
 const _waitClusterGone = (
   { config, mks, serviceName }: { readonly config: ClusterConfig; readonly mks: Mks; readonly serviceName: string }
-): Effect.Effect<void, MksError> =>
+): Effect.Effect<void, ManagedDistroError> =>
   pollUntil({
     check: findClusterByName({ mks, config: _toMksConfig({ config, serviceName }) }).pipe(
       Effect.map((info) => info?.status ?? "DELETED")
@@ -362,10 +361,11 @@ const _waitClusterGone = (
     isDone: (status) => status === "DELETED",
     interval: "5 seconds",
     timeout: "20 minutes",
+    kind: "mks-cluster",
     ref: config.name
   }).pipe(Effect.asVoid)
 
-const _deleteMksInfra = (config: ClusterConfig): Effect.Effect<void, MksError, CloudProvider> =>
+const _deleteMksInfra = (config: ClusterConfig): Effect.Effect<void, ManagedDistroError, CloudProvider> =>
   Effect.gen(function*() {
     if (config.distro !== "ovh-mks" || config.network === undefined) return
     const cloud = yield* CloudProvider
@@ -374,12 +374,12 @@ const _deleteMksInfra = (config: ClusterConfig): Effect.Effect<void, MksError, C
 
 export const deleteMksEffect = (
   config: ClusterConfig
-): Effect.Effect<void, MksError | CdnStepError, MksEnv | DnsProvider | CloudProvider> =>
+): Effect.Effect<void, ManagedDistroError | CdnStepError, MksEnv | DnsProvider | CloudProvider> =>
   deleteMksWithCdn({ config, cdn: undefined })
 
 export const deleteMksWithCdn = (
   { cdn, config }: { readonly config: ClusterConfig; readonly cdn: CdnHandle | undefined }
-): Effect.Effect<void, MksError | CdnStepError, MksEnv | DnsProvider | CloudProvider> =>
+): Effect.Effect<void, ManagedDistroError | CdnStepError, MksEnv | DnsProvider | CloudProvider> =>
   Effect.gen(function*() {
     const { mks, serviceName } = yield* MksEnv
     const mksConfig = _toMksConfig({ config, serviceName })
@@ -410,14 +410,11 @@ export const deleteMks = (
   { config, configDir }: { readonly config: ClusterConfig; readonly configDir: string }
 ): Effect.Effect<
   void,
-  MksError | ConfigInvalid | CdnStepError | AuthenticationFailed,
+  ManagedDistroError | ConfigInvalid | CdnStepError | AuthenticationFailed,
   MksEnv | OpenStackEnv | HttpClient.HttpClient | FileSystem
 > =>
   Effect.gen(function*() {
-    const cdn = yield* cdnHandleFor({ config, configDir })
-
-    yield* deleteMksWithCdn({ config, cdn }).pipe(
-      Effect.provide(dnsProviderLayerWith({ config, pullZoneIdFor: pullZoneIdFor(cdn) })),
+    yield* withEdge({ config, configDir, run: (cdn) => deleteMksWithCdn({ config, cdn }) }).pipe(
       Effect.provide(mksCloudProviderLayer(config))
     )
   })

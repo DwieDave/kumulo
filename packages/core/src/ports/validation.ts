@@ -10,5 +10,5 @@ export const validateAutoscaling = (config: ClusterConfigFields): Option.Option<
 
 export const validateCni = (config: ClusterConfigFields): Option.Option<PlanRejected> =>
   !distroCapabilities[config.distro].selectableCni && config.addons.cni === "cilium"
-    ? Option.some(new PlanRejected({ reason: "cilium is not selectable under ovh-mks; CNI is fixed by OVH" }))
+    ? Option.some(new PlanRejected({ reason: `cilium is not selectable under ${config.distro}; CNI is fixed by the provider` }))
     : Option.none()

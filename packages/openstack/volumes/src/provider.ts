@@ -1,4 +1,4 @@
-import { VolumeProvider } from "@kumulo/core"
+import { paginate, ProviderApiError, VolumeProvider } from "@kumulo/core"
 import type { ClusterTag, VolumeInfo, VolumeRef, VolumeSpec } from "@kumulo/core"
 import { Effect, Layer } from "effect"
 import type { HttpClient } from "effect/http"
@@ -47,24 +47,32 @@ const _listPage = (
     ref: _listRef
   })
 
-const _listFrom = (
-  { client, marker, seen }: {
-    readonly client: CinderClient
-    readonly marker: string | undefined
-    readonly seen: ReadonlyArray<VolumeRecord>
-  }
-): Effect.Effect<ReadonlyArray<VolumeRecord>, CinderError> =>
-  _listPage({ client, marker }).pipe(Effect.flatMap((page) => {
-    const acc = [...seen, ...page.volumes]
-    const next = nextMarker(page)
+const _maxPages = 100
 
-    // also stops on a non-advancing marker — otherwise loops forever
-    return next === undefined || page.volumes.length === 0 || next === marker
-      ? Effect.succeed(acc)
-      : _listFrom({ client, marker: next, seen: acc })
-  }))
+const _firstMarker: string | undefined = undefined
 
-const _listAll = (client: CinderClient) => _listFrom({ client, marker: undefined, seen: [] })
+const _listAll = (client: CinderClient): Effect.Effect<ReadonlyArray<VolumeRecord>, CinderError> =>
+  paginate<string | undefined, VolumesDetailResponse, VolumeRecord, CinderError, never>({
+    initial: _firstMarker,
+    fetch: (marker) => _listPage({ client, marker }),
+    items: (page) => page.volumes,
+    // a non-advancing marker or an empty page ends the walk, otherwise it loops forever
+    next: ({ cursor, items, page }) => {
+      const next = nextMarker(page)
+
+      return next === undefined || items.length === 0 || next === cursor ? undefined : next
+    },
+    maxPages: _maxPages
+  }).pipe(
+    Effect.catchTags({
+      PaginationLimitExceeded: (error) =>
+        Effect.fail(
+          new ProviderApiError({ operation: `volume ${_listRef}`, status: 0, body: `more than ${error.maxPages} pages` })
+        ),
+      PaginationStalled: (error) =>
+        Effect.fail(new ProviderApiError({ operation: `volume ${_listRef}`, status: 0, body: `stalled at ${error.cursor}` }))
+    })
+  )
 
 // Cinder has no idempotency key — never wrap only the create POST in a retry policy, it would duplicate
 export const ensureVolume = (
@@ -102,7 +110,7 @@ export const deleteVolume = (ref: VolumeRef): R<void> =>
       Effect.asVoid
     ))
 
-export const VolumeProviderLive = (options: VolumeProviderOptions): Layer.Layer<VolumeProvider, never, Deps> =>
+export const cinderVolumeProviderLive = (options: VolumeProviderOptions): Layer.Layer<VolumeProvider, never, Deps> =>
   Layer.effect(
     VolumeProvider,
     Effect.gen(function*() {

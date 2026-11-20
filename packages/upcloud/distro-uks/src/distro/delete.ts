@@ -1,14 +1,14 @@
+import { pollUntil } from "@kumulo/core"
 // Strict delete order: cluster, then network, then router — the router 409s while a network is still attached to it.
 import { Effect } from "effect"
 import { ignoreMissing, mapUpcloudError } from "@kumulo/upcloud"
-import type { MksError } from "@kumulo/core"
+import type { ManagedDistroError } from "@kumulo/core"
 import { deleteNetwork } from "./network.ts"
-import { pollUntil } from "./status.ts"
 import type { UksClients, UksClusterRef } from "./types.ts"
 
 export const deleteCluster = (
   { clients, ref }: { readonly clients: UksClients; readonly ref: UksClusterRef }
-): Effect.Effect<void, MksError> =>
+): Effect.Effect<void, ManagedDistroError> =>
   ignoreMissing(mapUpcloudError({ self: clients.uks.delete(ref.uuid), ctx: { kind: "uks-cluster", ref: ref.uuid } })).pipe(
     Effect.andThen(
       pollUntil({
@@ -31,4 +31,4 @@ export const deleteAll = (
     readonly clusterName: string
     readonly zone?: string | undefined
   }
-): Effect.Effect<void, MksError> => deleteCluster({ clients, ref }).pipe(Effect.andThen(deleteNetwork({ clients, clusterName, zone })))
+): Effect.Effect<void, ManagedDistroError> => deleteCluster({ clients, ref }).pipe(Effect.andThen(deleteNetwork({ clients, clusterName, zone })))

@@ -1,4 +1,3 @@
-import { noBannedTypeAssertions } from "./rules/no-banned-type-assertions.ts"
 import { noComments } from "./rules/no-comments.ts"
 import { noMultipleFunctionParams } from "./rules/no-multiple-function-params.ts"
 import { noSwitch } from "./rules/no-switch.ts"
@@ -11,7 +10,6 @@ import { definePlugin } from "@oxlint/plugins"
 const plugin = definePlugin({
   meta: { name: "kumulo" },
   rules: {
-    "no-banned-type-assertions": noBannedTypeAssertions,
     "no-comments": noComments,
     "no-multiple-function-params": noMultipleFunctionParams,
     "no-switch": noSwitch,

@@ -5,8 +5,8 @@ import { TestClock } from "effect/testing"
 import { makeGodaddyDnsClient } from "../../src/client/godaddy-dns.ts"
 import { makeGodaddyHttpClient } from "../../src/transport/http-client.ts"
 import { makeGodaddyDnsProvider } from "../../src/provider/dns-provider.ts"
+import { dnsProviderContract } from "@kumulo/core/testing"
 import { makeFakeZone } from "./fake-zone.ts"
-import { runDnsProviderContractSuite } from "./contract.ts"
 
 const _zone = "example.com"
 
@@ -15,7 +15,7 @@ const _rel = (subDomain: string): string => subDomain.replace(/\.example\.com$/,
 const _owner = (name: string, tag = "cluster-a") => ({ name, target: `kumulo.cluster=${tag}` })
 
 describe("godaddy dns provider - port contract", () => {
-  runDnsProviderContractSuite(() => {
+  dnsProviderContract(() => {
     const fake = makeFakeZone({ zone: _zone })
 
     return {
@@ -26,7 +26,10 @@ describe("godaddy dns provider - port contract", () => {
       seedForeign: (subDomain, target) => fake.seed({ name: _rel(subDomain), type: "A", data: target }),
       seedForeignKind: (subDomain, fieldType, target) => fake.seed({ name: _rel(subDomain), type: fieldType, data: target }),
       seedForeignOwnerTxt: (subDomain, tag) => fake.seed({ name: _rel(subDomain), type: "TXT", data: `kumulo.cluster=${tag}` }),
-      kindsAt: (subDomain) => fake.peekAll().flatMap((r) => r.name === _rel(subDomain) ? [r.type] : []).toSorted()
+      kindsAt: (subDomain) => fake.peekAll().flatMap((r) => r.name === _rel(subDomain) ? [r.type] : []).toSorted(),
+      valuesAt: (subDomain, fieldType) =>
+        fake.peekAll().flatMap((r) => r.name === _rel(subDomain) && r.type === fieldType ? [r.data] : []),
+      seedForeignTxt: (subDomain, value) => fake.seed({ name: _rel(subDomain), type: "TXT", data: value })
     }
   })
 })
@@ -273,17 +276,18 @@ describe("godaddy dns provider - specifics", () => {
     }))
 })
 
-const _limited = (options: { readonly retryAfterSeconds: number }) => {
-  const fake = makeFakeZone({ zone: _zone, rateLimitAfter: 0, ...options })
-  const http = makeGodaddyHttpClient({ base: fake.httpClient, token: Redacted.make("t"), baseUrl: "" })
+const _limited = (options: { readonly retryAfterSeconds: number }) =>
+  Effect.gen(function*() {
+    const fake = makeFakeZone({ zone: _zone, rateLimitAfter: 0, ...options })
+    const http = yield* makeGodaddyHttpClient({ base: fake.httpClient, token: Redacted.make("t"), baseUrl: "https://fixture.invalid" })
 
-  return { fake, provider: makeGodaddyDnsProvider({ dns: makeGodaddyDnsClient(http) }) }
-}
+    return { fake, provider: makeGodaddyDnsProvider({ dns: makeGodaddyDnsClient(http) }) }
+  })
 
 describe("godaddy dns provider - rate limiting end to end", () => {
   it.effect("retries a 429 and then succeeds", () =>
     Effect.gen(function*() {
-      const { fake, provider } = _limited({ retryAfterSeconds: 1 })
+      const { fake, provider } = yield* _limited({ retryAfterSeconds: 1 })
       const fiber = yield* Effect.forkChild(provider.ensureRecords(_zone, [_owner("api.example.com"), { name: "api.example.com", target: "10.0.0.1" }]))
       yield* Effect.yieldNow
       fake.setRateLimitAfter(undefined)
@@ -294,7 +298,7 @@ describe("godaddy dns provider - rate limiting end to end", () => {
 
   it.effect("surfaces RateLimited once retries are exhausted", () =>
     Effect.gen(function*() {
-      const { provider } = _limited({ retryAfterSeconds: 2 })
+      const { provider } = yield* _limited({ retryAfterSeconds: 2 })
       const fiber = yield* Effect.forkChild(Effect.flip(provider.ensureRecords(_zone, [_owner("api.example.com")])))
       yield* Effect.yieldNow
       yield* TestClock.adjust(20_000)

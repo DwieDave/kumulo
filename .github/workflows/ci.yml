@@ -36,6 +36,12 @@ jobs:
       - name: Lint deps
         run: bun run lint:deps
 
+      - name: Lint unused exports
+        run: bun run lint:unused
+
+      - name: Tsconfig paths check
+        run: bun run tsconfig:check
+
       - name: Lint
         run: bun run lint
 

@@ -47,7 +47,6 @@
   },
   "dependencies": {
     "@kumulo/bunny": "workspace:*",
-    "yaml": "catalog:",
     "@kumulo/core": "workspace:*"
   },
   "peerDependencies": {

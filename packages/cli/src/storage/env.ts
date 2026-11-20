@@ -13,7 +13,8 @@ import type { BunnyStorageClient } from "@kumulo/bunny"
 import type { PlatformError } from "effect/PlatformError"
 import { requiredRedactedEnv } from "../env.ts"
 import { sopsCredentialsSinkLive } from "@kumulo/secrets-sops"
-import { MksEnv, ovhHttpClientFromEnv } from "../mks/env.ts"
+import { MksEnv } from "../mks/env.ts"
+import { ovhHttpClientFromEnv } from "../provider/ovh-http.ts"
 
 const ChildProcessSpawner = ChildProcessSpawnerNS.ChildProcessSpawner
 
@@ -68,7 +69,7 @@ const _bunnyProviderLayer = (
   Effect.gen(function*() {
     const apiKey = yield* requiredRedactedEnv("BUNNYNET_API_KEY")
     const base = yield* HttpClient.HttpClient
-    const storage = makeBunnyStorageClient(makeBunnyHttpClient({ base, apiKey }))
+    const storage = makeBunnyStorageClient(yield* makeBunnyHttpClient({ base, apiKey }))
     const owned = yield* _bunnyOwned({ config, configDir })
 
     return Layer.merge(bunnyObjectStorageProviderLive({ storage, owned }), Layer.succeed(BunnyStorage, { storage }))

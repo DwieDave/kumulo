@@ -40,11 +40,11 @@ export const upcloudUksEntry: DistroEntry<UpcloudUksClusterConfig> = {
       Effect.map((info) => ({ summary: `\nCluster "${a.config.name}" is ${info.status}.${info.cdnWarnings}` }))
     ),
   delete: deleteUpcloudUks,
-  kubeconfig: kubeconfigUpcloudUks,
+  kubeconfig: ({ config }) => kubeconfigUpcloudUks(config),
   deletedLabel: "uks-cluster",
   appliedPrefixes: ["router/", "network/", "uks-cluster/", "uks-pool/", "volume/", "bucket/", "cdn/"],
   selfProgress: true,
-  status: statusUpcloudUks,
+  status: ({ config }) => statusUpcloudUks(config),
   upgrade: upgradeUpcloudUks,
   credentialsLabel: "upcloud api token",
   requiredEnvVars: ["UPCLOUD_API_TOKEN"],

@@ -16,7 +16,7 @@ RAW="$(mktemp)"
 DENULLIFIED="$(mktemp)"
 trap 'rm -f "${RAW}" "${DENULLIFIED}"' EXIT
 
-curl -sf --max-time 30 "https://docs.hetzner.cloud/cloud.spec.json" -o "${RAW}"
+curl -fsS --max-time 30 "https://docs.hetzner.cloud/cloud.spec.json" -o "${RAW}"
 (cd "${DIR}" && bun run scripts/denullify-spec.ts "${RAW}" "${DENULLIFIED}")
 
 NEW_HASH="$(shasum -a 256 "${DENULLIFIED}" | awk '{print $1}')"

@@ -1,23 +1,29 @@
 import { assert, describe, it } from "@effect/vitest"
 import { Effect } from "effect"
+import { dnsProviderContract } from "@kumulo/core/testing"
 import { makeOvhDnsProvider } from "../../src/provider/dns-provider.ts"
 import { makeFakeZone } from "./fake-zone.ts"
-import { runDnsProviderContractSuite } from "./contract.ts"
+
 
 const _zone = "example.com"
 
 describe("ovh dns-ovh provider — port contract", () => {
-  runDnsProviderContractSuite(() => {
+  dnsProviderContract(() => {
     const fake = makeFakeZone(_zone)
+
+    // contract names are FQDNs, the fake stores OVH's relative subDomain
+    const sub = (name: string): string => name.replace(`.${_zone}`, "")
 
     return {
       zone: _zone,
       provider: makeOvhDnsProvider(fake.dns),
-      targetOf: (subDomain) => fake.peek(subDomain)?.target,
-      seedForeign: (subDomain, target) => fake.seed({ fieldType: "A", subDomain, target }),
-      seedForeignKind: (subDomain, fieldType, target) => fake.seed({ fieldType, subDomain, target }),
-      seedForeignOwnerTxt: (subDomain, tag) => fake.seed({ fieldType: "TXT", subDomain, target: `kumulo.cluster=${tag}` }),
-      kindsAt: (subDomain) => fake.peekAll().flatMap((r) => r.subDomain === subDomain ? [r.fieldType] : []).toSorted()
+      targetOf: (name) => fake.peek(sub(name))?.target,
+      seedForeign: (name, target) => fake.seed({ fieldType: "A", subDomain: sub(name), target }),
+      seedForeignKind: (name, fieldType, target) => fake.seed({ fieldType, subDomain: sub(name), target }),
+      seedForeignOwnerTxt: (name, tag) => fake.seed({ fieldType: "TXT", subDomain: sub(name), target: `kumulo.cluster=${tag}` }),
+      seedForeignTxt: (name, value) => fake.seed({ fieldType: "TXT", subDomain: sub(name), target: value }),
+      kindsAt: (name) => fake.peekAll().flatMap((r) => r.subDomain === sub(name) ? [r.fieldType] : []).toSorted(),
+      valuesAt: (name, type) => fake.peekAll().flatMap((r) => r.subDomain === sub(name) && r.fieldType === type ? [r.target] : [])
     }
   })
 })
@@ -28,8 +34,8 @@ describe("ovh dns-ovh provider — fixture-replay specifics", () => {
       const fake = makeFakeZone(_zone)
       const provider = makeOvhDnsProvider(fake.dns)
       yield* provider.ensureRecords(_zone, [
-        { name: "api.example.com", target: "kumulo.cluster=cluster-a" },
-        { name: "api.example.com", target: "10.0.0.1" }
+        { name: "api", target: "kumulo.cluster=cluster-a" },
+        { name: "api", target: "10.0.0.1" }
       ])
       assert.strictEqual(fake.refreshCount(), 1)
     }))
@@ -40,8 +46,8 @@ describe("ovh dns-ovh provider — fixture-replay specifics", () => {
       const provider = makeOvhDnsProvider(fake.dns)
 
       const desired = [
-        { name: "api.example.com", target: "kumulo.cluster=cluster-a" },
-        { name: "api.example.com", target: "10.0.0.1" }
+        { name: "api", target: "kumulo.cluster=cluster-a" },
+        { name: "api", target: "10.0.0.1" }
       ]
 
       yield* provider.ensureRecords(_zone, desired)
@@ -55,5 +61,18 @@ describe("ovh dns-ovh provider — fixture-replay specifics", () => {
       const provider = makeOvhDnsProvider(fake.dns)
       yield* provider.ensureRecords(_zone, [])
       assert.strictEqual(fake.refreshCount(), 0)
+    }))
+
+  it.effect("writes an FQDN name as OVH's relative subDomain and the apex as empty", () =>
+    Effect.gen(function*() {
+      const fake = makeFakeZone(_zone)
+      const provider = makeOvhDnsProvider(fake.dns)
+
+      yield* provider.ensureRecords(_zone, [
+        { name: "api.example.com", target: "10.0.0.1" },
+        { name: "example.com", target: "10.0.0.2" }
+      ])
+
+      assert.deepStrictEqual(fake.peekAll().map((r) => r.subDomain).toSorted(), ["", "api"])
     }))
 })

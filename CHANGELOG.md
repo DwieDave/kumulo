@@ -6,6 +6,23 @@ All notable changes to kumulo are documented here. Format:
 
 ## [Unreleased]
 
+### Changed (behaviour, migration notes)
+
+- Provider HTTP retries: bunny `PUT` (including DNS add-record) is no longer
+  retried, and `Retry-After` / `RateLimit-Reset` waits are capped at 60s.
+- OVH DNS: FQDN record names are normalised to relative `subDomain`s (apex is
+  the empty subDomain). Existing records written with an FQDN name are matched
+  by the relative name and may be updated once on the next apply.
+- Cluster names must be DNS labels (lowercase letters, digits, hyphens, at
+  most 63 characters). Configs with uppercase or underscore names now fail
+  to decode; rename the cluster.
+- Outputs files (`*.buckets.*`, `*.outputs.*`) are written atomically via a
+  temp file and rename, mode 0600.
+- The bunny `CdnOutputsInvalid` error tag is now `OutputsInvalid`.
+- Kubeconfig bearer tokens are `Redacted` in `@kumulo/core`.
+- Known gap: the per-cluster SSH known_hosts layer (`k3sSshLayer`) is not yet
+  wired into the CLI.
+
 ### Added
 
 - Initial public release of the `kumulo` CLI and the `@kumulo/*` packages.

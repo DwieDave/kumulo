@@ -12,12 +12,6 @@ const baseConfig: ClusterConfigFields = {
   volumes: { managed: [{ type: "any-custom-type" }] }
 }
 
-it("generic profile makes no capability assumptions", () => {
-  assert.isTrue(genericProfile.capabilities.octavia("any-region"))
-  assert.isTrue(genericProfile.capabilities.floatingIps)
-  assert.deepStrictEqual(genericProfile.capabilities.volumeTypes, [])
-})
-
 it.effect("generic profile accepts any region/HA/volume-type combo (no assumptions)", () =>
   Effect.gen(function*() {
     yield* genericProfile.validate(baseConfig)

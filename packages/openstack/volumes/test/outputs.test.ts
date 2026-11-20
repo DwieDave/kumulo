@@ -62,6 +62,7 @@ describe("readOutputs / writeOutputs (in-memory FileSystem)", () => {
       const fs = layerNoop({
         exists: (path) => Effect.succeed(store.has(path)),
         writeFileString: (path, data) => Effect.sync(() => void store.set(path, data)),
+        rename: (from, to) => Effect.sync(() => void store.set(to, store.get(from) ?? "")).pipe(Effect.andThen(Effect.sync(() => void store.delete(from)))),
         readFileString: (path) => Effect.succeed(store.get(path) ?? "")
       })
 
@@ -79,6 +80,7 @@ describe("readOutputs / writeOutputs (in-memory FileSystem)", () => {
       const fs = layerNoop({
         exists: (path) => Effect.succeed(store.has(path)),
         writeFileString: (path, data) => Effect.sync(() => void store.set(path, data)),
+        rename: (from, to) => Effect.sync(() => void store.set(to, store.get(from) ?? "")).pipe(Effect.andThen(Effect.sync(() => void store.delete(from)))),
         readFileString: (path) => Effect.succeed(store.get(path) ?? "")
       })
 
@@ -97,6 +99,7 @@ describe("readOutputs / writeOutputs (in-memory FileSystem)", () => {
       const fs = layerNoop({
         exists: (path) => Effect.succeed(store.has(path)),
         writeFileString: (path, data) => Effect.sync(() => void store.set(path, data)),
+        rename: (from, to) => Effect.sync(() => void store.set(to, store.get(from) ?? "")).pipe(Effect.andThen(Effect.sync(() => void store.delete(from)))),
         readFileString: (path) => Effect.succeed(store.get(path) ?? "")
       })
 

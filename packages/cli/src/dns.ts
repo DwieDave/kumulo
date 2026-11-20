@@ -1,10 +1,11 @@
-import { Effect, Layer } from "effect"
+import { Effect } from "effect"
 import type * as HttpClient from "effect/http/HttpClient"
 import { makeGodaddyDnsClient } from "@kumulo/dns-godaddy"
-import { ConfigInvalid, DnsProvider, dnsNoopLive, ownershipTarget } from "@kumulo/core"
-import type { AuthenticationFailed, DesiredRecord, DnsError } from "@kumulo/core"
+import { DnsProvider, ownershipTarget } from "@kumulo/core"
+import type { AuthenticationFailed, ConfigInvalid, DesiredRecord, DnsError } from "@kumulo/core"
 import type { ClusterConfig } from "./cluster-config.ts"
-import { godaddyHttpClientFromEnv, k3sBunnyDnsProviderLayer, k3sDnsProviderLayer, k3sGodaddyDnsProviderLayer, k3sHetznerDnsProviderLayer } from "./k3s/env.ts"
+import { dnsRegistry, godaddyHttpClientFromEnv } from "./dns/registry.ts"
+import type { DnsLayer } from "./dns/registry.ts"
 
 export type DnsTarget =
   | { readonly kind: "ip"; readonly value: string }
@@ -56,32 +57,12 @@ export const removeDns = (config: ClusterConfig): Effect.Effect<void, DnsError, 
     yield* dns.removeClusterRecords(cfgDns.zone, config.name)
   })
 
-export const dnsProviderLayerFor = (config: ClusterConfig) => dnsProviderLayerWith({ config })
-
 export const dnsProviderLayerWith = (
   { config, pullZoneIdFor }: { readonly config: ClusterConfig; readonly pullZoneIdFor?: ((target: string) => number | undefined) | undefined }
-): Layer.Layer<DnsProvider, AuthenticationFailed | ConfigInvalid, HttpClient.HttpClient> => {
-  const dnsModule = config.dns.module
-
-  if (dnsModule === "ovh") return k3sDnsProviderLayer()
-
-  if (dnsModule === "hetzner") return k3sHetznerDnsProviderLayer()
-
-  if (config.dns.module === "bunny") return k3sBunnyDnsProviderLayer({ pullZoneIdFor, ttl: config.dns.ttl })
-
-  if (config.dns.module === "godaddy") return k3sGodaddyDnsProviderLayer({ ttl: config.dns.ttl })
-
-  if (dnsModule === "none") return dnsNoopLive
-
-  return Layer.effect(
-    DnsProvider,
-    Effect.fail(
-      new ConfigInvalid({
-        issues: [{ path: ["dns", "module"], message: `dns.module "${dnsModule}" has no DnsProvider implementation` }]
-      })
-    )
-  )
-}
+): DnsLayer =>
+  config.dns.module === "none"
+    ? dnsRegistry.none.layer({ ttl: 0 })
+    : dnsRegistry[config.dns.module].layer({ ttl: config.dns.ttl, pullZoneIdFor })
 
 export const dnsPreflight = (
   config: ClusterConfig

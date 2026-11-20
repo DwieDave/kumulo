@@ -12,13 +12,13 @@ const _idempotent: ReadonlySet<string> = new Set(["GET", "HEAD", "PUT", "DELETE"
 const _isRetryable = (method: string, status: number): boolean =>
   status === 429 || (_idempotent.has(method) && (status === 409 || (status >= 500 && status < 600)))
 
-export const DEFAULT_REQUEST_TIMEOUT: Duration.Input = "30 seconds"
+const _DEFAULT_REQUEST_TIMEOUT: Duration.Input = "30 seconds"
 
-export const transportRetrySchedule: Schedule.Schedule<Duration.Duration> = Schedule.exponential("200 millis", 2).pipe(
+const _transportRetrySchedule: Schedule.Schedule<Duration.Duration> = Schedule.exponential("200 millis", 2).pipe(
   Schedule.jittered
 )
 
-export const transportMaxRetries = 5
+const _transportMaxRetries = 5
 
 const _BODY_LIMIT = 512
 
@@ -59,9 +59,9 @@ export const makeOpenStackHttpClient = (
     const base = options.base
     const auth = yield* KeystoneAuth
     const semaphore = yield* Semaphore.make(options.maxConcurrentRequests ?? 8)
-    const schedule = Schedule.passthrough(transportRetrySchedule)
-    const times = transportMaxRetries
-    const duration = options.requestTimeout ?? DEFAULT_REQUEST_TIMEOUT
+    const schedule = Schedule.passthrough(_transportRetrySchedule)
+    const times = _transportMaxRetries
+    const duration = options.requestTimeout ?? _DEFAULT_REQUEST_TIMEOUT
 
     const attempt = (request: HttpClientRequest.HttpClientRequest) =>
       Effect.gen(function*() {

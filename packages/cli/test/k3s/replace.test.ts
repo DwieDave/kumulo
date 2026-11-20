@@ -1,7 +1,9 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Layer, Ref, Schema } from "effect"
+import { layerNoop } from "effect/FileSystem"
+import type { FileSystem } from "effect/FileSystem"
 import { PlanAction } from "@kumulo/core"
-import { CloudProvider, configHash, DnsProvider, VolumeProvider } from "@kumulo/core"
+import { CloudProvider, serverConfigHash, DnsProvider, VolumeProvider } from "@kumulo/core"
 import { namesToReplace } from "@kumulo/core"
 import type { ServerInfo, ServerSpec, TaggedResource } from "@kumulo/core"
 import type { K3sClusterConfig, K3sClusterConfigEncoded } from "../../src/cluster-config.ts"
@@ -79,7 +81,7 @@ const _recordingCloudProvider = (store: Store): Layer.Layer<CloudProvider> =>
             id: `srv-${store.events.length + 1}`,
             name: spec.name,
             ip: `10.0.0.${map.size + 1}`,
-            configHash: configHash(spec)
+            configHash: serverConfigHash(spec)
           }
 
           store.events.push({ kind: "create", name: spec.name })
@@ -121,8 +123,18 @@ const _FakeVolumes = Layer.succeed(VolumeProvider, {
 
 const _makeStore = Effect.map(Ref.make<ReadonlyMap<string, ServerInfo>>(new Map()), (servers): Store => ({ events: [], servers }))
 
-const _run = <A, E>(store: Store, effect: Effect.Effect<A, E, CloudProvider | Ssh | DnsProvider | VolumeProvider>) =>
+
+const _FakeFs = layerNoop({
+  readFileString: () => Effect.succeed("ssh-ed25519 AAAA test\n"),
+  writeFileString: () => Effect.void,
+  chmod: () => Effect.void,
+  rename: () => Effect.void,
+  remove: () => Effect.void
+})
+
+const _run = <A, E>(store: Store, effect: Effect.Effect<A, E, CloudProvider | Ssh | DnsProvider | VolumeProvider | FileSystem>) =>
   effect.pipe(
+    Effect.provide(_FakeFs),
     Effect.provide(_FakeSshLive),
     Effect.provide(_FakeVolumes),
     Effect.provide(_FakeDns),
@@ -153,7 +165,8 @@ describe("confirmed replace actually executes", () => {
 
       expect(store.events.filter((e) => e.name === WORKER_1).map((e) => e.kind)).toEqual(["delete", "create"])
       const after = yield* Ref.get(store.servers)
-      const expected = configHash(buildK3sNodes(drifted).find((n) => n.spec.name === WORKER_1)?.spec)
+      const node = buildK3sNodes(drifted).find((n) => n.spec.name === WORKER_1)
+      const expected = node === undefined ? undefined : serverConfigHash(node.spec)
       expect(after.get(WORKER_1)?.configHash).toBe(expected)
     }))
 

@@ -19,7 +19,7 @@ import {
 import { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/process"
 import { kumuloCli } from "./commands.ts"
 import { resolveSecretsFile, secretsConfigProvider } from "./secrets-file.ts"
-import { OpenStackEnvLive } from "./doctor-openstack/env.ts"
+import { OpenStackEnvLive } from "./openstack/env.ts"
 import { exitCodeFor } from "./exit-codes.ts"
 import { renderCliError } from "./errors.ts"
 import { MksEnv, MksEnvLive } from "./mks/env.ts"

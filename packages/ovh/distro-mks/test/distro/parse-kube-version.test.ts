@@ -8,7 +8,7 @@ it.effect("a plain semver config version maps onto OVH's major.minor enum", () =
     assert.strictEqual(yield* parseKubeVersion("v1.34.2"), "1.34")
   }))
 
-it.effect("fails with a MksError (not a silent drop) when OVH doesn't support the requested minor", () =>
+it.effect("fails with a ManagedDistroError (not a silent drop) when OVH doesn't support the requested minor", () =>
   Effect.gen(function*() {
     const failure = yield* parseKubeVersion("1.20.0").pipe(Effect.flip)
     assert.strictEqual(failure._tag, "ResourceConflict")

@@ -1,7 +1,7 @@
 import { pollUntil, ProvisioningTimeout } from "@kumulo/core"
 import { Effect } from "effect"
 import type { HcloudClient } from "../client/hcloud.ts"
-import { mapHcloudError, type HcloudError } from "./errors.ts"
+import { mapHcloudError, type HcloudError } from "../errors.ts"
 
 interface ActionState {
   readonly status: "running" | "success" | "error"

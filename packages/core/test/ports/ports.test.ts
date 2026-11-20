@@ -3,10 +3,17 @@ import { Effect, Layer, Redacted } from "effect"
 import { CloudProvider } from "../../src/ports/cloud-provider.ts"
 import { CredentialsSink } from "../../src/ports/credentials-sink.ts"
 import { ProviderProfile } from "../../src/ports/provider-profile.ts"
-import { Distro } from "../../src/ports/distro.ts"
 import { DnsProvider } from "../../src/ports/dns-provider.ts"
 import { ObjectStorageProvider } from "../../src/ports/object-storage-provider.ts"
+import type { ClusterConfigFields } from "../../src/domain/types.ts"
 import { VolumeProvider } from "../../src/ports/volume-provider.ts"
+
+const baseFields: ClusterConfigFields = {
+  distro: "k3s",
+  worker_pools: [],
+  addons: { cni: "flannel" },
+  auth: { region: "anywhere" }
+}
 
 describe("ports", () => {
   it.effect("CloudProvider resolves through a fake Layer", () =>
@@ -70,39 +77,14 @@ describe("ports", () => {
       const fake = Layer.succeed(
         ProviderProfile,
         ProviderProfile.of({
-          name: "ovh",
-          auth: { keystoneUrlPattern: "https://auth.cloud.ovh.net/v3", domainDefault: "Default" },
-          capabilities: { octavia: () => true, floatingIps: false, volumeTypes: ["classic"] },
-          defaults: { externalNetworkName: "Ext-Net", imageAliases: {}, dnsServers: [] },
           validate: () => Effect.void
         })
       )
 
-      const name = yield* Effect.provide(
-        ProviderProfile.pipe(Effect.map((profile) => profile.name)),
+      yield* Effect.provide(
+        ProviderProfile.pipe(Effect.flatMap((profile) => profile.validate(baseFields))),
         fake
       )
-
-      expect(name).toBe("ovh")
-    }))
-
-  it.effect("Distro resolves a managed implementation and branches on kind", () =>
-    Effect.gen(function*() {
-      const fake = Layer.succeed(
-        Distro,
-        Distro.of({
-          kind: "managed",
-          name: "ovh-mks",
-          ensureCluster: () => Effect.succeed({ id: "c-1", apiEndpoint: "https://api", status: "READY" }),
-          ensureNodePools: () => Effect.void,
-          fetchKubeconfig: () => Effect.succeed({ content: "kubeconfig" }),
-          upgrade: () => Effect.void,
-          delete: () => Effect.void
-        })
-      )
-
-      const kind = yield* Effect.provide(Distro.pipe(Effect.map((d) => d.kind)), fake)
-      expect(kind).toBe("managed")
     }))
 
   it.effect("DnsProvider resolves through a fake Layer", () =>

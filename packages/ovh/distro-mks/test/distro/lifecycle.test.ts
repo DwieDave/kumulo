@@ -1,4 +1,7 @@
 import { Effect } from "effect"
+import * as HttpClient from "effect/http/HttpClient"
+import * as HttpClientRequest from "effect/http/HttpClientRequest"
+import * as HttpClientResponse from "effect/http/HttpClientResponse"
 import { assert, it } from "@effect/vitest"
 import { CONFIG_HASH_KEY } from "@kumulo/core"
 import { mksPoolHash } from "../../src/distro/nodepool-diff.ts"
@@ -81,4 +84,14 @@ it.effect("ensureCluster is idempotent: re-running finds the existing cluster by
 
     assert.strictEqual(first.id, second.id)
     assert.strictEqual(server.clusters.size, 1)
+  }))
+
+it.effect("ensureCluster fails fast when the API returns a cluster without an id", () =>
+  Effect.gen(function*() {
+    const http = HttpClient.make((request) =>
+      Effect.succeed(HttpClientResponse.fromWeb(request, new Response(request.method === "POST" ? "{\"name\":\"prod-eu\"}" : "[]", { status: 200 })))
+    ).pipe(HttpClient.mapRequest(HttpClientRequest.prependUrl("https://fixture.invalid")))
+
+    const error = yield* Effect.flip(ensureCluster({ mks: makeMksClient(http), config: _config }))
+    assert.strictEqual(error._tag, "ProviderApiError")
   }))

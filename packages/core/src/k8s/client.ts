@@ -1,8 +1,10 @@
-import { Context, Effect, Option, Schema } from "effect"
-import type { HttpClient} from "effect/http";
-import { HttpClientRequest } from "effect/http"
-import { HttpTransportError, ResourceConflict, ResourceNotFound } from "../errors/tagged.ts"
-import type { K8sManifest } from "../domain/types.ts"
+import { Context, Effect, Option, Redacted, Schema } from "effect"
+import { HttpClient, HttpClientRequest } from "effect/http"
+import type { ConfigInvalid } from "../errors/tagged.ts"
+import { HttpTransportError, ResourceConflict, ResourceNotFound, ResponseDecodeError } from "../errors/tagged.ts"
+import type { K8sManifest, Kubeconfig } from "../domain/types.ts"
+import { parseKubeconfig } from "./kubeconfig.ts"
+import type { KubeconfigContext } from "./kubeconfig.ts"
 
 export interface ResourceRef {
   readonly path: string
@@ -11,7 +13,7 @@ export interface ResourceRef {
 
 export class K8sClient extends Context.Service<K8sClient, {
   readonly get: (ref: ResourceRef) => Effect.Effect<K8sManifest, ResourceNotFound | HttpTransportError>
-  readonly list: (ref: ResourceRef) => Effect.Effect<ReadonlyArray<K8sManifest>, HttpTransportError>
+  readonly list: (ref: ResourceRef) => Effect.Effect<ReadonlyArray<K8sManifest>, HttpTransportError | ResponseDecodeError>
   readonly apply: (
     ref: ResourceRef,
     manifest: K8sManifest
@@ -37,8 +39,6 @@ const K8sManifestSchema = Schema.StructWithRest(
 const K8sListSchema = Schema.Struct({
   items: Schema.optional(Schema.Array(Schema.Unknown))
 })
-
-const _emptyListing = { items: [] }
 
 export interface K8sClientOptions {
   readonly client: HttpClient.HttpClient
@@ -75,8 +75,9 @@ export const makeK8sClient = (options: K8sClientOptions): K8sClient["Service"] =
       if (response.status !== 200) return yield* Effect.fail(_transportError(`status ${response.status}`))
       const body = yield* response.json.pipe(Effect.mapError(_transportError))
 
+      // an undecodable list must fail: treating it as empty would let drain delete a node that still has pods
       const listing = yield* Schema.decodeUnknownEffect(K8sListSchema)(body).pipe(
-        Effect.orElseSucceed(() => _emptyListing)
+        Effect.mapError((error) => new ResponseDecodeError({ endpoint: ref.path, issue: error.issue }))
       )
 
       const decoded = yield* Effect.forEach(listing.items ?? [], (item) => Effect.option(_decodeManifest(item)))
@@ -136,5 +137,28 @@ export const makeK8sClient = (options: K8sClientOptions): K8sClient["Service"] =
 
   return { get, list, apply, delete: deleteResource, evict }
 }
+
+
+export interface K8sClientFromKubeconfigOptions<E, R> {
+  readonly kubeconfig: Kubeconfig
+  // Builds the transport for the parsed context. Core has no TLS dependency, so the caller
+  // applies the CA and client-cert material here; the bearer token is added by the builder.
+  readonly httpClientFor: (context: KubeconfigContext) => Effect.Effect<HttpClient.HttpClient, E, R>
+}
+
+// Parse a kubeconfig and build a `K8sClient` for its server: the shared replacement for the per-call-site copies in the CLI.
+export const k8sClientFromKubeconfig = <E, R>(
+  options: K8sClientFromKubeconfigOptions<E, R>
+): Effect.Effect<K8sClient["Service"], ConfigInvalid | E, R> =>
+  Effect.gen(function*() {
+    const context = yield* parseKubeconfig(options.kubeconfig.content)
+    const base = yield* options.httpClientFor(context)
+
+    const client = context.auth.kind === "token"
+      ? HttpClient.mapRequest(base, HttpClientRequest.bearerToken(Redacted.value(context.auth.token)))
+      : base
+
+    return makeK8sClient({ client, server: context.server })
+  })
 
 const _toYaml = (manifest: K8sManifest): string => JSON.stringify(manifest)

@@ -2,7 +2,7 @@ import { Effect, Layer, Predicate, Redacted, Schedule } from "effect"
 import { BucketNotEmpty, ObjectStorageProvider, ProviderApiError, ResourceNotFound } from "@kumulo/core"
 import type { BucketInfo, BucketRef, BucketSpec, ClusterTag, ObjectStorageError, S3Credentials } from "@kumulo/core"
 import type { Cloud_StorageContainer, Cloud_storage_VersioningStatusEnum, Cloud_user_User, Storage } from "../generated/client.ts"
-import { mapStorageError } from "./errors.ts"
+import { mapStorageError } from "../errors.ts"
 
 type Container = Cloud_StorageContainer
 
@@ -115,7 +115,7 @@ const _ensureUser = (
     return yield* _awaitUserReady({ storage, serviceName, userId: String(user.id), username })
   })
 
-// OVH only ever returns an S3 secret once (create response); a credential found here is an unrecoverable orphan — deleting and re-issuing is safe.
+// OVH returns an S3 secret only once (create response): a credential found here is an unrecoverable orphan, safe to delete after replacing.
 const _deleteOrphanedCredentials = (
   { storage, serviceName, userId, username, existing }: {
     readonly storage: Storage
@@ -190,12 +190,16 @@ export const ensureCredentials = (
         ctx
       })
 
-      if (existing.length > 0) yield* _deleteOrphanedCredentials({ storage, serviceName, userId, username, existing })
-
+      // create first: a failed create must leave the previous credentials in place
       const created = yield* mapStorageError({
         self: storage.postCloudProjectServiceNameUserUserIdS3Credentials(serviceName, userId, undefined),
         ctx
       })
+
+      // the secret is only returned once, so a failed cleanup must not discard it
+      yield* _deleteOrphanedCredentials({ storage, serviceName, userId, username, existing }).pipe(
+        Effect.catch((error) => Effect.logWarning(`left stale s3 credentials for ${username}: ${error._tag}`))
+      )
 
       return {
         user: username,

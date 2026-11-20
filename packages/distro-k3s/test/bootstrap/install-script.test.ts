@@ -96,3 +96,21 @@ describe("renderAgentInstallScript", () => {
     expect(script).toContain("--kubelet-arg=foo=bar")
   })
 })
+
+describe("kubeconfig mode", () => {
+  it("does not make the kubeconfig world-readable", () => {
+    const script = renderServerInstallScript({
+      k3sVersion: "v1.31.4+k3s1",
+      token: "tok",
+      isFirstMaster: true,
+      firstMasterIp: "10.0.0.1",
+      privateIp: "10.0.0.2",
+      publicIp: "203.0.113.2",
+      tlsSans: [],
+      addons: { cloudControllerManager: false, cni: "flannel" },
+      extraServerArgs: []
+    })
+
+    expect(script).not.toContain("write-kubeconfig-mode")
+  })
+})

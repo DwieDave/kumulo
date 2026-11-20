@@ -15,14 +15,6 @@ const _rawHttpClient = (handle: (request: HttpClientRequest.HttpClientRequest) =
 const _fixtureHttpClient = (fixture: { readonly status: number; readonly body: unknown }) =>
   _rawHttpClient(() => new Response(JSON.stringify(fixture.body), { status: fixture.status }))
 
-it.effect("resolves a zone by name (GET /zones/{id_or_name})", () =>
-  Effect.gen(function*() {
-    const httpClient = _fixtureHttpClient({ status: 200, body: { zone: { id: "42", name: "example.com" } } })
-    const client = makeHetznerDnsClient(httpClient)
-    const zone = yield* client.getZone("example.com")
-    assert.deepStrictEqual(zone, { id: "42", name: "example.com" })
-  }))
-
 it.effect("creates-or-replaces a rrset (PUT /zones/{id}/rrsets/{name}/{type})", () =>
   Effect.gen(function*() {
     let capturedPath: string | undefined
@@ -80,6 +72,16 @@ it.effect("surfaces a non-2xx status as a decodable error response", () =>
   Effect.gen(function*() {
     const httpClient = _fixtureHttpClient({ status: 404, body: { error: { message: "zone not found" } } })
     const client = makeHetznerDnsClient(httpClient)
-    const failure = yield* Effect.flip(client.getZone("missing.example.com"))
+    const failure = yield* Effect.flip(client.listRRsets("missing.example.com"))
     assert.strictEqual(failure._tag, "HttpClientError")
+  }))
+
+it.effect("fails with a stalled-pagination error instead of looping when next_page never advances", () =>
+  Effect.gen(function*() {
+    const httpClient = _rawHttpClient(() =>
+      new Response(JSON.stringify({ rrsets: [], meta: { pagination: { next_page: 1 } } }), { status: 200 })
+    )
+
+    const failure = yield* Effect.flip(makeHetznerDnsClient(httpClient).listRRsets("example.com"))
+    assert.strictEqual(failure._tag, "ProviderApiError")
   }))

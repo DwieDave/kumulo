@@ -72,7 +72,7 @@ describe("sopsCredentialsSinkLive", () => {
       expect(args).toContain("--input-type yaml")
       expect(args).toContain("--output-type yaml")
       expect(args).toContain("--age age1testrecipient")
-      expect(args).toContain("/dev/stdin")
+      expect(args).toContain("-- /dev/stdin")
 
       const stdin = readFileSync(join(captureDir, "stdin"), "utf8")
       expect(stdin).toContain("cluster: staging")

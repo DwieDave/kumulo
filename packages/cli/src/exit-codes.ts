@@ -24,14 +24,14 @@ const _codeByTag: Record<KumuloErrorTag, number> = {
   ProviderApiError: 17
 }
 
-const _distroNotWiredCode = 20
+const _doctorFailedCode = 20
 const _platformErrorCode = 21
 const _outputsInvalidCode = 22
 const _unmanagedBucketsCode = 14
 const _defaultCode = 1
 
 export const exitCodeFor = (error: CliExitError): number => {
-  if (Predicate.isTagged(error, "DistroNotWired")) return _distroNotWiredCode
+  if (Predicate.isTagged(error, "DoctorFailed")) return _doctorFailedCode
 
   if (Predicate.isTagged(error, "PlatformError")) return _platformErrorCode
 

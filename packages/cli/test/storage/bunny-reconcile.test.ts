@@ -4,7 +4,8 @@ import { layerNoop } from "effect/FileSystem"
 import { assert, describe, it } from "@effect/vitest"
 import { BucketNotEmpty, CredentialsSink, ObjectStorageProvider, PlanAction } from "@kumulo/core"
 import type { CredentialEntry } from "@kumulo/core"
-import { makeBunnyHttpClient, makeBunnyStorageClient, makeFakeBunnyStorage } from "@kumulo/bunny"
+import { makeBunnyHttpClient, makeBunnyStorageClient } from "@kumulo/bunny"
+import { makeFakeBunnyStorage } from "@kumulo/bunny/testing"
 import { bunnyObjectStorageProviderLive, outputsPath, parseOutputsYaml } from "@kumulo/storage-bunny"
 import { makeStorageClient } from "@kumulo/storage-ovh"
 import type { ClusterConfig } from "../../src/cluster-config.ts"
@@ -42,9 +43,9 @@ const _mks = decodeTestConfig({
   secrets: _sops
 })
 
-const _setup = (apiKey = "k") => {
+const _setup = (apiKey = "k") => Effect.gen(function*() {
   const fake = makeFakeBunnyStorage({ apiKey })
-  const http = makeBunnyHttpClient({ base: fake.httpClient, apiKey: Redacted.make(apiKey), baseUrl: "https://fake.invalid" })
+  const http = yield* makeBunnyHttpClient({ base: fake.httpClient, apiKey: Redacted.make(apiKey), baseUrl: "https://fake.invalid" })
   const storage = makeBunnyStorageClient(http)
   const store = new Map<string, string>()
   const writes: Array<ReadonlyArray<CredentialEntry>> = []
@@ -52,7 +53,12 @@ const _setup = (apiKey = "k") => {
   const fs = layerNoop({
     exists: (path) => Effect.succeed(store.has(path)),
     readFileString: (path) => Effect.succeed(store.get(path) ?? ""),
-    writeFileString: (path, data) => Effect.sync(() => void store.set(path, data))
+    writeFileString: (path, data) => Effect.sync(() => void store.set(path, data)),
+    rename: (from, to) =>
+      Effect.sync(() => {
+        store.set(to, store.get(from) ?? "")
+        store.delete(from)
+      })
   })
 
   const sink = Layer.succeed(CredentialsSink, CredentialsSink.of({ write: (entries) => Effect.sync(() => void writes.push(entries)) }))
@@ -68,7 +74,7 @@ const _setup = (apiKey = "k") => {
     )
 
   return { fake, storage, store, writes, base, fs, withProvider }
-}
+})
 
 const _ctx = { configDir: "." }
 
@@ -80,7 +86,7 @@ describe("bunny storage wiring", () => {
 
   it.effect("plan then apply creates zones, records outputs and writes per-bucket credentials", () =>
     Effect.gen(function*() {
-      const { base, fake, store, writes, storage } = _setup()
+      const { base, fake, store, writes, storage } = yield* _setup()
       const config = _k3s()
       const provider = bunnyObjectStorageProviderLive({ storage, owned: [] })
       const plan = yield* bucketPlanActions({ config, ..._ctx }).pipe(Effect.provide(Layer.merge(provider, base)))
@@ -112,7 +118,7 @@ describe("bunny storage wiring", () => {
 
   it.effect("second apply performs zero writes and no credential rewrite", () =>
     Effect.gen(function*() {
-      const { base, fake, writes, storage, store } = _setup()
+      const { base, fake, writes, storage, store } = yield* _setup()
       const config = _mks
       const first = bunnyObjectStorageProviderLive({ storage, owned: [] })
       yield* convergeBuckets({ config, ..._ctx }).pipe(Effect.provide(Layer.merge(first, base)))
@@ -125,7 +131,7 @@ describe("bunny storage wiring", () => {
 
   it.effect("status, delete plan and delete honour retain and empty zones", () =>
     Effect.gen(function*() {
-      const { base, fake, store, storage } = _setup()
+      const { base, fake, store, storage } = yield* _setup()
       const config = _k3s()
       const empty = bunnyObjectStorageProviderLive({ storage, owned: [] })
       yield* convergeBuckets({ config, ..._ctx }).pipe(Effect.provide(Layer.merge(empty, base)))
@@ -151,7 +157,7 @@ describe("bunny storage wiring", () => {
 
   it.effect("delete refuses a non-empty zone before any delete call", () =>
     Effect.gen(function*() {
-      const { fake, storage } = _setup()
+      const { fake, storage } = yield* _setup()
       const seeded = fake.seed({ name: "kumulo-data", filesStored: 3 })
       const owned = [{ id: seeded.Id, name: "kumulo-data", region: "DE", tier: "standard" as const, retain: false }]
       const live = bunnyObjectStorageProviderLive({ storage, owned })
@@ -163,7 +169,7 @@ describe("bunny storage wiring", () => {
 
   it.effect("storageProviderLayer builds the bunny provider from BUNNYNET_API_KEY", () =>
     Effect.gen(function*() {
-      const { fake, withProvider } = _setup("test-bunny-key")
+      const { fake, withProvider } = yield* _setup("test-bunny-key")
       fake.seed({ name: "kumulo-data" })
       const layer = yield* withProvider(_k3s())
       const provider = yield* Effect.provide(ObjectStorageProvider, layer)
@@ -172,7 +178,7 @@ describe("bunny storage wiring", () => {
     }).pipe(Effect.provide(fakeCredentials)))
   it.effect("writes outputs for the successful buckets when one ensureZone fails, then fails", () =>
     Effect.gen(function*() {
-      const { base, fake, store, storage } = _setup()
+      const { base, fake, store, storage } = yield* _setup()
       fake.seed({ name: "kumulo-keep" })
       const config = _k3s()
       const provider = bunnyObjectStorageProviderLive({ storage, owned: [] })

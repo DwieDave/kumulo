@@ -9,8 +9,7 @@
           "type": "string"
         },
         "name": {
-          "type": "string",
-          "minLength": 1
+          "type": "string"
         },
         "outputs": {
           "type": "object",
@@ -991,8 +990,7 @@
           "type": "string"
         },
         "name": {
-          "type": "string",
-          "minLength": 1
+          "type": "string"
         },
         "outputs": {
           "type": "object",
@@ -2625,6 +2623,40 @@
     {
       "if": {
         "properties": {
+          "object_storage": {
+            "properties": {
+              "module": {
+                "not": {
+                  "const": "none"
+                }
+              }
+            },
+            "required": [
+              "module"
+            ]
+          }
+        },
+        "required": [
+          "object_storage"
+        ]
+      },
+      "then": {
+        "properties": {
+          "secrets": {
+            "properties": {
+              "sink": {
+                "not": {
+                  "const": "none"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
           "provider": {
             "const": "hetzner"
           }
@@ -2729,6 +2761,68 @@
     {
       "if": {
         "properties": {
+          "cdn": {
+            "properties": {
+              "origin": {
+                "const": "ingress"
+              }
+            },
+            "required": [
+              "origin"
+            ]
+          }
+        },
+        "required": [
+          "cdn"
+        ]
+      },
+      "then": {
+        "properties": {
+          "distro": {
+            "const": "ovh-mks"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "ingress"
+        ]
+      },
+      "then": {
+        "required": [
+          "network"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "cdn": {
+            "properties": {
+              "origin": {
+                "const": "ingress"
+              }
+            },
+            "required": [
+              "origin"
+            ]
+          }
+        },
+        "required": [
+          "cdn"
+        ]
+      },
+      "then": {
+        "required": [
+          "ingress"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
           "provider": {
             "const": "hetzner"
           }
@@ -2746,17 +2840,6 @@
                   "hcloud",
                   "none"
                 ]
-              }
-            }
-          },
-          "addons": {
-            "properties": {
-              "csi": {
-                "not": {
-                  "required": [
-                    "default_volume_type"
-                  ]
-                }
               }
             }
           }
@@ -2779,64 +2862,28 @@
     {
       "if": {
         "properties": {
-          "object_storage": {
-            "properties": {
-              "module": {
-                "not": {
-                  "const": "none"
-                }
-              }
-            },
-            "required": [
-              "module"
-            ]
+          "provider": {
+            "const": "hetzner"
           }
         },
         "required": [
-          "object_storage"
+          "provider"
         ]
       },
       "then": {
         "properties": {
-          "secrets": {
+          "addons": {
             "properties": {
-              "sink": {
+              "csi": {
                 "not": {
-                  "const": "none"
+                  "required": [
+                    "default_volume_type"
+                  ]
                 }
               }
             }
           }
         }
-      }
-    },
-    {
-      "if": {
-        "properties": {
-          "cdn": {
-            "properties": {
-              "origin": {
-                "const": "ingress"
-              }
-            },
-            "required": [
-              "origin"
-            ]
-          }
-        },
-        "required": [
-          "cdn"
-        ]
-      },
-      "then": {
-        "properties": {
-          "distro": {
-            "const": "ovh-mks"
-          }
-        },
-        "required": [
-          "ingress"
-        ]
       }
     },
     {
@@ -2867,18 +2914,6 @@
             }
           }
         }
-      }
-    },
-    {
-      "if": {
-        "required": [
-          "ingress"
-        ]
-      },
-      "then": {
-        "required": [
-          "network"
-        ]
       }
     }
   ],

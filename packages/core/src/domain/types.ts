@@ -63,12 +63,16 @@ export interface ServerSpec {
   readonly flavor: string
   readonly image: string
   readonly tag: ClusterTag
+  // kumulo: provisioning inputs, not drift-relevant — providers must leave them out of configHash
+  readonly userData?: string | undefined
+  readonly networkId?: string | undefined
 }
 
 export interface ServerInfo {
   readonly id: string
   readonly name: string
   readonly ip: string
+  readonly role?: NodeRole | undefined
   readonly configHash?: string | undefined
 }
 

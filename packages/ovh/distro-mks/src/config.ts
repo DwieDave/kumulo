@@ -4,11 +4,9 @@ import {
   cidrRange,
   commonClusterFields,
   Dns,
-  isAuthMethodConsistentWithProvider,
-  isCdnApexRequiresBunnyDns,
-  isGodaddyApexNotCname,
-  isGodaddyTtlMinimum,
-  isSecretsRequiredForObjectStorage,
+  authMethodConsistentWithProvider,
+  crossFieldRule,
+  secretsRequiredForObjectStorage,
   OpenStackVolumes
 } from "@kumulo/core"
 
@@ -53,18 +51,31 @@ const isFlavorUnambiguous = Schema.makeFilter((config: { ingress?: { flavor?: un
     : undefined
 )
 
-const isIngressPlaceable = Schema.makeFilter((config: { network?: unknown; ingress?: unknown }) =>
-  config.ingress !== undefined && config.network === undefined
-    ? "ingress requires a network block: the load balancer's VIP must sit on the cluster's load_balancers_subnet"
-    : undefined
-)
+const ingressPlaceable = crossFieldRule({
+  check: (config: { network?: unknown; ingress?: unknown }) =>
+    config.ingress !== undefined && config.network === undefined
+      ? "ingress requires a network block: the load balancer's VIP must sit on the cluster's load_balancers_subnet"
+      : undefined,
+  jsonSchema: [{ if: { required: ["ingress"] }, then: { required: ["network"] } }]
+})
 
-const isCdnIngressOriginPlaceable = Schema.makeFilter(
-  (config: { cdn?: { module: string; origin?: unknown }; ingress?: unknown }) =>
+const cdnIngressOriginPlaceable = crossFieldRule({
+  check: (config: { cdn?: { module: string; origin?: unknown }; ingress?: unknown }) =>
     config.cdn?.origin === "ingress" && config.ingress === undefined
       ? "cdn.origin ingress requires an ingress block"
-      : undefined
-)
+      : undefined,
+  jsonSchema: [
+    {
+      if: {
+        properties: { cdn: { properties: { origin: { const: "ingress" } }, required: ["origin"] } },
+        required: ["cdn"]
+      },
+      then: { required: ["ingress"] }
+    }
+  ]
+})
+
+export const mksConfigRules = [ingressPlaceable, cdnIngressOriginPlaceable]
 
 export const MksClusterConfig = Schema.Struct({
   ...commonClusterFields,
@@ -76,7 +87,13 @@ export const MksClusterConfig = Schema.Struct({
   // landmine: network is create-time-only, adding/removing it on a live cluster is refused at plan time
   network: Schema.optionalKey(MksNetwork),
   ingress: Schema.optionalKey(MksIngress)
-}).check(isSecretsRequiredForObjectStorage, isAuthMethodConsistentWithProvider, isIngressPlaceable, isFlavorUnambiguous, isCdnApexRequiresBunnyDns, isCdnIngressOriginPlaceable, isGodaddyTtlMinimum, isGodaddyApexNotCname)
+}).check(
+  secretsRequiredForObjectStorage.filter,
+  authMethodConsistentWithProvider.filter,
+  ingressPlaceable.filter,
+  isFlavorUnambiguous,
+  cdnIngressOriginPlaceable.filter
+)
 
 export type MksClusterConfig = typeof MksClusterConfig.Type
 

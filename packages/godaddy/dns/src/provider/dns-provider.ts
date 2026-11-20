@@ -1,9 +1,8 @@
-import { Effect, Layer, Option } from "effect"
-import { DnsProvider, ProviderApiError, ResourceConflict, ownerTagOf, recordKind } from "@kumulo/core"
-import type { ClusterTag, DesiredRecord, DnsError } from "@kumulo/core"
-import type { DnsRecord, DnsRecordInput, GodaddyDnsClient } from "../client/godaddy-dns.ts"
-
-const _DEFAULT_TTL = 600
+import { Effect, Layer, Option, Schema } from "effect"
+import { DnsProvider, ProviderApiError, ownerTagOf, recordKind, reconcileDns } from "@kumulo/core"
+import type { DesiredRecord, DnsAdapter, DnsError, ZoneRecord } from "@kumulo/core"
+import { DnsRecordType } from "../client/godaddy-dns.ts"
+import type { DnsRecord, GodaddyDnsClient } from "../client/godaddy-dns.ts"
 
 const _APEX = "@"
 
@@ -30,87 +29,57 @@ const _canonicalIpv6 = (data: string): string => {
   return Option.match(url, { onNone: () => data.toLowerCase(), onSome: (u) => u.hostname })
 }
 
-const _canonicalData = ({ data, type }: { readonly type: DnsRecordInput["type"]; readonly data: string }): string => {
-  const bare = _unquote(data)
+const _canonical = ({ type, value }: { readonly type: string; readonly value: string }): string => {
+  const bare = _unquote(value)
 
   if (type === "CNAME") return bare.toLowerCase().replace(/\.$/, "")
 
   return type === "AAAA" ? _canonicalIpv6(bare) : bare
 }
 
-const _isManaged = (record: DnsRecord): boolean =>
-  record.type === "A" || record.type === "AAAA" || record.type === "CNAME"
+const _isRecordType = Schema.is(DnsRecordType)
 
-const _ownerTagOfRecord = (record: DnsRecord): string | undefined =>
-  record.type === "TXT" ? ownerTagOf(_unquote(record.data)) : undefined
+const _toZoneRecord = (record: DnsRecord): ZoneRecord => ({
+  id: record.recordId,
+  name: record.name,
+  type: record.type,
+  value: record.data,
+  ttl: record.ttl
+})
+
+const _unsupported = (record: ZoneRecord) =>
+  new ProviderApiError({
+    operation: "ensureRecords",
+    status: 422,
+    body: `unsupported record type ${record.type} at ${record.name}`
+  })
+
+const _toInput = (record: ZoneRecord) =>
+  _isRecordType(record.type)
+    ? Effect.succeed({ name: record.name, type: record.type, data: record.value, ttl: record.ttl })
+    : Effect.fail(_unsupported(record))
+
+const _requireId = (record: ZoneRecord): Effect.Effect<string, DnsError> =>
+  record.id === undefined
+    ? Effect.fail(new ProviderApiError({ operation: "godaddy record id", status: 0, body: `record ${record.name} has no id` }))
+    : Effect.succeed(record.id)
+
+export const makeGodaddyDnsAdapter = ({ dns, ttl }: GodaddyDnsProviderOptions): DnsAdapter => ({
+  ttl,
+  list: (zone) => Effect.map(dns.listRecords({ zone }), (records) => records.map(_toZoneRecord)),
+  create: ({ zone, record }) =>
+    Effect.flatMap(_toInput(record), (input) => Effect.asVoid(dns.createRecord({ zone, record: input }))),
+  update: ({ zone, existing, record }) =>
+    Effect.flatMap(
+      Effect.all([_requireId(existing), _toInput(record)]),
+      ([recordId, input]) => Effect.asVoid(dns.replaceRecord({ zone, recordId, record: input }))
+    ),
+  delete: ({ zone, record }) => Effect.flatMap(_requireId(record), (recordId) => dns.deleteRecord({ zone, recordId })),
+  normalize: _normalize,
+  canonical: _canonical
+})
 
 const _isOwnershipRecord = (record: DesiredRecord): boolean => ownerTagOf(record.target) !== undefined
-
-const _recordsAt = ({ snapshot, name, zone }: {
-  readonly snapshot: ReadonlyArray<DnsRecord>
-  readonly name: string
-  readonly zone: string
-}): ReadonlyArray<DnsRecord> => snapshot.filter((r) => _normalize({ name: r.name, zone }) === name)
-
-const _converge = Effect.fn("godaddy.converge")(function*(
-  { dns, zone, name, type, data, ttl, existing }: {
-    readonly dns: GodaddyDnsClient
-    readonly zone: string
-    readonly name: string
-    readonly type: DnsRecordInput["type"]
-    readonly data: string
-    readonly ttl: number
-    readonly existing: ReadonlyArray<DnsRecord>
-  }
-) {
-  const [keep, ...surplus] = existing
-  const record: DnsRecordInput = { name, type, data, ttl }
-
-  if (keep === undefined) {
-    yield* dns.createRecord({ zone, record })
-  } else if (_canonicalData({ type, data: keep.data }) !== _canonicalData({ type, data }) || keep.ttl !== ttl) {
-    yield* dns.replaceRecord({ zone, recordId: keep.recordId, record })
-  }
-
-  yield* Effect.forEach(surplus, (r) => dns.deleteRecord({ zone, recordId: r.recordId }), { discard: true })
-})
-
-const _ensureName = Effect.fn("godaddy.ensureName")(function*(
-  { dns, zone, name, target, ownerTarget, ttl, snapshot }: {
-    readonly dns: GodaddyDnsClient
-    readonly zone: string
-    readonly name: string
-    readonly target: string | undefined
-    readonly ownerTarget: string | undefined
-    readonly ttl: number
-    readonly snapshot: ReadonlyArray<DnsRecord>
-  }
-) {
-  const here = _recordsAt({ snapshot, name, zone })
-  const ownerTxts = here.filter((r) => _ownerTagOfRecord(r) !== undefined)
-  const managed = here.filter(_isManaged)
-  const foreignOwner = ownerTxts.some((r) => _unquote(r.data) !== ownerTarget)
-
-  if (foreignOwner || (target !== undefined && managed.length > 0 && ownerTxts.length === 0)) {
-    return yield* Effect.fail(new ResourceConflict({ kind: "dns-record", ref: `${zone}/${name}` }))
-  }
-
-  if (ownerTarget !== undefined) {
-    yield* _converge({ dns, zone, name, type: "TXT", data: ownerTarget, ttl, existing: ownerTxts })
-  }
-
-  if (target === undefined) return
-
-  const kind = recordKind(target)
-
-  yield* Effect.forEach(
-    managed.filter((r) => r.type !== kind),
-    (r) => dns.deleteRecord({ zone, recordId: r.recordId }),
-    { discard: true }
-  )
-
-  yield* _converge({ dns, zone, name, type: kind, data: target, ttl, existing: managed.filter((r) => r.type === kind) })
-})
 
 const _apexCname = ({ records, zone }: { readonly records: ReadonlyArray<DesiredRecord>; readonly zone: string }) =>
   records.find((r) => !_isOwnershipRecord(r) && _normalize({ name: r.name, zone }) === _APEX && recordKind(r.target) === "CNAME")
@@ -128,54 +97,13 @@ const _rejectApexCname = ({ records, zone }: { readonly records: ReadonlyArray<D
       )
   })
 
-export const makeGodaddyDnsProvider = ({ dns, ttl }: GodaddyDnsProviderOptions) => {
-  const effectiveTtl = ttl ?? _DEFAULT_TTL
+export const makeGodaddyDnsProvider = (options: GodaddyDnsProviderOptions) => {
+  const reconciler = reconcileDns(makeGodaddyDnsAdapter(options))
 
   return {
     ensureRecords: (zone: string, records: ReadonlyArray<DesiredRecord>): Effect.Effect<void, DnsError> =>
-      Effect.gen(function*() {
-        yield* _rejectApexCname({ records, zone })
-
-        const snapshot = yield* dns.listRecords({ zone })
-        const names = [...new Set(records.map((r) => _normalize({ name: r.name, zone })))]
-
-        for (const name of names) {
-          const at = records.filter((r) => _normalize({ name: r.name, zone }) === name)
-          const ownerTarget = at.find(_isOwnershipRecord)?.target
-          const targets = at.filter((r) => !_isOwnershipRecord(r))
-
-          if (targets.length > 1) {
-            return yield* Effect.fail(new ResourceConflict({ kind: "dns-record", ref: `${zone}/${name}` }))
-          }
-
-          const target = targets[0]?.target
-          yield* _ensureName({ dns, zone, name, target, ownerTarget, ttl: effectiveTtl, snapshot })
-        }
-      }),
-    removeClusterRecords: (zone: string, tag: ClusterTag): Effect.Effect<void, DnsError> =>
-      Effect.gen(function*() {
-        const snapshot = yield* dns.listRecords({ zone })
-
-        const owned = new Set(
-          snapshot.flatMap((r) => _ownerTagOfRecord(r) === tag ? [_normalize({ name: r.name, zone })] : [])
-        )
-
-        const contested = new Set(
-          snapshot.flatMap((r) => {
-            const owner = _ownerTagOfRecord(r)
-
-            return owner !== undefined && owner !== tag ? [_normalize({ name: r.name, zone })] : []
-          })
-        )
-
-        const doomed = snapshot.filter((r) => {
-          const name = _normalize({ name: r.name, zone })
-
-          return owned.has(name) && !contested.has(name) && (_isManaged(r) || _ownerTagOfRecord(r) === tag)
-        })
-
-        yield* Effect.forEach(doomed, (r) => dns.deleteRecord({ zone, recordId: r.recordId }), { discard: true })
-      })
+      Effect.andThen(_rejectApexCname({ records, zone }), reconciler.ensureRecords(zone, records)),
+    removeClusterRecords: reconciler.removeClusterRecords
   }
 }
 

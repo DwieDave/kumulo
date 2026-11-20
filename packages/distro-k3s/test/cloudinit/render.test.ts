@@ -11,6 +11,11 @@ describe("renderCloudInit", () => {
     expect(yaml).not.toContain("get.k3s.io")
   })
 
+  it("authorizes the key for the root user the SSH layer connects as", () => {
+    const yaml = renderCloudInit({ hostname: "m", sshPublicKey: "ssh-ed25519 KEY" })
+    expect(yaml).toContain("users:\n  - name: root\n    ssh_authorized_keys:\n      - ssh-ed25519 KEY")
+  })
+
   it("renders custom packages instead of the default set", () => {
     const yaml = renderCloudInit({ hostname: "worker-1", sshPublicKey: "key", packages: ["curl", "jq"] })
     expect(yaml).toContain("- curl")

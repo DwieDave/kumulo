@@ -3,7 +3,7 @@ import { AuthenticationFailed } from "@kumulo/core"
 import { CinderAuth } from "@kumulo/volumes-cinder"
 import type { CinderAuthError } from "@kumulo/volumes-cinder"
 import type { OpenStackError } from "@kumulo/openstack"
-import { OpenStackEnv } from "../doctor-openstack/env.ts"
+import { OpenStackEnv } from "../openstack/env.ts"
 
 const _toCinderAuthError = (cause: OpenStackError): CinderAuthError =>
   Predicate.isTagged(cause, "CapabilityMissing") || Predicate.isTagged(cause, "ProvisioningTimeout")

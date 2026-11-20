@@ -2,8 +2,10 @@ import {
   CapabilityMissing,
   CloudProvider,
   CONFIG_HASH_KEY,
-  configHash,
+  serverConfigHash,
+  paginate,
   pollUntil,
+  ProviderApiError,
   ProvisioningTimeout,
   ResourceConflict,
   ResourceNotFound,
@@ -15,6 +17,7 @@ import type {
   LbInfo,
   LbSpec,
   GatewayRef,
+  NodeRole,
   NetworkInfo,
   NetworkSpec,
   SecGroupInfo,
@@ -28,8 +31,8 @@ import type { HttpClient } from "effect/http"
 import * as Schema from "effect/Schema"
 import type { KeystoneAuth } from "../auth/keystone-auth.ts"
 import { glanceClient, neutronClient, novaClient, octaviaClient } from "../client/services.ts"
-import { toOpenStackError } from "./errors.ts"
-import type { OpenStackError } from "./errors.ts"
+import { toOpenStackError } from "../errors.ts"
+import type { OpenStackError } from "../errors.ts"
 import { decodeServerIp } from "./schemas.ts"
 import { SecurityGroupRuleInput } from "./security-group-rules.ts"
 
@@ -63,6 +66,8 @@ const _idOf = (entry: Named | undefined): string => entry?.id ?? ""
 
 const _MAX_PAGES = 100
 
+const _firstMarker: string | undefined = undefined
+
 const _markerOf = (href: string | undefined): string | undefined =>
   href === undefined ? undefined : new URL(href, "https://openstack.invalid").searchParams.get("marker") ?? undefined
 
@@ -70,20 +75,20 @@ type Page<A> = readonly [ReadonlyArray<A>, string | undefined]
 
 // every OpenStack list endpoint paginates, following it is the difference between "no such X" and "no such X on page one"
 const _paginate = <A>(page: (marker: string | undefined) => R<Page<A>>): R<ReadonlyArray<A>> =>
-  Effect.gen(function*() {
-    const collected: Array<A> = []
-    let marker: string | undefined = undefined
-
-    for (let index = 0; index < _MAX_PAGES; index += 1) {
-      const [items, next]: Page<A> = yield* page(marker)
-      collected.push(...items)
-      marker = _markerOf(next)
-
-      if (marker === undefined) break
-    }
-
-    return collected
-  })
+  paginate<string | undefined, Page<A>, A, OpenStackError, Deps>({
+    initial: _firstMarker,
+    fetch: page,
+    items: ([items]) => items,
+    next: ({ page: [, next] }) => _markerOf(next),
+    maxPages: _MAX_PAGES
+  }).pipe(
+    Effect.catchTags({
+      PaginationLimitExceeded: (error) =>
+        Effect.fail(new ProviderApiError({ operation: "list", status: 0, body: `more than ${error.maxPages} pages` })),
+      PaginationStalled: (error) =>
+        Effect.fail(new ProviderApiError({ operation: "list", status: 0, body: `marker ${error.cursor} did not advance` }))
+    })
+  )
 
 const _ignoreConflict = <A>(effect: R<A>): R<void> =>
   effect.pipe(Effect.asVoid, Effect.catchTag("ResourceConflict", () => Effect.void))
@@ -625,11 +630,37 @@ const _adoptExisting = (
     return { id, name, ip: detail.ip }
   })
 
+const ROLE_KEY = "kumulo-role"
+
+// kumulo: Nova rejects "auto" mixed with an explicit list, so attach the external network (SSH public address) plus the cluster one
+const _serverNetworks = (
+  { options, spec }: { readonly options: CloudProviderOptions; readonly spec: ServerSpec }
+) =>
+  spec.networkId === undefined
+    ? Effect.succeed("auto" as const)
+    : neutronClient(options.region).pipe(
+      Effect.flatMap(_externalNetworkId),
+      Effect.map((external) => [{ uuid: external }, { uuid: spec.networkId ?? "" }])
+    )
+
+interface UserDataField {
+  user_data?: string
+}
+
+const _userDataField = (spec: ServerSpec): UserDataField => {
+  const out: UserDataField = {}
+
+  if (spec.userData !== undefined) out.user_data = btoa(spec.userData)
+
+  return out
+}
+
 const _createServer = (
   { groupId, options, spec }: { readonly options: CloudProviderOptions; readonly spec: ServerSpec; readonly groupId: string }
 ): R<string> =>
   Effect.gen(function*() {
     const client = yield* novaClient(options.region)
+    const networks = yield* _serverNetworks({ options, spec })
 
     const created = yield* client.servers.serversPost({
       payload: {
@@ -638,9 +669,9 @@ const _createServer = (
           imageRef: spec.image,
           flavorRef: spec.flavor,
           tags: [spec.tag],
-          metadata: { [CONFIG_HASH_KEY]: configHash(spec) },
-          // "auto" keeps Nova's own network selection, pass the cluster network once ServerSpec names one
-          networks: "auto"
+          metadata: { [CONFIG_HASH_KEY]: serverConfigHash(spec), [ROLE_KEY]: spec.role },
+          networks,
+          ..._userDataField(spec)
         },
         "OS-SCH-HNT:scheduler_hints": { group: groupId }
       }
@@ -733,6 +764,7 @@ export const listClusterResources = ({ options }: { readonly options: CloudProvi
         id: _idOf(record),
         name: record.name ?? "",
         ip: "",
+        role: _roleOf(record.metadata?.[ROLE_KEY]),
         configHash: record.metadata?.[CONFIG_HASH_KEY]
       })),
       networks: network === undefined ? [] : [{ id: _idOf(network), cidr: "" }],
@@ -740,6 +772,9 @@ export const listClusterResources = ({ options }: { readonly options: CloudProvi
       loadBalancers: lb === undefined ? [] : [{ id: _idOf(lb), vip: lb.vip_address ?? "" }]
     }
   })
+
+const _roleOf = (value: string | undefined): NodeRole | undefined =>
+  value === "master" || value === "worker" ? value : undefined
 
 const _deleteServers = (options: CloudProviderOptions): R<void> =>
   Effect.gen(function*() {
@@ -907,7 +942,7 @@ export const resolveFlavor = ({ options, ref }: { readonly options: CloudProvide
   })
 
 
-export const CloudProviderLive = (options: CloudProviderOptions): Layer.Layer<CloudProvider, never, Deps> =>
+export const openstackCloudProviderLive = (options: CloudProviderOptions): Layer.Layer<CloudProvider, never, Deps> =>
   Layer.effect(
     CloudProvider,
     Effect.gen(function*() {

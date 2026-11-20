@@ -1,25 +1,25 @@
 import { Console, Effect } from "effect"
 import * as HttpClient from "effect/http/HttpClient"
-import { AuthenticationFailed, makeK8sClient, refFor, parseKubeconfig, waitForDeploymentAvailable } from "@kumulo/core"
+import { AuthenticationFailed, k8sClientFromKubeconfig, refFor, waitForDeploymentAvailable } from "@kumulo/core"
 import type { CloudProvider, ResourceRef, K8sClient } from "@kumulo/core"
 import type { K3sClusterConfig } from "../cluster-config.ts"
 import { refForPlan, systemUpgradeControllerAddon, renderMastersPlan, renderUpgradePlan, renderWorkersPlan } from "@kumulo/distro-k3s"
 import type { Ssh} from "@kumulo/distro-k3s";
-import { SshLive } from "@kumulo/distro-k3s"
 import { k3sDeletePlanActions, k3sPlanEffect } from "../k3s/plan.ts"
 import { providerFor } from "../provider/registry.ts"
+import { k3sSshLayer } from "../k3s/env.ts"
 import { k8sHttpClientLayer } from "../k3s/k8s-http-client.ts"
 import { applyK3s, deleteK3s, k3sStatus, kubeconfigK3s, kubeconfigK3sEffect } from "../k3s/reconcile.ts"
 import type { K3sError, K3sStatus } from "../k3s/reconcile.ts"
-import { OpenStackEnv, OS_ENV_KEYS, OS_SECRET_ENV_KEYS } from "../doctor-openstack/env.ts"
-import { keystoneAuthCheck } from "../doctor-openstack/keystone-auth.ts"
-import { microversionCheck, NOVA_MICROVERSION, probeMicroversion } from "../doctor-openstack/nova.ts"
-import { fetchNovaLimits, quotaHeadroomCheck } from "../doctor-openstack/quota.ts"
+import { OpenStackEnv, OS_ENV_KEYS, OS_SECRET_ENV_KEYS } from "../openstack/env.ts"
+import { keystoneAuthCheck } from "../doctor/openstack/keystone-auth.ts"
+import { microversionCheck, NOVA_MICROVERSION, probeMicroversion } from "../doctor/openstack/nova.ts"
+import { fetchNovaLimits, quotaHeadroomCheck } from "../doctor/openstack/quota.ts"
 import type { CinderAuth } from "@kumulo/volumes-cinder"
 import type { DistroEntry, DistroUpgradeArgs } from "./types.ts"
 
-const _statusK3s = Effect.fn(function*(config: K3sClusterConfig) {
-  const info: K3sStatus = yield* k3sStatus(config)
+const _statusK3s = Effect.fn(function*({ config, configDir }: { readonly config: K3sClusterConfig; readonly configDir: string }) {
+  const info: K3sStatus = yield* k3sStatus({ config, configDir })
 
   if (!info.exists) {
     yield* Console.log(`Cluster "${config.name}" does not exist.`)
@@ -54,17 +54,18 @@ const _k8sClientForUpgradeEffect = (
 ): Effect.Effect<K8sClient["Service"], K3sError, CloudProvider | Ssh | HttpClient.HttpClient> =>
   Effect.gen(function*() {
     const kubeconfig = yield* kubeconfigK3sEffect(config)
-    const parsed = yield* parseKubeconfig(kubeconfig.content)
-    const client = yield* Effect.provide(HttpClient.HttpClient, k8sHttpClientLayer({ auth: parsed.auth, caPem: parsed.caPem }))
 
-    return makeK8sClient({ client, server: parsed.server })
+    return yield* k8sClientFromKubeconfig({
+      kubeconfig,
+      httpClientFor: (ctx) => Effect.provide(HttpClient.HttpClient, k8sHttpClientLayer({ auth: ctx.auth, caPem: ctx.caPem }))
+    })
   })
 
 const _k8sClientForUpgrade = (
-  config: K3sClusterConfig
+  { config, configDir }: { readonly config: K3sClusterConfig; readonly configDir: string }
 ): Effect.Effect<K8sClient["Service"], K3sError, OpenStackEnv | CinderAuth | HttpClient.HttpClient> =>
   _k8sClientForUpgradeEffect(config).pipe(
-    Effect.provide(SshLive),
+    Effect.provide(k3sSshLayer({ configDir, clusterName: config.name })),
     Effect.provide(providerFor(config).cloudProviderLayer(config))
   )
 
@@ -111,15 +112,19 @@ export const applyK3sUpgradeWith = (
   })
 
 const _applyK3s = (
-  { config, workerConcurrency }: { readonly config: K3sClusterConfig; readonly workerConcurrency: number }
+  { config, configDir, workerConcurrency }: {
+    readonly config: K3sClusterConfig
+    readonly configDir: string
+    readonly workerConcurrency: number
+  }
 ) =>
   Effect.gen(function*() {
-    const k8sClient = yield* _k8sClientForUpgrade(config)
+    const k8sClient = yield* _k8sClientForUpgrade({ config, configDir })
     yield* applyK3sUpgradeWith({ config, workerConcurrency, k8sClient })
   })
 
-const _upgradeK3s = ({ config, dryRun, workerConcurrency }: DistroUpgradeArgs<K3sClusterConfig>) =>
-  dryRun ? _renderK3s({ config, workerConcurrency }) : _applyK3s({ config, workerConcurrency })
+const _upgradeK3s = ({ config, configDir, dryRun, workerConcurrency }: DistroUpgradeArgs<K3sClusterConfig>) =>
+  dryRun ? _renderK3s({ config, workerConcurrency }) : _applyK3s({ config, configDir, workerConcurrency })
 
 const _plannedInstanceCount = (config: K3sClusterConfig): number =>
   config.masters.count + config.worker_pools.reduce((total, pool) => total + pool.count, 0)

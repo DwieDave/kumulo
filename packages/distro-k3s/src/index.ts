@@ -9,7 +9,7 @@ export { K3sClusterConfig } from "./config.ts"
 
 export type { K3sClusterConfigEncoded } from "./config.ts"
 
-export { cloudInitReady, controlPlaneReady, Ssh, SshCommandError, sshReady, SshLive } from "./ssh/index.ts"
+export { cloudInitReady, controlPlaneReady, Ssh, SshCommandError, SshHostKeyMismatch, sshReady, SshLive, makeSshLive } from "./ssh/index.ts"
 
 export type { SshHost } from "./ssh/index.ts"
 
@@ -42,13 +42,9 @@ export { fetchKubeconfig, resolveServerUrl, rewriteKubeconfig, writeKubeconfigFi
 
 export type { FetchKubeconfigArgs, ResolveServerUrlArgs, RewriteKubeconfigArgs } from "./kubeconfig/index.ts"
 
-export { K3S_RELEASE_FIXTURE, makeReleaseCache } from "./releases/index.ts"
+export { bootstrapOrder, drainAndRemove, renderUserData } from "./distro/index.ts"
 
-export type { MakeReleaseCacheArgs, ReleaseCache } from "./releases/index.ts"
-
-export { bootstrapOrder, drainAndRemove, makeSelfManagedDistro } from "./distro/index.ts"
-
-export type { MakeSelfManagedDistroArgs } from "./distro/index.ts"
+export type { RenderUserDataArgs } from "./distro/index.ts"
 
 export { refForPlan, renderMastersPlan, renderUpgradePlan, renderWorkersPlan } from "./upgrade/index.ts"
 

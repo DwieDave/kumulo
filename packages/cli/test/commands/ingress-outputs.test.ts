@@ -17,7 +17,13 @@ const _store = () => {
     layer: layerNoop({
       exists: (path: string) => Effect.succeed(files.has(path)),
       writeFileString: (path: string, data: string) => Effect.sync(() => void files.set(path, data)),
-      readFileString: (path: string) => Effect.succeed(files.get(path) ?? "")
+      readFileString: (path: string) => Effect.succeed(files.get(path) ?? ""),
+      rename: (from: string, to: string) =>
+        Effect.sync(() => {
+          files.set(to, files.get(from) ?? "")
+          files.delete(from)
+        }),
+      remove: (path: string) => Effect.sync(() => void files.delete(path))
     })
   }
 }

@@ -61,7 +61,7 @@ module.exports = {
       severity: "error",
       from: { path: "^(packages|tools)/((?:bunny|ovh|upcloud|hetzner|godaddy|openstack)/[^/]+|[^/]+)/" },
       to: {
-        path: "^packages/(?:(?:bunny|ovh|upcloud|hetzner|godaddy|openstack)/)?[^/]+/src/(?!index\\.ts$).+",
+        path: "^packages/(?:(?:bunny|ovh|upcloud|hetzner|godaddy|openstack)/)?[^/]+/src/(?!index\\.ts$|testing/index\\.ts$).+",
         pathNot: "^packages/$2/",
       },
     },

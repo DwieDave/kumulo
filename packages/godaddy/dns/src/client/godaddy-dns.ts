@@ -1,13 +1,14 @@
 import { Effect, Option } from "effect"
 import * as Schema from "effect/Schema"
 import * as SchemaIssue from "effect/SchemaIssue"
+import { paginate } from "@kumulo/core"
 import type { DnsError } from "@kumulo/core"
 import type { SchemaError } from "effect/Schema"
 import type * as HttpClient from "effect/http/HttpClient"
 import * as HttpClientError from "effect/http/HttpClientError"
 import * as HttpClientRequest from "effect/http/HttpClientRequest"
 import * as HttpClientResponse from "effect/http/HttpClientResponse"
-import { toDnsError } from "../provider/errors.ts"
+import { toDnsError } from "../errors.ts"
 
 export const DnsRecordType = Schema.Literals(["A", "AAAA", "CNAME", "MX", "TXT", "NS", "SRV", "SOA", "CAA"])
 
@@ -91,37 +92,30 @@ const _schemaFailure = (message: string): SchemaError => new Schema.SchemaError(
 
 const _pageSearch = (href: string): string => new URL(href, "https://relative.invalid").search
 
-const _nextHref = (list: DnsRecordList): Option.Option<string> =>
-  Option.fromNullishOr(list.links?.find((link) => link.rel === "next")?.href)
+const _nextUrl = ({ list, zone }: { readonly list: DnsRecordList; readonly zone: string }): string | undefined => {
+  const href = list.links?.find((link) => link.rel === "next")?.href
 
-const _listFrom = (
-  { acc, httpClient, seen, url, zone }: {
-    readonly httpClient: HttpClient.HttpClient
-    readonly zone: string
-    readonly url: string
-    readonly acc: ReadonlyArray<DnsRecord>
-    readonly seen: ReadonlySet<string>
-  }
+  return href === undefined ? undefined : `${_recordsPath(zone)}${_pageSearch(href)}`
+}
+
+const _listAll = (
+  { httpClient, zone }: { readonly httpClient: HttpClient.HttpClient; readonly zone: string }
 ): Effect.Effect<ReadonlyArray<DnsRecord>, HttpClientError.HttpClientError | SchemaError> =>
-  httpClient.execute(HttpClientRequest.get(url)).pipe(
-    Effect.flatMap(HttpClientResponse.filterStatusOk),
-    Effect.flatMap((response) =>
-      HttpClientResponse.schemaBodyJson(DnsRecordList)(response).pipe(
-        Effect.flatMap((list) => {
-          const all = [...acc, ...list.items]
-
-          return Option.match(_nextHref(list), {
-            onNone: () => Effect.succeed(all),
-            onSome: (href) => {
-              const next = `${_recordsPath(zone)}${_pageSearch(href)}`
-
-              return seen.has(next) || seen.size >= _maxPages
-                ? Effect.fail(_schemaFailure(`pagination did not terminate at ${next}`))
-                : _listFrom({ httpClient, zone, url: next, acc: all, seen: new Set([...seen, next]) })
-            }
-          })
-        })
-      )
+  paginate({
+    initial: `${_recordsPath(zone)}?pageSize=${pageSize}`,
+    fetch: (url) =>
+      httpClient.execute(HttpClientRequest.get(url)).pipe(
+        Effect.flatMap(HttpClientResponse.filterStatusOk),
+        Effect.flatMap(HttpClientResponse.schemaBodyJson(DnsRecordList))
+      ),
+    items: (list) => list.items,
+    next: ({ page }) => _nextUrl({ list: page, zone }),
+    maxPages: _maxPages
+  }).pipe(
+    Effect.mapError((error) =>
+      error instanceof Schema.SchemaError || HttpClientError.isHttpClientError(error)
+        ? error
+        : _schemaFailure(`pagination did not terminate: ${error._tag}`)
     )
   )
 
@@ -154,11 +148,7 @@ const _decodeDeleted = (response: HttpClientResponse.HttpClientResponse): Effect
   response.status === 404 ? Effect.void : Effect.asVoid(HttpClientResponse.filterStatusOk(response))
 
 export const makeGodaddyDnsClient = (httpClient: HttpClient.HttpClient): GodaddyDnsClient => ({
-  listRecords: ({ zone }) => {
-    const first = `${_recordsPath(zone)}?pageSize=${pageSize}`
-
-    return _listFrom({ httpClient, zone, url: first, acc: [], seen: new Set([first]) }).pipe(_mapErrors({ zone, name: "*" }))
-  },
+  listRecords: ({ zone }) => _listAll({ httpClient, zone }).pipe(_mapErrors({ zone, name: "*" })),
   probe: ({ zone }) =>
     httpClient.execute(HttpClientRequest.get(`${_recordsPath(zone)}?pageSize=1`)).pipe(
       Effect.flatMap(HttpClientResponse.filterStatusOk),

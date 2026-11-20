@@ -1,9 +1,11 @@
 export const packageName = "@kumulo/dns-godaddy"
 
-export * from "./transport/http-client.ts"
+export { GodaddyHttpLive } from "./transport/http-client.ts"
 
-export * from "./client/godaddy-dns.ts"
+export { makeGodaddyDnsClient } from "./client/godaddy-dns.ts"
 
-export * from "./provider/errors.ts"
+export type { GodaddyDnsClient } from "./client/godaddy-dns.ts"
 
-export * from "./provider/dns-provider.ts"
+export { godaddyDnsProviderLive } from "./provider/dns-provider.ts"
+
+export { godaddyApexNotCname, godaddyConfigRules, godaddyTtlMinimum } from "./config.ts"

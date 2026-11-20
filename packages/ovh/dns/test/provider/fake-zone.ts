@@ -88,7 +88,7 @@ export const makeFakeZone = (zoneName: string) => {
   return {
     dns: ClientModule.makeDnsClient(httpClient),
     peek: (subDomain: string): StoredRecord | undefined =>
-      [...records.values()].find((r) => r.subDomain === subDomain && r.fieldType !== "TXT"),
+      [...records.values()].find((r) => r.subDomain === subDomain && ["A", "AAAA", "CNAME"].includes(r.fieldType)),
     peekAll: (): ReadonlyArray<StoredRecord> => [...records.values()],
     seed: (record: { fieldType: string; subDomain: string; target: string }): void => {
       const id = nextId++

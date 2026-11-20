@@ -12,7 +12,7 @@ import {
   uksPoolHash
 } from "@kumulo/distro-upcloud-uks"
 import type { ExistingNodeGroup, UksWorkerPoolConfig } from "@kumulo/distro-upcloud-uks"
-import type { MksError, ObjectStorageError, VolumeError } from "@kumulo/core"
+import type { ManagedDistroError, ObjectStorageError, VolumeError } from "@kumulo/core"
 import type { UpcloudUksClusterConfig } from "../cluster-config.ts"
 import { UpcloudEnv } from "./env.ts"
 import { bucketPlanActions, configuredUpcloudBuckets, lookupUpcloudBuckets, uksBucketRow } from "./storage.ts"
@@ -42,7 +42,7 @@ export interface UpcloudInventory {
 
 export const lookupUpcloudInventory = (
   config: UpcloudUksClusterConfig
-): Effect.Effect<UpcloudInventory, MksError | ObjectStorageError | VolumeError, UpcloudEnv> =>
+): Effect.Effect<UpcloudInventory, ManagedDistroError | ObjectStorageError | VolumeError, UpcloudEnv> =>
   Effect.gen(function*() {
     const { clients } = yield* UpcloudEnv
     const cluster = yield* findClusterByName({ clients, name: config.name })
@@ -144,7 +144,7 @@ export const buildUpcloudPlan = (
 
 export const upcloudDeletePlanActions = (
   config: UpcloudUksClusterConfig
-): Effect.Effect<Plan["actions"], MksError | ObjectStorageError | VolumeError, UpcloudEnv> =>
+): Effect.Effect<Plan["actions"], ManagedDistroError | ObjectStorageError | VolumeError, UpcloudEnv> =>
   Effect.gen(function*() {
     const inventory = yield* lookupUpcloudInventory(config)
 

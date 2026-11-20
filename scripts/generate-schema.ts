@@ -1,56 +1,7 @@
 #!/usr/bin/env bun
-import { writeFileSync } from "node:fs"
+import { readFileSync, writeFileSync } from "node:fs"
 import { JsonSchema, Schema } from "effect"
-import { authMethodsByProvider } from "@kumulo/core"
-import { ClusterConfig } from "../packages/cli/src/cluster-config.ts"
-
-// Mirrors the cross-field `.check(...)` filters in core's schema.ts — keep in sync.
-// kumulo: godaddy apex-CNAME rule is not expressible in JSON Schema (compares record.name to dns.zone).
-const crossFieldConstraints = [
-  ...Object.entries(authMethodsByProvider).map(([provider, methods]) => ({
-    if: { properties: { provider: { const: provider } }, required: ["provider"] },
-    then: { properties: { auth: { properties: { method: { enum: [...methods] } } } } }
-  })),
-  {
-    if: { properties: { provider: { const: "hetzner" } }, required: ["provider"] },
-    then: {
-      properties: {
-        volumes: { properties: { module: { enum: ["hcloud", "none"] } } },
-        addons: { properties: { csi: { not: { required: ["default_volume_type"] } } } }
-      }
-    },
-    else: {
-      properties: {
-        volumes: { properties: { module: { not: { const: "hcloud" } } } }
-      }
-    }
-  },
-  {
-    if: {
-      properties: { object_storage: { properties: { module: { not: { const: "none" } } }, required: ["module"] } },
-      required: ["object_storage"]
-    },
-    then: { properties: { secrets: { properties: { sink: { not: { const: "none" } } } } } }
-  },
-  {
-    if: {
-      properties: { cdn: { properties: { origin: { const: "ingress" } }, required: ["origin"] } },
-      required: ["cdn"]
-    },
-    then: { properties: { distro: { const: "ovh-mks" } }, required: ["ingress"] }
-  },
-  {
-    if: {
-      properties: { dns: { properties: { module: { const: "godaddy" } }, required: ["module"] } },
-      required: ["dns"]
-    },
-    then: { properties: { dns: { properties: { ttl: { minimum: 600 } } } } }
-  },
-  {
-    if: { required: ["ingress"] },
-    then: { required: ["network"] }
-  }
-]
+import { ClusterConfig, clusterConfigRules } from "../packages/cli/src/cluster-config.ts"
 
 const document = Schema.toJsonSchemaDocument(ClusterConfig)
 
@@ -65,10 +16,21 @@ const schema = {
   $schema: JsonSchema.META_SCHEMA_URI_DRAFT_2020_12,
   title: "kumulo cluster config",
   anyOf: variants.map((v) => ({ ...v, properties: { $schema: { type: "string" }, ...v.properties } })),
-  allOf: crossFieldConstraints,
+  // rules JSON Schema cannot express (e.g. the godaddy apex CNAME check) render as nothing
+  allOf: [...new Set(clusterConfigRules)].flatMap((rule) => rule.jsonSchema),
   $defs: document.definitions
 }
 
-writeFileSync(new URL("../kumulo.schema.json", import.meta.url), `${JSON.stringify(schema, null, 2)}\n`)
+const target = new URL("../kumulo.schema.json", import.meta.url)
+const rendered = `${JSON.stringify(schema, null, 2)}\n`
 
-console.log("wrote kumulo.schema.json")
+if (process.argv.includes("--check")) {
+  if (readFileSync(target, "utf8") === rendered) console.log("kumulo.schema.json is up to date")
+  else {
+    console.error("kumulo.schema.json is stale: run `bun run schema:generate` and commit")
+    process.exit(1)
+  }
+} else {
+  writeFileSync(target, rendered)
+  console.log("wrote kumulo.schema.json")
+}

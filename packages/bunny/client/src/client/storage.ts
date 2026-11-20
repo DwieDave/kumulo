@@ -4,6 +4,7 @@ import type * as HttpClient from "effect/http/HttpClient"
 import * as HttpClientRequest from "effect/http/HttpClientRequest"
 import * as HttpClientResponse from "effect/http/HttpClientResponse"
 import { toBunnyError } from "../errors.ts"
+import { bunnyPages } from "./pages.ts"
 import { bunnyRequester } from "./request.ts"
 import type { BunnyError } from "../errors.ts"
 import { BunnyStorageZoneTier, BunnyStorageZoneType } from "../enums.ts"
@@ -109,22 +110,19 @@ export const makeBunnyStorageClient = (httpClient: HttpClient.HttpClient): Bunny
     })
   }
 
-  const listFrom = (
-    { acc, page, perPage, search }: {
-      readonly page: number
-      readonly perPage: number
-      readonly search: string | undefined
-      readonly acc: ReadonlyArray<BunnyStorageZone>
-    }
-  ): Effect.Effect<ReadonlyArray<BunnyStorageZone>, BunnyError> =>
-    Effect.flatMap(listPage({ page, perPage, search }), (result) => {
-      const all = [...acc, ...result.Items]
-
-      return result.HasMoreItems ? listFrom({ page: page + 1, perPage, search, acc: all }) : Effect.succeed(all)
+  const listAll = (
+    { perPage, search }: { readonly perPage: number; readonly search: string | undefined }
+  ) =>
+    bunnyPages({
+      kind: _kind,
+      ref: "list",
+      items: (result) => result.Items,
+      hasMore: (result) => result.HasMoreItems,
+      fetch: (page: number) => listPage({ page, perPage, search })
     })
 
   return {
-    listZones: (input) => listFrom({ page: 1, perPage: input?.perPage ?? _defaultPerPage, search: input?.search, acc: [] }),
+    listZones: (input) => listAll({ perPage: input?.perPage ?? _defaultPerPage, search: input?.search }),
     getZone: (id) => send({ ref: String(id), schema: BunnyStorageZone, request: HttpClientRequest.get(`/storagezone/${id}`) }),
     createZone: (input) =>
       _withBody({

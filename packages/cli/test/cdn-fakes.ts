@@ -1,5 +1,6 @@
 import { Duration, Effect, Ref } from "effect"
-import { makeBunnyPullZoneClient, makeBunnyShieldClient, makeFakePullZoneServer, makeFakeShield } from "@kumulo/bunny"
+import { makeBunnyPullZoneClient, makeBunnyShieldClient } from "@kumulo/bunny"
+import { makeFakePullZoneServer, makeFakeShield } from "@kumulo/bunny/testing"
 import { emptyCdnOutputs, makeBunnyCdnProvider, makeBunnyShield } from "@kumulo/cdn-bunny"
 import type { CdnOutputsFile } from "@kumulo/cdn-bunny"
 import type { CdnHandle } from "../src/cdn.ts"

@@ -1,13 +1,13 @@
 // landmine: DELETE /node-groups/{name} is undocumented whether it drains pods first — assume bare delete
 import { Effect } from "effect"
-import { CONFIG_HASH_KEY } from "@kumulo/core"
+import { CONFIG_HASH_KEY, pollUntil } from "@kumulo/core"
 import { mapUpcloudError } from "@kumulo/upcloud"
 import type { NodeGroup } from "@kumulo/upcloud"
-import type { MksError } from "@kumulo/core"
+import type { ManagedDistroError } from "@kumulo/core"
 import type { ExistingNodeGroup, NodeGroupDiff } from "./nodegroup-diff.ts"
 import { diffNodePools, KUMULO_POOL_LABEL_KEY, uksPoolHash, uksPoolName } from "./nodegroup-diff.ts"
 import { KUMULO_OWNER_LABEL_KEY } from "./ownership.ts"
-import { pollUntil, pollUntilGone } from "./status.ts"
+import { pollUntilGone } from "./status.ts"
 import type { UksClients, UksClusterRef, UksLabel, UksWorkerPoolConfig } from "./types.ts"
 
 const _toExisting = (group: NodeGroup): ExistingNodeGroup => ({
@@ -56,7 +56,7 @@ const _createPayload = ({ pool, owner }: { readonly pool: UksWorkerPoolConfig; r
 
 const _create = (
   { clients, ref, pool, owner }: { readonly clients: UksClients; readonly ref: UksClusterRef; readonly pool: UksWorkerPoolConfig; readonly owner: string }
-): Effect.Effect<void, MksError> =>
+): Effect.Effect<void, ManagedDistroError> =>
   Effect.gen(function*() {
     yield* mapUpcloudError({
       self: clients.nodeGroups.create(ref.uuid, _createPayload({ pool, owner })),
@@ -67,7 +67,7 @@ const _create = (
 
 const _delete = (
   { clients, ref, name }: { readonly clients: UksClients; readonly ref: UksClusterRef; readonly name: string }
-): Effect.Effect<void, MksError> =>
+): Effect.Effect<void, ManagedDistroError> =>
   mapUpcloudError({ self: clients.nodeGroups.delete(ref.uuid, name), ctx: { kind: "uks-node-group", ref: name } }).pipe(
     Effect.andThen(
       pollUntilGone({
@@ -87,7 +87,7 @@ const _update = (
     readonly name: string
     readonly pool: UksWorkerPoolConfig
   }
-): Effect.Effect<void, MksError> =>
+): Effect.Effect<void, ManagedDistroError> =>
   mapUpcloudError({
     self: clients.nodeGroups.patch(ref.uuid, name, { count: pool.count }),
     ctx: { kind: "uks-node-group", ref: name }
@@ -95,7 +95,7 @@ const _update = (
 
 const _awaitRunning = (
   { clients, ref, name }: { readonly clients: UksClients; readonly ref: UksClusterRef; readonly name: string }
-): Effect.Effect<void, MksError> =>
+): Effect.Effect<void, ManagedDistroError> =>
   pollUntil({
     check: mapUpcloudError({ self: clients.nodeGroups.get(ref.uuid, name), ctx: { kind: "uks-node-group", ref: name } }),
     isDone: (group) => group.state === "running",
@@ -116,11 +116,11 @@ const _replace = (
     readonly pool: UksWorkerPoolConfig
     readonly owner: string
   }
-): Effect.Effect<void, MksError> => _create({ clients, ref, pool, owner }).pipe(Effect.andThen(_delete({ clients, ref, name: liveName })))
+): Effect.Effect<void, ManagedDistroError> => _create({ clients, ref, pool, owner }).pipe(Effect.andThen(_delete({ clients, ref, name: liveName })))
 
 const _applyDiff = (
   { clients, ref, diff, owner }: { readonly clients: UksClients; readonly ref: UksClusterRef; readonly diff: NodeGroupDiff; readonly owner: string }
-): Effect.Effect<void, MksError> =>
+): Effect.Effect<void, ManagedDistroError> =>
   Effect.gen(function*() {
     yield* Effect.forEach(diff.toCreate, (pool) => _create({ clients, ref, pool, owner }), { discard: true })
     yield* Effect.forEach(diff.toReplace, ({ liveName, pool }) => _replace({ clients, ref, liveName, pool, owner }), { discard: true })
@@ -130,7 +130,7 @@ const _applyDiff = (
 
 export const listNodeGroups = (
   { clients, ref }: { readonly clients: UksClients; readonly ref: UksClusterRef }
-): Effect.Effect<ReadonlyArray<ExistingNodeGroup>, MksError> =>
+): Effect.Effect<ReadonlyArray<ExistingNodeGroup>, ManagedDistroError> =>
   mapUpcloudError({ self: clients.nodeGroups.list(ref.uuid), ctx: { kind: "uks-node-group", ref: ref.uuid } }).pipe(
     Effect.map((groups) => groups.filter((group) => group.state !== "terminating").map(_toExisting))
   )
@@ -143,7 +143,7 @@ export const ensureNodePools = (
     readonly owner: string
     readonly replace?: ReadonlySet<string>
   }
-): Effect.Effect<void, MksError> =>
+): Effect.Effect<void, ManagedDistroError> =>
   Effect.gen(function*() {
     const existing = yield* listNodeGroups({ clients, ref })
     yield* _applyDiff({ clients, ref, diff: diffNodePools({ desired: pools, existing, replace }), owner })

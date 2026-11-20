@@ -18,4 +18,8 @@ for (const { dir } of workspacePackages().toSorted((a, b) => a.dir.localeCompare
 	if (status !== 0) failed = true
 }
 
+console.log("[typecheck] tsconfig.tools.json")
+
+if (spawnSync(TSC, ["--noEmit", "-p", "tsconfig.tools.json"], { cwd: REPO_ROOT, stdio: "inherit" }).status !== 0) failed = true
+
 process.exit(failed ? 1 : 0)

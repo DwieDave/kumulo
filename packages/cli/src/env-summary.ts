@@ -1,9 +1,10 @@
 import { Config, Effect, Option, Redacted } from "effect"
 import { AuthenticationFailed } from "@kumulo/core"
 import type { ClusterConfig } from "./cluster-config.ts"
+import { dnsRegistry } from "./dns/registry.ts"
 import { distroFor, distroRegistry } from "./distro/registry.ts"
 import { providerFor } from "./provider/registry.ts"
-import { OS_ENV_KEYS, OS_SECRET_ENV_KEYS } from "./doctor-openstack/env.ts"
+import { OS_ENV_KEYS, OS_SECRET_ENV_KEYS } from "./openstack/env.ts"
 import { dim } from "./present.ts"
 
 export interface ProviderSection {
@@ -14,14 +15,6 @@ export interface ProviderSection {
 const _ovhVars = distroRegistry["ovh-mks"].requiredEnvVars
 const _upcloudVars = distroRegistry["upcloud-uks"].requiredEnvVars
 const _osVars = [...OS_ENV_KEYS, ...OS_SECRET_ENV_KEYS] as const
-
-const _dnsVars: Record<ClusterConfig["dns"]["module"], ReadonlyArray<string>> = {
-  none: [],
-  ovh: ["OVH_CLIENT_ID", "OVH_CLIENT_SECRET"],
-  hetzner: ["HETZNER_DNS_TOKEN"],
-  bunny: ["BUNNYNET_API_KEY"],
-  godaddy: ["GODADDY_API_TOKEN"]
-}
 
 const _cdnVars: Record<"none" | "bunny", ReadonlyArray<string>> = {
   none: [],
@@ -56,7 +49,7 @@ export const providerSections = (config: ClusterConfig): ReadonlyArray<ProviderS
       vars: distroFor(config).requiredEnvVars
     }
     : { title: `provider: ${config.provider}`, vars: providerFor(config).requiredEnvVars },
-  ..._moduleSection(`dns: ${config.dns.module}`, _dnsVars[config.dns.module]),
+  ..._moduleSection(`dns: ${config.dns.module}`, dnsRegistry[config.dns.module].envVars),
   ..._moduleSection(`volumes: ${config.volumes.module}`, _volumesVars[config.volumes.module]),
   ..._moduleSection(`object_storage: ${config.object_storage.module}`, _objectStorageVars[config.object_storage.module]),
   ..._moduleSection(`cdn: ${_cdnModule(config)}`, _cdnVars[_cdnModule(config)])
@@ -82,7 +75,7 @@ const _requiredVars = (config: ClusterConfig): ReadonlyArray<string> => [
   ...new Set([
     ...(config.distro === "ovh-mks" ? distroRegistry["ovh-mks"].requiredEnvVars : []),
     ...(config.distro === "upcloud-uks" ? _upcloudVars : []),
-    ..._dnsVars[config.dns.module],
+    ...dnsRegistry[config.dns.module].envVars,
     ..._objectStorageVars[config.object_storage.module],
     ..._cdnVars[_cdnModule(config)]
   ])

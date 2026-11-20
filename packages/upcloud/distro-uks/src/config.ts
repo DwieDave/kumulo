@@ -4,12 +4,9 @@ import {
   Cidr,
   commonClusterFields,
   Dns,
-  isAuthMethodConsistentWithProvider,
-  isCdnApexRequiresBunnyDns,
-  isGodaddyApexNotCname,
-  isGodaddyTtlMinimum,
-  isCdnOriginUrlRequired,
-  isSecretsRequiredForObjectStorage,
+  authMethodConsistentWithProvider,
+  cdnOriginUrlRequired,
+  secretsRequiredForObjectStorage,
   NonNegativeInt,
   NoVolumes,
   ObjectStorage,
@@ -208,12 +205,9 @@ export const UpcloudUksClusterConfig = Schema.Struct({
   upgrade_strategy: Schema.optionalKey(UpgradeStrategy)
 }).check(
   isOutsideZoneUtilityRange,
-  isSecretsRequiredForObjectStorage,
-  isAuthMethodConsistentWithProvider,
-  isCdnApexRequiresBunnyDns,
-  isCdnOriginUrlRequired,
-  isGodaddyTtlMinimum,
-  isGodaddyApexNotCname
+  secretsRequiredForObjectStorage.filter,
+  authMethodConsistentWithProvider.filter,
+  cdnOriginUrlRequired.filter
 )
 
 export type UpcloudUksClusterConfig = typeof UpcloudUksClusterConfig.Type
