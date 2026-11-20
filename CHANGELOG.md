@@ -6,6 +6,14 @@ All notable changes to kumulo are documented here. Format:
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-20
+
+0.1.1 was the first npm publish, made by hand. Nine package names are new on
+npm with this release:
+`@kumulo/upcloud`, `@kumulo/distro-upcloud-uks`, `@kumulo/storage-upcloud`,
+`@kumulo/volumes-upcloud`, `@kumulo/dns-godaddy`, `@kumulo/bunny`,
+`@kumulo/dns-bunny`, `@kumulo/storage-bunny` and `@kumulo/cdn-bunny`.
+
 ### Changed (behaviour, migration notes)
 
 - Provider HTTP retries: bunny `PUT` (including DNS add-record) is no longer
@@ -29,26 +37,26 @@ All notable changes to kumulo are documented here. Format:
   change is a DNS record now writes it. Before, such an apply planned nothing
   and returned without touching the zone. DNS rows are always `Create`: the
   plan does not read the zone, apply converges it.
-- Known gap: the per-cluster SSH known_hosts layer (`k3sSshLayer`) is not yet
-  wired into the CLI.
 
 ### Added
 
-- Initial public release of the `kumulo` CLI and the `@kumulo/*` packages.
-- `k3s` distro: self-managed cluster on OVH Cloud instances (cloud-init,
-  SSH bootstrap, control-plane/worker install).
-- `ovh-mks` distro: OVH Managed Kubernetes clusters and node pools.
-- Cinder volumes and PVC rendering (`@kumulo/volumes-cinder`).
-- OVH object storage buckets (`@kumulo/storage-ovh`).
-- DNS records via OVH (`@kumulo/dns-ovh`) and Hetzner (`@kumulo/dns-hetzner`).
+- `upcloud-uks` distro: UpCloud Managed Kubernetes clusters with an SDN
+  network and router, node groups, block volumes (`@kumulo/volumes-upcloud`)
+  and Managed Object Storage buckets (`@kumulo/storage-upcloud`), on the
+  `@kumulo/upcloud` API client. Authenticated with `UPCLOUD_API_TOKEN`.
+- `kumulo doctor <config>` runs the distro's preflight checks against its
+  provider and exits 20 when one fails.
+- `@kumulo/bunny`: bunny.net Core and Shield API client with Schema-decoded responses and retry on 429/5xx.
+- `@kumulo/dns-bunny`: `dns.module: bunny`, including PullZone records for CDN apex hostnames and `target: cdn`.
+- `@kumulo/storage-bunny`: `object_storage.module: bunny`, one S3-type storage zone per bucket with per-bucket credentials in the sops sink.
+- `@kumulo/cdn-bunny` and a new `CdnProvider` core port: optional `cdn` block (`module: bunny`) with pull zone, hostnames, free certificates and Shield (WAF, DDoS, bot detection, rate limits, access lists). Ids are written to `<cluster>.cdn.yaml`.
+- `BUNNYNET_API_KEY` credential and the `examples/k3s-bunny.yaml` and `examples/ovh-mks-bunny-cdn.yaml` configs.
 - DNS records via GoDaddy (`@kumulo/dns-godaddy`, `dns.module: godaddy`),
   authenticated with a personal access token in `GODADDY_API_TOKEN`. TTL must
   be at least 600 and the apex cannot hold a CNAME.
 - Cluster addons: provider addons (OpenStack CCM and Cinder CSI, Hetzner CCM
   and CSI) live in the provider packages, Cilium and the system upgrade
   controller in `@kumulo/distro-k3s`; `@kumulo/core` applies them.
-- SOPS-encrypted credential sink (`@kumulo/secrets-sops`).
-- Single-file executable build (`bun run build:binary`).
 - `ovh-mks`: optional `network` block (`cidr`, `nodes_subnet`,
   `load_balancers_subnet`) — kumulo creates the private network and both
   subnets and hands their ids to MKS at cluster creation. Absent means the
@@ -97,6 +105,13 @@ All notable changes to kumulo are documented here. Format:
 - UpCloud teardown refuses to remove an object storage service that holds
   unmanaged buckets.
 
+### Removed
+
+- `@kumulo/addons`. Its addons moved into the provider and distro packages
+  (see `addons.csi` above).
+- The single-file executable build. The CLI runs on node from
+  `@kumulo/cli`'s `dist/main.mjs`.
+
 ### Fixed
 
 - UpCloud: no retry of POST on 5xx, request timeout, `Retry-After` honoured,
@@ -117,8 +132,18 @@ All notable changes to kumulo are documented here. Format:
   a second apply saw its own records as foreign and `delete` removed nothing.
 - DNS: a record whose target changed kind (`CNAME` ⇄ `A`) left the stale rrset
   in place beside the new one. Fixed in both the OVH and Hetzner adapters.
-- `@kumulo/bunny`: bunny.net Core and Shield API client with Schema-decoded responses and retry on 429/5xx.
-- `@kumulo/dns-bunny`: `dns.module: bunny`, including PullZone records for CDN apex hostnames and `target: cdn`.
-- `@kumulo/storage-bunny`: `object_storage.module: bunny`, one S3-type storage zone per bucket with per-bucket credentials in the sops sink.
-- `@kumulo/cdn-bunny` and a new `CdnProvider` core port: optional `cdn` block (`module: bunny`) with pull zone, hostnames, free certificates and Shield (WAF, DDoS, bot detection, rate limits, access lists). Ids are written to `<cluster>.cdn.yaml`.
-- `BUNNYNET_API_KEY` credential and the `examples/k3s-bunny.yaml` and `examples/ovh-mks-bunny-cdn.yaml` configs.
+
+## [0.1.1] - 2026-07-27
+
+### Added
+
+- Initial public release of the `kumulo` CLI and the `@kumulo/*` packages.
+- `k3s` distro: self-managed cluster on OVH Cloud instances (cloud-init,
+  SSH bootstrap, control-plane/worker install).
+- `ovh-mks` distro: OVH Managed Kubernetes clusters and node pools.
+- Cinder volumes and PVC rendering (`@kumulo/volumes-cinder`).
+- OVH object storage buckets (`@kumulo/storage-ovh`).
+- DNS records via OVH (`@kumulo/dns-ovh`) and Hetzner (`@kumulo/dns-hetzner`).
+- Cluster addons: Cilium, Cinder CSI, cloud-conf secret (`@kumulo/addons`).
+- SOPS-encrypted credential sink (`@kumulo/secrets-sops`).
+- Single-file executable build (`bun run build:binary`).

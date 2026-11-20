@@ -1,6 +1,6 @@
 {
   "name": "@kumulo/volumes-cinder",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "OpenStack Cinder volume integration for kumulo.",
   "license": "MIT",
   "author": "David Stahl-Gruber",
