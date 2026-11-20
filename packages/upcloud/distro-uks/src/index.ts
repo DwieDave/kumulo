@@ -1,7 +1,7 @@
 /** @kumulo/distro-upcloud-uks — package barrel. */
 export const packageName = "@kumulo/distro-upcloud-uks"
 
-export { UpcloudUksClusterConfig, UpcloudVolumeTier, UpgradeStrategy } from "./config.ts"
+export { UpcloudUksClusterConfig, UpcloudVolumeTier, UpgradeStrategy, uksConfigRules } from "./config.ts"
 
 export type { UpcloudUksClusterConfigEncoded } from "./config.ts"
 

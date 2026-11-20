@@ -2823,6 +2823,37 @@
     {
       "if": {
         "properties": {
+          "distro": {
+            "const": "upcloud-uks"
+          }
+        },
+        "required": [
+          "distro"
+        ]
+      },
+      "then": {
+        "properties": {
+          "dns": {
+            "properties": {
+              "records": {
+                "items": {
+                  "properties": {
+                    "target": {
+                      "not": {
+                        "const": "ingress"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
           "provider": {
             "const": "hetzner"
           }

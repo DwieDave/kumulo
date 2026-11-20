@@ -6,6 +6,7 @@ import {
   Dns,
   authMethodConsistentWithProvider,
   cdnOriginUrlRequired,
+  crossFieldRule,
   secretsRequiredForObjectStorage,
   NonNegativeInt,
   NoVolumes,
@@ -179,6 +180,30 @@ export const UpgradeStrategy = Schema.Literals(["manual", "rolling-update"])
 
 export type UpgradeStrategy = typeof UpgradeStrategy.Type
 
+// UKS load balancers come from in-cluster Services, so kumulo has no address for "ingress";
+// unchecked, the record would be written as a CNAME to the literal word "ingress"
+const ingressTargetUnavailable = crossFieldRule({
+  check: (config: { dns: { module: string; records?: ReadonlyArray<{ target: string }> } }) => {
+    const index = config.dns.records?.findIndex((record) => record.target === "ingress") ?? -1
+
+    return index === -1
+      ? undefined
+      : `dns.records[${index}].target: ingress is not available on distro upcloud-uks, which has no kumulo-managed ingress load balancer; use a literal IP or hostname, such as the address of the cluster's LoadBalancer Service`
+  },
+  jsonSchema: [
+    {
+      if: { properties: { distro: { const: "upcloud-uks" } }, required: ["distro"] },
+      then: {
+        properties: {
+          dns: { properties: { records: { items: { properties: { target: { not: { const: "ingress" } } } } } } }
+        }
+      }
+    }
+  ]
+})
+
+export const uksConfigRules = [ingressTargetUnavailable]
+
 // zone, plan, control_plane_ip_filter, storage_encryption are creation-time only; drift on them is refused at plan time, not encoded in the schema.
 export const UpcloudUksClusterConfig = Schema.Struct({
   ...commonClusterFields,
@@ -207,7 +232,8 @@ export const UpcloudUksClusterConfig = Schema.Struct({
   isOutsideZoneUtilityRange,
   secretsRequiredForObjectStorage.filter,
   authMethodConsistentWithProvider.filter,
-  cdnOriginUrlRequired.filter
+  cdnOriginUrlRequired.filter,
+  ingressTargetUnavailable.filter
 )
 
 export type UpcloudUksClusterConfig = typeof UpcloudUksClusterConfig.Type

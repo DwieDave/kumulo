@@ -11,7 +11,7 @@ import { cdnApexRequiresBunnyDns } from "@kumulo/cdn-bunny"
 import { godaddyApexNotCname, godaddyTtlMinimum } from "@kumulo/dns-godaddy"
 import { K3sClusterConfig } from "@kumulo/distro-k3s"
 import { MksClusterConfig, mksConfigRules } from "@kumulo/distro-ovh-mks"
-import { UpcloudUksClusterConfig } from "@kumulo/distro-upcloud-uks"
+import { UpcloudUksClusterConfig, uksConfigRules } from "@kumulo/distro-upcloud-uks"
 import { hetznerCsiHasNoVolumeType, hetznerVolumesConsistentWithProvider } from "@kumulo/hetzner"
 
 // Rules that name a specific provider live with that provider; the CLI is the only place
@@ -31,6 +31,7 @@ export const clusterConfigRules = [
   authMethodConsistentWithProvider,
   cdnOriginUrlRequired,
   ...mksConfigRules,
+  ...uksConfigRules,
   ..._providerRules
 ]
 

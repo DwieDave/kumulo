@@ -20,6 +20,10 @@ All notable changes to kumulo are documented here. Format:
   temp file and rename, mode 0600.
 - The bunny `CdnOutputsInvalid` error tag is now `OutputsInvalid`.
 - Kubeconfig bearer tokens are `Redacted` in `@kumulo/core`.
+- `upcloud-uks`: a DNS record with `target: ingress` fails to decode, naming
+  `dns.records[i].target`. It used to be written as a CNAME to the literal word
+  `ingress`. Use a literal IP or hostname (the address of the cluster's
+  LoadBalancer Service).
 - Known gap: the per-cluster SSH known_hosts layer (`k3sSshLayer`) is not yet
   wired into the CLI.
 
