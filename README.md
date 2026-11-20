@@ -264,3 +264,4 @@ bun run ci   # typecheck + test + dep-lint + oxlint + codegen:check, everything 
 
 See [`.docs/workflows/kumulo-cli-build/`](.docs/workflows/kumulo-cli-build)
 for the design, requirements, and task-by-task build log.
+[`RELEASING.md`](RELEASING.md) lists the steps to publish a version to npm.
