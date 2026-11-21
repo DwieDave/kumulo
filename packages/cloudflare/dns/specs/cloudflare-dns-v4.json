@@ -1,0 +1,3242 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "description": "Welcome to Cloudflare's API documentation site. We are experimenting with an updated version of our API documentation - check out [developers.cloudflare.com/api-next/](https://developers.cloudflare.com/api-next/) to test out the new experience.\n\nTo get started using Cloudflare's products and services via the API, refer to [how to interact with Cloudflare](https://developers.cloudflare.com/fundamentals/basic-tasks/interact-with-cloudflare/), which covers using tools like [Terraform](https://developers.cloudflare.com/terraform/#cloudflare-terraform) and the [official SDKs](https://developers.cloudflare.com/fundamentals/api/reference/sdks/) to maintain your Cloudflare resources.\n\nUsing the Cloudflare API requires authentication so that Cloudflare knows who is making requests and what permissions you have. Create an API token to grant access to the API to perform actions. You can also authenticate with [API keys](https://developers.cloudflare.com/fundamentals/api/get-started/keys/), but these keys have [several limitations](https://developers.cloudflare.com/fundamentals/api/get-started/keys/#limitations) that make them less secure than API tokens. Whenever possible, use API tokens to interact with the Cloudflare API.\n\nTo create an API token, from the Cloudflare dashboard, go to My Profile > API Tokens and select Create Token. For more information on how to create and troubleshoot API tokens, refer to\nour [API fundamentals](https://developers.cloudflare.com/fundamentals/api/).\n\nFor information regarding rate limits, refer to our [API Rate Limits](https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/platform/limits/#api-rate-limits).\n\nTotally new to Cloudflare? [Start here](https://developers.cloudflare.com/fundamentals/get-started/).",
+    "license": {
+      "name": "BSD-3-Clause",
+      "url": "https://opensource.org/licenses/BSD-3-Clause"
+    },
+    "title": "Cloudflare API",
+    "version": "4.0.0"
+  },
+  "servers": [
+    {
+      "description": "Client API",
+      "url": "https://api.cloudflare.com/client/v4"
+    }
+  ],
+  "paths": {
+    "/zones": {
+      "get": {
+        "operationId": "zones-get",
+        "summary": "List Zones",
+        "description": "Lists, searches, sorts, and filters your zones. Listing zones across more than 500 accounts\nis currently not allowed.\n",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "schema": {
+              "description": "A domain name. Optional filter operators can be provided to extend refine the search:\n  * `equal` (default)\n  * `not_equal`\n  * `starts_with`\n  * `ends_with`\n  * `contains`\n  * `starts_with_case_sensitive`\n  * `ends_with_case_sensitive`\n  * `contains_case_sensitive`\n",
+              "type": "string",
+              "maxLength": 253
+            },
+            "examples": {
+              "Basic Query": {
+                "summary": "Simple Query",
+                "value": "example.com"
+              },
+              "Contains Query": {
+                "summary": "Contains Query",
+                "value": "contains:.org"
+              },
+              "Ends With Query": {
+                "summary": "Ends With Query",
+                "value": "ends_with:arpa"
+              },
+              "Starts With Query": {
+                "summary": "Starts With Query",
+                "value": "starts_with:dev"
+              }
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "description": "Specify a zone status to filter by.",
+              "type": "string",
+              "enum": [
+                "initializing",
+                "pending",
+                "active",
+                "moved"
+              ]
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "description": "Zone types to filter by. Multiple types can be specified as a comma-separated list (e.g., ?type=full,partial,secondary). When this parameter is not provided, zones with type \"internal\" are excluded from the results.",
+              "type": "array",
+              "items": {
+                "enum": [
+                  "full",
+                  "partial",
+                  "secondary",
+                  "internal"
+                ],
+                "type": "string"
+              }
+            },
+            "explode": false,
+            "style": "form"
+          },
+          {
+            "name": "account.id",
+            "in": "query",
+            "schema": {
+              "description": "Filter by an account ID.",
+              "type": "string"
+            }
+          },
+          {
+            "name": "account.name",
+            "in": "query",
+            "schema": {
+              "description": "An account Name. Optional filter operators can be provided to extend refine the search:\n  * `equal` (default)\n  * `not_equal`\n  * `starts_with`\n  * `ends_with`\n  * `contains`\n  * `starts_with_case_sensitive`\n  * `ends_with_case_sensitive`\n  * `contains_case_sensitive`\n",
+              "type": "string",
+              "maxLength": 253
+            },
+            "examples": {
+              "Basic Query": {
+                "summary": "Simple Query",
+                "value": "Dev Account"
+              },
+              "Contains Query": {
+                "summary": "Contains Query",
+                "value": "contains:Test"
+              }
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "description": "Page number of paginated results.",
+              "type": "number",
+              "default": 1,
+              "minimum": 1
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "schema": {
+              "description": "Number of zones per page.",
+              "type": "number",
+              "default": 20,
+              "maximum": 50,
+              "minimum": 5
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "schema": {
+              "description": "Field to order zones by.",
+              "type": "string",
+              "example": "status",
+              "enum": [
+                "name",
+                "status",
+                "account.id",
+                "account.name",
+                "plan.id"
+              ]
+            }
+          },
+          {
+            "name": "direction",
+            "in": "query",
+            "schema": {
+              "description": "Direction to order zones.",
+              "type": "string",
+              "example": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          },
+          {
+            "name": "match",
+            "in": "query",
+            "schema": {
+              "description": "Whether to match all search requirements or at least one (any).",
+              "type": "string",
+              "default": "all",
+              "enum": [
+                "any",
+                "all"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List Zones response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/zones_api-response-common"
+                    },
+                    {
+                      "properties": {
+                        "result_info": {
+                          "$ref": "#/components/schemas/zones_result_info"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "result": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/zones_zone"
+                          }
+                        }
+                      },
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "List Zones response failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/zones_api-response-common-failure"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "api_token": []
+          },
+          {
+            "api_email": [],
+            "api_key": []
+          }
+        ],
+        "tags": [
+          "Zone"
+        ],
+        "x-api-token-group": [
+          "Zone Zone Read"
+        ],
+        "x-fern-availability": "generally-available",
+        "x-fern-sdk-group-name": "zones",
+        "x-fern-sdk-method-name": "list",
+        "x-forge-availability": "generally-available",
+        "x-forge-group-name": "zones",
+        "x-forge-method-name": "list"
+      }
+    },
+    "/zones/{zone_id}/dns_records": {
+      "get": {
+        "operationId": "dns-records-for-a-zone-list-dns-records",
+        "summary": "List DNS Records",
+        "description": "List, search, sort, and filter a zone's DNS records. Requests with `cursor` or `prev_cursor` use cursor pagination. Otherwise, the endpoint uses offset pagination. To start cursor pagination, set `cursor` to an empty value, then pass `result_info.cursor` from the previous response to request the next page. Cursor-paginated responses do not include `page`, `total_count`, or `total_pages`. Cursor tokens are opaque and can vary in length. Pass them back unchanged and do not assume a fixed length.\n",
+        "parameters": [
+          {
+            "name": "zone_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/dns-records_identifier"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_name"
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_name_exact"
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_name_contains"
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_name_startswith"
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_name_endswith"
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_type"
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_content"
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_content_exact"
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_content_contains"
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_content_startswith"
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_content_endswith"
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_proxied"
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_match"
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_comment"
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_comment_present"
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_comment_absent"
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_comment_exact"
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_comment_contains"
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_comment_startswith"
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_comment_endswith"
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_tag"
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_tag_present"
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_tag_absent"
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_tag_exact"
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_tag_contains"
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_tag_startswith"
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_tag_endswith"
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_search"
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_tag_match"
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_cursor"
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_prev_cursor"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/dns-records_page"
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/dns-records_per_page"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/dns-records_order"
+            }
+          },
+          {
+            "name": "direction",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/dns-records_direction"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_include_shadow_metadata"
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_shadowed_by_name"
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_shadowing_name"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List DNS Records response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/dns-records_dns_response_list"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "List DNS Records response failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/dns-records_api-response-common-failure"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "api_token": []
+          },
+          {
+            "api_email": [],
+            "api_key": []
+          }
+        ],
+        "tags": [
+          "DNS Records for a Zone"
+        ],
+        "x-api-token-group": [
+          "DNS Read",
+          "DNS Write"
+        ],
+        "x-cfPermissionsRequired": {
+          "enum": [
+            "#dns_records:read"
+          ]
+        },
+        "x-cfPlanAvailability": {
+          "business": true,
+          "enterprise": true,
+          "free": true,
+          "pro": true
+        },
+        "x-fern-availability": "generally-available",
+        "x-fern-sdk-group-name": "dns.records",
+        "x-fern-sdk-method-name": "list",
+        "x-forge-availability": "generally-available",
+        "x-forge-group-name": "dns.records",
+        "x-forge-method-name": "list",
+        "x-forge-oauth-scopes": [
+          "dns.read",
+          "dns.write"
+        ],
+        "x-forge-params": {
+          "zone_id": {
+            "description": "Zone ID"
+          }
+        }
+      },
+      "post": {
+        "operationId": "dns-records-for-a-zone-create-dns-record",
+        "summary": "Create DNS Record",
+        "description": "Create a new DNS record for a zone.\n\nNotes:\n- A/AAAA records cannot exist on the same name as CNAME records.\n- NS records cannot exist on the same name as any other record type.\n- Domain names are always represented in Punycode, even if Unicode\n  characters were used when creating the record.\n",
+        "parameters": [
+          {
+            "name": "zone_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/dns-records_identifier"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_include_shadow_metadata"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/dns-records_dns-record-post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Create DNS Record response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/dns-records_dns_response_single"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Create DNS Record response failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/dns-records_api-response-common-failure"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "api_token": []
+          },
+          {
+            "api_email": [],
+            "api_key": []
+          }
+        ],
+        "tags": [
+          "DNS Records for a Zone"
+        ],
+        "x-api-token-group": [
+          "DNS Write"
+        ],
+        "x-cfPermissionsRequired": {
+          "enum": [
+            "#dns_records:edit"
+          ]
+        },
+        "x-cfPlanAvailability": {
+          "business": true,
+          "enterprise": true,
+          "free": true,
+          "pro": true
+        },
+        "x-fern-availability": "generally-available",
+        "x-fern-sdk-group-name": "dns.records",
+        "x-fern-sdk-method-name": "create",
+        "x-forge-availability": "generally-available",
+        "x-forge-group-name": "dns.records",
+        "x-forge-method-name": "create",
+        "x-forge-oauth-scopes": [
+          "dns.write"
+        ]
+      }
+    },
+    "/zones/{zone_id}/dns_records/{dns_record_id}": {
+      "put": {
+        "operationId": "dns-records-for-a-zone-update-dns-record",
+        "summary": "Overwrite DNS Record",
+        "description": "Overwrite an existing DNS record.\n\nNotes:\n- A/AAAA records cannot exist on the same name as CNAME records.\n- NS records cannot exist on the same name as any other record type.\n- Domain names are always represented in Punycode, even if Unicode\n  characters were used when creating the record.\n",
+        "parameters": [
+          {
+            "name": "dns_record_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/dns-records_identifier"
+            }
+          },
+          {
+            "name": "zone_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/dns-records_identifier"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/dns-records_include_shadow_metadata"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/dns-records_dns-record-post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Update DNS Record response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/dns-records_dns_response_single"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Update DNS Record response failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/dns-records_api-response-common-failure"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "api_token": []
+          },
+          {
+            "api_email": [],
+            "api_key": []
+          }
+        ],
+        "tags": [
+          "DNS Records for a Zone"
+        ],
+        "x-api-token-group": [
+          "DNS Write"
+        ],
+        "x-cfPermissionsRequired": {
+          "enum": [
+            "#dns_records:edit"
+          ]
+        },
+        "x-cfPlanAvailability": {
+          "business": true,
+          "enterprise": true,
+          "free": true,
+          "pro": true
+        },
+        "x-fern-availability": "generally-available",
+        "x-fern-sdk-group-name": "dns.records",
+        "x-fern-sdk-method-name": "update",
+        "x-forge-availability": "generally-available",
+        "x-forge-group-name": "dns.records",
+        "x-forge-method-name": "update",
+        "x-forge-oauth-scopes": [
+          "dns.write"
+        ]
+      },
+      "delete": {
+        "operationId": "dns-records-for-a-zone-delete-dns-record",
+        "summary": "Delete DNS Record",
+        "description": "Permanently removes a DNS record from the zone.",
+        "parameters": [
+          {
+            "name": "dns_record_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/dns-records_identifier"
+            }
+          },
+          {
+            "name": "zone_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/dns-records_identifier"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Delete DNS Record response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "result": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "$ref": "#/components/schemas/dns-records_identifier"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Delete DNS Record response failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "allOf": [
+                    {
+                      "properties": {
+                        "result": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "$ref": "#/components/schemas/dns-records_identifier"
+                            }
+                          }
+                        }
+                      },
+                      "type": "object"
+                    },
+                    {
+                      "$ref": "#/components/schemas/dns-records_api-response-common-failure"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "api_token": []
+          },
+          {
+            "api_email": [],
+            "api_key": []
+          }
+        ],
+        "tags": [
+          "DNS Records for a Zone"
+        ],
+        "x-api-token-group": [
+          "DNS Write"
+        ],
+        "x-cfPermissionsRequired": {
+          "enum": [
+            "#dns_records:edit"
+          ]
+        },
+        "x-cfPlanAvailability": {
+          "business": true,
+          "enterprise": true,
+          "free": true,
+          "pro": true
+        },
+        "x-fern-availability": "generally-available",
+        "x-fern-sdk-group-name": "dns.records",
+        "x-fern-sdk-method-name": "delete",
+        "x-forge-availability": "generally-available",
+        "x-forge-group-name": "dns.records",
+        "x-forge-method-name": "delete",
+        "x-forge-oauth-scopes": [
+          "dns.write"
+        ]
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "dns-records_comment": {
+        "in": "query",
+        "name": "comment",
+        "schema": {
+          "description": "Exact value of the DNS record comment. This is a convenience alias for `comment.exact`.\n",
+          "type": "string",
+          "example": "Hello, world"
+        }
+      },
+      "dns-records_comment_absent": {
+        "in": "query",
+        "name": "comment.absent",
+        "schema": {
+          "description": "If this parameter is present, only records *without* a comment are returned.\n",
+          "type": "string"
+        }
+      },
+      "dns-records_comment_contains": {
+        "in": "query",
+        "name": "comment.contains",
+        "schema": {
+          "description": "Substring of the DNS record comment. Comment filters are case-insensitive.\n",
+          "type": "string",
+          "example": "ello, worl"
+        }
+      },
+      "dns-records_comment_endswith": {
+        "in": "query",
+        "name": "comment.endswith",
+        "schema": {
+          "description": "Suffix of the DNS record comment. Comment filters are case-insensitive.\n",
+          "type": "string",
+          "example": "o, world"
+        }
+      },
+      "dns-records_comment_exact": {
+        "in": "query",
+        "name": "comment.exact",
+        "schema": {
+          "description": "Exact value of the DNS record comment. Comment filters are case-insensitive.\n",
+          "type": "string",
+          "example": "Hello, world"
+        }
+      },
+      "dns-records_comment_present": {
+        "in": "query",
+        "name": "comment.present",
+        "schema": {
+          "description": "If this parameter is present, only records *with* a comment are returned.\n",
+          "type": "string"
+        }
+      },
+      "dns-records_comment_startswith": {
+        "in": "query",
+        "name": "comment.startswith",
+        "schema": {
+          "description": "Prefix of the DNS record comment. Comment filters are case-insensitive.\n",
+          "type": "string",
+          "example": "Hello, w"
+        }
+      },
+      "dns-records_content": {
+        "in": "query",
+        "name": "content",
+        "schema": {
+          "description": "Exact value of the DNS record content. This is a convenience alias for `content.exact`.\n",
+          "type": "string",
+          "example": "127.0.0.1"
+        }
+      },
+      "dns-records_content_contains": {
+        "in": "query",
+        "name": "content.contains",
+        "schema": {
+          "description": "Substring of the DNS record content. Content filters are case-insensitive.\n",
+          "type": "string",
+          "example": "7.0.0."
+        }
+      },
+      "dns-records_content_endswith": {
+        "in": "query",
+        "name": "content.endswith",
+        "schema": {
+          "description": "Suffix of the DNS record content. Content filters are case-insensitive.\n",
+          "type": "string",
+          "example": ".0.1"
+        }
+      },
+      "dns-records_content_exact": {
+        "in": "query",
+        "name": "content.exact",
+        "schema": {
+          "description": "Exact value of the DNS record content. Content filters are case-insensitive.\n",
+          "type": "string",
+          "example": "127.0.0.1"
+        }
+      },
+      "dns-records_content_startswith": {
+        "in": "query",
+        "name": "content.startswith",
+        "schema": {
+          "description": "Prefix of the DNS record content. Content filters are case-insensitive.\n",
+          "type": "string",
+          "example": "127.0."
+        }
+      },
+      "dns-records_cursor": {
+        "allowEmptyValue": true,
+        "in": "query",
+        "name": "cursor",
+        "schema": {
+          "description": "Opaque token for cursor pagination, obtained from `result_info.cursor` of the previous response. An empty value starts cursor pagination. Mutually exclusive with `page` and `prev_cursor`.\n",
+          "type": "string",
+          "maxLength": 4096
+        }
+      },
+      "dns-records_include_shadow_metadata": {
+        "in": "query",
+        "name": "include_shadow_metadata",
+        "schema": {
+          "description": "Whether to include shadow metadata in the `meta` field of each record in the response. See [Shadowed records](https://developers.cloudflare.com/dns/manage-dns-records/reference/shadowed-records).\n",
+          "type": "boolean",
+          "example": true,
+          "default": false
+        }
+      },
+      "dns-records_match": {
+        "in": "query",
+        "name": "match",
+        "schema": {
+          "$ref": "#/components/schemas/dns-records_match"
+        }
+      },
+      "dns-records_name": {
+        "in": "query",
+        "name": "name",
+        "schema": {
+          "description": "Exact value of the DNS record name. This is a convenience alias for `name.exact`.\n",
+          "type": "string",
+          "example": "www.example.com"
+        }
+      },
+      "dns-records_name_contains": {
+        "in": "query",
+        "name": "name.contains",
+        "schema": {
+          "description": "Substring of the DNS record name. Name filters are case-insensitive.\n",
+          "type": "string",
+          "example": "w.example."
+        }
+      },
+      "dns-records_name_endswith": {
+        "in": "query",
+        "name": "name.endswith",
+        "schema": {
+          "description": "Suffix of the DNS record name. Name filters are case-insensitive.\n",
+          "type": "string",
+          "example": ".example.com"
+        }
+      },
+      "dns-records_name_exact": {
+        "in": "query",
+        "name": "name.exact",
+        "schema": {
+          "description": "Exact value of the DNS record name. Name filters are case-insensitive.\n",
+          "type": "string",
+          "example": "www.example.com"
+        }
+      },
+      "dns-records_name_startswith": {
+        "in": "query",
+        "name": "name.startswith",
+        "schema": {
+          "description": "Prefix of the DNS record name. Name filters are case-insensitive.\n",
+          "type": "string",
+          "example": "www.example"
+        }
+      },
+      "dns-records_prev_cursor": {
+        "in": "query",
+        "name": "prev_cursor",
+        "schema": {
+          "description": "Opaque token for requesting the previous page in cursor pagination, obtained from `result_info.prev_cursor` of the previous response. Mutually exclusive with `page` and `cursor`.\n",
+          "type": "string",
+          "maxLength": 4096,
+          "minLength": 1
+        }
+      },
+      "dns-records_proxied": {
+        "in": "query",
+        "name": "proxied",
+        "schema": {
+          "$ref": "#/components/schemas/dns-records_proxied"
+        }
+      },
+      "dns-records_search": {
+        "in": "query",
+        "name": "search",
+        "schema": {
+          "$ref": "#/components/schemas/dns-records_search"
+        }
+      },
+      "dns-records_shadowed_by_name": {
+        "in": "query",
+        "name": "shadowed_by_name",
+        "schema": {
+          "description": "Filters the response to records at or below the specified NS delegation name. NS, DS, and NSEC records at the delegation name are excluded because they are not shadowed by that delegation. Those record types are included only when they exist below the delegation. The value must be a non-apex subdomain of the zone. Requires `include_shadow_metadata=true`. See [Shadowed records](https://developers.cloudflare.com/dns/manage-dns-records/reference/shadowed-records).\n",
+          "type": "string",
+          "example": "sub.example.com"
+        }
+      },
+      "dns-records_shadowing_name": {
+        "in": "query",
+        "name": "shadowing_name",
+        "schema": {
+          "description": "Returns NS records that shadow the given name, searching at the name itself and each of its ancestor names within the zone, excluding the zone apex. The value must be a subdomain of the zone; the zone apex is not accepted. See [Shadowed records](https://developers.cloudflare.com/dns/manage-dns-records/reference/shadowed-records).\n",
+          "type": "string",
+          "example": "www.sub.example.com"
+        }
+      },
+      "dns-records_tag": {
+        "in": "query",
+        "name": "tag",
+        "schema": {
+          "description": "Condition on the DNS record tag.\n\nParameter values can be of the form `<tag-name>:<tag-value>` to search for an exact `name:value` pair, or just `<tag-name>` to search for records with a specific tag name regardless of its value.\n\nThis is a convenience shorthand for the more powerful `tag.<predicate>` parameters.\nExamples:\n- `tag=important` is equivalent to `tag.present=important`\n- `tag=team:DNS` is equivalent to `tag.exact=team:DNS`\n",
+          "type": "string",
+          "example": "team:DNS"
+        }
+      },
+      "dns-records_tag_absent": {
+        "in": "query",
+        "name": "tag.absent",
+        "schema": {
+          "description": "Name of a tag which must *not* be present on the DNS record. Tag filters are case-insensitive.\n",
+          "type": "string",
+          "example": "important"
+        }
+      },
+      "dns-records_tag_contains": {
+        "in": "query",
+        "name": "tag.contains",
+        "schema": {
+          "description": "A tag and value, of the form `<tag-name>:<tag-value>`. The API will only return DNS records that have a tag named `<tag-name>` whose value contains `<tag-value>`. Tag filters are case-insensitive.\n",
+          "type": "string",
+          "example": "greeting:ello, worl"
+        }
+      },
+      "dns-records_tag_endswith": {
+        "in": "query",
+        "name": "tag.endswith",
+        "schema": {
+          "description": "A tag and value, of the form `<tag-name>:<tag-value>`. The API will only return DNS records that have a tag named `<tag-name>` whose value ends with `<tag-value>`. Tag filters are case-insensitive.\n",
+          "type": "string",
+          "example": "greeting:o, world"
+        }
+      },
+      "dns-records_tag_exact": {
+        "in": "query",
+        "name": "tag.exact",
+        "schema": {
+          "description": "A tag and value, of the form `<tag-name>:<tag-value>`. The API will only return DNS records that have a tag named `<tag-name>` whose value is `<tag-value>`. Tag filters are case-insensitive.\n",
+          "type": "string",
+          "example": "greeting:Hello, world"
+        }
+      },
+      "dns-records_tag_match": {
+        "in": "query",
+        "name": "tag_match",
+        "schema": {
+          "$ref": "#/components/schemas/dns-records_tag_match"
+        }
+      },
+      "dns-records_tag_present": {
+        "in": "query",
+        "name": "tag.present",
+        "schema": {
+          "description": "Name of a tag which must be present on the DNS record. Tag filters are case-insensitive.\n",
+          "type": "string",
+          "example": "important"
+        }
+      },
+      "dns-records_tag_startswith": {
+        "in": "query",
+        "name": "tag.startswith",
+        "schema": {
+          "description": "A tag and value, of the form `<tag-name>:<tag-value>`. The API will only return DNS records that have a tag named `<tag-name>` whose value starts with `<tag-value>`. Tag filters are case-insensitive.\n",
+          "type": "string",
+          "example": "greeting:Hello, w"
+        }
+      },
+      "dns-records_type": {
+        "in": "query",
+        "name": "type",
+        "schema": {
+          "$ref": "#/components/schemas/dns-records_type"
+        }
+      }
+    },
+    "schemas": {
+      "dns-records_AAAARecord": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/dns-records_dns-record-shared-fields"
+          },
+          {
+            "properties": {
+              "content": {
+                "description": "A valid IPv6 address.",
+                "example": "2400:cb00:2049::1",
+                "format": "ipv6",
+                "type": "string",
+                "x-auditable": true
+              },
+              "private_routing": {
+                "description": "Enables private network routing to the origin.",
+                "type": "boolean",
+                "example": true,
+                "default": false,
+                "x-auditable": true
+              },
+              "type": {
+                "description": "Record type.",
+                "type": "string",
+                "example": "AAAA",
+                "enum": [
+                  "AAAA"
+                ],
+                "x-auditable": true
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "title": "AAAA Record"
+      },
+      "dns-records_ARecord": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/dns-records_dns-record-shared-fields"
+          },
+          {
+            "properties": {
+              "content": {
+                "description": "A valid IPv4 address.",
+                "example": "198.51.100.4",
+                "format": "ipv4",
+                "type": "string",
+                "x-auditable": true
+              },
+              "private_routing": {
+                "description": "Enables private network routing to the origin.",
+                "type": "boolean",
+                "example": true,
+                "default": false,
+                "x-auditable": true
+              },
+              "type": {
+                "description": "Record type.",
+                "type": "string",
+                "example": "A",
+                "enum": [
+                  "A"
+                ],
+                "x-auditable": true
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "title": "A Record"
+      },
+      "dns-records_CAARecord": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/dns-records_dns-record-shared-fields"
+          },
+          {
+            "properties": {
+              "content": {
+                "description": "Formatted CAA content. See 'data' to set CAA properties.",
+                "readOnly": true,
+                "type": "string",
+                "x-auditable": true
+              },
+              "data": {
+                "description": "Components of a CAA record.",
+                "type": "object",
+                "properties": {
+                  "flags": {
+                    "description": "Flags for the CAA record.",
+                    "type": "number",
+                    "example": 1,
+                    "maximum": 255,
+                    "minimum": 0,
+                    "x-auditable": true
+                  },
+                  "tag": {
+                    "description": "Name of the property controlled by this record (e.g.: issue, issuewild, iodef).",
+                    "type": "string",
+                    "example": "issue",
+                    "x-auditable": true
+                  },
+                  "value": {
+                    "description": "Value of the record. This field's semantics depend on the chosen tag.",
+                    "type": "string",
+                    "x-auditable": true
+                  }
+                }
+              },
+              "type": {
+                "description": "Record type.",
+                "type": "string",
+                "example": "CAA",
+                "enum": [
+                  "CAA"
+                ],
+                "x-auditable": true
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "title": "CAA Record"
+      },
+      "dns-records_CERTRecord": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/dns-records_dns-record-shared-fields"
+          },
+          {
+            "properties": {
+              "content": {
+                "description": "Formatted CERT content. See 'data' to set CERT properties.",
+                "readOnly": true,
+                "type": "string",
+                "x-auditable": true
+              },
+              "data": {
+                "description": "Components of a CERT record.",
+                "type": "object",
+                "properties": {
+                  "algorithm": {
+                    "description": "Algorithm.",
+                    "type": "number",
+                    "example": 8,
+                    "maximum": 255,
+                    "minimum": 0,
+                    "x-auditable": true
+                  },
+                  "certificate": {
+                    "description": "Certificate.",
+                    "type": "string",
+                    "x-auditable": true
+                  },
+                  "key_tag": {
+                    "description": "Key Tag.",
+                    "type": "number",
+                    "example": 1,
+                    "maximum": 65535,
+                    "minimum": 0,
+                    "x-auditable": true
+                  },
+                  "type": {
+                    "description": "Type.",
+                    "type": "number",
+                    "example": 9,
+                    "maximum": 65535,
+                    "minimum": 0,
+                    "x-auditable": true
+                  }
+                }
+              },
+              "type": {
+                "description": "Record type.",
+                "type": "string",
+                "example": "CERT",
+                "enum": [
+                  "CERT"
+                ],
+                "x-auditable": true
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "title": "CERT Record"
+      },
+      "dns-records_CNAMERecord": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/dns-records_dns-record-shared-fields"
+          },
+          {
+            "properties": {
+              "content": {
+                "description": "A valid hostname. Must not match the record's name.",
+                "type": "string",
+                "x-auditable": true
+              },
+              "settings": {
+                "type": "object",
+                "properties": {
+                  "flatten_cname": {
+                    "description": "If enabled, causes the CNAME record to be resolved externally and the resulting address records (e.g., A and AAAA) to be returned instead of the CNAME record itself. This setting is unavailable for proxied records, since they are always flattened.",
+                    "type": "boolean",
+                    "example": true,
+                    "default": false,
+                    "x-auditable": true
+                  }
+                }
+              },
+              "type": {
+                "description": "Record type.",
+                "type": "string",
+                "example": "CNAME",
+                "enum": [
+                  "CNAME"
+                ],
+                "x-auditable": true
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "title": "CNAME Record"
+      },
+      "dns-records_DNSKEYRecord": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/dns-records_dns-record-shared-fields"
+          },
+          {
+            "properties": {
+              "content": {
+                "description": "Formatted DNSKEY content. See 'data' to set DNSKEY properties.",
+                "readOnly": true,
+                "type": "string",
+                "x-auditable": true
+              },
+              "data": {
+                "description": "Components of a DNSKEY record.",
+                "type": "object",
+                "properties": {
+                  "algorithm": {
+                    "description": "Algorithm.",
+                    "type": "number",
+                    "example": 5,
+                    "maximum": 255,
+                    "minimum": 0,
+                    "x-auditable": true
+                  },
+                  "flags": {
+                    "description": "Flags.",
+                    "type": "number",
+                    "example": 1,
+                    "maximum": 65535,
+                    "minimum": 0,
+                    "x-auditable": true
+                  },
+                  "protocol": {
+                    "description": "Protocol.",
+                    "type": "number",
+                    "example": 3,
+                    "maximum": 255,
+                    "minimum": 0,
+                    "x-auditable": true
+                  },
+                  "public_key": {
+                    "description": "Public Key.",
+                    "type": "string",
+                    "x-auditable": true
+                  }
+                }
+              },
+              "type": {
+                "description": "Record type.",
+                "type": "string",
+                "example": "DNSKEY",
+                "enum": [
+                  "DNSKEY"
+                ],
+                "x-auditable": true
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "title": "DNSKEY Record"
+      },
+      "dns-records_DSRecord": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/dns-records_dns-record-shared-fields"
+          },
+          {
+            "properties": {
+              "content": {
+                "description": "Formatted DS content. See 'data' to set DS properties.",
+                "readOnly": true,
+                "type": "string",
+                "x-auditable": true
+              },
+              "data": {
+                "description": "Components of a DS record.",
+                "type": "object",
+                "properties": {
+                  "algorithm": {
+                    "description": "Algorithm.",
+                    "type": "number",
+                    "example": 3,
+                    "maximum": 255,
+                    "minimum": 0,
+                    "x-auditable": true
+                  },
+                  "digest": {
+                    "description": "Digest.",
+                    "type": "string",
+                    "x-auditable": true
+                  },
+                  "digest_type": {
+                    "description": "Digest Type.",
+                    "type": "number",
+                    "example": 1,
+                    "maximum": 255,
+                    "minimum": 0,
+                    "x-auditable": true
+                  },
+                  "key_tag": {
+                    "description": "Key Tag.",
+                    "type": "number",
+                    "example": 1,
+                    "maximum": 65535,
+                    "minimum": 0,
+                    "x-auditable": true
+                  }
+                }
+              },
+              "type": {
+                "description": "Record type.",
+                "type": "string",
+                "example": "DS",
+                "enum": [
+                  "DS"
+                ],
+                "x-auditable": true
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "title": "DS Record"
+      },
+      "dns-records_HTTPSRecord": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/dns-records_dns-record-shared-fields"
+          },
+          {
+            "properties": {
+              "content": {
+                "description": "Formatted HTTPS content. See 'data' to set HTTPS properties.",
+                "readOnly": true,
+                "type": "string",
+                "x-auditable": true
+              },
+              "data": {
+                "description": "Components of a HTTPS record.",
+                "type": "object",
+                "properties": {
+                  "priority": {
+                    "description": "Priority.",
+                    "type": "number",
+                    "example": 1,
+                    "maximum": 65535,
+                    "minimum": 0,
+                    "x-auditable": true
+                  },
+                  "target": {
+                    "description": "Target.",
+                    "type": "string",
+                    "example": ".",
+                    "x-auditable": true
+                  },
+                  "value": {
+                    "description": "Value.",
+                    "type": "string",
+                    "example": "alpn=\"h3,h2\" ipv4hint=\"127.0.0.1\" ipv6hint=\"::1\"",
+                    "x-auditable": true
+                  }
+                }
+              },
+              "type": {
+                "description": "Record type.",
+                "type": "string",
+                "example": "HTTPS",
+                "enum": [
+                  "HTTPS"
+                ],
+                "x-auditable": true
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "title": "HTTPS Record"
+      },
+      "dns-records_LOCRecord": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/dns-records_dns-record-shared-fields"
+          },
+          {
+            "properties": {
+              "content": {
+                "description": "Formatted LOC content. See 'data' to set LOC properties.",
+                "example": "IN LOC 37 46 46 N 122 23 35 W 0m 100m 0m 0m",
+                "readOnly": true,
+                "type": "string",
+                "x-auditable": true
+              },
+              "data": {
+                "description": "Components of a LOC record.",
+                "type": "object",
+                "properties": {
+                  "altitude": {
+                    "description": "Altitude of location in meters.",
+                    "type": "number",
+                    "example": 0,
+                    "maximum": 42849672.95,
+                    "minimum": -100000,
+                    "x-auditable": true
+                  },
+                  "lat_degrees": {
+                    "description": "Degrees of latitude.",
+                    "type": "number",
+                    "example": 37,
+                    "maximum": 90,
+                    "minimum": 0,
+                    "x-auditable": true
+                  },
+                  "lat_direction": {
+                    "description": "Latitude direction.",
+                    "type": "string",
+                    "example": "N",
+                    "enum": [
+                      "N",
+                      "S"
+                    ],
+                    "x-auditable": true
+                  },
+                  "lat_minutes": {
+                    "description": "Minutes of latitude.",
+                    "type": "number",
+                    "example": 46,
+                    "maximum": 59,
+                    "minimum": 0,
+                    "x-auditable": true
+                  },
+                  "lat_seconds": {
+                    "description": "Seconds of latitude.",
+                    "type": "number",
+                    "example": 46,
+                    "maximum": 59.999,
+                    "minimum": 0,
+                    "x-auditable": true
+                  },
+                  "long_degrees": {
+                    "description": "Degrees of longitude.",
+                    "type": "number",
+                    "example": 122,
+                    "maximum": 180,
+                    "minimum": 0,
+                    "x-auditable": true
+                  },
+                  "long_direction": {
+                    "description": "Longitude direction.",
+                    "type": "string",
+                    "example": "W",
+                    "enum": [
+                      "E",
+                      "W"
+                    ],
+                    "x-auditable": true
+                  },
+                  "long_minutes": {
+                    "description": "Minutes of longitude.",
+                    "type": "number",
+                    "example": 23,
+                    "maximum": 59,
+                    "minimum": 0,
+                    "x-auditable": true
+                  },
+                  "long_seconds": {
+                    "description": "Seconds of longitude.",
+                    "type": "number",
+                    "example": 35,
+                    "maximum": 59.999,
+                    "minimum": 0,
+                    "x-auditable": true
+                  },
+                  "precision_horz": {
+                    "description": "Horizontal precision of location.",
+                    "type": "number",
+                    "example": 0,
+                    "maximum": 90000000,
+                    "minimum": 0,
+                    "x-auditable": true
+                  },
+                  "precision_vert": {
+                    "description": "Vertical precision of location.",
+                    "type": "number",
+                    "example": 0,
+                    "maximum": 90000000,
+                    "minimum": 0,
+                    "x-auditable": true
+                  },
+                  "size": {
+                    "description": "Size of location in meters.",
+                    "type": "number",
+                    "example": 100,
+                    "maximum": 90000000,
+                    "minimum": 0,
+                    "x-auditable": true
+                  }
+                }
+              },
+              "type": {
+                "description": "Record type.",
+                "type": "string",
+                "example": "LOC",
+                "enum": [
+                  "LOC"
+                ],
+                "x-auditable": true
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "title": "LOC Record"
+      },
+      "dns-records_MXRecord": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/dns-records_dns-record-shared-fields"
+          },
+          {
+            "properties": {
+              "content": {
+                "description": "A valid mail server hostname.",
+                "example": "mx.example.com",
+                "format": "hostname",
+                "type": "string",
+                "x-auditable": true
+              },
+              "priority": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/dns-records_priority"
+                  }
+                ],
+                "x-auditable": true
+              },
+              "type": {
+                "description": "Record type.",
+                "type": "string",
+                "example": "MX",
+                "enum": [
+                  "MX"
+                ],
+                "x-auditable": true
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "title": "MX Record"
+      },
+      "dns-records_NAPTRRecord": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/dns-records_dns-record-shared-fields"
+          },
+          {
+            "properties": {
+              "content": {
+                "description": "Formatted NAPTR content. See 'data' to set NAPTR properties.",
+                "readOnly": true,
+                "type": "string",
+                "x-auditable": true
+              },
+              "data": {
+                "description": "Components of a NAPTR record.",
+                "type": "object",
+                "properties": {
+                  "flags": {
+                    "description": "Flags.",
+                    "type": "string",
+                    "x-auditable": true
+                  },
+                  "order": {
+                    "description": "Order.",
+                    "type": "number",
+                    "example": 100,
+                    "maximum": 65535,
+                    "minimum": 0,
+                    "x-auditable": true
+                  },
+                  "preference": {
+                    "description": "Preference.",
+                    "type": "number",
+                    "example": 10,
+                    "maximum": 65535,
+                    "minimum": 0,
+                    "x-auditable": true
+                  },
+                  "regex": {
+                    "description": "Regex.",
+                    "type": "string",
+                    "x-auditable": true
+                  },
+                  "replacement": {
+                    "description": "Replacement.",
+                    "type": "string",
+                    "x-auditable": true
+                  },
+                  "service": {
+                    "description": "Service.",
+                    "type": "string",
+                    "x-auditable": true
+                  }
+                }
+              },
+              "type": {
+                "description": "Record type.",
+                "type": "string",
+                "example": "NAPTR",
+                "enum": [
+                  "NAPTR"
+                ],
+                "x-auditable": true
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "title": "NAPTR Record"
+      },
+      "dns-records_NSRecord": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/dns-records_dns-record-shared-fields"
+          },
+          {
+            "properties": {
+              "content": {
+                "description": "A valid name server host name.",
+                "example": "ns1.example.com",
+                "type": "string",
+                "x-auditable": true
+              },
+              "type": {
+                "description": "Record type.",
+                "type": "string",
+                "example": "NS",
+                "enum": [
+                  "NS"
+                ],
+                "x-auditable": true
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "title": "NS Record"
+      },
+      "dns-records_OPENPGPKEYRecord": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/dns-records_dns-record-shared-fields"
+          },
+          {
+            "properties": {
+              "content": {
+                "description": "A single Base64-encoded OpenPGP Transferable Public Key (RFC 4880 Section 11.1)",
+                "type": "string",
+                "x-auditable": true
+              },
+              "type": {
+                "description": "Record type.",
+                "type": "string",
+                "example": "OPENPGPKEY",
+                "enum": [
+                  "OPENPGPKEY"
+                ],
+                "x-auditable": true
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "title": "OPENPGPKEY Record"
+      },
+      "dns-records_PTRRecord": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/dns-records_dns-record-shared-fields"
+          },
+          {
+            "properties": {
+              "content": {
+                "description": "Domain name pointing to the address.",
+                "example": "example.com",
+                "type": "string",
+                "x-auditable": true
+              },
+              "type": {
+                "description": "Record type.",
+                "type": "string",
+                "example": "PTR",
+                "enum": [
+                  "PTR"
+                ],
+                "x-auditable": true
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "title": "PTR Record"
+      },
+      "dns-records_SMIMEARecord": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/dns-records_dns-record-shared-fields"
+          },
+          {
+            "properties": {
+              "content": {
+                "description": "Formatted SMIMEA content. See 'data' to set SMIMEA properties.",
+                "readOnly": true,
+                "type": "string",
+                "x-auditable": true
+              },
+              "data": {
+                "description": "Components of a SMIMEA record.",
+                "type": "object",
+                "properties": {
+                  "certificate": {
+                    "description": "Certificate.",
+                    "type": "string",
+                    "x-auditable": true
+                  },
+                  "matching_type": {
+                    "description": "Matching Type.",
+                    "type": "number",
+                    "example": 0,
+                    "maximum": 255,
+                    "minimum": 0,
+                    "x-auditable": true
+                  },
+                  "selector": {
+                    "description": "Selector.",
+                    "type": "number",
+                    "example": 0,
+                    "maximum": 255,
+                    "minimum": 0,
+                    "x-auditable": true
+                  },
+                  "usage": {
+                    "description": "Usage.",
+                    "type": "number",
+                    "example": 3,
+                    "maximum": 255,
+                    "minimum": 0,
+                    "x-auditable": true
+                  }
+                }
+              },
+              "type": {
+                "description": "Record type.",
+                "type": "string",
+                "example": "SMIMEA",
+                "enum": [
+                  "SMIMEA"
+                ],
+                "x-auditable": true
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "title": "SMIMEA Record"
+      },
+      "dns-records_SRVRecord": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/dns-records_dns-record-shared-fields"
+          },
+          {
+            "properties": {
+              "content": {
+                "description": "Priority, weight, port, and SRV target. See 'data' for setting the individual component values.",
+                "example": "10 IN SRV 5 8806 example.com.",
+                "readOnly": true,
+                "type": "string",
+                "x-auditable": true
+              },
+              "data": {
+                "description": "Components of a SRV record.",
+                "type": "object",
+                "properties": {
+                  "port": {
+                    "description": "The port of the service.",
+                    "type": "number",
+                    "example": 8806,
+                    "maximum": 65535,
+                    "minimum": 0,
+                    "x-auditable": true
+                  },
+                  "priority": {
+                    "allOf": [
+                      {
+                        "$ref": "#/components/schemas/dns-records_priority"
+                      }
+                    ],
+                    "x-auditable": true
+                  },
+                  "target": {
+                    "description": "A valid hostname.",
+                    "type": "string",
+                    "format": "hostname",
+                    "example": "example.com",
+                    "x-auditable": true
+                  },
+                  "weight": {
+                    "description": "The record weight.",
+                    "type": "number",
+                    "example": 5,
+                    "maximum": 65535,
+                    "minimum": 0,
+                    "x-auditable": true
+                  }
+                }
+              },
+              "type": {
+                "description": "Record type.",
+                "type": "string",
+                "example": "SRV",
+                "enum": [
+                  "SRV"
+                ],
+                "x-auditable": true
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "title": "SRV Record"
+      },
+      "dns-records_SSHFPRecord": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/dns-records_dns-record-shared-fields"
+          },
+          {
+            "properties": {
+              "content": {
+                "description": "Formatted SSHFP content. See 'data' to set SSHFP properties.",
+                "readOnly": true,
+                "type": "string",
+                "x-auditable": true
+              },
+              "data": {
+                "description": "Components of a SSHFP record.",
+                "type": "object",
+                "properties": {
+                  "algorithm": {
+                    "description": "Algorithm.",
+                    "type": "number",
+                    "example": 2,
+                    "maximum": 255,
+                    "minimum": 0,
+                    "x-auditable": true
+                  },
+                  "fingerprint": {
+                    "description": "Fingerprint.",
+                    "type": "string",
+                    "x-auditable": true
+                  },
+                  "type": {
+                    "description": "Type.",
+                    "type": "number",
+                    "example": 1,
+                    "maximum": 255,
+                    "minimum": 0,
+                    "x-auditable": true
+                  }
+                }
+              },
+              "type": {
+                "description": "Record type.",
+                "type": "string",
+                "example": "SSHFP",
+                "enum": [
+                  "SSHFP"
+                ],
+                "x-auditable": true
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "title": "SSHFP Record"
+      },
+      "dns-records_SVCBRecord": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/dns-records_dns-record-shared-fields"
+          },
+          {
+            "properties": {
+              "content": {
+                "description": "Formatted SVCB content. See 'data' to set SVCB properties.",
+                "readOnly": true,
+                "type": "string",
+                "x-auditable": true
+              },
+              "data": {
+                "description": "Components of a SVCB record.",
+                "type": "object",
+                "properties": {
+                  "priority": {
+                    "description": "Priority.",
+                    "type": "number",
+                    "example": 1,
+                    "maximum": 65535,
+                    "minimum": 0,
+                    "x-auditable": true
+                  },
+                  "target": {
+                    "description": "Target.",
+                    "type": "string",
+                    "example": ".",
+                    "x-auditable": true
+                  },
+                  "value": {
+                    "description": "Value.",
+                    "type": "string",
+                    "example": "alpn=\"h3,h2\" ipv4hint=\"127.0.0.1\" ipv6hint=\"::1\"",
+                    "x-auditable": true
+                  }
+                }
+              },
+              "type": {
+                "description": "Record type.",
+                "type": "string",
+                "example": "SVCB",
+                "enum": [
+                  "SVCB"
+                ],
+                "x-auditable": true
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "title": "SVCB Record"
+      },
+      "dns-records_TLSARecord": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/dns-records_dns-record-shared-fields"
+          },
+          {
+            "properties": {
+              "content": {
+                "description": "Formatted TLSA content. See 'data' to set TLSA properties.",
+                "readOnly": true,
+                "type": "string",
+                "x-auditable": true
+              },
+              "data": {
+                "description": "Components of a TLSA record.",
+                "type": "object",
+                "properties": {
+                  "certificate": {
+                    "description": "Certificate.",
+                    "type": "string",
+                    "x-auditable": true
+                  },
+                  "matching_type": {
+                    "description": "Matching Type.",
+                    "type": "number",
+                    "example": 1,
+                    "maximum": 255,
+                    "minimum": 0,
+                    "x-auditable": true
+                  },
+                  "selector": {
+                    "description": "Selector.",
+                    "type": "number",
+                    "example": 0,
+                    "maximum": 255,
+                    "minimum": 0,
+                    "x-auditable": true
+                  },
+                  "usage": {
+                    "description": "Usage.",
+                    "type": "number",
+                    "example": 0,
+                    "maximum": 255,
+                    "minimum": 0,
+                    "x-auditable": true
+                  }
+                }
+              },
+              "type": {
+                "description": "Record type.",
+                "type": "string",
+                "example": "TLSA",
+                "enum": [
+                  "TLSA"
+                ],
+                "x-auditable": true
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "title": "TLSA Record"
+      },
+      "dns-records_TXTRecord": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/dns-records_dns-record-shared-fields"
+          },
+          {
+            "properties": {
+              "content": {
+                "description": "Text content for the record. The content must consist of quoted \"character strings\" (RFC 1035), each with a length of up to 255 bytes. Strings exceeding this allowed maximum length are automatically split.\n\nLearn more at <https://www.cloudflare.com/learning/dns/dns-records/dns-txt-record/>.",
+                "example": "\"v=spf1 include:example.com -all\"",
+                "type": "string",
+                "x-auditable": true
+              },
+              "type": {
+                "description": "Record type.",
+                "type": "string",
+                "example": "TXT",
+                "enum": [
+                  "TXT"
+                ],
+                "x-auditable": true
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "title": "TXT Record"
+      },
+      "dns-records_URIRecord": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/dns-records_dns-record-shared-fields"
+          },
+          {
+            "properties": {
+              "content": {
+                "description": "Formatted URI content. See 'data' to set URI properties.",
+                "readOnly": true,
+                "type": "string",
+                "x-auditable": true
+              },
+              "data": {
+                "description": "Components of a URI record.",
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "description": "The record content.",
+                    "type": "string",
+                    "example": "http://example.com/example.html",
+                    "x-auditable": true
+                  },
+                  "weight": {
+                    "description": "The record weight.",
+                    "type": "number",
+                    "example": 20,
+                    "maximum": 65535,
+                    "minimum": 0,
+                    "x-auditable": true
+                  }
+                }
+              },
+              "priority": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/dns-records_priority"
+                  }
+                ],
+                "x-auditable": true
+              },
+              "type": {
+                "description": "Record type.",
+                "type": "string",
+                "example": "URI",
+                "enum": [
+                  "URI"
+                ],
+                "x-auditable": true
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "title": "URI Record"
+      },
+      "dns-records_api-response-collection": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/dns-records_api-response-common"
+          },
+          {
+            "properties": {
+              "result_info": {
+                "type": "object",
+                "properties": {
+                  "count": {
+                    "description": "Total number of results for the requested service.",
+                    "type": "number",
+                    "example": 1
+                  },
+                  "page": {
+                    "description": "Current page within paginated list of results.",
+                    "type": "number",
+                    "example": 1
+                  },
+                  "per_page": {
+                    "description": "Number of results per page of results.",
+                    "type": "number",
+                    "example": 20
+                  },
+                  "total_count": {
+                    "description": "Total results available without any search parameters.",
+                    "type": "number",
+                    "example": 2000
+                  },
+                  "total_pages": {
+                    "description": "The number of total pages in the entire result set.",
+                    "type": "number",
+                    "example": 100
+                  }
+                }
+              }
+            },
+            "type": "object"
+          }
+        ]
+      },
+      "dns-records_api-response-common": {
+        "type": "object",
+        "properties": {
+          "errors": {
+            "$ref": "#/components/schemas/dns-records_messages"
+          },
+          "messages": {
+            "$ref": "#/components/schemas/dns-records_messages"
+          },
+          "success": {
+            "description": "Whether the API call was successful.",
+            "type": "boolean",
+            "example": true,
+            "enum": [
+              true
+            ]
+          }
+        },
+        "required": [
+          "success",
+          "errors",
+          "messages"
+        ]
+      },
+      "dns-records_api-response-common-failure": {
+        "type": "object",
+        "properties": {
+          "errors": {
+            "example": [
+              {
+                "code": 7003,
+                "message": "No route for the URI"
+              }
+            ],
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/dns-records_messages"
+              }
+            ],
+            "minLength": 1
+          },
+          "messages": {
+            "example": [],
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/dns-records_messages"
+              }
+            ]
+          },
+          "result": {
+            "type": "object",
+            "enum": [
+              null
+            ],
+            "nullable": true
+          },
+          "success": {
+            "description": "Whether the API call was successful.",
+            "type": "boolean",
+            "example": false,
+            "enum": [
+              false
+            ]
+          }
+        },
+        "required": [
+          "success",
+          "errors",
+          "messages",
+          "result"
+        ]
+      },
+      "dns-records_api-response-single": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/dns-records_api-response-common"
+          }
+        ]
+      },
+      "dns-records_comment": {
+        "description": "Comments or notes about the DNS record. This field has no effect on DNS responses.",
+        "type": "string",
+        "example": "Domain verification record",
+        "x-auditable": true
+      },
+      "dns-records_direction": {
+        "description": "Direction to order DNS records in.",
+        "type": "string",
+        "default": "asc",
+        "enum": [
+          "asc",
+          "desc"
+        ]
+      },
+      "dns-records_dns-record-post": {
+        "type": "object",
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/dns-records_dns-record-without-data"
+          },
+          {
+            "$ref": "#/components/schemas/dns-records_dns-record-with-data"
+          }
+        ]
+      },
+      "dns-records_dns-record-response": {
+        "type": "object",
+        "allOf": [
+          {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/dns-records_dns-record-without-data"
+              },
+              {
+                "$ref": "#/components/schemas/dns-records_dns-record-with-data"
+              }
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "comment_modified_on": {
+                "description": "When the record comment was last modified. Omitted if there is no comment.",
+                "type": "string",
+                "format": "date-time",
+                "example": "2024-01-01T05:20:00.12345Z",
+                "readOnly": true,
+                "x-stainless-terraform-configurability": "computed"
+              },
+              "created_on": {
+                "description": "When the record was created.",
+                "type": "string",
+                "format": "date-time",
+                "example": "2014-01-01T05:20:00.12345Z",
+                "readOnly": true,
+                "x-stainless-terraform-configurability": "computed"
+              },
+              "id": {
+                "$ref": "#/components/schemas/dns-records_identifier"
+              },
+              "meta": {
+                "description": "Extra Cloudflare-specific metadata about the record.",
+                "type": "object",
+                "properties": {
+                  "dead_glue": {
+                    "description": "Whether this glue record is not served because a shallower NS delegation takes precedence over the deeper delegation that needs it. Present only when true; reachable glue carries only `is_glue`. See [Unreachable glue records](https://developers.cloudflare.com/dns/manage-dns-records/reference/shadowed-records#unreachable-glue-records).\n",
+                    "type": "boolean",
+                    "example": true,
+                    "readOnly": true
+                  },
+                  "is_glue": {
+                    "description": "Whether this A or AAAA record is glue for a subdomain NS delegation. See [Glue records](https://developers.cloudflare.com/dns/manage-dns-records/reference/shadowed-records#glue-records).\n",
+                    "type": "boolean",
+                    "example": true,
+                    "readOnly": true
+                  },
+                  "shadowed_by": {
+                    "description": "IDs of the NS records that shadow this record. See [Shadowed records](https://developers.cloudflare.com/dns/manage-dns-records/reference/shadowed-records).\n",
+                    "type": "array",
+                    "items": {
+                      "example": "372e67954025e0ba6aaa6d586b9e0b59",
+                      "type": "string"
+                    },
+                    "readOnly": true
+                  },
+                  "shadowed_records_count": {
+                    "description": "Number of records shadowed by this NS delegation. See [Shadowed records](https://developers.cloudflare.com/dns/manage-dns-records/reference/shadowed-records).\n",
+                    "type": "integer",
+                    "example": 42,
+                    "maximum": 10000,
+                    "minimum": 0,
+                    "readOnly": true
+                  }
+                },
+                "readOnly": true,
+                "x-stainless-terraform-configurability": "computed"
+              },
+              "modified_on": {
+                "description": "When the record was last modified.",
+                "type": "string",
+                "format": "date-time",
+                "example": "2014-01-01T05:20:00.12345Z",
+                "readOnly": true,
+                "x-stainless-terraform-configurability": "computed"
+              },
+              "proxiable": {
+                "description": "Whether the record can be proxied by Cloudflare or not.",
+                "type": "boolean",
+                "example": true,
+                "readOnly": true,
+                "x-stainless-terraform-configurability": "computed"
+              },
+              "tags_modified_on": {
+                "description": "When the record tags were last modified. Omitted if there are no tags.",
+                "type": "string",
+                "format": "date-time",
+                "example": "2025-01-01T05:20:00.12345Z",
+                "readOnly": true,
+                "x-stainless-terraform-configurability": "computed"
+              }
+            },
+            "required": [
+              "id",
+              "proxiable",
+              "created_on",
+              "modified_on",
+              "meta"
+            ],
+            "type": "object"
+          }
+        ],
+        "required": [
+          "name",
+          "type",
+          "content",
+          "data",
+          "proxied",
+          "ttl",
+          "settings",
+          "comment",
+          "tags"
+        ]
+      },
+      "dns-records_dns-record-shared-fields": {
+        "type": "object",
+        "properties": {
+          "comment": {
+            "$ref": "#/components/schemas/dns-records_comment"
+          },
+          "name": {
+            "$ref": "#/components/schemas/dns-records_name"
+          },
+          "proxied": {
+            "$ref": "#/components/schemas/dns-records_proxied"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/dns-records_settings"
+          },
+          "tags": {
+            "$ref": "#/components/schemas/dns-records_tags"
+          },
+          "ttl": {
+            "$ref": "#/components/schemas/dns-records_ttl"
+          }
+        }
+      },
+      "dns-records_dns-record-with-data": {
+        "type": "object",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/dns-records_CAARecord"
+          },
+          {
+            "$ref": "#/components/schemas/dns-records_CERTRecord"
+          },
+          {
+            "$ref": "#/components/schemas/dns-records_DNSKEYRecord"
+          },
+          {
+            "$ref": "#/components/schemas/dns-records_DSRecord"
+          },
+          {
+            "$ref": "#/components/schemas/dns-records_HTTPSRecord"
+          },
+          {
+            "$ref": "#/components/schemas/dns-records_LOCRecord"
+          },
+          {
+            "$ref": "#/components/schemas/dns-records_NAPTRRecord"
+          },
+          {
+            "$ref": "#/components/schemas/dns-records_SMIMEARecord"
+          },
+          {
+            "$ref": "#/components/schemas/dns-records_SRVRecord"
+          },
+          {
+            "$ref": "#/components/schemas/dns-records_SSHFPRecord"
+          },
+          {
+            "$ref": "#/components/schemas/dns-records_SVCBRecord"
+          },
+          {
+            "$ref": "#/components/schemas/dns-records_TLSARecord"
+          },
+          {
+            "$ref": "#/components/schemas/dns-records_URIRecord"
+          }
+        ]
+      },
+      "dns-records_dns-record-without-data": {
+        "type": "object",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/dns-records_ARecord"
+          },
+          {
+            "$ref": "#/components/schemas/dns-records_AAAARecord"
+          },
+          {
+            "$ref": "#/components/schemas/dns-records_CNAMERecord"
+          },
+          {
+            "$ref": "#/components/schemas/dns-records_MXRecord"
+          },
+          {
+            "$ref": "#/components/schemas/dns-records_NSRecord"
+          },
+          {
+            "$ref": "#/components/schemas/dns-records_OPENPGPKEYRecord"
+          },
+          {
+            "$ref": "#/components/schemas/dns-records_PTRRecord"
+          },
+          {
+            "$ref": "#/components/schemas/dns-records_TXTRecord"
+          }
+        ]
+      },
+      "dns-records_dns_response_list": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/dns-records_api-response-collection"
+          },
+          {
+            "properties": {
+              "result": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/dns-records_dns-record-response"
+                }
+              },
+              "result_info": {
+                "type": "object",
+                "properties": {
+                  "cursor": {
+                    "description": "Opaque token for the next page. Omitted on the last page.",
+                    "type": "string"
+                  },
+                  "prev_cursor": {
+                    "description": "Opaque token for the previous page. Omitted on the first page.",
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "type": "object"
+          }
+        ]
+      },
+      "dns-records_dns_response_single": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/dns-records_api-response-single"
+          },
+          {
+            "properties": {
+              "result": {
+                "$ref": "#/components/schemas/dns-records_dns-record-response"
+              }
+            },
+            "type": "object"
+          }
+        ]
+      },
+      "dns-records_identifier": {
+        "description": "Identifier.",
+        "type": "string",
+        "example": "023e105f4ecef8ad9ca31a8372d0c353",
+        "maxLength": 32,
+        "x-auditable": true
+      },
+      "dns-records_match": {
+        "description": "Whether to match all search requirements or at least one (any). If set to `all`, acts like a logical AND between filters. If set to `any`, acts like a logical OR instead. Note that the interaction between tag filters is controlled by the `tag-match` parameter instead.\n",
+        "type": "string",
+        "example": "any",
+        "default": "all",
+        "enum": [
+          "any",
+          "all"
+        ]
+      },
+      "dns-records_messages": {
+        "type": "array",
+        "items": {
+          "properties": {
+            "code": {
+              "type": "integer",
+              "minimum": 1000
+            },
+            "documentation_url": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "source": {
+              "type": "object",
+              "properties": {
+                "pointer": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object",
+          "uniqueItems": true
+        },
+        "example": []
+      },
+      "dns-records_name": {
+        "description": "Complete DNS record name, including the zone name, in Punycode.",
+        "type": "string",
+        "example": "example.com",
+        "maxLength": 255,
+        "minLength": 1,
+        "x-auditable": true
+      },
+      "dns-records_order": {
+        "description": "Field to order DNS records by.",
+        "type": "string",
+        "default": "type",
+        "enum": [
+          "type",
+          "name",
+          "content",
+          "ttl",
+          "proxied"
+        ]
+      },
+      "dns-records_page": {
+        "description": "Page number for offset pagination.",
+        "type": "number",
+        "minimum": 1
+      },
+      "dns-records_per_page": {
+        "description": "Number of DNS records per page.",
+        "type": "number",
+        "example": 5,
+        "default": 100,
+        "maximum": 5000000,
+        "minimum": 1
+      },
+      "dns-records_priority": {
+        "description": "Required for MX and URI records; ignored for other record types (but may still be returned by the API). Records with lower priorities are preferred. This field is to be deprecated in favor of the priority field within the data map.",
+        "type": "number",
+        "example": 10,
+        "maximum": 65535,
+        "minimum": 0,
+        "x-auditable": true
+      },
+      "dns-records_proxied": {
+        "description": "Whether the record is receiving the performance and security benefits of Cloudflare.",
+        "type": "boolean",
+        "example": true,
+        "default": false,
+        "x-auditable": true
+      },
+      "dns-records_search": {
+        "description": "Allows searching in multiple properties of a DNS record simultaneously. This parameter is intended for human users, not automation. Its exact behavior is intentionally left unspecified and is subject to change in the future. This parameter works independently of the `match` setting. For automated searches, please use the other available parameters.\n",
+        "type": "string",
+        "example": "www.cloudflare.com"
+      },
+      "dns-records_settings": {
+        "description": "Settings for the DNS record.",
+        "type": "object",
+        "properties": {
+          "ipv4_only": {
+            "description": "When enabled, only A records will be generated, and AAAA records will not be created. This setting is intended for exceptional cases. Note that this option only applies to proxied records and it has no effect on whether Cloudflare communicates with the origin using IPv4 or IPv6.",
+            "type": "boolean",
+            "example": true,
+            "default": false,
+            "x-auditable": true
+          },
+          "ipv6_only": {
+            "description": "When enabled, only AAAA records will be generated, and A records will not be created. This setting is intended for exceptional cases. Note that this option only applies to proxied records and it has no effect on whether Cloudflare communicates with the origin using IPv4 or IPv6.",
+            "type": "boolean",
+            "example": true,
+            "default": false,
+            "x-auditable": true
+          }
+        }
+      },
+      "dns-records_tag_match": {
+        "description": "Whether to match all tag search requirements or at least one (any). If set to `all`, acts like a logical AND between tag filters. If set to `any`, acts like a logical OR instead. Note that the regular `match` parameter is still used to combine the resulting condition with other filters that aren't related to tags. The legacy `tag-match` parameter is an alias for this parameter.\n",
+        "type": "string",
+        "example": "any",
+        "default": "all",
+        "enum": [
+          "any",
+          "all"
+        ]
+      },
+      "dns-records_tags": {
+        "description": "Custom tags for the DNS record. This field has no effect on DNS responses.",
+        "type": "array",
+        "items": {
+          "description": "Individual tag of the form name:value (the name must consist of only letters, numbers, underscores and hyphens)",
+          "example": "owner:dns-team",
+          "type": "string",
+          "x-auditable": true
+        },
+        "default": [],
+        "x-stainless-collection-type": "set"
+      },
+      "dns-records_ttl": {
+        "description": "Time To Live (TTL) of the DNS record in seconds. Setting to 1 means 'automatic'. Value must be between 60 and 86400, with the minimum reduced to 30 for Enterprise zones.",
+        "type": "number",
+        "example": 3600,
+        "default": 1,
+        "anyOf": [
+          {
+            "example": 3600,
+            "maximum": 86400,
+            "minimum": 30,
+            "type": "number"
+          },
+          {
+            "enum": [
+              1
+            ],
+            "type": "number"
+          }
+        ],
+        "x-auditable": true
+      },
+      "dns-records_type": {
+        "description": "Record type.",
+        "type": "string",
+        "example": "A",
+        "enum": [
+          "A",
+          "AAAA",
+          "CAA",
+          "CERT",
+          "CNAME",
+          "DNSKEY",
+          "DS",
+          "HTTPS",
+          "LOC",
+          "MX",
+          "NAPTR",
+          "NS",
+          "OPENPGPKEY",
+          "PTR",
+          "SMIMEA",
+          "SRV",
+          "SSHFP",
+          "SVCB",
+          "TLSA",
+          "TXT",
+          "URI"
+        ],
+        "x-auditable": true
+      },
+      "zones_api-response-common": {
+        "type": "object",
+        "properties": {
+          "errors": {
+            "$ref": "#/components/schemas/zones_messages"
+          },
+          "messages": {
+            "$ref": "#/components/schemas/zones_messages"
+          },
+          "success": {
+            "description": "Whether the API call was successful.",
+            "type": "boolean",
+            "example": true
+          }
+        },
+        "required": [
+          "success",
+          "errors",
+          "messages"
+        ]
+      },
+      "zones_api-response-common-failure": {
+        "type": "object",
+        "properties": {
+          "errors": {
+            "example": [
+              {
+                "code": 7003,
+                "message": "No route for the URI"
+              }
+            ],
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/zones_messages"
+              }
+            ],
+            "minLength": 1
+          },
+          "messages": {
+            "example": [],
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/zones_messages"
+              }
+            ]
+          },
+          "result": {
+            "type": "object",
+            "nullable": true
+          },
+          "success": {
+            "description": "Whether the API call was successful.",
+            "type": "boolean",
+            "example": false
+          }
+        },
+        "required": [
+          "success",
+          "errors",
+          "messages",
+          "result"
+        ]
+      },
+      "zones_identifier": {
+        "description": "Identifier",
+        "type": "string",
+        "example": "023e105f4ecef8ad9ca31a8372d0c353",
+        "maxLength": 32
+      },
+      "zones_messages": {
+        "type": "array",
+        "items": {
+          "properties": {
+            "code": {
+              "type": "integer",
+              "minimum": 1000
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object",
+          "uniqueItems": true
+        },
+        "example": []
+      },
+      "zones_paused": {
+        "description": "Indicates whether the zone is only using Cloudflare DNS services. A\ntrue value means the zone will not receive security or performance\nbenefits.\n",
+        "type": "boolean",
+        "default": false
+      },
+      "zones_result_info": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "description": "Total number of results for the requested service.",
+            "type": "number",
+            "example": 1
+          },
+          "page": {
+            "description": "Current page within paginated list of results.",
+            "type": "number",
+            "example": 1
+          },
+          "per_page": {
+            "description": "Number of results per page of results.",
+            "type": "number",
+            "example": 20
+          },
+          "total_count": {
+            "description": "Total results available without any search parameters.",
+            "type": "number",
+            "example": 2000
+          },
+          "total_pages": {
+            "description": "Total number of pages",
+            "type": "number",
+            "example": 100
+          }
+        }
+      },
+      "zones_type": {
+        "description": "A full zone implies that DNS is hosted with Cloudflare. A partial zone is\ntypically a partner-hosted zone or a CNAME setup.\n",
+        "type": "string",
+        "example": "full",
+        "default": "full",
+        "enum": [
+          "full",
+          "partial",
+          "secondary",
+          "internal"
+        ]
+      },
+      "zones_zone": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "description": "The account the zone belongs to.",
+            "type": "object",
+            "properties": {
+              "id": {
+                "description": "Identifier",
+                "type": "string",
+                "example": "023e105f4ecef8ad9ca31a8372d0c353",
+                "maxLength": 32,
+                "x-auditable": true
+              },
+              "name": {
+                "description": "The name of the account.",
+                "type": "string",
+                "example": "Example Account Name"
+              }
+            }
+          },
+          "activated_on": {
+            "description": "The last time proof of ownership was detected and the zone was made\nactive.",
+            "type": "string",
+            "format": "date-time",
+            "example": "2014-01-02T00:01:00.12345Z",
+            "nullable": true,
+            "readOnly": true
+          },
+          "cname_suffix": {
+            "description": "Allows the customer to use a custom apex.\n*Tenants Only Configuration*.",
+            "type": "string",
+            "example": "cdn.cloudflare.com"
+          },
+          "created_on": {
+            "description": "When the zone was created.",
+            "type": "string",
+            "format": "date-time",
+            "example": "2014-01-01T05:20:00.12345Z",
+            "readOnly": true
+          },
+          "development_mode": {
+            "description": "The interval (in seconds) from when development mode expires\n(positive integer) or last expired (negative integer) for the\ndomain. If development mode has never been enabled, this value is 0.",
+            "type": "number",
+            "example": 7200,
+            "readOnly": true
+          },
+          "id": {
+            "description": "Identifier",
+            "type": "string",
+            "example": "023e105f4ecef8ad9ca31a8372d0c353",
+            "maxLength": 32,
+            "x-auditable": true
+          },
+          "meta": {
+            "description": "Metadata about the zone.",
+            "type": "object",
+            "properties": {
+              "cdn_only": {
+                "description": "The zone is only configured for CDN.",
+                "type": "boolean",
+                "example": true
+              },
+              "custom_certificate_quota": {
+                "description": "Number of Custom Certificates the zone can have.",
+                "type": "integer",
+                "example": 1
+              },
+              "dns_only": {
+                "description": "The zone is only configured for DNS.",
+                "type": "boolean",
+                "example": true
+              },
+              "foundation_dns": {
+                "description": "The zone is setup with Foundation DNS.",
+                "type": "boolean",
+                "example": true
+              },
+              "page_rule_quota": {
+                "description": "Number of Page Rules a zone can have.",
+                "type": "integer",
+                "example": 100
+              },
+              "phishing_detected": {
+                "description": "The zone has been flagged for phishing.",
+                "type": "boolean",
+                "example": false
+              },
+              "step": {
+                "type": "integer",
+                "example": 2
+              }
+            }
+          },
+          "modified_on": {
+            "description": "When the zone was last modified.",
+            "type": "string",
+            "format": "date-time",
+            "example": "2014-01-01T05:20:00.12345Z",
+            "readOnly": true
+          },
+          "name": {
+            "description": "The domain name. Per [RFC 1035](https://datatracker.ietf.org/doc/html/rfc1035#section-2.3.4) the overall zone name can be up to 253 characters, with each segment (\"label\") not exceeding 63 characters.",
+            "type": "string",
+            "example": "example.com",
+            "maxLength": 253,
+            "pattern": "^([a-zA-Z0-9][\\-a-zA-Z0-9]*\\.)+[\\-a-zA-Z0-9]{2,20}$",
+            "x-auditable": true
+          },
+          "name_servers": {
+            "description": "The name servers Cloudflare assigns to a zone.",
+            "type": "array",
+            "items": {
+              "format": "hostname",
+              "type": "string"
+            },
+            "example": [
+              "bob.ns.cloudflare.com",
+              "lola.ns.cloudflare.com"
+            ],
+            "readOnly": true
+          },
+          "original_dnshost": {
+            "description": "DNS host at the time of switching to Cloudflare.",
+            "type": "string",
+            "example": "NameCheap",
+            "maxLength": 50,
+            "nullable": true,
+            "readOnly": true
+          },
+          "original_name_servers": {
+            "description": "Original name servers before moving to Cloudflare.",
+            "type": "array",
+            "items": {
+              "format": "hostname",
+              "type": "string"
+            },
+            "example": [
+              "ns1.originaldnshost.com",
+              "ns2.originaldnshost.com"
+            ],
+            "nullable": true,
+            "readOnly": true
+          },
+          "original_registrar": {
+            "description": "Registrar for the domain at the time of switching to Cloudflare.",
+            "type": "string",
+            "example": "GoDaddy",
+            "nullable": true,
+            "readOnly": true
+          },
+          "owner": {
+            "description": "The owner of the zone.",
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/zones_identifier"
+              },
+              "name": {
+                "description": "Name of the owner.",
+                "type": "string",
+                "example": "Example Org"
+              },
+              "type": {
+                "description": "The type of owner.",
+                "type": "string",
+                "example": "organization"
+              }
+            }
+          },
+          "paused": {
+            "$ref": "#/components/schemas/zones_paused"
+          },
+          "permissions": {
+            "description": "Legacy permissions based on legacy user membership information.",
+            "type": "array",
+            "items": {
+              "example": "#worker:read",
+              "type": "string"
+            },
+            "deprecated": true,
+            "x-stainless-deprecation-message": "This has been replaced by Account memberships."
+          },
+          "plan": {
+            "description": "A Zones subscription information.",
+            "type": "object",
+            "deprecated": true,
+            "properties": {
+              "can_subscribe": {
+                "description": "States if the subscription can be activated.",
+                "type": "boolean",
+                "example": false
+              },
+              "currency": {
+                "description": "The denomination of the customer.",
+                "type": "string",
+                "example": "USD"
+              },
+              "externally_managed": {
+                "description": "If this Zone is managed by another company.",
+                "type": "boolean",
+                "example": false
+              },
+              "frequency": {
+                "description": "How often the customer is billed.",
+                "type": "string",
+                "example": "monthly"
+              },
+              "id": {
+                "$ref": "#/components/schemas/zones_identifier"
+              },
+              "is_subscribed": {
+                "description": "States if the subscription active.",
+                "type": "boolean",
+                "example": false
+              },
+              "legacy_discount": {
+                "description": "If the legacy discount applies to this Zone.",
+                "type": "boolean",
+                "example": false
+              },
+              "legacy_id": {
+                "description": "The legacy name of the plan.",
+                "type": "string",
+                "example": "free"
+              },
+              "name": {
+                "description": "Name of the owner.",
+                "type": "string",
+                "example": "Example Org"
+              },
+              "price": {
+                "description": "How much the customer is paying.",
+                "type": "number",
+                "example": 10.99
+              }
+            },
+            "x-stainless-deprecation-message": "Please use the `/zones/{zone_id}/subscription` API\nto update a zone's plan. Changing this value will create/cancel\nassociated subscriptions. To view available plans for this zone,\nsee [Zone Plans](https://developers.cloudflare.com/api/resources/zones/subresources/plans/)."
+          },
+          "status": {
+            "description": "The zone status on Cloudflare.",
+            "type": "string",
+            "example": "active",
+            "enum": [
+              "initializing",
+              "pending",
+              "active",
+              "moved"
+            ],
+            "readOnly": true
+          },
+          "tenant": {
+            "description": "The root organizational unit that this zone belongs to (such as a tenant or organization).",
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/zones_identifier"
+              },
+              "name": {
+                "description": "The name of the Tenant account.",
+                "type": "string",
+                "example": "Example Account Name"
+              }
+            }
+          },
+          "tenant_unit": {
+            "description": "The immediate parent organizational unit that this zone belongs to (such as under a tenant or sub-organization).",
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/zones_identifier"
+              }
+            }
+          },
+          "type": {
+            "$ref": "#/components/schemas/zones_type"
+          },
+          "vanity_name_servers": {
+            "description": "An array of domains used for custom name servers. This is only available for Business and Enterprise plans.",
+            "type": "array",
+            "items": {
+              "format": "hostname",
+              "maxLength": 253,
+              "type": "string"
+            },
+            "example": [
+              "ns1.example.com",
+              "ns2.example.com"
+            ],
+            "default": []
+          },
+          "verification_key": {
+            "description": "Verification key for partial zone setup.",
+            "type": "string",
+            "example": "284344499-1084221259",
+            "readOnly": true
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "development_mode",
+          "owner",
+          "account",
+          "meta",
+          "name_servers",
+          "original_name_servers",
+          "original_registrar",
+          "original_dnshost",
+          "created_on",
+          "modified_on",
+          "activated_on",
+          "plan"
+        ]
+      }
+    }
+  }
+}
