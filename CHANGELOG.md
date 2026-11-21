@@ -10,6 +10,18 @@ All notable changes to kumulo are documented here. Format:
 
 One package name is new on npm with this release: `@kumulo/dns-cloudflare`.
 
+### Changed (behaviour, migration notes)
+
+- DNS, every module: the ownership TXT `kumulo.cluster=<cluster>` moves off
+  the record's own name to `_kumulo.<name>` (`_kumulo._wildcard.<parent>` for
+  `*.<parent>`, `_kumulo` for the apex). A name with a CNAME may hold no other
+  record (RFC 1034 §3.6.2), so a provider that enforces that refused the TXT
+  beside a CNAME target, as for an UpCloud load balancer hostname. A TXT at
+  `*.c1` was also a wildcard TXT answering for every name under `c1`.
+  Migration is automatic: the next `apply` writes the new TXT, then deletes
+  the old one; `delete` removes records marked either way. kumulo 0.2 run
+  against a migrated zone reports a conflict and changes nothing.
+
 ### Added
 
 - DNS records via Cloudflare (`@kumulo/dns-cloudflare`, `dns.module: cloudflare`),

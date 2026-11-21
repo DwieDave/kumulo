@@ -149,15 +149,33 @@ with the permissions Zone:Read and DNS:Edit, limited to the zone. Export it as
 
 **Behaviour.**
 - `dns.ttl` is 1 (automatic) or 60 to 86400.
-- A, AAAA and CNAME records are not proxied. The proxy would terminate TLS
-  and does not serve wildcard names on the free plan, so kumulo writes
-  `proxied: false` and switches a record back if someone turned the proxy on.
+- A, AAAA and CNAME records, wildcards included, are not proxied: the
+  cluster's gateway terminates TLS itself, so kumulo writes `proxied: false`
+  and switches a record back if someone turned the proxy on.
 - A CNAME on the apex is allowed (Cloudflare flattens it).
 - `apply` and `delete` look the zone up first and stop before touching the
   cluster if the token cannot see it.
 
 **Unverified.** The client was written from Cloudflare's published OpenAPI
 spec and tested against a fake. It has not run against the live API.
+
+## DNS record ownership
+
+kumulo marks every name it writes with a TXT record `kumulo.cluster=<cluster>`
+and only ever changes or deletes names that carry its own mark. The mark sits
+beside the name, not on it, because a name with a CNAME may hold no other
+record (RFC 1034 §3.6.2):
+
+| Record | Ownership TXT |
+|---|---|
+| `api.prod` | `_kumulo.api.prod` |
+| `*.c1` | `_kumulo._wildcard.c1` |
+| `@` (apex) | `_kumulo` |
+
+kumulo 0.2 and earlier wrote the TXT on the record's own name. 0.3 still
+recognises that, and the next `apply` moves it to `_kumulo.<name>`; `delete`
+removes records marked either way. After that, kumulo 0.2 sees the names as
+foreign and refuses to touch them, so do not go back to 0.2 for that zone.
 
 ## Which provider serves the zone
 

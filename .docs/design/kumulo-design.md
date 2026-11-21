@@ -204,7 +204,7 @@ Implementations (each its own package — adding one never touches core):
 | `designate` | `@kumulo/dns-designate` (later) | OpenStack Designate, for generic clouds |
 | `none` | built-in no-op | DNS managed elsewhere |
 
-Records are tagged via a TXT ownership record (`kumulo.cluster=<name>`, external-dns convention) so reconcile/`delete` only ever touch records the module created — this contract is part of the *port*, so every implementation must honor it. This makes `kumulo create` in CI produce a fully reachable cluster URL with zero manual steps. See §5 for the config block.
+Records are tagged via a TXT ownership record (`kumulo.cluster=<name>`, external-dns convention) at `_kumulo.<record name>` (`_kumulo` for the apex, `_kumulo._wildcard.<parent>` for `*.<parent>`; a CNAME shares its name with no other record, RFC 1034 §3.6.2) so reconcile/`delete` only ever touch records the module created — this contract is part of the *port*, so every implementation must honor it. This makes `kumulo create` in CI produce a fully reachable cluster URL with zero manual steps. See §5 for the config block.
 
 ### 3.5.1 `CdnProvider` (implemented by `@kumulo/cdn-bunny`)
 
