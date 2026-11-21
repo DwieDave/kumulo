@@ -57,6 +57,20 @@ describe("cloudflare dns provider - specifics", () => {
       assert.deepStrictEqual(byType("CNAME"), [{ type: "CNAME", name: "www.example.com", content: "lb.example.net", ttl: 600, proxied: false }])
       assert.deepStrictEqual(byType("TXT").map((body) => body.content), ["\"kumulo.cluster=cluster-a\"", "\"kumulo.cluster=cluster-a\""])
       assert.isTrue(byType("TXT").every((body) => !("proxied" in body)))
+      assert.deepStrictEqual(byType("TXT").map((body) => body.name).toSorted(), ["_kumulo._wildcard.c1.example.com", "_kumulo.www.example.com"])
+    }))
+
+  it.effect("writes a bare * as an unproxied wildcard, with its ownership TXT at _kumulo._wildcard", () =>
+    Effect.gen(function*() {
+      const { fake, provider } = _setup()
+      yield* provider.ensureRecords(_zone, [_owner("*"), { name: "*", target: "lb.example.net" }])
+      assert.deepStrictEqual(fake.peekAll().map((r) => [r.name, r.type, r.proxied]).toSorted(), [
+        ["*.example.com", "CNAME", false],
+        ["_kumulo._wildcard.example.com", "TXT", undefined]
+      ])
+      const before = fake.writes().length
+      yield* provider.ensureRecords(_zone, [_owner("*"), { name: "*", target: "lb.example.net" }])
+      assert.strictEqual(fake.writes().length, before)
     }))
 
   it.effect("looks the zone up once per provider and then reuses its id", () =>
@@ -99,7 +113,7 @@ describe("cloudflare dns provider - specifics", () => {
   it.effect("rewrites an owned record that someone switched to proxied", () =>
     Effect.gen(function*() {
       const { fake, provider } = _setup()
-      fake.seed({ name: "api", type: "TXT", content: "\"kumulo.cluster=cluster-a\"", ttl: 600 })
+      fake.seed({ name: "_kumulo.api", type: "TXT", content: "\"kumulo.cluster=cluster-a\"", ttl: 600 })
       const a = fake.seed({ name: "api", type: "A", content: "10.0.0.1", ttl: 1, proxied: true })
       yield* provider.ensureRecords(_zone, [_owner("api"), { name: "api", target: "10.0.0.1" }])
       const writes = fake.writes()
@@ -122,14 +136,14 @@ describe("cloudflare dns provider - specifics", () => {
         const { fake, provider } = _setup()
         yield* provider.ensureRecords(_zone, [_owner(name), { name, target: "10.0.0.1" }])
         assert.strictEqual(fake.peek({ name: "example.com", type: "A" })?.content, "10.0.0.1")
-        assert.strictEqual(fake.peek({ name: "example.com", type: "TXT" })?.content, "\"kumulo.cluster=cluster-a\"")
+        assert.strictEqual(fake.peek({ name: "_kumulo", type: "TXT" })?.content, "\"kumulo.cluster=cluster-a\"")
       }
     }))
 
   it.effect("replaces by id on ttl drift", () =>
     Effect.gen(function*() {
       const { fake, provider } = _setup()
-      const owner = fake.seed({ name: "api", type: "TXT", content: "\"kumulo.cluster=cluster-a\"", ttl: 600 })
+      const owner = fake.seed({ name: "_kumulo.api", type: "TXT", content: "\"kumulo.cluster=cluster-a\"", ttl: 600 })
       const a = fake.seed({ name: "api", type: "A", content: "10.0.0.1", ttl: 1800 })
       yield* provider.ensureRecords(_zone, [_owner("api"), { name: "api", target: "10.0.0.1" }])
       const writes = fake.writes()
@@ -137,7 +151,7 @@ describe("cloudflare dns provider - specifics", () => {
       assert.strictEqual(writes[0]?.method, "PUT")
       assert.isTrue(writes[0]?.path.endsWith(a.id))
       assert.strictEqual(fake.peek({ name: "api", type: "A" })?.ttl, 600)
-      assert.strictEqual(fake.peek({ name: "api", type: "TXT" })?.id, owner.id)
+      assert.strictEqual(fake.peek({ name: "_kumulo.api", type: "TXT" })?.id, owner.id)
     }))
 
   it.effect("kind change deletes before it creates", () =>
@@ -153,7 +167,7 @@ describe("cloudflare dns provider - specifics", () => {
   it.effect("accepts unquoted TXT ownership written by hand without rewriting", () =>
     Effect.gen(function*() {
       const { fake, provider } = _setup()
-      fake.seed({ name: "api", type: "TXT", content: "kumulo.cluster=cluster-a", ttl: 600 })
+      fake.seed({ name: "_kumulo.api", type: "TXT", content: "kumulo.cluster=cluster-a", ttl: 600 })
       fake.seed({ name: "api", type: "A", content: "10.0.0.1", ttl: 600 })
       yield* provider.ensureRecords(_zone, [_owner("api"), { name: "api", target: "10.0.0.1" }])
       assert.strictEqual(fake.writes().length, 0)
@@ -162,9 +176,9 @@ describe("cloudflare dns provider - specifics", () => {
   it.effect("does not rewrite a dotted, mixed-case CNAME or a non-canonical AAAA", () =>
     Effect.gen(function*() {
       const { fake, provider } = _setup()
-      fake.seed({ name: "www", type: "TXT", content: "\"kumulo.cluster=cluster-a\"", ttl: 600 })
+      fake.seed({ name: "_kumulo.www", type: "TXT", content: "\"kumulo.cluster=cluster-a\"", ttl: 600 })
       fake.seed({ name: "www", type: "CNAME", content: "LB.Example.net.", ttl: 600 })
-      fake.seed({ name: "v6", type: "TXT", content: "\"kumulo.cluster=cluster-a\"", ttl: 600 })
+      fake.seed({ name: "_kumulo.v6", type: "TXT", content: "\"kumulo.cluster=cluster-a\"", ttl: 600 })
       fake.seed({ name: "v6", type: "AAAA", content: "2001:DB8:0:0:0:0:0:1", ttl: 600 })
       yield* provider.ensureRecords(_zone, [
         _owner("www"),
@@ -202,7 +216,7 @@ describe("cloudflare dns provider - specifics", () => {
         const { fake, provider } = _setup({ ttl })
         yield* provider.ensureRecords(_zone, [_owner("api"), { name: "api", target: "10.0.0.1" }])
         assert.strictEqual(fake.peek({ name: "api", type: "A" })?.ttl, ttl)
-        assert.strictEqual(fake.peek({ name: "api", type: "TXT" })?.ttl, ttl)
+        assert.strictEqual(fake.peek({ name: "_kumulo.api", type: "TXT" })?.ttl, ttl)
       }
     }))
 

@@ -3,7 +3,7 @@ import { ResourceConflict } from "../errors/tagged.ts"
 import type { ClusterTag, DesiredRecord } from "../domain/types.ts"
 import type { DnsError } from "../ports/dns-provider.ts"
 import { DnsProvider } from "../ports/dns-provider.ts"
-import { ownerTagOf, recordKind } from "./ownership.ts"
+import { ownedName, ownerTagOf, ownershipName, recordKind } from "./ownership.ts"
 
 const _DEFAULT_TTL = 600
 
@@ -18,6 +18,8 @@ export interface ZoneRecord {
 // The provider-specific half of DNS reconciliation. `canonical` must make
 // equivalent values compare equal (unquote TXT, lowercase CNAME and drop the
 // trailing dot, compress IPv6); `normalize` maps any name spelling to one key.
+// create, update and delete receive names in that normalized form, including
+// ownership names such as _kumulo.www or _kumulo._wildcard.c1.
 export interface DnsAdapter {
   readonly ttl?: number | undefined
   readonly list: (zone: string) => Effect.Effect<ReadonlyArray<ZoneRecord>, DnsError>
@@ -46,6 +48,8 @@ export const reconcileDns = (adapter: DnsAdapter) => {
 
   const nameOf = (zone: string) => (record: { readonly name: string }): string =>
     adapter.normalize({ name: record.name, zone })
+
+  const apexKeyOf = (zone: string): string => adapter.normalize({ name: zone, zone })
 
   // only a TXT whose canonical value carries the ownership prefix counts
   const ownerTagOfRecord = (record: ZoneRecord): string | undefined =>
@@ -81,18 +85,25 @@ export const reconcileDns = (adapter: DnsAdapter) => {
       readonly snapshot: ReadonlyArray<ZoneRecord>
     }
   ) {
-    const here = snapshot.filter((r) => nameOf(zone)(r) === name)
-    const ownerTxts = here.filter((r) => ownerTagOfRecord(r) !== undefined)
+    const ownerKey = ownershipName({ name, apexKey: apexKeyOf(zone) })
+    const at = (key: string) => snapshot.filter((r) => nameOf(zone)(r) === key)
+    const here = at(name)
+    const ownerTxts = at(ownerKey).filter((r) => ownerTagOfRecord(r) !== undefined)
+    // written by kumulo 0.2 and earlier, beside the record it owns
+    const legacyOwnerTxts = here.filter((r) => ownerTagOfRecord(r) !== undefined)
     const managed = here.filter(_isManaged)
     const ownerCanonical = ownerTarget === undefined ? undefined : adapter.canonical({ type: "TXT", value: ownerTarget })
-    const foreignOwner = ownerTxts.some((r) => canon(r) !== ownerCanonical)
+    const owners = [...ownerTxts, ...legacyOwnerTxts]
+    const foreignOwner = owners.some((r) => canon(r) !== ownerCanonical)
 
-    if (foreignOwner || (target !== undefined && managed.length > 0 && ownerTxts.length === 0)) {
+    if (foreignOwner || (target !== undefined && managed.length > 0 && owners.length === 0)) {
       return yield* Effect.fail(_conflict({ zone, name }))
     }
 
     if (ownerTarget !== undefined) {
-      yield* converge({ zone, name, type: "TXT", value: ownerTarget, existing: ownerTxts })
+      yield* converge({ zone, name: ownerKey, type: "TXT", value: ownerTarget, existing: ownerTxts })
+      // only after the new TXT exists, so the name is never left unowned; a CNAME can follow once it is gone
+      yield* Effect.forEach(legacyOwnerTxts, (r) => adapter.delete({ zone, record: r }), { discard: true })
     }
 
     if (target === undefined) return
@@ -127,20 +138,29 @@ export const reconcileDns = (adapter: DnsAdapter) => {
     removeClusterRecords: (zone: string, tag: ClusterTag): Effect.Effect<void, DnsError> =>
       Effect.gen(function*() {
         const snapshot = yield* adapter.list(zone)
+        const apexKey = apexKeyOf(zone)
         const owned = new Set<string>()
         const contested = new Set<string>()
+
+        // the name an ownership TXT speaks for: its own (0.2 layout) or the one behind _kumulo.
+        const ownedBy = (r: ZoneRecord): string => {
+          const name = nameOf(zone)(r)
+
+          return ownedName({ name, apexKey }) ?? name
+        }
 
         for (const r of snapshot) {
           const owner = ownerTagOfRecord(r)
 
-          if (owner === tag) owned.add(nameOf(zone)(r))
-          else if (owner !== undefined) contested.add(nameOf(zone)(r))
+          if (owner === tag) owned.add(ownedBy(r))
+          else if (owner !== undefined) contested.add(ownedBy(r))
         }
 
         const doomed = snapshot.filter((r) => {
-          const name = nameOf(zone)(r)
+          const isOwnerTxt = ownerTagOfRecord(r) === tag
+          const name = isOwnerTxt ? ownedBy(r) : nameOf(zone)(r)
 
-          return owned.has(name) && !contested.has(name) && (_isManaged(r) || ownerTagOfRecord(r) === tag)
+          return owned.has(name) && !contested.has(name) && (_isManaged(r) || isOwnerTxt)
         })
 
         yield* Effect.forEach(doomed, (r) => adapter.delete({ zone, record: r }), { discard: true })

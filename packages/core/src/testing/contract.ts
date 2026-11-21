@@ -88,9 +88,9 @@ export const dnsProviderContract = (build: () => ContractHarness): void => {
       const name = "www.example.com"
       const owner = _ownershipRecord(name, "cluster-a")
       yield* provider.ensureRecords(zone, [owner, { name, target: "lb.example.net" }])
-      assert.deepStrictEqual(kindsAt(name), ["CNAME", "TXT"])
+      assert.deepStrictEqual(kindsAt(name), ["CNAME"])
       yield* provider.ensureRecords(zone, [owner, { name, target: "203.0.113.1" }])
-      assert.deepStrictEqual(kindsAt(name), ["A", "TXT"])
+      assert.deepStrictEqual(kindsAt(name), ["A"])
       assert.strictEqual(targetOf(name), "203.0.113.1")
     }))
 
@@ -141,5 +141,67 @@ export const dnsProviderContract = (build: () => ContractHarness): void => {
       yield* provider.removeClusterRecords(zone, "cluster-a")
       assert.strictEqual(targetOf(record.name), undefined)
       assert.deepStrictEqual(valuesAt(record.name, "MX"), ["10 mail.example.net"])
+    }))
+
+  // RFC 1034 3.6.2: a name with a CNAME holds no other data, so the ownership TXT lives at _kumulo.<name>.
+  it.effect("keeps the ownership TXT off the owned name, at _kumulo.<name>", () =>
+    Effect.gen(function*() {
+      const { zone, provider, targetOf, kindsAt, valuesAt } = build()
+      const name = "www.example.com"
+      yield* provider.ensureRecords(zone, [_ownershipRecord(name, "cluster-a"), { name, target: "lb.example.net" }])
+      assert.strictEqual(targetOf(name), "lb.example.net")
+      assert.deepStrictEqual(kindsAt(name), ["CNAME"])
+      assert.deepStrictEqual(valuesAt("_kumulo.www.example.com", "TXT"), ["kumulo.cluster=cluster-a"])
+    }))
+
+  // A TXT named _kumulo.*.c1 would hold a literal asterisk label; most providers reject it.
+  it.effect("puts a wildcard name's ownership TXT at _kumulo._wildcard.<parent> and removes it with the record", () =>
+    Effect.gen(function*() {
+      const { zone, provider, targetOf, kindsAt, valuesAt } = build()
+      const name = "*.c1.example.com"
+      yield* provider.ensureRecords(zone, [_ownershipRecord(name, "cluster-a"), { name, target: "lb.example.net" }])
+      assert.strictEqual(targetOf(name), "lb.example.net")
+      assert.deepStrictEqual(kindsAt(name), ["CNAME"])
+      assert.deepStrictEqual(valuesAt("_kumulo._wildcard.c1.example.com", "TXT"), ["kumulo.cluster=cluster-a"])
+      yield* provider.removeClusterRecords(zone, "cluster-a")
+      assert.strictEqual(targetOf(name), undefined)
+      assert.deepStrictEqual(valuesAt("_kumulo._wildcard.c1.example.com", "TXT"), [])
+    }))
+
+  it.effect("moves an ownership TXT written beside the record by kumulo 0.2 to _kumulo.<name>", () =>
+    Effect.gen(function*() {
+      const { zone, provider, targetOf, kindsAt, valuesAt, seedForeign, seedForeignOwnerTxt } = build()
+      const record = _ownedRecord()
+      seedForeignOwnerTxt(record.name, "cluster-a")
+      seedForeign(record.name, record.target)
+      yield* provider.ensureRecords(zone, [_ownershipRecord(record.name, "cluster-a"), record])
+      assert.deepStrictEqual(kindsAt(record.name), ["A"])
+      assert.deepStrictEqual(valuesAt("_kumulo.api.example.com", "TXT"), ["kumulo.cluster=cluster-a"])
+      yield* provider.ensureRecords(zone, [_ownershipRecord(record.name, "cluster-a"), { name: record.name, target: "lb.example.net" }])
+      assert.strictEqual(targetOf(record.name), "lb.example.net")
+      assert.deepStrictEqual(kindsAt(record.name), ["CNAME"])
+    }))
+
+  it.effect("removeClusterRecords also removes records owned through a 0.2-style TXT", () =>
+    Effect.gen(function*() {
+      const { zone, provider, targetOf, kindsAt, seedForeign, seedForeignOwnerTxt } = build()
+      const record = _ownedRecord()
+      seedForeignOwnerTxt(record.name, "cluster-a")
+      seedForeign(record.name, record.target)
+      yield* provider.removeClusterRecords(zone, "cluster-a")
+      assert.strictEqual(targetOf(record.name), undefined)
+      assert.deepStrictEqual(kindsAt(record.name), [])
+    }))
+
+  it.effect("never takes a name whose _kumulo.<name> TXT names another cluster", () =>
+    Effect.gen(function*() {
+      const { zone, provider, targetOf, valuesAt, seedForeignOwnerTxt } = build()
+      const record = _ownedRecord()
+      seedForeignOwnerTxt("_kumulo.api.example.com", "some-other-cluster")
+      const result = yield* Effect.flip(provider.ensureRecords(zone, [_ownershipRecord(record.name, "cluster-a"), record]))
+      assert.strictEqual(result._tag, "ResourceConflict")
+      assert.strictEqual(targetOf(record.name), undefined)
+      yield* provider.removeClusterRecords(zone, "cluster-a")
+      assert.deepStrictEqual(valuesAt("_kumulo.api.example.com", "TXT"), ["kumulo.cluster=some-other-cluster"])
     }))
 }

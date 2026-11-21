@@ -65,7 +65,7 @@ describe("bunny dns provider — bunny specifics", () => {
   it.effect("treats empty and @ as the apex", () =>
     Effect.gen(function*() {
       const { fake, provider, zoneId } = _setup()
-      fake.seedRecord({ zoneId, record: { Name: "@", Type: "TXT", Value: "kumulo.cluster=cluster-a", Ttl: 300 } })
+      fake.seedRecord({ zoneId, record: { Name: "_kumulo", Type: "TXT", Value: "kumulo.cluster=cluster-a", Ttl: 300 } })
       fake.seedRecord({ zoneId, record: { Name: "", Type: "A", Value: "10.0.0.1", Ttl: 300 } })
       fake.clearRequests()
       yield* provider.ensureRecords(_zone, [_owner(_zone), { name: _zone, target: "10.0.0.1" }])
@@ -166,7 +166,7 @@ describe("bunny dns provider — bunny specifics", () => {
       }
 
       const provider = makeBunnyDnsProvider({ dns, pullZoneIdFor: () => 42 })
-      fake.seedRecord({ zoneId, record: { Name: "", Type: "TXT", Value: "kumulo.cluster=cluster-a", Ttl: 300 } })
+      fake.seedRecord({ zoneId, record: { Name: "_kumulo", Type: "TXT", Value: "kumulo.cluster=cluster-a", Ttl: 300 } })
       fake.seedRecord({ zoneId, record: { Name: "", Type: "PullZone", Value: "", Ttl: 300, PullZoneId: 42 } })
       fake.clearRequests()
       yield* provider.ensureRecords(_zone, [_owner(_zone), { name: _zone, target: "site.b-cdn.net" }])

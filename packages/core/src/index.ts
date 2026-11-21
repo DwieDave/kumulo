@@ -137,7 +137,7 @@ export { cdnNoop, cdnNoopLive } from "./cdn-noop/index.ts"
 
 export { dnsNoop, dnsNoopLive } from "./dns-noop/index.ts"
 
-export { OWNERSHIP_PREFIX, ownershipTarget, ownerTagOf, reconcileDns, reconcileDnsLive, recordKind } from "./dns/index.ts"
+export { OWNERSHIP_PREFIX, ownedName, ownershipName, ownershipTarget, ownerTagOf, reconcileDns, reconcileDnsLive, recordKind } from "./dns/index.ts"
 
 export type { DnsAdapter, DnsRecordKind, ZoneRecord } from "./dns/index.ts"
 
