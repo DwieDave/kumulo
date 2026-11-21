@@ -1,5 +1,5 @@
 import { Effect, Layer, Option, Schema } from "effect"
-import { DnsProvider, ownerTagOf, ProviderApiError, reconcileDns, ResourceNotFound } from "@kumulo/core"
+import { DnsProvider, ownershipName, ownerTagOf, ProviderApiError, reconcileDns, ResourceNotFound } from "@kumulo/core"
 import type { ClusterTag, DesiredRecord, DnsAdapter, DnsError, ZoneRecord } from "@kumulo/core"
 import { bunnyCapabilityAsApiError, BunnyDnsRecordType } from "@kumulo/bunny"
 import type { BunnyDnsClient, BunnyDnsRecord, BunnyDnsRecordInput, BunnyError } from "@kumulo/bunny"
@@ -143,8 +143,10 @@ const _commentsFor = (
 ): ReadonlyMap<string, string> =>
   new Map(records.flatMap((record) => {
     const comment = _commentFor(record.target)
+    const name = _normalize({ name: record.name, zone })
 
-    return comment === undefined ? [] : [[_normalize({ name: record.name, zone }), comment] as const]
+    // the ownership TXT sits at _kumulo.<name> and carries the same comment as the records it owns
+    return comment === undefined ? [] : [[name, comment] as const, [ownershipName({ name, apexKey: "" }), comment] as const]
   }))
 
 export const makeBunnyDnsProvider = (options: BunnyDnsProviderOptions) => ({

@@ -38,7 +38,9 @@ describe("cloudflare dns through dnsProviderLayerWith", () => {
         assert.strictEqual(fake.peek({ name: "*.c1", type: "A" })?.content, "203.0.113.5")
         assert.strictEqual(fake.peek({ name: "*.c1", type: "A" })?.proxied, false)
         assert.strictEqual(fake.peek({ name: "api", type: "CNAME" })?.content, "abc123.k8s.example.net")
-        assert.strictEqual(fake.peek({ name: "api", type: "TXT" })?.content, `"kumulo.cluster=${config.name}"`)
+        assert.deepStrictEqual(fake.peekAll().filter((r) => r.name === "api.example.com").map((r) => r.type), ["CNAME"])
+        assert.strictEqual(fake.peek({ name: "_kumulo.api", type: "TXT" })?.content, `"kumulo.cluster=${config.name}"`)
+        assert.strictEqual(fake.peek({ name: "_kumulo._wildcard.c1", type: "TXT" })?.content, `"kumulo.cluster=${config.name}"`)
         assert.isTrue(fake.peekAll().every((r) => r.ttl === 300))
 
         const writes = fake.writes().length

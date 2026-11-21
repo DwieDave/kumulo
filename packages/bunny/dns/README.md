@@ -1,6 +1,6 @@
 # @kumulo/dns-bunny
 
-DNS provider for bunny.net zones. The zone must already exist. It keeps one value per name and kind, writes the `kumulo.cluster=<tag>` TXT ownership record, and creates a PullZone record (type 7) for a CDN hostname at the zone apex.
+DNS provider for bunny.net zones. The zone must already exist. It keeps one value per name and kind, writes the `kumulo.cluster=<tag>` TXT ownership record at `_kumulo.<name>`, and creates a PullZone record (type 7) for a CDN hostname at the zone apex.
 
 Part of [kumulo](../../../README.md) — a CLI that provisions and manages
 Kubernetes clusters on OVH from a single YAML config. This package is

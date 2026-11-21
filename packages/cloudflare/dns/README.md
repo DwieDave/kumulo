@@ -31,7 +31,9 @@ dns:
 - `dns.ttl` is 1 (Cloudflare's "automatic") or 60 to 86400.
 - A, AAAA and CNAME records are written with `proxied: false`. An owned record
   someone switched to proxied is switched back on the next apply.
-- Each name gets a TXT record `"kumulo.cluster=<name>"` that marks it as owned.
+- Each name gets an ownership TXT `"kumulo.cluster=<cluster>"` at `_kumulo.<name>`
+  (`_kumulo._wildcard.<parent>` for `*.<parent>`, `_kumulo` for the apex), so a
+  CNAME keeps its name to itself.
 - A CNAME at the apex is allowed; Cloudflare flattens it.
 - The zone is looked up by name with `GET /zones?name=`. A token that cannot
   see it fails the preflight before anything is created.

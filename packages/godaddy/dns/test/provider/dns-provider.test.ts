@@ -76,7 +76,7 @@ describe("godaddy dns provider - specifics", () => {
   it.effect("replaces by id on ttl drift", () =>
     Effect.gen(function*() {
       const { fake, provider } = _setup()
-      const owner = fake.seed({ name: "api", type: "TXT", data: "kumulo.cluster=cluster-a", ttl: 600 })
+      const owner = fake.seed({ name: "_kumulo.api", type: "TXT", data: "kumulo.cluster=cluster-a", ttl: 600 })
       const a = fake.seed({ name: "api", type: "A", data: "10.0.0.1", ttl: 1800 })
       yield* provider.ensureRecords(_zone, [_owner("api.example.com"), { name: "api.example.com", target: "10.0.0.1" }])
       const writes = fake.writes()
@@ -84,7 +84,7 @@ describe("godaddy dns provider - specifics", () => {
       assert.strictEqual(writes[0]?.method, "PUT")
       assert.isTrue(writes[0]?.path.endsWith(a.recordId))
       assert.strictEqual(fake.peek({ name: "api", type: "A" })?.ttl, 600)
-      assert.strictEqual(fake.peek({ name: "api", type: "TXT" })?.recordId, owner.recordId)
+      assert.strictEqual(fake.peek({ name: "_kumulo.api", type: "TXT" })?.recordId, owner.recordId)
     }))
 
   it.effect("kind change deletes before it creates", () =>
@@ -104,7 +104,7 @@ describe("godaddy dns provider - specifics", () => {
         const { fake, provider } = _setup()
         yield* provider.ensureRecords(_zone, [_owner(name), { name, target: "10.0.0.1" }])
         assert.strictEqual(fake.peek({ name: "@", type: "A" })?.data, "10.0.0.1")
-        assert.strictEqual(fake.peek({ name: "@", type: "TXT" })?.data, "kumulo.cluster=cluster-a")
+        assert.strictEqual(fake.peek({ name: "_kumulo", type: "TXT" })?.data, "kumulo.cluster=cluster-a")
       }
     }))
 
@@ -123,7 +123,7 @@ describe("godaddy dns provider - specifics", () => {
   it.effect("accepts quoted TXT ownership without rewriting", () =>
     Effect.gen(function*() {
       const { fake, provider } = _setup()
-      fake.seed({ name: "api", type: "TXT", data: "\"kumulo.cluster=cluster-a\"", ttl: 600 })
+      fake.seed({ name: "_kumulo.api", type: "TXT", data: "\"kumulo.cluster=cluster-a\"", ttl: 600 })
       fake.seed({ name: "api", type: "A", data: "10.0.0.1", ttl: 600 })
       yield* provider.ensureRecords(_zone, [_owner("api.example.com"), { name: "api.example.com", target: "10.0.0.1" }])
       assert.strictEqual(fake.writes().length, 0)
@@ -194,9 +194,9 @@ describe("godaddy dns provider - specifics", () => {
   it.effect("does not rewrite a dotted, mixed-case CNAME or a non-canonical AAAA", () =>
     Effect.gen(function*() {
       const { fake, provider } = _setup()
-      fake.seed({ name: "www", type: "TXT", data: "kumulo.cluster=cluster-a", ttl: 600 })
+      fake.seed({ name: "_kumulo.www", type: "TXT", data: "kumulo.cluster=cluster-a", ttl: 600 })
       fake.seed({ name: "www", type: "CNAME", data: "LB.Example.net.", ttl: 600 })
-      fake.seed({ name: "v6", type: "TXT", data: "kumulo.cluster=cluster-a", ttl: 600 })
+      fake.seed({ name: "_kumulo.v6", type: "TXT", data: "kumulo.cluster=cluster-a", ttl: 600 })
       fake.seed({ name: "v6", type: "AAAA", data: "2001:DB8:0:0:0:0:0:1", ttl: 600 })
       yield* provider.ensureRecords(_zone, [
         _owner("www.example.com"),
@@ -260,7 +260,7 @@ describe("godaddy dns provider - specifics", () => {
       const provider = makeGodaddyDnsProvider({ dns: fake.dns, ttl: 900 })
       yield* provider.ensureRecords(_zone, [_owner("api.example.com"), { name: "api.example.com", target: "10.0.0.1" }])
       assert.strictEqual(fake.peek({ name: "api", type: "A" })?.ttl, 900)
-      assert.strictEqual(fake.peek({ name: "api", type: "TXT" })?.ttl, 900)
+      assert.strictEqual(fake.peek({ name: "_kumulo.api", type: "TXT" })?.ttl, 900)
     }))
 
   it.effect("ensureRecords converges across multiple pages with zero writes on re-apply", () =>

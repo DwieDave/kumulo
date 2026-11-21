@@ -84,7 +84,16 @@ export const makeFakeZone = ({ zone: zoneName, ...options }: FakeZoneOptions & {
 
   const _isApex = (name: string): boolean => name === "@" || name === "" || name === zoneName
 
-  const _validate = (body: typeof _WriteBody.Type): Option.Option<Response> => {
+  // GoDaddy's troubleshooting guide says a write that "violates a DNS rule" fails with 422; it names the apex
+  // CNAME, not this case. RFC 1034 3.6.2 (a CNAME shares its name with nothing) is assumed, not verified.
+  const _besideCname = ({ body, id }: { readonly body: typeof _WriteBody.Type; readonly id: string | undefined }): boolean =>
+    [...records.values()].some((r) => r.recordId !== id && r.name === body.name && (r.type === "CNAME" || body.type === "CNAME"))
+
+  const _validate = (body: typeof _WriteBody.Type, id?: string): Option.Option<Response> => {
+    if (_besideCname({ body, id })) {
+      return Option.some(_error({ status: 422, code: "UNPROCESSABLE_ENTITY", message: "a CNAME cannot share its name with other records" }))
+    }
+
     if (_isProtected(body.type)) {
       return Option.some(_error({ status: 409, code: "CONFLICT", message: "NS and SOA records cannot be modified" }))
     }
@@ -143,7 +152,7 @@ export const makeFakeZone = ({ zone: zoneName, ...options }: FakeZoneOptions & {
       return _error({ status: 400, code: "INVALID_BODY", message: "invalid request" })
     }
 
-    return Option.match(_validate(body.value), {
+    return Option.match(_validate(body.value, id), {
       onSome: (rejected) => rejected,
       onNone: () => _json({ status: 200, body: JSON.stringify(_store({ id, body: body.value })) })
     })
