@@ -11,7 +11,9 @@ export const fakeCredentials = Layer.succeed(
       HETZNER_DNS_TOKEN: "test-dns-token",
       BUNNYNET_API_KEY: "test-bunny-key",
       GODADDY_API_TOKEN: "test-godaddy-token",
-      GODADDY_API_BASE_URL: "https://fixture.invalid"
+      GODADDY_API_BASE_URL: "https://fixture.invalid",
+      CLOUDFLARE_API_TOKEN: "test-cloudflare-token",
+      CLOUDFLARE_API_BASE_URL: "https://fixture.invalid"
     }
   })
 )

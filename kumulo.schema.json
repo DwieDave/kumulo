@@ -772,7 +772,8 @@
                     "ovh",
                     "hetzner",
                     "bunny",
-                    "godaddy"
+                    "godaddy",
+                    "cloudflare"
                   ]
                 },
                 "zone": {
@@ -1678,7 +1679,8 @@
                     "ovh",
                     "hetzner",
                     "bunny",
-                    "godaddy"
+                    "godaddy",
+                    "cloudflare"
                   ]
                 },
                 "zone": {
@@ -2540,7 +2542,8 @@
                     "ovh",
                     "hetzner",
                     "bunny",
-                    "godaddy"
+                    "godaddy",
+                    "cloudflare"
                   ]
                 },
                 "zone": {
@@ -2941,6 +2944,44 @@
             "properties": {
               "ttl": {
                 "minimum": 600
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "dns": {
+            "properties": {
+              "module": {
+                "const": "cloudflare"
+              }
+            },
+            "required": [
+              "module"
+            ]
+          }
+        },
+        "required": [
+          "dns"
+        ]
+      },
+      "then": {
+        "properties": {
+          "dns": {
+            "properties": {
+              "ttl": {
+                "anyOf": [
+                  {
+                    "const": 1
+                  },
+                  {
+                    "minimum": 60,
+                    "maximum": 86400
+                  }
+                ]
               }
             }
           }

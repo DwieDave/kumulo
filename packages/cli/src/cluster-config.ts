@@ -8,6 +8,7 @@ import {
   secretsRequiredForObjectStorage
 } from "@kumulo/core"
 import { cdnApexRequiresBunnyDns } from "@kumulo/cdn-bunny"
+import { cloudflareTtlRange } from "@kumulo/dns-cloudflare"
 import { godaddyApexNotCname, godaddyTtlMinimum } from "@kumulo/dns-godaddy"
 import { K3sClusterConfig } from "@kumulo/distro-k3s"
 import { MksClusterConfig, mksConfigRules } from "@kumulo/distro-ovh-mks"
@@ -21,6 +22,7 @@ const _providerRules = [
   hetznerCsiHasNoVolumeType,
   godaddyTtlMinimum,
   godaddyApexNotCname,
+  cloudflareTtlRange,
   cdnApexRequiresBunnyDns
 ] as const
 
@@ -40,6 +42,7 @@ export const ClusterConfig = Schema.Union([K3sClusterConfig, MksClusterConfig, U
   hetznerCsiHasNoVolumeType.filter,
   godaddyTtlMinimum.filter,
   godaddyApexNotCname.filter,
+  cloudflareTtlRange.filter,
   cdnApexRequiresBunnyDns.filter
 )
 

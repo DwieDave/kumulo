@@ -97,7 +97,7 @@ const DnsRecord = Schema.Struct({
 export const Dns = Schema.Union([
   Schema.Struct({ module: Schema.Literal("none") }),
   Schema.Struct({
-    module: Schema.Literals(["ovh", "hetzner", "bunny", "godaddy"]),
+    module: Schema.Literals(["ovh", "hetzner", "bunny", "godaddy", "cloudflare"]),
     zone: Schema.NonEmptyString,
     ttl: PositiveInt,
     records: Schema.Array(DnsRecord)

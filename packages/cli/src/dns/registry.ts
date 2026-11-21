@@ -5,6 +5,7 @@ import type { AuthenticationFailed, DnsProvider } from "@kumulo/core"
 import { makeDnsClient, ovhDnsProviderLive } from "@kumulo/dns-ovh"
 import { hetznerDnsHttpLive, hetznerDnsProviderLive, makeHetznerDnsClient } from "@kumulo/dns-hetzner"
 import { GodaddyHttpLive, godaddyDnsProviderLive, makeGodaddyDnsClient } from "@kumulo/dns-godaddy"
+import { CloudflareHttpLive, cloudflareDnsProviderLive, makeCloudflareDnsClient } from "@kumulo/dns-cloudflare"
 import { BunnyHttpLive, bunnyDnsClient } from "@kumulo/bunny"
 import { bunnyDnsProviderLive } from "@kumulo/dns-bunny"
 import type { ClusterConfig } from "../cluster-config.ts"
@@ -25,6 +26,16 @@ export interface DnsRegistryEntry {
   readonly layer: (args: DnsLayerArgs) => DnsLayer
 }
 
+const _optionalUrlEnv = (name: string): Effect.Effect<string | undefined, ConfigInvalid> =>
+  Config.option(Config.String(name)).pipe(
+    Effect.mapError((cause) => new ConfigInvalid({ issues: [{ path: [name], message: cause.message }] })),
+    Effect.filterOrFail(
+      (url) => Option.match(url, { onNone: () => true, onSome: (value) => URL.canParse(value) }),
+      () => new ConfigInvalid({ issues: [{ path: [name], message: `${name} is not a valid URL` }] })
+    ),
+    Effect.map(Option.getOrUndefined)
+  )
+
 export const godaddyHttpClientFromEnv = (): Effect.Effect<
   HttpClient.HttpClient,
   AuthenticationFailed | ConfigInvalid,
@@ -32,16 +43,21 @@ export const godaddyHttpClientFromEnv = (): Effect.Effect<
 > =>
   Effect.gen(function*() {
     const token = yield* requiredRedactedEnv("GODADDY_API_TOKEN")
+    const baseUrl = yield* _optionalUrlEnv("GODADDY_API_BASE_URL")
 
-    const baseUrl = yield* Config.option(Config.String("GODADDY_API_BASE_URL")).pipe(
-      Effect.mapError((cause) => new ConfigInvalid({ issues: [{ path: ["GODADDY_API_BASE_URL"], message: cause.message }] })),
-      Effect.filterOrFail(
-        (url) => Option.match(url, { onNone: () => true, onSome: (value) => URL.canParse(value) }),
-        () => new ConfigInvalid({ issues: [{ path: ["GODADDY_API_BASE_URL"], message: "GODADDY_API_BASE_URL is not a valid URL" }] })
-      )
-    )
+    return yield* Effect.provide(HttpClient.HttpClient, GodaddyHttpLive({ token, baseUrl }))
+  })
 
-    return yield* Effect.provide(HttpClient.HttpClient, GodaddyHttpLive({ token, baseUrl: Option.getOrUndefined(baseUrl) }))
+export const cloudflareHttpClientFromEnv = (): Effect.Effect<
+  HttpClient.HttpClient,
+  AuthenticationFailed | ConfigInvalid,
+  HttpClient.HttpClient
+> =>
+  Effect.gen(function*() {
+    const token = yield* requiredRedactedEnv("CLOUDFLARE_API_TOKEN")
+    const baseUrl = yield* _optionalUrlEnv("CLOUDFLARE_API_BASE_URL")
+
+    return yield* Effect.provide(HttpClient.HttpClient, CloudflareHttpLive({ token, baseUrl }))
   })
 
 export const dnsRegistry: Record<DnsModule, DnsRegistryEntry> = {
@@ -89,6 +105,17 @@ export const dnsRegistry: Record<DnsModule, DnsRegistryEntry> = {
           const httpClient = yield* godaddyHttpClientFromEnv()
 
           return godaddyDnsProviderLive({ dns: makeGodaddyDnsClient(httpClient), ttl })
+        })
+      )
+  },
+  cloudflare: {
+    envVars: ["CLOUDFLARE_API_TOKEN"],
+    layer: ({ ttl }) =>
+      Layer.unwrap(
+        Effect.gen(function*() {
+          const httpClient = yield* cloudflareHttpClientFromEnv()
+
+          return cloudflareDnsProviderLive({ dns: makeCloudflareDnsClient(httpClient), ttl })
         })
       )
   }
