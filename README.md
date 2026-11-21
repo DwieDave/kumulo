@@ -44,6 +44,7 @@ Credentials are read from the environment, not the config file:
 | `OS_AUTH_URL`, `OS_USERNAME`, `OS_PASSWORD`, `OS_PROJECT_NAME`, `OS_REGION_NAME` (or `OS_CLOUD` + `clouds.yaml`) | Cinder volumes (both distros); the `ovh-mks` `network`/`ingress` blocks |
 | `HCLOUD_TOKEN`, `HETZNER_DNS_TOKEN` | `k3s` clusters with `provider: hetzner` |
 | `GODADDY_API_TOKEN`, optional `GODADDY_API_BASE_URL` | `dns.module: godaddy` |
+| `CLOUDFLARE_API_TOKEN`, optional `CLOUDFLARE_API_BASE_URL` | `dns.module: cloudflare` |
 | `UPCLOUD_API_TOKEN` | `upcloud-uks` cluster API calls |
 
 They can also come from a sops-encrypted file — see
@@ -78,8 +79,8 @@ either the token lacks `domains.dns:update` or the account is not eligible
 GoDaddy API support to allow-list the account, or meet the threshold.
 
 **Fallback.** If the account cannot get API access, point the zone's
-nameservers at another DNS provider (OVH, Hetzner or bunny.net) at the
-registrar, and set `dns.module` to that provider.
+nameservers at another DNS provider (OVH, Hetzner, bunny.net or Cloudflare) at
+the registrar, and set `dns.module` to that provider.
 
 **OTE.** GoDaddy's test environment is `https://api.ote-godaddy.com`, set
 through `GODADDY_API_BASE_URL`. Support says OTE is not subject to the
@@ -122,6 +123,49 @@ node packages/cli/dist/main.mjs scale examples/ovh-mks.yaml --yes
 node packages/cli/dist/main.mjs delete examples/ovh-mks.yaml --yes
 ```
 
+## Cloudflare DNS
+
+Set `dns.module: cloudflare` to manage records in a zone hosted at
+Cloudflare. The zone must already exist in the account; kumulo does not
+create it.
+
+```yaml
+dns:
+  module: cloudflare
+  zone: example.com
+  ttl: 300
+  records:
+    - name: "*.prod"
+      target: 203.0.113.10
+    - name: api.prod
+      target: api_server
+```
+
+**Token.** Create an API token (dash.cloudflare.com, My Profile, API Tokens)
+with the permissions Zone:Read and DNS:Edit, limited to the zone. Export it as
+`CLOUDFLARE_API_TOKEN`, or put it under that key in the sops secrets file.
+`CLOUDFLARE_API_BASE_URL` is optional and overrides
+`https://api.cloudflare.com/client/v4`.
+
+**Behaviour.**
+- `dns.ttl` is 1 (automatic) or 60 to 86400.
+- A, AAAA and CNAME records are not proxied. The proxy would terminate TLS
+  and does not serve wildcard names on the free plan, so kumulo writes
+  `proxied: false` and switches a record back if someone turned the proxy on.
+- A CNAME on the apex is allowed (Cloudflare flattens it).
+- `apply` and `delete` look the zone up first and stop before touching the
+  cluster if the token cannot see it.
+
+**Unverified.** The client was written from Cloudflare's published OpenAPI
+spec and tested against a fake. It has not run against the live API.
+
+## Which provider serves the zone
+
+Records only resolve if the domain's nameservers point at the provider kumulo
+writes to. `kumulo doctor` checks this for `dns.module: cloudflare` (the
+nameservers Cloudflare assigned to the zone) and `dns.module: godaddy`
+(`*.domaincontrol.com`). Check it by hand with `dig NS example.com +short`.
+
 ## Command reference
 
 | Command | Notes |
@@ -132,6 +176,7 @@ node packages/cli/dist/main.mjs delete examples/ovh-mks.yaml --yes
 | `kubeconfig <config>` | Prints the cluster's kubeconfig to stdout. |
 | `delete <config>` | Tears the cluster down; volumes marked `retain: true` in `volumes.managed[]` are kept. |
 | `upgrade <config>` | Renders SUC upgrade Plans for `k3s`; drives the OVH or UpCloud API directly for `ovh-mks`/`upcloud-uks`. |
+| `doctor <config>` | Runs the distro's preflight checks, then the DNS module's (`cloudflare`, `godaddy`): can the token read the zone, and do the domain's nameservers point at that provider. Exits 20 when a check fails. |
 | `volumes list <config>` / `volumes adopt <config>` | Inspect or re-bind retained Cinder volumes into a (re)created cluster. |
 
 The config path is a positional argument on every command. Shared flags:

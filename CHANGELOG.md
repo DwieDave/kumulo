@@ -6,6 +6,17 @@ All notable changes to kumulo are documented here. Format:
 
 ## [Unreleased]
 
+### Added
+
+- DNS records via Cloudflare (`@kumulo/dns-cloudflare`, `dns.module: cloudflare`),
+  on the API v4 with an API token in `CLOUDFLARE_API_TOKEN` (Zone:Read and
+  DNS:Edit). A, AAAA and CNAME records are written with `proxied: false`.
+  `dns.ttl` is 1 (automatic) or 60 to 86400. `apply` and `delete` stop
+  before touching the cluster when the token cannot see the zone.
+- `kumulo doctor` runs DNS checks after the distro's: for `cloudflare` and
+  `godaddy`, whether the token can read the zone and whether the domain's
+  nameservers point at that provider.
+
 ## [0.2.0] - 2026-11-20
 
 0.1.1 was the first npm publish, made by hand. Nine package names are new on
