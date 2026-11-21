@@ -1,10 +1,11 @@
-import { Effect } from "effect"
+import { Effect, Option } from "effect"
 import type * as HttpClient from "effect/http/HttpClient"
+import { makeCloudflareDnsClient, zoneNotVisible } from "@kumulo/dns-cloudflare"
 import { makeGodaddyDnsClient } from "@kumulo/dns-godaddy"
 import { DnsProvider, ownershipTarget } from "@kumulo/core"
 import type { AuthenticationFailed, ConfigInvalid, DesiredRecord, DnsError } from "@kumulo/core"
 import type { ClusterConfig } from "./cluster-config.ts"
-import { dnsRegistry, godaddyHttpClientFromEnv } from "./dns/registry.ts"
+import { cloudflareHttpClientFromEnv, dnsRegistry, godaddyHttpClientFromEnv } from "./dns/registry.ts"
 import type { DnsLayer } from "./dns/registry.ts"
 
 export type DnsTarget =
@@ -70,7 +71,15 @@ export const dnsPreflight = (
   Effect.gen(function*() {
     const cfgDns = config.dns
 
-    if (cfgDns.module !== "godaddy") return
-    const httpClient = yield* godaddyHttpClientFromEnv()
-    yield* makeGodaddyDnsClient(httpClient).probe({ zone: cfgDns.zone })
+    if (cfgDns.module === "godaddy") {
+      const httpClient = yield* godaddyHttpClientFromEnv()
+      yield* makeGodaddyDnsClient(httpClient).probe({ zone: cfgDns.zone })
+    }
+
+    if (cfgDns.module === "cloudflare") {
+      const httpClient = yield* cloudflareHttpClientFromEnv()
+      const zone = yield* makeCloudflareDnsClient(httpClient).findZone({ name: cfgDns.zone })
+
+      if (Option.isNone(zone)) return yield* Effect.fail(zoneNotVisible(cfgDns.zone))
+    }
   })

@@ -1,6 +1,6 @@
 {
   "name": "@kumulo/cli",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "kumulo CLI \u2014 declarative Kubernetes cluster provisioning on OVH/Hetzner.",
   "license": "MIT",
   "author": "David Stahl-Gruber",
@@ -57,6 +57,7 @@
     "@kumulo/distro-ovh-mks": "workspace:*",
     "@kumulo/distro-upcloud-uks": "workspace:*",
     "@kumulo/dns-bunny": "workspace:*",
+    "@kumulo/dns-cloudflare": "workspace:*",
     "@kumulo/dns-godaddy": "workspace:*",
     "@kumulo/dns-hetzner": "workspace:*",
     "@kumulo/dns-ovh": "workspace:*",

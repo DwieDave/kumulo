@@ -4,7 +4,7 @@ import { decodeConfig } from "../../src/cluster-config.ts"
 import { validConfig, validUpcloudUksConfig } from "./fixtures.ts"
 
 const distros = ["k3s", "ovh-mks", "upcloud-uks"] as const
-const dnsModules = ["ovh", "hetzner", "bunny", "godaddy"] as const
+const dnsModules = ["ovh", "hetzner", "bunny", "godaddy", "cloudflare"] as const
 
 const realDns = { zone: "example.com", ttl: 600, records: [{ name: "api.prod-eu", target: "api_server" }] }
 

@@ -3,7 +3,7 @@ import { Effect, Result, Schema } from "effect"
 import { decodeConfig } from "../../src/cluster-config.ts"
 import { validConfig, validMksConfig, validUpcloudUksConfig } from "./fixtures.ts"
 
-const dnsModules = ["ovh", "hetzner", "bunny", "godaddy"] as const
+const dnsModules = ["ovh", "hetzner", "bunny", "godaddy", "cloudflare"] as const
 
 const literalTargets = ["203.0.113.7", "2001:db8::1", "lb-1234.upcloudlb.com", "api_server"] as const
 

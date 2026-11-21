@@ -1,6 +1,6 @@
 {
   "name": "@kumulo/cdn-bunny",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "bunny.net CDN provider for kumulo.",
   "license": "MIT",
   "author": "David Stahl-Gruber",

@@ -188,6 +188,28 @@ npm deprecate @kumulo/addons@0.1.1 "merged into the provider and distro packages
 
 Optionally create a GitHub release for `v0.2.0` from the changelog entry.
 
+## Steps for 0.3.0
+
+0.2.0 went out through `release.yml` on 2026-11-20, so trusted publishing works
+for the 21 names it published. 0.3.0 adds one name, `@kumulo/dns-cloudflare`,
+which npm does not have yet. Before the tag, a scope owner with two-factor
+authentication sets it up the way the 0.2.0 names were (`@kumulo/dns-godaddy`
+carries a `0.0.1` placeholder):
+
+```sh
+npm login
+dir=$(mktemp -d) && cd "$dir"
+printf '{"name":"%s","version":"0.0.1","description":"placeholder, use 0.3.0 or later","license":"MIT"}\n' @kumulo/dns-cloudflare > package.json
+npm publish --access public
+npm deprecate @kumulo/dns-cloudflare@0.0.1 "placeholder, use 0.3.0 or later"
+npm trust github @kumulo/dns-cloudflare --file release.yml --repo DwieDave/kumulo
+```
+
+Then tag the merge commit on `main` that carries 0.3.0 and watch the run as in
+steps 3 to 5 of 0.2.0. Without the trusted publisher on the new name, the
+publish loop stops at `dns-cloudflare` with the packages before it already on
+npm (see [A publish stopped halfway](#a-publish-stopped-halfway)).
+
 ## Later releases
 
 1. `bun run version:bump <x.y.z>` (or `patch`, `minor`, `major`). It sets every

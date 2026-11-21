@@ -1,6 +1,6 @@
 {
   "name": "@kumulo/hetzner",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Hetzner Cloud API client for kumulo.",
   "license": "MIT",
   "author": "David Stahl-Gruber",
