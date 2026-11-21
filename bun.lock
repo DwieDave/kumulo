@@ -23,7 +23,7 @@
     },
     "packages/bunny/cdn": {
       "name": "@kumulo/cdn-bunny",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "@kumulo/bunny": "workspace:*",
         "@kumulo/core": "workspace:*",
@@ -39,7 +39,7 @@
     },
     "packages/bunny/client": {
       "name": "@kumulo/bunny",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "@kumulo/core": "workspace:*",
       },
@@ -54,7 +54,7 @@
     },
     "packages/bunny/dns": {
       "name": "@kumulo/dns-bunny",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "@kumulo/bunny": "workspace:*",
         "@kumulo/core": "workspace:*",
@@ -70,7 +70,7 @@
     },
     "packages/bunny/storage": {
       "name": "@kumulo/storage-bunny",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "@kumulo/bunny": "workspace:*",
         "@kumulo/core": "workspace:*",
@@ -86,7 +86,7 @@
     },
     "packages/cli": {
       "name": "@kumulo/cli",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "bin": {
         "kumulo": "./dist/main.mjs",
       },
@@ -127,7 +127,7 @@
     },
     "packages/cloudflare/dns": {
       "name": "@kumulo/dns-cloudflare",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "@kumulo/core": "workspace:*",
       },
@@ -142,7 +142,7 @@
     },
     "packages/core": {
       "name": "@kumulo/core",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "yaml": "catalog:",
       },
@@ -157,7 +157,7 @@
     },
     "packages/distro-k3s": {
       "name": "@kumulo/distro-k3s",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "@kumulo/core": "workspace:*",
         "ssh2": "catalog:",
@@ -175,7 +175,7 @@
     },
     "packages/godaddy/dns": {
       "name": "@kumulo/dns-godaddy",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "@kumulo/core": "workspace:*",
       },
@@ -190,7 +190,7 @@
     },
     "packages/hetzner/client": {
       "name": "@kumulo/hetzner",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "@kumulo/core": "workspace:*",
       },
@@ -206,7 +206,7 @@
     },
     "packages/hetzner/dns": {
       "name": "@kumulo/dns-hetzner",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "@kumulo/core": "workspace:*",
       },
@@ -221,7 +221,7 @@
     },
     "packages/openstack/client": {
       "name": "@kumulo/openstack",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "@kumulo/core": "workspace:*",
         "yaml": "catalog:",
@@ -238,7 +238,7 @@
     },
     "packages/openstack/volumes": {
       "name": "@kumulo/volumes-cinder",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "@kumulo/core": "workspace:*",
         "yaml": "catalog:",
@@ -255,7 +255,7 @@
     },
     "packages/ovh/client": {
       "name": "@kumulo/provider-ovh",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "@kumulo/core": "workspace:*",
       },
@@ -270,7 +270,7 @@
     },
     "packages/ovh/distro-mks": {
       "name": "@kumulo/distro-ovh-mks",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "@kumulo/core": "workspace:*",
       },
@@ -287,7 +287,7 @@
     },
     "packages/ovh/dns": {
       "name": "@kumulo/dns-ovh",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "@kumulo/core": "workspace:*",
       },
@@ -304,7 +304,7 @@
     },
     "packages/ovh/storage": {
       "name": "@kumulo/storage-ovh",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "@kumulo/core": "workspace:*",
       },
@@ -332,7 +332,7 @@
     },
     "packages/secrets-sops": {
       "name": "@kumulo/secrets-sops",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "@kumulo/core": "workspace:*",
         "yaml": "catalog:",
@@ -349,7 +349,7 @@
     },
     "packages/upcloud/client": {
       "name": "@kumulo/upcloud",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "@kumulo/core": "workspace:*",
       },
@@ -364,7 +364,7 @@
     },
     "packages/upcloud/distro-uks": {
       "name": "@kumulo/distro-upcloud-uks",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "@kumulo/core": "workspace:*",
         "@kumulo/upcloud": "workspace:*",
@@ -380,7 +380,7 @@
     },
     "packages/upcloud/storage": {
       "name": "@kumulo/storage-upcloud",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "@kumulo/core": "workspace:*",
         "@kumulo/upcloud": "workspace:*",
@@ -396,7 +396,7 @@
     },
     "packages/upcloud/volumes": {
       "name": "@kumulo/volumes-upcloud",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "@kumulo/core": "workspace:*",
         "@kumulo/upcloud": "workspace:*",

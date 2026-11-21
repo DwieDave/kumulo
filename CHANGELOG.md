@@ -6,6 +6,10 @@ All notable changes to kumulo are documented here. Format:
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-21
+
+One package name is new on npm with this release: `@kumulo/dns-cloudflare`.
+
 ### Added
 
 - DNS records via Cloudflare (`@kumulo/dns-cloudflare`, `dns.module: cloudflare`),

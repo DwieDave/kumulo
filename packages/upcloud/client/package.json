@@ -1,6 +1,6 @@
 {
   "name": "@kumulo/upcloud",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Hand-written UpCloud API client (UKS, network, router) for kumulo.",
   "license": "MIT",
   "author": "David Stahl-Gruber",
