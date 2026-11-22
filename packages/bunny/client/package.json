@@ -1,6 +1,6 @@
 {
   "name": "@kumulo/bunny",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "bunny.net API client for kumulo.",
   "license": "MIT",
   "author": "David Stahl-Gruber",

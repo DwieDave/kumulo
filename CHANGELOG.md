@@ -6,6 +6,8 @@ All notable changes to kumulo are documented here. Format:
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-22
+
 ### Added
 
 - `dns.module: none` takes `records`, in the managed modules' shape (names
