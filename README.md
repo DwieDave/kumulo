@@ -162,14 +162,40 @@ spec and tested against a fake. It has not run against the live API.
 ## Manual DNS (`dns.module: none`)
 
 With `dns.module: none` kumulo writes no DNS records and needs no DNS token.
-`apply` ends by printing every address it resolved for the cluster, so you can
-create the records yourself at any DNS host:
+Every `apply` that is not a dry run ends by printing the records to create at
+your DNS host, also when its plan has nothing to do.
+
+List the records you want, in the same shape as the managed modules: names
+relative to `zone`, `@` for the apex, and a target of `api_server`, `ingress`
+(`ovh-mks` with an `ingress` block), `cdn` (with a CDN), or a literal IP or
+hostname. `records` needs `zone`; there is no `ttl`.
 
 ```yaml
 dns:
   module: none
-  zone: example.com   # optional, only fills in the suggested names
+  zone: example.com
+  records:
+    - name: api.demo
+      target: api_server
+    - name: "*.demo"
+      target: 203.0.113.7
+    - name: _acme-challenge.demo
+      target: demo.acme.example.net
 ```
+
+```text
+dns.module is none: kumulo wrote no DNS records. Create these records at your DNS host:
+
+  NAME                              TYPE   VALUE
+  api.demo.example.com              CNAME  abc123.upcloud.k8s.io
+  *.demo.example.com                A      203.0.113.7
+  _acme-challenge.demo.example.com  CNAME  demo.acme.example.net
+```
+
+Without `records`, `apply` prints one row per address it resolved for the
+cluster, with a suggested name (`api.<cluster>.<zone>`, `*.<cluster>.<zone>`,
+the CDN's own `hostnames` for `cdn`). `zone` is optional then; without it the
+names keep a literal `<zone>` to replace.
 
 ```text
 dns.module is none: kumulo wrote no DNS records. Create these at your DNS host.
@@ -179,18 +205,14 @@ The names are suggestions: any name works with the type and value shown.
   api_server  api.staging-de.example.com  CNAME  abc123.upcloud.k8s.io
 ```
 
-- One row per target the distro resolved: `api_server` always, `ingress` on
-  `ovh-mks` with an `ingress` block, `cdn` with a CDN. The type follows the
-  value: A for an IPv4 address, AAAA for IPv6, CNAME for a hostname.
-- Suggested names are `api.<cluster>.<zone>` and `*.<cluster>.<zone>`, the
-  shapes the examples above use, and the CDN's own `hostnames` for `cdn`.
-  Without `zone` the names keep a literal `<zone>` to replace.
+- The type follows the value: A for an IPv4 address, AAAA for IPv6, CNAME for
+  a hostname.
 - There is no ownership TXT to create: nothing reads it when kumulo does not
   manage the zone.
-- `apply --dry-run` prints no rows, because the addresses do not exist before
-  the cluster does. An `apply` whose plan has nothing to do stops before it
-  resolves them, so keep the output of the apply that created the cluster.
-- `delete` prints a reminder to remove the records by hand.
+- `apply --dry-run` prints no records, because the addresses do not exist before
+  the cluster does.
+- `delete` prints a reminder to remove the records by hand, with their full
+  names when `records` is set.
 
 ## DNS record ownership
 

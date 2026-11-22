@@ -25,7 +25,17 @@
   ],
   "dns": {
     "module": "none",
-    "zone": "example.com"
+    "zone": "example.com",
+    "records": [
+      {
+        "name": "api.staging-de",
+        "target": "api_server"
+      },
+      {
+        "name": "*.staging-de",
+        "target": "203.0.113.10"
+      }
+    ]
   },
   "volumes": {
     "module": "upcloud",

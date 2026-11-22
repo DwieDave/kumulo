@@ -33,6 +33,9 @@ import { withEdge } from "../edge.ts"
 import { applyCdn, cdnWarnings, removeCdn } from "../cdn.ts"
 import type { CdnHandle, CdnStepError } from "../cdn.ts"
 import type { FileSystem } from "effect/FileSystem"
+import type { PlatformError } from "effect/PlatformError"
+import { readOutputs } from "@kumulo/volumes-cinder"
+import type { OutputsInvalid } from "@kumulo/volumes-cinder"
 import type { DnsTarget, DnsTargets } from "../dns.ts"
 
 const _toMksConfig = (
@@ -107,6 +110,9 @@ export const reconcileMksDns = (
   }
 ): Effect.Effect<void, ManagedDistroError | ConfigInvalid, DnsProvider> =>
   Effect.gen(function*() {
+    // `none` short-circuits before the endpoint check.
+    if (config.dns.module === "none") return
+
     const hostname = yield* Effect.try({
       try: () => new URL(apiEndpoint).hostname,
       catch: () => _endpointInvalid(apiEndpoint)
@@ -114,6 +120,29 @@ export const reconcileMksDns = (
 
     if (hostname === "") return yield* Effect.fail(_endpointInvalid(apiEndpoint))
     yield* reconcileDns({ config, targets: _dnsTargets({ hostname, ingress, cdn }) })
+  })
+
+// read-only twin of reconcileMksDns's targets: the API endpoint's hostname, and the ingress floating IP apply recorded in the outputs file
+export const mksDnsTargets = (
+  { config, configDir }: { readonly config: ClusterConfig; readonly configDir: string }
+): Effect.Effect<DnsTargets | undefined, ManagedDistroError | ConfigInvalid | OutputsInvalid | PlatformError, MksEnv | FileSystem> =>
+  Effect.gen(function*() {
+    const { mks, serviceName } = yield* MksEnv
+    const info = yield* findClusterByName({ mks, config: _toMksConfig({ config, serviceName }) })
+
+    if (info === undefined) return undefined
+
+    const hostname = yield* Effect.try({
+      try: () => new URL(info.apiEndpoint).hostname,
+      catch: () => _endpointInvalid(info.apiEndpoint)
+    })
+
+    if (hostname === "") return yield* Effect.fail(_endpointInvalid(info.apiEndpoint))
+    const outputs = yield* readOutputs({ dir: configDir, tag: config.name, format: config.outputs?.format })
+
+    return outputs.ingress === undefined
+      ? { api_server: { kind: "hostname", value: hostname } }
+      : { api_server: { kind: "hostname", value: hostname }, ingress: { kind: "ip", value: outputs.ingress.floating_ip } }
   })
 
 type MksNetworkIds = Pick<MksDriverConfig, "privateNetworkId" | "nodesSubnetId" | "loadBalancersSubnetId">

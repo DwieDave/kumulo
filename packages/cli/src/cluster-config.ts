@@ -4,6 +4,7 @@ import {
   cdnOriginUrlRequired,
   decodeConfigWith,
   encodeConfigWith,
+  manualDnsRecordsNeedZone,
   parseConfigYamlWith,
   secretsRequiredForObjectStorage
 } from "@kumulo/core"
@@ -32,12 +33,14 @@ export const clusterConfigRules = [
   secretsRequiredForObjectStorage,
   authMethodConsistentWithProvider,
   cdnOriginUrlRequired,
+  manualDnsRecordsNeedZone,
   ...mksConfigRules,
   ...uksConfigRules,
   ..._providerRules
 ]
 
 export const ClusterConfig = Schema.Union([K3sClusterConfig, MksClusterConfig, UpcloudUksClusterConfig]).check(
+  manualDnsRecordsNeedZone.filter,
   hetznerVolumesConsistentWithProvider.filter,
   hetznerCsiHasNoVolumeType.filter,
   godaddyTtlMinimum.filter,

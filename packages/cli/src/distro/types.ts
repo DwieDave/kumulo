@@ -5,7 +5,8 @@ import type * as HttpClient from "effect/http/HttpClient"
 import type { ChildProcessSpawner as ChildProcessSpawnerNS } from "effect/process"
 import type { BucketNotEmpty, ConfigInvalid, CredentialsSinkError, DistroKind, Kubeconfig, ManagedDistroError, Plan } from "@kumulo/core"
 import type { ClusterConfig } from "../cluster-config.ts"
-import type { CinderAuth, OutputsIngress } from "@kumulo/volumes-cinder"
+import type { CinderAuth, OutputsIngress, OutputsInvalid } from "@kumulo/volumes-cinder"
+import type { DnsTargets } from "../dns.ts"
 import type { DoctorCheck } from "../doctor/types.ts"
 import type { OpenStackEnv } from "../openstack/env.ts"
 import type { K3sError } from "../k3s/reconcile.ts"
@@ -42,6 +43,10 @@ export interface DistroEntry<C extends ClusterConfig = ClusterConfig> {
   ) => Effect.Effect<DistroApplyResult, DistroFailure, DistroServices>
   readonly delete: (a: { readonly config: C; readonly configDir: string }) => Effect.Effect<void, DistroFailure, DistroServices>
   readonly kubeconfig: (a: { readonly config: C; readonly configDir: string }) => Effect.Effect<Kubeconfig, DistroFailure, DistroServices>
+  // read-only: what apply points DNS records at, for dns.module none to print; undefined when the cluster does not exist
+  readonly dnsTargets: (
+    a: { readonly config: C; readonly configDir: string }
+  ) => Effect.Effect<DnsTargets | undefined, DistroFailure | OutputsInvalid, DistroServices>
   readonly deletedLabel: string
   readonly appliedPrefixes: ReadonlyArray<string>
   readonly selfProgress?: boolean

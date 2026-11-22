@@ -25,6 +25,7 @@ export {
   CinderVolumes,
   commonClusterFields,
   Dns,
+  manualDnsRecordsNeedZone,
   HcloudVolumes,
   authMethodConsistentWithProvider,
   secretsRequiredForObjectStorage,

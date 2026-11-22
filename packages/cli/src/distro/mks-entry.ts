@@ -10,7 +10,7 @@ import { MksEnv } from "../mks/env.ts"
 import { mksCloudProviderLayer } from "../provider/registry.ts"
 import type { DistroUpgradeArgs } from "./types.ts"
 import { buildMksPlan } from "../mks/plan.ts"
-import { applyMks, deleteMks, kubeconfigMks, lookupMksInventory, resolveMksNetwork } from "../mks/reconcile.ts"
+import { applyMks, deleteMks, kubeconfigMks, lookupMksInventory, mksDnsTargets, resolveMksNetwork } from "../mks/reconcile.ts"
 import type { DistroEntry } from "./types.ts"
 
 const _mksPlanLive = (config: MksClusterConfig) =>
@@ -135,6 +135,7 @@ export const mksEntry: DistroEntry<MksClusterConfig> = {
     ),
   delete: deleteMks,
   kubeconfig: ({ config }) => kubeconfigMks(config),
+  dnsTargets: mksDnsTargets,
   deletedLabel: "mks-cluster",
   appliedPrefixes: ["network/", "subnet/", "gateway/", "mks-cluster/", "mks-pool/", "load-balancer/", "floating-ip/", "cdn/"],
   selfProgress: true,

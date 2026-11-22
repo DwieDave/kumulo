@@ -39,6 +39,7 @@ export {
   commonClusterFields,
   decodeConfigWith,
   Dns,
+  manualDnsRecordsNeedZone,
   encodeConfigWith,
   HcloudVolumes,
   authMethodConsistentWithProvider,

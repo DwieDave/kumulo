@@ -1,6 +1,6 @@
 {
   "name": "@kumulo/dns-godaddy",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "GoDaddy DNS provider for kumulo.",
   "license": "MIT",
   "author": "David Stahl-Gruber",
