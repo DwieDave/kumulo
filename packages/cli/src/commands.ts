@@ -1,5 +1,5 @@
 import { dirname } from "node:path"
-import { Console, Effect } from "effect"
+import { Console, Effect, Ref } from "effect"
 import { Command, Prompt } from "effect/cli"
 import type { Layer } from "effect"
 import { deleteRow, namesToReplace, PlanAction, PlanDecision, PlanRejected, ProviderProfile } from "@kumulo/core"
@@ -10,8 +10,7 @@ import type { OutputsIngress, OutputsInvalid } from "@kumulo/volumes-cinder"
 import type { FileSystem } from "effect/FileSystem"
 import type { PlatformError } from "effect/PlatformError"
 import { loadConfig } from "./config.ts"
-import { dnsPreflight, ManualDns, manualDnsRemovalNote, renderManualDns } from "./dns.ts"
-import type { ManualDnsTarget } from "./dns.ts"
+import { dnsPreflight, manualDnsRemoval, renderManualDns } from "./dns.ts"
 import { envSummary, requireCredentials } from "./env-summary.ts"
 import {
   convergeManagedVolumes,
@@ -176,6 +175,25 @@ export const rejectUnconfirmedReplace = (plan: Plan): Effect.Effect<void, PlanRe
       })
     )
 
+// dns.module none: after every apply that did not stop at a dry run, print the records to enter by hand. Resolved read-only
+// here, not inside the distro apply, so an apply whose plan has nothing to do prints them too.
+const _printManualDns = Effect.fn(function*({ config, configDir }: { readonly config: ClusterConfig; readonly configDir: string }) {
+  if (config.dns.module !== "none") return
+  const distroTargets = yield* onDistro(config)(({ config: cfg, entry }) => entry.dnsTargets({ config: cfg, configDir }))
+
+  if (distroTargets === undefined) return
+  const cdn = yield* cdnHandleFor({ config, configDir })
+  const cdnHostname = cdn === undefined ? undefined : (yield* Ref.get(cdn.state)).systemHostname
+
+  const targets = cdnHostname === undefined || cdnHostname === ""
+    ? distroTargets
+    : { ...distroTargets, cdn: { kind: "hostname" as const, value: cdnHostname } }
+
+  const table = renderManualDns({ config, targets })
+
+  if (table !== "") yield* Console.log(`\n${table}`)
+})
+
 const _applyFlow = Effect.fn(function*({ config: configPath }: { readonly config: string }) {
   const root = yield* kumulo
   const config = yield* loadConfig(configPath)
@@ -207,7 +225,9 @@ const _applyFlow = Effect.fn(function*({ config: configPath }: { readonly config
   const decision = decidePlanAction({ plan, yes: root.yes, dryRun: root.dryRun })
   yield* Console.log(`${renderPlan(plan)}\n`)
 
-  if (PlanDecision.$is("DryRun")(decision) || PlanDecision.$is("NothingToDo")(decision)) return
+  if (PlanDecision.$is("DryRun")(decision)) return
+
+  if (PlanDecision.$is("NothingToDo")(decision)) return yield* _printManualDns({ config, configDir })
 
   if (PlanDecision.$is("NeedsConfirm")(decision)) {
     const proceed = yield* _confirm({ message: "Apply these changes?", fallback: "Re-run with --yes to apply." })
@@ -224,18 +244,16 @@ const _applyFlow = Effect.fn(function*({ config: configPath }: { readonly config
   }
 
   const selfProgress = distroFor(config).selfProgress === true
-  const manualDns: Array<ManualDnsTarget> = []
 
   const result = yield* withPlanView({
     ...view,
     effect: appliedPrefixes.length === 0 && storageLayer === undefined && !usesGenericVolumes(config)
       ? (selfProgress ? applyStep : withRowProgress({ match: () => true, effect: applyStep }))
       : _convergeAll({ apply: applyStep, appliedPrefixes, config, configDir, plan, selfProgress, storageLayer })
-  }).pipe(Effect.provideService(ManualDns, { add: (targets) => manualDns.push(...targets) }))
+  })
 
   yield* Console.log(result.summary)
-
-  if (manualDns.length > 0) yield* Console.log(`\n${renderManualDns(manualDns)}`)
+  yield* _printManualDns({ config, configDir })
 })
 
 export const apply = Command.make("apply", { config: configArgument() }, _applyFlow).pipe(
@@ -343,7 +361,9 @@ export const del = Command.make(
     })
     yield* Console.log(`\nCluster "${config.name}" deleted.`)
 
-    if (config.dns.module === "none") yield* Console.log(`\n${manualDnsRemovalNote}`)
+    const removal = manualDnsRemoval(config)
+
+    if (removal !== "") yield* Console.log(`\n${removal}`)
   })
 ).pipe(Command.withDescription("Delete a cluster"))
 

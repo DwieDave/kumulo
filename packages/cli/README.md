@@ -47,7 +47,7 @@ variable.
 
 ## DNS you manage yourself
 
-With `dns.module: none` the CLI writes no records and needs no DNS token. `apply` ends with a table of every address it resolved (`api_server`, plus `ingress` and `cdn` where the cluster has them): target, suggested name, record type (A, AAAA or CNAME, from the value) and value. An optional `dns.zone` fills in the suggested names; without it they keep a literal `<zone>`. `delete` reminds you to remove the records by hand. See "Manual DNS" in the [root README](../../README.md).
+With `dns.module: none` the CLI writes no records and needs no DNS token. Every `apply` that is not a dry run, also one with nothing to do, ends with the records to create at your DNS host. With `dns.zone` and `dns.records` (the managed modules' record shape), it prints exactly those records resolved: full name, type (A, AAAA or CNAME, from the value) and value. Without `records` it prints one row per resolved address (`api_server`, plus `ingress` and `cdn` where the cluster has them) with a suggested name. `delete` reminds you to remove the records by hand. See "Manual DNS" in the [root README](../../README.md).
 
 ## bunny.net
 

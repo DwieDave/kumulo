@@ -9,7 +9,7 @@ import { k3sDeletePlanActions, k3sPlanEffect } from "../k3s/plan.ts"
 import { providerFor } from "../provider/registry.ts"
 import { k3sSshLayer } from "../k3s/env.ts"
 import { k8sHttpClientLayer } from "../k3s/k8s-http-client.ts"
-import { applyK3s, deleteK3s, k3sStatus, kubeconfigK3s, kubeconfigK3sEffect } from "../k3s/reconcile.ts"
+import { applyK3s, deleteK3s, k3sDnsTargets, k3sStatus, kubeconfigK3s, kubeconfigK3sEffect } from "../k3s/reconcile.ts"
 import type { K3sError, K3sStatus } from "../k3s/reconcile.ts"
 import { OpenStackEnv, OS_ENV_KEYS, OS_SECRET_ENV_KEYS } from "../openstack/env.ts"
 import { keystoneAuthCheck } from "../doctor/openstack/keystone-auth.ts"
@@ -169,6 +169,7 @@ export const k3sEntry: DistroEntry<K3sClusterConfig> = {
     ),
   delete: deleteK3s,
   kubeconfig: kubeconfigK3s,
+  dnsTargets: k3sDnsTargets,
   deletedLabel: "cluster",
   appliedPrefixes: [],
   selfProgress: true,

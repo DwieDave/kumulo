@@ -22,7 +22,7 @@ import { UpcloudEnv } from "./env.ts"
 import { withRowProgress } from "../spinner.ts"
 import { reconcileDns, removeDns } from "../dns.ts"
 import { withEdge } from "../edge.ts"
-import type { DnsTarget } from "../dns.ts"
+import type { DnsTarget, DnsTargets } from "../dns.ts"
 import { applyCdn, cdnWarnings, removeCdn } from "../cdn.ts"
 import type { CdnHandle, CdnStepError } from "../cdn.ts"
 import type { AuthenticationFailed } from "@kumulo/core"
@@ -99,15 +99,23 @@ export const applyUpcloudUksEffect = (
     })
     const managedVolumes = managedUpcloudVolumes(config)
 
-    // dns.module none needs it too: the api_server hostname is printed for the operator
-    const kubeconfig = yield* fetchKubeconfig({ clients, uuid: info.uuid })
+    const kubeconfig = config.dns.module !== "none" || managedVolumes.length > 0
+      ? yield* fetchKubeconfig({ clients, uuid: info.uuid })
+      : undefined
 
     yield* withRowProgress({
       match: (name) => name.startsWith("cdn/"),
-      effect: applyCdn({ config, cdn, dns: (targets) => reconcileUpcloudDns({ config, kubeconfig, cdn: targets.cdn }) })
+      effect: applyCdn({
+        config,
+        cdn,
+        dns: (targets) =>
+          config.dns.module === "none" || kubeconfig === undefined
+            ? Effect.void
+            : reconcileUpcloudDns({ config, kubeconfig, cdn: targets.cdn })
+      })
     })
 
-    if (managedVolumes.length > 0) {
+    if (kubeconfig !== undefined && managedVolumes.length > 0) {
       yield* withRowProgress({
         match: (name) => name.startsWith("volume/"),
         effect: convergeUpcloudVolumes({ config, kubeconfig })
@@ -161,6 +169,13 @@ export const reconcileUpcloudDns = (
   }
 ): Effect.Effect<void, DnsError | ConfigInvalid, DnsProvider> =>
   Effect.gen(function*() {
+    if (config.dns.module === "none") return
+    const apiServer = yield* _apiServerTarget(kubeconfig)
+    yield* reconcileDns({ config, targets: cdn === undefined ? { api_server: apiServer } : { api_server: apiServer, cdn } })
+  })
+
+const _apiServerTarget = (kubeconfig: Kubeconfig): Effect.Effect<DnsTarget, ConfigInvalid> =>
+  Effect.gen(function*() {
     const context = yield* parseKubeconfig(kubeconfig.content)
 
     const hostname = yield* Effect.try({
@@ -169,9 +184,15 @@ export const reconcileUpcloudDns = (
     })
 
     if (hostname === "") return yield* Effect.fail(_serverInvalid(context.server))
-    const apiServer: DnsTarget = { kind: "hostname", value: hostname }
-    yield* reconcileDns({ config, targets: cdn === undefined ? { api_server: apiServer } : { api_server: apiServer, cdn } })
+
+    return { kind: "hostname", value: hostname }
   })
+
+// read-only twin of reconcileUpcloudDns's targets, for printing the records dns.module none leaves to the operator
+export const uksDnsTargets = (
+  config: UpcloudUksClusterConfig
+): Effect.Effect<DnsTargets, ManagedDistroError | ConfigInvalid, UpcloudEnv> =>
+  Effect.map(Effect.flatMap(kubeconfigUpcloudUks(config), _apiServerTarget), (apiServer) => ({ api_server: apiServer }))
 
 const _serverInvalid = (server: string): ConfigInvalid =>
   new ConfigInvalid({

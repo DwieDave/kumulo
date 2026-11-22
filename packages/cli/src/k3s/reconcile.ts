@@ -44,6 +44,7 @@ import { k8sHttpClientLayer } from "./k8s-http-client.ts"
 import { buildK3sServerSpecs, nodeRoleOf } from "./plan.ts"
 import { withRowProgress } from "../spinner.ts"
 import { reconcileDns, removeDns } from "../dns.ts"
+import type { DnsTargets } from "../dns.ts"
 import { withEdge } from "../edge.ts"
 import { applyCdn, cdnWarnings, removeCdn } from "../cdn.ts"
 import type { CdnHandle, CdnStepError } from "../cdn.ts"
@@ -271,6 +272,16 @@ const _inventoryLbVip = (inventory: Inventory): string | undefined => {
   return vip === undefined || vip === "" ? undefined : vip
 }
 
+// read-only twin of apply's api_server target (_apiEndpoint): the load balancer VIP, else the first master's IP
+export const k3sDnsTargetsEffect = (config: K3sClusterConfig): Effect.Effect<DnsTargets | undefined, CloudError, CloudProvider> =>
+  Effect.gen(function*() {
+    const cloudProvider = yield* CloudProvider
+    const inventory = yield* cloudProvider.listClusterResources(config.name)
+    const master = inventory.servers.find((server) => nodeRoleOf({ config, server }) === "master")
+
+    return master === undefined ? undefined : { api_server: { kind: "ip", value: _inventoryLbVip(inventory) ?? master.ip } }
+  })
+
 const _writeKubeconfig = (
   config: K3sClusterConfig,
   master1: SshHost,
@@ -492,6 +503,11 @@ export const k3sStatusEffect = (
 
     return { exists: true, apiEndpoint: _inventoryLbVip(inventory) ?? masterInfo.ip, nodes }
   })
+
+export const k3sDnsTargets = (
+  { config }: { readonly config: K3sClusterConfig }
+): Effect.Effect<DnsTargets | undefined, CloudError | AuthenticationFailed, OpenStackEnv | HttpClient.HttpClient> =>
+  k3sDnsTargetsEffect(config).pipe(Effect.provide(_cloudProviderLayerFor(config)))
 
 export const k3sStatus = (
   { config, configDir }: { readonly config: K3sClusterConfig; readonly configDir: string }

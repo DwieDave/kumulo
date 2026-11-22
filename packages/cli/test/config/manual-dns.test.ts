@@ -30,6 +30,40 @@ describe("dns.module: none", () => {
     expect(Result.isSuccess(result) ? result.success.dns : undefined).toEqual({ module: "none" })
   })
 
+  it.prop("accepts records with a zone on every distro, names such as _acme-challenge and *.c1 included", [Schema.Literals(distros)], ([distro]) => {
+    const records = [
+      { name: "api.demo", target: "api_server" },
+      { name: "*.c1.demo", target: "203.0.113.7" },
+      { name: "_acme-challenge.demo", target: "demo.acme.example.net" },
+      { name: "@", target: "2001:db8::1" }
+    ]
+
+    const result = _decode({ ..._forDistro(distro), dns: { module: "none", zone: "example.com", records } })
+
+    return Result.isSuccess(result) && JSON.stringify(result.success.dns) === JSON.stringify({ module: "none", zone: "example.com", records })
+  })
+
+  it.prop("rejects records without a zone, naming dns.zone", [Schema.Literals(distros)], ([distro]) => {
+    const result = _decode({ ..._forDistro(distro), dns: { module: "none", records: [{ name: "api.demo", target: "api_server" }] } })
+
+    return Result.isFailure(result) && JSON.stringify(result.failure).includes("dns.zone")
+  })
+
+  it("rejects a record with an empty name or target", ({ expect }) => {
+    for (const record of [{ name: "", target: "api_server" }, { name: "api", target: "" }]) {
+      expect(Result.isFailure(_decode({ ...validConfig, dns: { module: "none", zone: "example.com", records: [record] } }))).toBe(true)
+    }
+  })
+
+  it("still refuses target ingress on upcloud-uks", ({ expect }) => {
+    const result = _decode({
+      ...validUpcloudUksConfig,
+      dns: { module: "none", zone: "example.com", records: [{ name: "www", target: "ingress" }] }
+    })
+
+    expect(Result.isFailure(result) && JSON.stringify(result.failure).includes("dns.records[0].target")).toBe(true)
+  })
+
   it("rejects an empty zone", ({ expect }) => {
     expect(Result.isFailure(_decode({ ...validConfig, dns: { module: "none", zone: "" } }))).toBe(true)
   })

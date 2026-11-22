@@ -94,9 +94,30 @@ const DnsRecord = Schema.Struct({
   target: Schema.NonEmptyString
 })
 
+// kumulo writes nothing for none: apply prints the records for the operator to enter by hand. zone fills in their
+// full names; without records apply suggests one name per resolved target.
+export const manualDnsRecordsNeedZone = crossFieldRule({
+  check: (config: { dns: { module: string; zone?: string; records?: ReadonlyArray<unknown> } }) =>
+    config.dns.module === "none" && config.dns.records !== undefined && config.dns.zone === undefined
+      ? "dns.records with dns.module none needs dns.zone, the zone the record names are relative to"
+      : undefined,
+  jsonSchema: [
+    {
+      if: {
+        properties: { dns: { properties: { module: { const: "none" } }, required: ["module", "records"] } },
+        required: ["dns"]
+      },
+      then: { properties: { dns: { required: ["zone"] } } }
+    }
+  ]
+})
+
 export const Dns = Schema.Union([
-  // kumulo writes nothing for none; zone only fills in the names apply suggests for the records to enter by hand
-  Schema.Struct({ module: Schema.Literal("none"), zone: Schema.optionalKey(Schema.NonEmptyString) }),
+  Schema.Struct({
+    module: Schema.Literal("none"),
+    zone: Schema.optionalKey(Schema.NonEmptyString),
+    records: Schema.optionalKey(Schema.Array(DnsRecord))
+  }),
   Schema.Struct({
     module: Schema.Literals(["ovh", "hetzner", "bunny", "godaddy", "cloudflare"]),
     zone: Schema.NonEmptyString,

@@ -6,6 +6,24 @@ All notable changes to kumulo are documented here. Format:
 
 ## [Unreleased]
 
+### Added
+
+- `dns.module: none` takes `records`, in the managed modules' shape (names
+  relative to `zone`, `@` for the apex, target `api_server`, `ingress`, `cdn`
+  or a literal IP or hostname). `records` needs `zone`. `apply` then prints
+  exactly those records, resolved, with their full names, and no suggested
+  rows. `delete` lists their names to remove by hand. kumulo still calls no
+  DNS provider and writes no ownership TXT.
+
+### Fixed
+
+- `dns.module: none` printed nothing on an `apply` whose plan had nothing to
+  do, because the addresses were only resolved inside the distro's apply.
+  Every `apply` that is not a dry run now resolves them read-only afterwards
+  (k3s: the cloud inventory; ovh-mks: the cluster's API endpoint and the
+  ingress floating IP in `<cluster>.outputs.yaml`; upcloud-uks: the
+  kubeconfig; CDN: `<cluster>.cdn.yaml`) and prints the table.
+
 ## [0.4.0] - 2026-11-22
 
 ### Added

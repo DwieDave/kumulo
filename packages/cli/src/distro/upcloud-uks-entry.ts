@@ -9,7 +9,7 @@ import {
 } from "../doctor/upcloud/storage.ts"
 import { UpcloudEnv } from "../upcloud/env.ts"
 import { buildUpcloudPlan, lookupUpcloudInventory, upcloudDeletePlanActions } from "../upcloud/plan.ts"
-import { applyUpcloudUks, deleteUpcloudUks, kubeconfigUpcloudUks, statusUpcloudUks, upgradeUpcloudUks } from "../upcloud/reconcile.ts"
+import { applyUpcloudUks, deleteUpcloudUks, kubeconfigUpcloudUks, statusUpcloudUks, uksDnsTargets, upgradeUpcloudUks } from "../upcloud/reconcile.ts"
 import { managedUpcloudVolumes } from "../upcloud/volumes.ts"
 import type { DistroEntry } from "./types.ts"
 
@@ -41,6 +41,7 @@ export const upcloudUksEntry: DistroEntry<UpcloudUksClusterConfig> = {
     ),
   delete: deleteUpcloudUks,
   kubeconfig: ({ config }) => kubeconfigUpcloudUks(config),
+  dnsTargets: ({ config }) => uksDnsTargets(config),
   deletedLabel: "uks-cluster",
   appliedPrefixes: ["router/", "network/", "uks-cluster/", "uks-pool/", "volume/", "bucket/", "cdn/"],
   selfProgress: true,

@@ -2,8 +2,8 @@ import { describe, expect, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 
 import { ownershipTarget, recordKind } from "@kumulo/core"
-import { desiredRecords, ManualDns, manualDnsTargets, reconcileDns, removeDns, renderManualDns } from "../src/dns.ts"
-import type { DnsTarget, DnsTargets, ManualDnsTarget } from "../src/dns.ts"
+import { desiredRecords, manualDnsRemoval, manualDnsTargets, reconcileDns, removeDns, renderManualDns } from "../src/dns.ts"
+import type { DnsTarget, DnsTargets } from "../src/dns.ts"
 import { spyDnsLayer } from "./mks/spy-dns.ts"
 import type { ClusterConfig } from "../src/cluster-config.ts"
 import { baseEncodedConfig, decodeTestConfig } from "./fixtures.ts"
@@ -149,12 +149,31 @@ describe("manualDnsTargets", () => {
   })
 })
 
+const _pad = (rows: ReadonlyArray<ReadonlyArray<string>>): ReadonlyArray<string> => {
+  const widths = (rows[0] ?? []).map((_, column) => Math.max(...rows.map((row) => (row[column] ?? "").length)))
+
+  return rows.map((row) => `  ${row.map((cell, column) => column === row.length - 1 ? cell : cell.padEnd(widths[column] ?? 0)).join("  ")}`)
+}
+
+const _withRecords = decodeTestConfig({
+  ...baseEncodedConfig,
+  dns: {
+    module: "none",
+    zone: "example.com",
+    records: [
+      { name: "api.demo", target: "api_server" },
+      { name: "*.demo", target: "203.0.113.7" },
+      { name: "_acme-challenge.demo", target: "demo.acme.example.net" }
+    ]
+  }
+})
+
 describe("renderManualDns", () => {
-  it("prints the instructions and an aligned target, name, type and value table", () => {
-    expect(renderManualDns([
-      { name: "api.prod-eu.example.com", target: "api_server", type: "CNAME", value: "abc123.upcloud.k8s.io" },
-      { name: "*.prod-eu.example.com", target: "ingress", type: "A", value: "203.0.113.1" }
-    ])).toBe([
+  it("without records, prints the suggested rows for each resolved target", () => {
+    expect(renderManualDns({
+      config: _noneWithZone,
+      targets: { api_server: { kind: "hostname", value: "abc123.upcloud.k8s.io" }, ingress: { kind: "ip", value: "203.0.113.1" } }
+    })).toBe([
       "dns.module is none: kumulo wrote no DNS records. Create these at your DNS host.",
       "The names are suggestions: any name works with the type and value shown.",
       "",
@@ -164,50 +183,79 @@ describe("renderManualDns", () => {
     ].join("\n"))
   })
 
-  it("says how to fill in <zone> when a name still holds it", () => {
-    expect(renderManualDns([{ name: "api.prod-eu.<zone>", target: "api_server", type: "A", value: "10.0.0.1" }]).split("\n")[2])
+  it("says how to fill in <zone> when a suggested name still holds it", () => {
+    expect(renderManualDns({ config: _none, targets: _apiHost }).split("\n")[2])
       .toBe("Replace <zone> with your domain, or set dns.zone to fill it in.")
   })
 
-  it("prints a target reported twice once", () => {
-    const target = { name: "api.prod-eu.<zone>", target: "api_server", type: "A", value: "10.0.0.1" } as const
-
-    expect(renderManualDns([target, target]).split("\n").filter((line) => line.includes("10.0.0.1"))).toHaveLength(1)
+  it("with records, prints exactly those records resolved and in full, without suggestions", () => {
+    expect(renderManualDns({ config: _withRecords, targets: _apiHost })).toBe([
+      "dns.module is none: kumulo wrote no DNS records. Create these records at your DNS host:",
+      "",
+      ..._pad([
+        ["NAME", "TYPE", "VALUE"],
+        ["api.demo.example.com", "CNAME", "abc123.upcloud.k8s.io"],
+        ["*.demo.example.com", "A", "203.0.113.7"],
+        ["_acme-challenge.demo.example.com", "CNAME", "demo.acme.example.net"]
+      ])
+    ].join("\n"))
   })
 
-  it("prints nothing without targets", () => {
-    expect(renderManualDns([])).toBe("")
+  it("names the apex record after the zone and keeps a name already in the zone", () => {
+    const config = decodeTestConfig({
+      ...baseEncodedConfig,
+      dns: { module: "none", zone: "example.com", records: [{ name: "@", target: "2001:db8::1" }, { name: "www.example.com", target: "api_server" }] }
+    })
+
+    expect(renderManualDns({ config, targets: _apiHost })).toContain("\n  example.com      AAAA   2001:db8::1\n  www.example.com  CNAME  abc123.upcloud.k8s.io")
+  })
+
+  it("prints a record listed twice once", () => {
+    const config = decodeTestConfig({
+      ...baseEncodedConfig,
+      dns: { module: "none", zone: "example.com", records: [{ name: "a", target: "10.0.0.1" }, { name: "a", target: "10.0.0.1" }] }
+    })
+
+    expect(renderManualDns({ config, targets: _apiHost }).split("\n").filter((line) => line.includes("10.0.0.1"))).toHaveLength(1)
+  })
+
+  it("prints nothing for a managed module", () => {
+    expect(renderManualDns({ config: _configWith([{ name: "api", target: "api_server" }]), targets: _apiHost })).toBe("")
+  })
+})
+
+describe("manualDnsRemoval", () => {
+  it("without records, prints one reminder line", () => {
+    expect(manualDnsRemoval(_noneWithZone))
+      .toBe("dns.module is none: kumulo does not manage DNS records. Remove any records pointing at this cluster at your DNS host by hand.")
+  })
+
+  it("with records, lists each full name once", () => {
+    expect(manualDnsRemoval(_withRecords)).toBe([
+      "dns.module is none: kumulo does not manage DNS records. Remove these at your DNS host by hand:",
+      "",
+      "  api.demo.example.com",
+      "  *.demo.example.com",
+      "  _acme-challenge.demo.example.com"
+    ].join("\n"))
+  })
+
+  it("prints nothing for a managed module", () => {
+    expect(manualDnsRemoval(_configWith([{ name: "api", target: "api_server" }]))).toBe("")
   })
 })
 
 describe("reconcileDns and removeDns with dns.module none", () => {
-  it.effect("hand the targets to the ManualDns sink and never call the provider", () =>
+  it.effect("never call the provider, with or without records", () =>
     Effect.gen(function*() {
       const spy = spyDnsLayer()
-      const collected: Array<ManualDnsTarget> = []
 
-      yield* reconcileDns({ config: _noneWithZone, targets: _apiHost }).pipe(
-        Effect.provide(spy.layer),
-        Effect.provideService(ManualDns, { add: (targets) => collected.push(...targets) })
-      )
-      yield* removeDns(_noneWithZone).pipe(Effect.provide(spy.layer))
+      for (const config of [_none, _noneWithZone, _withRecords]) {
+        yield* reconcileDns({ config, targets: _apiHost }).pipe(Effect.provide(spy.layer))
+        yield* removeDns(config).pipe(Effect.provide(spy.layer))
+      }
 
-      expect(collected).toEqual([{ name: "api.prod-eu.example.com", target: "api_server", type: "CNAME", value: "abc123.upcloud.k8s.io" }])
       expect(spy.ensured).toEqual([])
       expect(spy.removed).toEqual([])
-    }))
-
-  it.effect("send a managed module's records to the provider, not the sink", () =>
-    Effect.gen(function*() {
-      const spy = spyDnsLayer()
-      const collected: Array<ManualDnsTarget> = []
-
-      yield* reconcileDns({ config: _configWith([{ name: "api", target: "api_server" }]), targets: _apiHost }).pipe(
-        Effect.provide(spy.layer),
-        Effect.provideService(ManualDns, { add: (targets) => collected.push(...targets) })
-      )
-
-      expect(collected).toEqual([])
-      expect(spy.ensured).toHaveLength(1)
     }))
 })

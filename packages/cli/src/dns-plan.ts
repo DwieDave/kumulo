@@ -4,7 +4,7 @@ import type { DnsRecordKind } from "@kumulo/core"
 import type { DnsTarget } from "./dns.ts"
 
 export type DnsPlanInput =
-  | { readonly module: "none"; readonly zone?: string }
+  | { readonly module: "none" }
   | {
     readonly module: "ovh" | "hetzner" | "bunny" | "godaddy" | "cloudflare"
     readonly zone: string

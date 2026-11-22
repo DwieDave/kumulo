@@ -137,11 +137,12 @@ it.effect("apply records the ingress LB it created in <cluster>.outputs.yaml", (
     assert.deepStrictEqual(outputs.ingress, { load_balancer_id: "lb-1", floating_ip: "203.0.113.1" })
   }))
 
-it.effect("with dns.module none, apply prints the api server and ingress targets to enter by hand", () =>
+it.effect("with dns.module none, every apply prints the api server and ingress targets to enter by hand", () =>
   Effect.gen(function*() {
     const server = makeFakeMksServer()
 
     const output = yield* Effect.gen(function*() {
+      yield* Command.runWith(kumuloCli, { version: "test" })(["apply", _configPath, "--yes"])
       yield* Command.runWith(kumuloCli, { version: "test" })(["apply", _configPath, "--yes"])
 
       return (yield* TestConsole.logLines).map(String).join("\n")
@@ -156,6 +157,6 @@ it.effect("with dns.module none, apply prints the api server and ingress targets
       Effect.provide(BunServices.layer)
     )
 
-    assert.include(output, "dns.module is none: kumulo wrote no DNS records.")
+    assert.lengthOf(output.match(/dns\.module is none: kumulo wrote no DNS records\./g) ?? [], 2)
     assert.match(output, /\n {2}api_server {2}api\.staging\.<zone> +CNAME {2}\S+\n {2}ingress {5}\*\.staging\.<zone> +A {6}203\.0\.113\.1/)
   }))

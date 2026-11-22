@@ -1,4 +1,4 @@
-import { Context, Effect, Option } from "effect"
+import { Effect, Option } from "effect"
 import type * as HttpClient from "effect/http/HttpClient"
 import { makeCloudflareDnsClient, zoneNotVisible } from "@kumulo/dns-cloudflare"
 import { makeGodaddyDnsClient } from "@kumulo/dns-godaddy"
@@ -38,19 +38,14 @@ export const desiredRecords = (
     ..._ownershipRecords(config.dns.records, config.name)
   ]
 
-// dns.module none: kumulo writes nothing and prints each target it resolved, for the operator to point a name at by hand
+// dns.module none: kumulo writes nothing. After apply it prints the records for the operator to enter by hand:
+// the configured records resolved, or without records one suggested name per resolved target.
 export interface ManualDnsTarget {
   readonly name: string
   readonly target: keyof DnsTargets
   readonly type: DnsRecordKind
   readonly value: string
 }
-
-// apply provides a sink and prints what it collected after the plan view; without one the targets are dropped
-export const ManualDns = Context.Reference<{ readonly add: (targets: ReadonlyArray<ManualDnsTarget>) => void }>(
-  "@kumulo/cli/ManualDns",
-  { defaultValue: () => ({ add: () => undefined }) }
-)
 
 const _targetKeys = ["api_server", "ingress", "cdn"] as const
 
@@ -78,26 +73,76 @@ export const manualDnsTargets = (
       : _suggestedNames({ config, target }).map((name) => ({ name, target, type: recordKind(resolved.value), value: resolved.value }))
   })
 
+// names are relative to the zone like the managed modules': "@" is the apex, a name already in the zone stays as written
+const _fullName = ({ name, zone }: { readonly name: string; readonly zone: string }): string =>
+  name === "@" ? zone : name === zone || name.endsWith(`.${zone}`) ? name : `${name}.${zone}`
+
+const _manualRecords = (config: ClusterConfig) =>
+  config.dns.module === "none" && config.dns.zone !== undefined && config.dns.records !== undefined
+    ? { zone: config.dns.zone, records: config.dns.records }
+    : undefined
+
+const _unique = (rows: ReadonlyArray<ReadonlyArray<string>>): ReadonlyArray<ReadonlyArray<string>> =>
+  [...new Map(rows.map((row) => [row.join(" "), row])).values()]
+
 const _table = (rows: ReadonlyArray<ReadonlyArray<string>>): ReadonlyArray<string> => {
   const widths = (rows[0] ?? []).map((_, column) => Math.max(...rows.map((row) => (row[column] ?? "").length)))
 
   return rows.map((row) => `  ${row.map((cell, column) => column === row.length - 1 ? cell : cell.padEnd(widths[column] ?? 0)).join("  ")}`)
 }
 
-export const renderManualDns = (targets: ReadonlyArray<ManualDnsTarget>): string => {
-  const unique = [...new Map(targets.map((t) => [`${t.name} ${t.type} ${t.value}`, t])).values()]
+const _recordsTable = (
+  { manual, targets }: { readonly manual: NonNullable<ReturnType<typeof _manualRecords>>; readonly targets: DnsTargets }
+): string => {
+  const rows = _unique(manual.records.map((record) => {
+    const { target } = _resolveTarget(record, targets)
+
+    return [_fullName({ name: record.name, zone: manual.zone }), recordKind(target), target]
+  }))
+
+  return rows.length === 0 ? "" : [
+    "dns.module is none: kumulo wrote no DNS records. Create these records at your DNS host:",
+    "",
+    ..._table([["NAME", "TYPE", "VALUE"], ...rows])
+  ].join("\n")
+}
+
+const _suggestionsTable = ({ config, targets }: { readonly config: ClusterConfig; readonly targets: DnsTargets }): string => {
+  const rows = manualDnsTargets({ config, targets })
+  const unique = _unique(rows.map((t) => [t.target, t.name, t.type, t.value]))
 
   return unique.length === 0 ? "" : [
     "dns.module is none: kumulo wrote no DNS records. Create these at your DNS host.",
     "The names are suggestions: any name works with the type and value shown.",
-    ...(unique.some((t) => t.name.includes(_ZONE_PLACEHOLDER)) ? [`Replace ${_ZONE_PLACEHOLDER} with your domain, or set dns.zone to fill it in.`] : []),
+    ...(rows.some((t) => t.name.includes(_ZONE_PLACEHOLDER)) ? [`Replace ${_ZONE_PLACEHOLDER} with your domain, or set dns.zone to fill it in.`] : []),
     "",
-    ..._table([["TARGET", "NAME", "TYPE", "VALUE"], ...unique.map((t) => [t.target, t.name, t.type, t.value])])
+    ..._table([["TARGET", "NAME", "TYPE", "VALUE"], ...unique])
   ].join("\n")
 }
 
-export const manualDnsRemovalNote =
-  "dns.module is none: kumulo does not manage DNS records. Remove any records pointing at this cluster at your DNS host by hand."
+export const renderManualDns = ({ config, targets }: { readonly config: ClusterConfig; readonly targets: DnsTargets }): string => {
+  if (config.dns.module !== "none") return ""
+  const manual = _manualRecords(config)
+
+  return manual === undefined ? _suggestionsTable({ config, targets }) : _recordsTable({ manual, targets })
+}
+
+export const manualDnsRemoval = (config: ClusterConfig): string => {
+  if (config.dns.module !== "none") return ""
+  const manual = _manualRecords(config)
+
+  if (manual === undefined || manual.records.length === 0) {
+    return "dns.module is none: kumulo does not manage DNS records. Remove any records pointing at this cluster at your DNS host by hand."
+  }
+
+  const names = [...new Set(manual.records.map((record) => _fullName({ name: record.name, zone: manual.zone })))]
+
+  return [
+    "dns.module is none: kumulo does not manage DNS records. Remove these at your DNS host by hand:",
+    "",
+    ...names.map((name) => `  ${name}`)
+  ].join("\n")
+}
 
 export const reconcileDns = (
   { config, targets }: { readonly config: ClusterConfig; readonly targets: DnsTargets }
@@ -105,12 +150,7 @@ export const reconcileDns = (
   Effect.gen(function*() {
     const cfgDns = config.dns
 
-    if (cfgDns.module === "none") {
-      (yield* ManualDns).add(manualDnsTargets({ config, targets }))
-
-      return
-    }
-
+    if (cfgDns.module === "none") return
     const dns = yield* DnsProvider
     yield* dns.ensureRecords(cfgDns.zone, desiredRecords({ config, targets }))
   })

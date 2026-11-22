@@ -20,6 +20,7 @@ import {
   makeZoneClient
 } from "@kumulo/upcloud"
 import { makeFakeUksServer } from "../../../upcloud/distro-uks/test/distro/fake-uks-server.ts"
+import type { UpcloudUksClusterConfigEncoded } from "../../src/cluster-config.ts"
 import { kumuloCli } from "../../src/commands.ts"
 import { MksEnv } from "../../src/mks/env.ts"
 import { OpenStackEnv } from "../../src/openstack/env.ts"
@@ -30,7 +31,7 @@ import { makeFakeCinder } from "./fake-cinder.ts"
 
 process.stdout.isTTY = false
 
-const _configPath = (dns: { readonly module: "none"; readonly zone?: string } = { module: "none" }) => {
+const _configPath = (dns: UpcloudUksClusterConfigEncoded["dns"] = { module: "none" }) => {
   const path = join(mkdtempSync(join(tmpdir(), "kumulo-manual-dns-")), "cluster.json")
 
   writeFileSync(
@@ -153,6 +154,61 @@ it.effect("apply fills dns.zone into the suggested name", () =>
 
     assert.include(output, "  api_server  api.staging-eu.example.com  CNAME  abc123.upcloud.k8s.io")
     assert.notInclude(output, "<zone>")
+  }))
+
+it.effect("a second apply with nothing to do prints the table again", () =>
+  Effect.gen(function*() {
+    const server = makeFakeUksServer({ readyAfterPolls: 0 })
+    const path = _configPath({ module: "none", zone: "example.com" })
+    yield* _run({ args: ["apply", path, "--yes"], server })
+    const output = yield* _run({ args: ["apply", path, "--yes"], server })
+
+    assert.include(output, "Plan: 0 to create")
+    assert.include(output, "  api_server  api.staging-eu.example.com  CNAME  abc123.upcloud.k8s.io")
+  }))
+
+const _records = [
+  { name: "api.demo", target: "api_server" },
+  { name: "*.demo", target: "203.0.113.7" },
+  { name: "_acme-challenge.demo", target: "demo.acme.example.net" }
+]
+
+it.effect("with records, apply prints exactly those records resolved, on every run", () =>
+  Effect.gen(function*() {
+    const server = makeFakeUksServer({ readyAfterPolls: 0 })
+    const path = _configPath({ module: "none", zone: "example.com", records: _records })
+
+    const table = [
+      "dns.module is none: kumulo wrote no DNS records. Create these records at your DNS host:",
+      "",
+      "  NAME                              TYPE   VALUE",
+      "  api.demo.example.com              CNAME  abc123.upcloud.k8s.io",
+      "  *.demo.example.com                A      203.0.113.7",
+      "  _acme-challenge.demo.example.com  CNAME  demo.acme.example.net"
+    ].join("\n")
+
+    for (let run = 0; run < 2; run++) {
+      const output = yield* _run({ args: ["apply", path, "--yes"], server })
+      assert.include(output, table)
+      assert.notInclude(output, "suggestions")
+      assert.notInclude(output, "_kumulo")
+    }
+  }))
+
+it.effect("with records, delete lists the names to remove by hand", () =>
+  Effect.gen(function*() {
+    const server = makeFakeUksServer({ readyAfterPolls: 0 })
+    const path = _configPath({ module: "none", zone: "example.com", records: _records })
+    yield* _run({ args: ["apply", path, "--yes"], server })
+    const output = yield* _run({ args: ["delete", path, "--yes"], server })
+
+    assert.include(output, [
+      "dns.module is none: kumulo does not manage DNS records. Remove these at your DNS host by hand:",
+      "",
+      "  api.demo.example.com",
+      "  *.demo.example.com",
+      "  _acme-challenge.demo.example.com"
+    ].join("\n"))
   }))
 
 it.effect("--dry-run prints no targets: nothing is resolved before the cluster exists", () =>

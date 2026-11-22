@@ -760,6 +760,27 @@
                 "zone": {
                   "type": "string",
                   "minLength": 1
+                },
+                "records": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "target": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "target"
+                    ],
+                    "additionalProperties": true
+                  }
                 }
               },
               "required": [
@@ -1671,6 +1692,27 @@
                 "zone": {
                   "type": "string",
                   "minLength": 1
+                },
+                "records": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "target": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "target"
+                    ],
+                    "additionalProperties": true
+                  }
                 }
               },
               "required": [
@@ -2538,6 +2580,27 @@
                 "zone": {
                   "type": "string",
                   "minLength": 1
+                },
+                "records": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "target": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "target"
+                    ],
+                    "additionalProperties": true
+                  }
                 }
               },
               "required": [
@@ -2795,6 +2858,35 @@
         "properties": {
           "distro": {
             "const": "ovh-mks"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "dns": {
+            "properties": {
+              "module": {
+                "const": "none"
+              }
+            },
+            "required": [
+              "module",
+              "records"
+            ]
+          }
+        },
+        "required": [
+          "dns"
+        ]
+      },
+      "then": {
+        "properties": {
+          "dns": {
+            "required": [
+              "zone"
+            ]
           }
         }
       }
