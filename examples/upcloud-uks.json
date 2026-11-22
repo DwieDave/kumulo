@@ -24,7 +24,8 @@
     }
   ],
   "dns": {
-    "module": "none"
+    "module": "none",
+    "zone": "example.com"
   },
   "volumes": {
     "module": "upcloud",

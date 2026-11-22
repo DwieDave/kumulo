@@ -95,7 +95,8 @@ const DnsRecord = Schema.Struct({
 })
 
 export const Dns = Schema.Union([
-  Schema.Struct({ module: Schema.Literal("none") }),
+  // kumulo writes nothing for none; zone only fills in the names apply suggests for the records to enter by hand
+  Schema.Struct({ module: Schema.Literal("none"), zone: Schema.optionalKey(Schema.NonEmptyString) }),
   Schema.Struct({
     module: Schema.Literals(["ovh", "hetzner", "bunny", "godaddy", "cloudflare"]),
     zone: Schema.NonEmptyString,

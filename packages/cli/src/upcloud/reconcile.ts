@@ -99,23 +99,15 @@ export const applyUpcloudUksEffect = (
     })
     const managedVolumes = managedUpcloudVolumes(config)
 
-    const kubeconfig = config.dns.module !== "none" || managedVolumes.length > 0
-      ? yield* fetchKubeconfig({ clients, uuid: info.uuid })
-      : undefined
+    // dns.module none needs it too: the api_server hostname is printed for the operator
+    const kubeconfig = yield* fetchKubeconfig({ clients, uuid: info.uuid })
 
     yield* withRowProgress({
       match: (name) => name.startsWith("cdn/"),
-      effect: applyCdn({
-        config,
-        cdn,
-        dns: (targets) =>
-          config.dns.module === "none" || kubeconfig === undefined
-            ? Effect.void
-            : reconcileUpcloudDns({ config, kubeconfig, cdn: targets.cdn })
-      })
+      effect: applyCdn({ config, cdn, dns: (targets) => reconcileUpcloudDns({ config, kubeconfig, cdn: targets.cdn }) })
     })
 
-    if (kubeconfig !== undefined && managedVolumes.length > 0) {
+    if (managedVolumes.length > 0) {
       yield* withRowProgress({
         match: (name) => name.startsWith("volume/"),
         effect: convergeUpcloudVolumes({ config, kubeconfig })
@@ -169,7 +161,6 @@ export const reconcileUpcloudDns = (
   }
 ): Effect.Effect<void, DnsError | ConfigInvalid, DnsProvider> =>
   Effect.gen(function*() {
-    if (config.dns.module === "none") return
     const context = yield* parseKubeconfig(kubeconfig.content)
 
     const hostname = yield* Effect.try({

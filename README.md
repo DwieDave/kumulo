@@ -159,6 +159,39 @@ with the permissions Zone:Read and DNS:Edit, limited to the zone. Export it as
 **Unverified.** The client was written from Cloudflare's published OpenAPI
 spec and tested against a fake. It has not run against the live API.
 
+## Manual DNS (`dns.module: none`)
+
+With `dns.module: none` kumulo writes no DNS records and needs no DNS token.
+`apply` ends by printing every address it resolved for the cluster, so you can
+create the records yourself at any DNS host:
+
+```yaml
+dns:
+  module: none
+  zone: example.com   # optional, only fills in the suggested names
+```
+
+```text
+dns.module is none: kumulo wrote no DNS records. Create these at your DNS host.
+The names are suggestions: any name works with the type and value shown.
+
+  TARGET      NAME                        TYPE   VALUE
+  api_server  api.staging-de.example.com  CNAME  abc123.upcloud.k8s.io
+```
+
+- One row per target the distro resolved: `api_server` always, `ingress` on
+  `ovh-mks` with an `ingress` block, `cdn` with a CDN. The type follows the
+  value: A for an IPv4 address, AAAA for IPv6, CNAME for a hostname.
+- Suggested names are `api.<cluster>.<zone>` and `*.<cluster>.<zone>`, the
+  shapes the examples above use, and the CDN's own `hostnames` for `cdn`.
+  Without `zone` the names keep a literal `<zone>` to replace.
+- There is no ownership TXT to create: nothing reads it when kumulo does not
+  manage the zone.
+- `apply --dry-run` prints no rows, because the addresses do not exist before
+  the cluster does. An `apply` whose plan has nothing to do stops before it
+  resolves them, so keep the output of the apply that created the cluster.
+- `delete` prints a reminder to remove the records by hand.
+
 ## DNS record ownership
 
 kumulo marks every name it writes with a TXT record `kumulo.cluster=<cluster>`

@@ -6,6 +6,27 @@ All notable changes to kumulo are documented here. Format:
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-22
+
+### Added
+
+- `dns.module: none` prints the DNS records to create by hand. `apply` ends
+  with one row per address it resolved for the cluster (`api_server`, plus
+  `ingress` and `cdn` where the cluster has them): target, a suggested name
+  (`api.<cluster>.<zone>`, `*.<cluster>.<zone>`, the CDN's hostnames), the
+  record type the value needs (A, AAAA or CNAME) and the value. kumulo still
+  calls no DNS provider. The new optional `dns.zone` fills in the suggested
+  names; without it they keep a literal `<zone>`. `delete` prints a reminder
+  to remove the records by hand.
+
+### Changed
+
+- `upcloud-uks` with `dns.module: none` now fetches the kubeconfig on every
+  `apply`, to resolve the API server's hostname.
+- The bunny CDN rule that a `cdn.hostnames` entry at the `dns.zone` apex needs
+  `dns.module: bunny` no longer applies to `none`, whose zone only names the
+  records you enter yourself.
+
 ## [0.3.0] - 2026-11-21
 
 One package name is new on npm with this release: `@kumulo/dns-cloudflare`.

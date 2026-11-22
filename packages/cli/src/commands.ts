@@ -10,7 +10,8 @@ import type { OutputsIngress, OutputsInvalid } from "@kumulo/volumes-cinder"
 import type { FileSystem } from "effect/FileSystem"
 import type { PlatformError } from "effect/PlatformError"
 import { loadConfig } from "./config.ts"
-import { dnsPreflight } from "./dns.ts"
+import { dnsPreflight, ManualDns, manualDnsRemovalNote, renderManualDns } from "./dns.ts"
+import type { ManualDnsTarget } from "./dns.ts"
 import { envSummary, requireCredentials } from "./env-summary.ts"
 import {
   convergeManagedVolumes,
@@ -223,15 +224,18 @@ const _applyFlow = Effect.fn(function*({ config: configPath }: { readonly config
   }
 
   const selfProgress = distroFor(config).selfProgress === true
+  const manualDns: Array<ManualDnsTarget> = []
 
   const result = yield* withPlanView({
     ...view,
     effect: appliedPrefixes.length === 0 && storageLayer === undefined && !usesGenericVolumes(config)
       ? (selfProgress ? applyStep : withRowProgress({ match: () => true, effect: applyStep }))
       : _convergeAll({ apply: applyStep, appliedPrefixes, config, configDir, plan, selfProgress, storageLayer })
-  })
+  }).pipe(Effect.provideService(ManualDns, { add: (targets) => manualDns.push(...targets) }))
 
   yield* Console.log(result.summary)
+
+  if (manualDns.length > 0) yield* Console.log(`\n${renderManualDns(manualDns)}`)
 })
 
 export const apply = Command.make("apply", { config: configArgument() }, _applyFlow).pipe(
@@ -338,6 +342,8 @@ export const del = Command.make(
       effect: Effect.all([clusterAndVolumesStep, bucketsStep], { concurrency: 2 })
     })
     yield* Console.log(`\nCluster "${config.name}" deleted.`)
+
+    if (config.dns.module === "none") yield* Console.log(`\n${manualDnsRemovalNote}`)
   })
 ).pipe(Command.withDescription("Delete a cluster"))
 

@@ -4,6 +4,7 @@ import { join } from "node:path"
 import { Effect, Layer, Option, Predicate, Schema } from "effect"
 import * as BunServices from "@effect/platform-bun/BunServices"
 import { Command } from "effect/cli"
+import { TestConsole } from "effect/testing"
 import * as HttpClient from "effect/http/HttpClient"
 import type { HttpClientRequest } from "effect/http"
 import { assert, it } from "@effect/vitest"
@@ -134,4 +135,27 @@ it.effect("apply records the ingress LB it created in <cluster>.outputs.yaml", (
     assert.strictEqual(server.clusters.size, 1)
     const outputs = yield* parseOutputsYaml(readFileSync(join(_configDir, "staging.outputs.yaml"), "utf8"))
     assert.deepStrictEqual(outputs.ingress, { load_balancer_id: "lb-1", floating_ip: "203.0.113.1" })
+  }))
+
+it.effect("with dns.module none, apply prints the api server and ingress targets to enter by hand", () =>
+  Effect.gen(function*() {
+    const server = makeFakeMksServer()
+
+    const output = yield* Effect.gen(function*() {
+      yield* Command.runWith(kumuloCli, { version: "test" })(["apply", _configPath, "--yes"])
+
+      return (yield* TestConsole.logLines).map(String).join("\n")
+    }).pipe(
+      Effect.provide(TestConsole.layer),
+      Effect.provide(Layer.succeed(MksEnv, { mks: makeMksClient(server.httpClient), serviceName: "service-1" })),
+      Effect.provide(_fakeOpenStack()),
+      Effect.provide(_openStackEnvLayer),
+      Effect.provide(unavailableUpcloudEnvLayer),
+      Effect.provide(_storageLayer),
+      Effect.provide(fakeCredentials),
+      Effect.provide(BunServices.layer)
+    )
+
+    assert.include(output, "dns.module is none: kumulo wrote no DNS records.")
+    assert.match(output, /\n {2}api_server {2}api\.staging\.<zone> +CNAME {2}\S+\n {2}ingress {5}\*\.staging\.<zone> +A {6}203\.0\.113\.1/)
   }))

@@ -756,6 +756,10 @@
                   "enum": [
                     "none"
                   ]
+                },
+                "zone": {
+                  "type": "string",
+                  "minLength": 1
                 }
               },
               "required": [
@@ -1663,6 +1667,10 @@
                   "enum": [
                     "none"
                   ]
+                },
+                "zone": {
+                  "type": "string",
+                  "minLength": 1
                 }
               },
               "required": [
@@ -2526,6 +2534,10 @@
                   "enum": [
                     "none"
                   ]
+                },
+                "zone": {
+                  "type": "string",
+                  "minLength": 1
                 }
               },
               "required": [

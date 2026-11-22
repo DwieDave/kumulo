@@ -107,9 +107,6 @@ export const reconcileMksDns = (
   }
 ): Effect.Effect<void, ManagedDistroError | ConfigInvalid, DnsProvider> =>
   Effect.gen(function*() {
-    // `none` short-circuits before the endpoint check.
-    if (config.dns.module === "none") return
-
     const hostname = yield* Effect.try({
       try: () => new URL(apiEndpoint).hostname,
       catch: () => _endpointInvalid(apiEndpoint)
