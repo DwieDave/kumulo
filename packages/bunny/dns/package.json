@@ -1,6 +1,6 @@
 {
   "name": "@kumulo/dns-bunny",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "bunny.net DNS provider for kumulo.",
   "license": "MIT",
   "author": "David Stahl-Gruber",

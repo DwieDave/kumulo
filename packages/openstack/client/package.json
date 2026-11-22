@@ -1,6 +1,6 @@
 {
   "name": "@kumulo/openstack",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "OpenStack API clients for kumulo.",
   "license": "MIT",
   "author": "David Stahl-Gruber",

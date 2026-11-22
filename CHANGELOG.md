@@ -6,6 +6,8 @@ All notable changes to kumulo are documented here. Format:
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-22
+
 ### Added
 
 - `dns.module: none` prints the DNS records to create by hand. `apply` ends
