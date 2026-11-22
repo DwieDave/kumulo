@@ -45,6 +45,10 @@ populated environment never spawns `sops`. Key material is sops' business
 command with the file path and sops' own stderr rather than reporting a missing
 variable.
 
+## DNS you manage yourself
+
+With `dns.module: none` the CLI writes no records and needs no DNS token. `apply` ends with a table of every address it resolved (`api_server`, plus `ingress` and `cdn` where the cluster has them): target, suggested name, record type (A, AAAA or CNAME, from the value) and value. An optional `dns.zone` fills in the suggested names; without it they keep a literal `<zone>`. `delete` reminds you to remove the records by hand. See "Manual DNS" in the [root README](../../README.md).
+
 ## bunny.net
 
 `dns.module`, `object_storage.module` and `cdn.module` accept `bunny`. Any of them makes the CLI require `BUNNYNET_API_KEY`, and `kumulo plan` lists it in the environment summary. With bunny storage, the sops credentials sink writes one entry per bucket under `s3.buckets.N.{name,region,endpoint,accessKey,secretKey}`, because a bunny S3 credential pair belongs to a single zone. The CDN keeps its ids in `<cluster>.cdn.yaml` beside the other outputs files. `apply` runs in this order: cluster, pull zone, DNS, certificates, Shield, storage. `delete` runs it in reverse and leaves the cluster for last.
